@@ -2,16 +2,23 @@ import fs from 'fs';
 import path from 'path';
 import initSqlJs, { Database, SqlJsStatic } from 'sql.js';
 
+/** Read a possibly-null numeric column without coercing NULL to 0. */
+function toNullableNumber(v: unknown): number | null {
+  if (v === null || v === undefined) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
 export interface SqliteHistoryRecord {
   id: number;
   text_preview: string;
   full_text: string;
   source_url: string;
   prediction: string;
-  confidence: number;
-  confidence_score: number;
-  fake_probability: number;
-  real_probability: number;
+  confidence: number | null;
+  confidence_score: number | null;
+  fake_probability: number | null;
+  real_probability: number | null;
   risk_level: string;
   model_name: string;
   detected_claim?: string;
@@ -37,9 +44,9 @@ export class SqliteHistoryManager {
   private pendingInserts: Array<{
     full_text: string;
     prediction: string;
-    confidence: number;
-    fake_probability: number;
-    real_probability: number;
+    confidence: number | null;
+    fake_probability: number | null;
+    real_probability: number | null;
     risk_level: string;
     model_name: string;
     source_url?: string;
@@ -86,9 +93,9 @@ export class SqliteHistoryManager {
             full_text TEXT NOT NULL,
             source_url TEXT,
             prediction TEXT NOT NULL,
-            confidence REAL NOT NULL,
-            fake_probability REAL NOT NULL,
-            real_probability REAL NOT NULL,
+            confidence REAL,
+            fake_probability REAL,
+            real_probability REAL,
             risk_level TEXT NOT NULL,
             model_name TEXT NOT NULL,
             detected_claim TEXT,
@@ -138,6 +145,60 @@ export class SqliteHistoryManager {
           }
         }
 
+        // Migration: older databases declared confidence/probability columns
+        // as NOT NULL. Rebuild the table once so guarded results can store
+        // NULL (meaning "not available / N/A") without crashing.
+        try {
+          const pragma = this.db.exec('PRAGMA table_info(history)');
+          const cols: Array<{ name: string; notnull: number }> = (pragma[0]?.values || []).map((v: any[]) => ({ name: String(v[1]), notnull: Number(v[3]) || 0 }));
+          const hasNotNullScore = cols.some(c => ['confidence', 'fake_probability', 'real_probability'].includes(c.name) && c.notnull === 1);
+          if (hasNotNullScore) {
+            this.db.run(`
+              CREATE TABLE history_migrated (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                text_preview TEXT NOT NULL,
+                full_text TEXT NOT NULL,
+                source_url TEXT,
+                prediction TEXT NOT NULL,
+                confidence REAL,
+                fake_probability REAL,
+                real_probability REAL,
+                risk_level TEXT NOT NULL,
+                model_name TEXT NOT NULL,
+                detected_claim TEXT,
+                input_type TEXT DEFAULT 'text',
+                original_url TEXT,
+                canonical_url TEXT,
+                article_title TEXT,
+                source_name TEXT,
+                published_at TEXT,
+                indicators_json TEXT,
+                explanation_json TEXT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+              );
+              INSERT INTO history_migrated (
+                id, text_preview, full_text, source_url, prediction, confidence,
+                fake_probability, real_probability, risk_level, model_name,
+                detected_claim, input_type, original_url, canonical_url,
+                article_title, source_name, published_at, indicators_json,
+                explanation_json, timestamp
+              )
+              SELECT
+                id, text_preview, full_text, source_url, prediction, confidence,
+                fake_probability, real_probability, risk_level, model_name,
+                detected_claim, input_type, original_url, canonical_url,
+                article_title, source_name, published_at, indicators_json,
+                explanation_json, timestamp
+              FROM history;
+              DROP TABLE history;
+              ALTER TABLE history_migrated RENAME TO history;
+            `);
+            console.log('[SqliteHistoryManager] Migrated history table to nullable score columns');
+          }
+        } catch (mErr) {
+          console.error('[SqliteHistoryManager] Nullable column migration failed:', mErr);
+        }
+
         this.isReady = true;
 
         // Flush any pending inserts that occurred before DB ready
@@ -172,9 +233,9 @@ export class SqliteHistoryManager {
   public insertHistory(record: {
     full_text: string;
     prediction: string;
-    confidence: number;
-    fake_probability: number;
-    real_probability: number;
+    confidence: number | null;
+    fake_probability: number | null;
+    real_probability: number | null;
     risk_level: string;
     model_name: string;
     source_url?: string;
@@ -267,10 +328,12 @@ export class SqliteHistoryManager {
         full_text: String(row.full_text || ''),
         source_url: String(row.source_url || ''),
         prediction: String(row.prediction || ''),
-        confidence: Number(row.confidence || 0),
-        confidence_score: Math.round((Number(row.confidence) || 0) * 100),
-        fake_probability: Number(row.fake_probability || 0),
-        real_probability: Number(row.real_probability || 0),
+        confidence: toNullableNumber(row.confidence),
+        confidence_score: row.confidence === null || row.confidence === undefined
+          ? null
+          : Math.round(Number(row.confidence) * 100),
+        fake_probability: toNullableNumber(row.fake_probability),
+        real_probability: toNullableNumber(row.real_probability),
         risk_level: String(row.risk_level || 'LOW'),
         model_name: String(row.model_name || 'Linear SVM (Calibrated)'),
         detected_claim: row.detected_claim || undefined,
@@ -312,10 +375,12 @@ export class SqliteHistoryManager {
         full_text: String(row.full_text || ''),
         source_url: String(row.source_url || ''),
         prediction: String(row.prediction || ''),
-        confidence: Number(row.confidence || 0),
-        confidence_score: Math.round((Number(row.confidence) || 0) * 100),
-        fake_probability: Number(row.fake_probability || 0),
-        real_probability: Number(row.real_probability || 0),
+        confidence: toNullableNumber(row.confidence),
+        confidence_score: row.confidence === null || row.confidence === undefined
+          ? null
+          : Math.round(Number(row.confidence) * 100),
+        fake_probability: toNullableNumber(row.fake_probability),
+        real_probability: toNullableNumber(row.real_probability),
         risk_level: String(row.risk_level || 'LOW'),
         model_name: String(row.model_name || 'Linear SVM (Calibrated)'),
         detected_claim: row.detected_claim || undefined,

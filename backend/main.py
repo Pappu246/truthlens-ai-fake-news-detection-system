@@ -72,16 +72,15 @@ def health_check():
 
 @app.post("/api/analyze")
 def analyze(req: AnalyzeRequest):
+    # Empty input is a validation error (400). Non-empty but short/vague
+    # input is NOT an error — it returns a NEEDS MORE CONTEXT verdict.
     if not req.text or not req.text.strip():
         raise HTTPException(status_code=400, detail="News article text cannot be empty.")
-        
+
     text_stripped = req.text.strip()
-    if len(text_stripped) < 15:
-        raise HTTPException(status_code=400, detail="Article text is too short. Please provide at least 15 characters.")
-        
     if len(text_stripped) > 50000:
         raise HTTPException(status_code=400, detail="Article text exceeds the maximum character limit (50,000 characters).")
-        
+
     try:
         result = analyze_news_article(
             text_stripped,
@@ -291,7 +290,7 @@ def get_demo_examples():
             "id": "ambiguous-1",
             "title": "Example: Ambiguous / Suspicious (Unattributed Press Claim)",
             "category": "Commercial PR / Unverified Rumor",
-            "expected_outcome": "SUSPICIOUS",
+            "expected_outcome": "NEEDS MORE CONTEXT",
             "source_url": "https://unverified-tech-leaks.blog",
             "text": "Insiders claim that a groundbreaking quantum computing processor may launch ahead of schedule next month, according to unconfirmed supply chain rumors circulating in Asian markets. Early reports suggest performance improvements of up to 400 percent over existing silicon architectures, though independent benchmarks have not yet been made public. Company representatives declined to comment on future product roadmaps or verify specifications."
         }
