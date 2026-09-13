@@ -67,12 +67,11 @@ def analyze_news_article(
     if len(cleaned.strip()) == 0:
         raise ValueError("Article text contains only punctuation, stop words, or symbols.")
 
-    # Short snippets do not contain enough context for a reliable fake-news verdict.
-    # Keep the ML score for transparency, but force an uncertainty result unless a
-    # source URL is supplied. This prevents generic headlines/snippets from being
-    # displayed as highly confident factual judgments.
+    # Short snippets and unverified summaries do not contain enough context for a
+    # reliable fake-news verdict. Keep the ML score for transparency, but force an
+    # uncertainty result for text under 120 words unless a source URL is supplied.
     word_count = len(text_clean_raw.split())
-    short_context_without_source = word_count < 40 and not (source_url and source_url.strip())
+    short_context_without_source = word_count < 120 and not (source_url and source_url.strip())
         
     # 2. Vectorization & Inference using trained pipeline
     X_vec = vectorizer.transform([cleaned])
