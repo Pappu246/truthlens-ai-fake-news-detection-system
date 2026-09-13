@@ -52,11 +52,7 @@ def analyze_news_article(
     fake_threshold: Optional[float] = None,
     real_threshold: Optional[float] = None
 ) -> Dict[str, Any]:
-    """
-    Core ML inference routine for a single article.
-    Strictly uses the trained, calibrated model (CalibratedClassifierCV / LogisticRegression)
-    and TF-IDF vectorizer. Never uses hardcoded or heuristic fallback predictions.
-    """
+    """Core ML inference routine for a single article."""
     model, vectorizer, model_name = load_artifacts()
     
     # 1. Input Validation
@@ -70,11 +66,17 @@ def analyze_news_article(
     cleaned = clean_text(text_clean_raw)
     if len(cleaned.strip()) == 0:
         raise ValueError("Article text contains only punctuation, stop words, or symbols.")
+
+    # Short snippets do not contain enough context for a reliable fake-news verdict.
+    # Keep the ML score for transparency, but force an uncertainty result unless a
+    # source URL is supplied. This prevents generic headlines/snippets from being
+    # displayed as highly confident factual judgments.
+    word_count = len(text_clean_raw.split())
+    short_context_without_source = word_count < 40 and not (source_url and source_url.strip())
         
     # 2. Vectorization & Inference using trained pipeline
     X_vec = vectorizer.transform([cleaned])
     
-    # Verify calibration is genuinely trained and available
     if not hasattr(model, "predict_proba"):
         raise RuntimeError(
             f"Active model '{model_name}' does not implement predict_proba. "
@@ -84,10 +86,9 @@ def analyze_news_article(
     probs = model.predict_proba(X_vec)[0]
     real_prob = round(float(probs[0]), 4)
     fake_prob = round(float(probs[1]), 4)
-    # Ensure exact mathematical sum to 1.0
     real_prob = round(1.0 - fake_prob, 4)
     
-    # 3. Decision Thresholds (Configurable uncertainty layer around binary model)
+    # 3. Decision Thresholds
     active_thresholds = get_thresholds()
     t_fake = fake_threshold if fake_threshold is not None else active_thresholds["fake_threshold"]
     t_real = real_threshold if real_threshold is not None else active_thresholds["real_threshold"]
@@ -95,10 +96,13 @@ def analyze_news_article(
     if t_real >= t_fake:
         raise ValueError(f"real_threshold ({t_real}) must be strictly less than fake_threshold ({t_fake})")
         
-    # Binary classification with SUSPICIOUS uncertainty zone
     uncertainty_score = round(1.0 - abs(fake_prob - real_prob), 4)
     
-    if fake_prob >= t_fake:
+    if short_context_without_source:
+        prediction = "SUSPICIOUS"
+        risk_level = "MODERATE"
+        confidence = round(max(fake_prob, real_prob), 4)
+    elif fake_prob >= t_fake:
         prediction = "LIKELY FAKE"
         risk_level = "HIGH"
         confidence = fake_prob
@@ -107,10 +111,8 @@ def analyze_news_article(
         risk_level = "LOW"
         confidence = real_prob
     else:
-        # SUSPICIOUS is strictly an uncertainty zone between the two definitive thresholds
         prediction = "SUSPICIOUS"
         risk_level = "MODERATE"
-        # In the uncertainty region, confidence reflects the dominant tendency
         confidence = round(max(fake_prob, real_prob), 4)
         
     # 4. Explainable AI & Indicators
@@ -137,7 +139,6 @@ def analyze_news_article(
         "note": "Independent external factual retrieval requires active search indexing and live fact-checking APIs."
     }
     
-    # 6. Save to SQLite History
     record_id = insert_history(
         full_text=text_clean_raw,
         prediction=prediction,
