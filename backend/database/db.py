@@ -19,9 +19,9 @@ def init_db():
         full_text TEXT NOT NULL,
         source_url TEXT,
         prediction TEXT NOT NULL,
-        confidence REAL NOT NULL,
-        fake_probability REAL NOT NULL,
-        real_probability REAL NOT NULL,
+        confidence REAL,
+        fake_probability REAL,
+        real_probability REAL,
         risk_level TEXT NOT NULL,
         model_name TEXT NOT NULL,
         indicators_json TEXT,
@@ -29,6 +29,46 @@ def init_db():
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
     )
     """)
+    # Migration: databases created before the verdict contract declared the
+    # score columns NOT NULL. Rebuild once so guarded (NEEDS MORE CONTEXT)
+    # results can store NULL = "not available".
+    try:
+        cols = cursor.execute("PRAGMA table_info(history)").fetchall()
+        notnull_cols = {row[1] for row in cols if row[3]}
+        if notnull_cols & {"confidence", "fake_probability", "real_probability"}:
+            cursor.executescript("""
+                CREATE TABLE IF NOT EXISTS history_migrated (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    text_preview TEXT NOT NULL,
+                    full_text TEXT NOT NULL,
+                    source_url TEXT,
+                    prediction TEXT NOT NULL,
+                    confidence REAL,
+                    fake_probability REAL,
+                    real_probability REAL,
+                    risk_level TEXT NOT NULL,
+                    model_name TEXT NOT NULL,
+                    indicators_json TEXT,
+                    explanation_json TEXT,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                );
+                INSERT INTO history_migrated (
+                    id, text_preview, full_text, source_url, prediction,
+                    confidence, fake_probability, real_probability,
+                    risk_level, model_name, indicators_json,
+                    explanation_json, timestamp
+                )
+                SELECT id, text_preview, full_text, source_url, prediction,
+                    confidence, fake_probability, real_probability,
+                    risk_level, model_name, indicators_json,
+                    explanation_json, timestamp
+                FROM history;
+                DROP TABLE history;
+                ALTER TABLE history_migrated RENAME TO history;
+            """)
+            print("[TruthLens] Migrated history table to nullable score columns")
+    except Exception as e:
+        print(f"[TruthLens] History table migration failed (non-fatal): {e}")
     conn.commit()
     conn.close()
 
@@ -38,9 +78,9 @@ init_db()
 def insert_history(
     full_text: str,
     prediction: str,
-    confidence: float,
-    fake_probability: float,
-    real_probability: float,
+    confidence: Optional[float],
+    fake_probability: Optional[float],
+    real_probability: Optional[float],
     risk_level: str,
     model_name: str,
     source_url: Optional[str] = None,

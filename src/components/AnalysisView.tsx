@@ -1,5 +1,5 @@
 import React from 'react';
-import { AnalysisResult, ModelComparisonData } from '../types';
+import { AnalysisResult, ModelComparisonData, isNeedsMoreContextLabel } from '../types';
 import { CheckCircle, AlertTriangle, XCircle, Info, ExternalLink, ShieldAlert, FileText, Search, HelpCircle, Layers } from 'lucide-react';
 import { TruthLensVerificationSection } from './TruthLensVerificationSection';
 
@@ -36,8 +36,8 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics }) =
               <span className="text-sm font-bold text-slate-900">Platt Sigmoid Scaling</span>
             </div>
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-              <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block mb-1">Decision Zone</span>
-              <span className="text-sm font-bold text-slate-900">≤0.35 Real / ≥0.65 Fake</span>
+              <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block mb-1">Verdict Contract</span>
+              <span className="text-sm font-bold text-slate-900">Real / Fake / Needs More Context</span>
             </div>
           </div>
         </div>
@@ -45,42 +45,75 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics }) =
     );
   }
 
-  // Short Text Protection view
-  if (result.status === 'INSUFFICIENT_INFORMATION' || result.prediction === 'INSUFFICIENT INFORMATION') {
+  // ======================================================================
+  // NEEDS MORE CONTEXT — dedicated visual state.
+  // Short, headline-only, vague, incomplete or source-less content, as well
+  // as uncertain model predictions inside the configured uncertainty zone,
+  // land here. This state NEVER renders a fake percentage: confidence and
+  // probabilities are shown as N/A (or the raw zone values, which by
+  // definition cannot exceed the threshold bounds).
+  // ======================================================================
+  if (result.status === 'INSUFFICIENT_INFORMATION' ||
+      isNeedsMoreContextLabel(result.verdict) ||
+      isNeedsMoreContextLabel(result.prediction)) {
+    const withheld = result.fake_probability === null || result.fake_probability === undefined;
     return (
       <section className="flex-1 p-6 lg:p-10 bg-slate-50 overflow-y-auto flex flex-col justify-between">
         <div className="max-w-2xl mx-auto my-auto py-10">
           <div className="bg-white rounded-2xl p-8 border border-amber-200 shadow-sm text-center">
             <div className="w-14 h-14 bg-amber-100 text-amber-700 rounded-2xl flex items-center justify-center mx-auto mb-5">
-              <AlertTriangle className="w-7 h-7" />
+              <HelpCircle className="w-7 h-7" />
             </div>
             <span className="px-3 py-1 bg-amber-100 text-amber-800 text-[11px] font-black uppercase tracking-wider rounded-full inline-block mb-3">
-              Insufficient Information
+              Needs More Context
             </span>
             <h2 className="text-3xl font-black text-slate-900 mb-3 tracking-tight">
-              More Article Context Required
+              Need More Context
             </h2>
             <p className="text-slate-600 text-base leading-relaxed mb-6 max-w-lg mx-auto">
-              {result.message || 'More article context is required for reliable ML analysis.'}
+              {result.reason || result.message || 'The backend could not reach a reliable verdict for this input. More context is required.'}
             </p>
 
             <div className="bg-slate-50 rounded-xl p-4 text-left border border-slate-200 mb-6 text-xs text-slate-600 space-y-2 font-mono">
-              <div className="flex justify-between">
-                <span>Input Length:</span>
-                <span className="font-bold text-slate-900">{result.input_length || 0} characters</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Minimum Required Length:</span>
-                <span className="font-bold text-slate-900">{result.min_required_length || 60} characters</span>
-              </div>
+              {typeof result.input_length === 'number' && (
+                <div className="flex justify-between">
+                  <span>Input Length:</span>
+                  <span className="font-bold text-slate-900">{result.input_length} characters</span>
+                </div>
+              )}
+              {typeof result.min_required_length === 'number' && (
+                <div className="flex justify-between">
+                  <span>Minimum Required Length:</span>
+                  <span className="font-bold text-slate-900">{result.min_required_length} characters</span>
+                </div>
+              )}
+              {typeof result.min_required_words === 'number' && (
+                <div className="flex justify-between">
+                  <span>Minimum Words (without source URL):</span>
+                  <span className="font-bold text-slate-900">{result.min_required_words} words</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span>Model Decision:</span>
                 <span className="font-bold text-amber-700">Classification Withheld (Safeguard)</span>
               </div>
+              <div className="flex justify-between">
+                <span>Fake Probability:</span>
+                <span className="font-bold text-slate-900">
+                  {withheld ? 'N/A (not available)' : (result.fake_probability as number).toFixed(2)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span>Confidence:</span>
+                <span className="font-bold text-slate-900">N/A</span>
+              </div>
             </div>
 
             <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
-              Statistical natural language models require multiple sentences to evaluate vocabulary distributions, syntax markers, and attribution hedges. Single headlines or fragments are not classified to avoid arbitrary predictions.
+              Statistical natural language models require multiple sentences to evaluate vocabulary
+              distributions, syntax markers, and attribution hedges. Single headlines or fragments are
+              not classified to avoid arbitrary predictions. Add the full article body or a source
+              URL with article text to obtain a verdict.
             </p>
           </div>
         </div>
@@ -88,24 +121,23 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics }) =
     );
   }
 
-  const isFake = result.prediction.includes('FAKE');
-  const isReal = result.prediction.includes('REAL');
-  const isSuspicious = result.prediction === 'SUSPICIOUS';
+  const isFake = result.prediction === 'LIKELY FAKE' || result.prediction === 'FAKE';
+  const isReal = result.prediction === 'LIKELY REAL' || result.prediction === 'REAL';
 
   const verdictBadgeClass = isFake
     ? 'bg-red-100 text-red-700 border border-red-200'
-    : isReal
-    ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
-    : 'bg-amber-100 text-amber-700 border border-amber-200';
+    : 'bg-emerald-100 text-emerald-700 border border-emerald-200';
 
   const verdictTextClass = isFake
     ? 'text-red-600'
-    : isReal
-    ? 'text-emerald-600'
-    : 'text-amber-600';
+    : 'text-emerald-600';
 
-  const fakePercentage = Math.round(result.fake_probability * 100);
-  const realPercentage = Math.round(result.real_probability * 100);
+  // NULL probabilities are rendered as N/A — the backend withheld them.
+  const fakePercentage = result.fake_probability === null || result.fake_probability === undefined ? null : Math.round(result.fake_probability * 100);
+  const realPercentage = result.real_probability === null || result.real_probability === undefined ? null : Math.round(result.real_probability * 100);
+  const confidenceDisplay = result.confidence_score === null || result.confidence_score === undefined ? 'N/A' : `${result.confidence_score}%`;
+
+  const isDemoModel = result.model_reliability === 'DEMO_DATASET' || metrics.is_demo;
 
   const trainingAccPercent = (activeModelMetrics.accuracy * 100).toFixed(1);
   const f1Value = activeModelMetrics.macro_f1.toFixed(2);
@@ -147,23 +179,29 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics }) =
               {result.prediction}
             </h2>
             <p className="text-slate-600 text-sm sm:text-base max-w-2xl leading-relaxed">
-              {result.summary || (isSuspicious
-                ? 'The article falls into the suspicious uncertainty zone near the decision boundary. Content exhibits mixed signals.'
-                : isFake
+              {result.summary || (isFake
                 ? 'The article exhibits language patterns statistically aligned with unverified or sensationalized reporting.'
                 : 'The article exhibits language patterns consistent with documented journalistic reporting.')}
             </p>
           </div>
 
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 shrink-0 text-left md:text-right">
-            <span className="text-3xl sm:text-4xl font-black text-slate-900 leading-none block">
-              {result.confidence_score}%
+            <span className={`text-3xl sm:text-4xl font-black leading-none block ${result.confidence_score === null || result.confidence_score === undefined ? 'text-slate-400' : 'text-slate-900'}`}>
+              {confidenceDisplay}
             </span>
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mt-1">
               Model Confidence Score
             </span>
           </div>
         </div>
+
+        {isDemoModel && (
+          <div className="mt-4 p-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-xs leading-relaxed">
+            <strong className="uppercase tracking-wide">Model reliability notice:</strong>{' '}
+            The active model was trained on a small demo dataset. Verdicts are indicative only and
+            extreme probabilities are not statistically supported{result.probability_caveat ? ` — ${result.probability_caveat}` : '.'}
+          </div>
+        )}
       </div>
 
       {/* SECTION 2: MODEL SCORE / CALIBRATED PROBABILITY */}
@@ -180,13 +218,17 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics }) =
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
           <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
             <span className="text-[10px] font-black uppercase text-slate-400 block mb-1">Fake Probability</span>
-            <span className="text-2xl font-black text-red-600 font-mono">{fakePercentage}%</span>
-            <span className="text-[10px] text-slate-400 block mt-1 font-mono">P(FAKE) = {result.fake_probability}</span>
+            <span className="text-2xl font-black text-red-600 font-mono">{fakePercentage === null ? 'N/A' : `${fakePercentage}%`}</span>
+            <span className="text-[10px] text-slate-400 block mt-1 font-mono">
+              P(FAKE) = {result.fake_probability === null || result.fake_probability === undefined ? 'N/A' : result.fake_probability}
+            </span>
           </div>
           <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
             <span className="text-[10px] font-black uppercase text-slate-400 block mb-1">Real Probability</span>
-            <span className="text-2xl font-black text-emerald-600 font-mono">{realPercentage}%</span>
-            <span className="text-[10px] text-slate-400 block mt-1 font-mono">P(REAL) = {result.real_probability}</span>
+            <span className="text-2xl font-black text-emerald-600 font-mono">{realPercentage === null ? 'N/A' : `${realPercentage}%`}</span>
+            <span className="text-[10px] text-slate-400 block mt-1 font-mono">
+              P(REAL) = {result.real_probability === null || result.real_probability === undefined ? 'N/A' : result.real_probability}
+            </span>
           </div>
           <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
             <span className="text-[10px] font-black uppercase text-slate-400 block mb-1">Threshold Zone</span>
@@ -194,35 +236,44 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics }) =
               Real ≤ {tReal} | Fake ≥ {tFake}
             </span>
             <span className="text-[10px] text-slate-500 block mt-1">
-              Suspicious Zone: {tReal} to {tFake}
+              Uncertainty Zone: {tReal} to {tFake}
+              {result.thresholds?.widened_for_demo ? ' (widened for demo model)' : ''}
             </span>
           </div>
         </div>
 
-        {/* Dual Progress Bar */}
-        <div className="h-4 w-full bg-slate-100 rounded-full overflow-hidden flex mb-2">
-          <div
-            className="h-full bg-red-500 transition-all duration-500"
-            style={{ width: `${fakePercentage}%` }}
-            title={`Fake: ${fakePercentage}%`}
-          />
-          <div
-            className="h-full bg-emerald-500 transition-all duration-500"
-            style={{ width: `${realPercentage}%` }}
-            title={`Real: ${realPercentage}%`}
-          />
-        </div>
-        <div className="flex justify-between text-[11px] font-bold font-mono">
-          <span className="text-red-600">Likely Fake Threshold (≥ {Math.round(tFake * 100)}%)</span>
-          <span className="text-amber-600 font-normal">Uncertainty Zone ({Math.round(tReal * 100)}% - {Math.round(tFake * 100)}%)</span>
-          <span className="text-emerald-600">Likely Real Threshold (≤ {Math.round(tReal * 100)}%)</span>
-        </div>
+        {/* Dual Progress Bar — only meaningful when the backend provided probabilities */}
+        {fakePercentage !== null && realPercentage !== null ? (
+          <>
+            <div className="h-4 w-full bg-slate-100 rounded-full overflow-hidden flex mb-2">
+              <div
+                className="h-full bg-red-500 transition-all duration-500"
+                style={{ width: `${fakePercentage}%` }}
+                title={`Fake: ${fakePercentage}%`}
+              />
+              <div
+                className="h-full bg-emerald-500 transition-all duration-500"
+                style={{ width: `${realPercentage}%` }}
+                title={`Real: ${realPercentage}%`}
+              />
+            </div>
+            <div className="flex justify-between text-[11px] font-bold font-mono">
+              <span className="text-red-600">Likely Fake Threshold (≥ {Math.round(tFake * 100)}%)</span>
+              <span className="text-amber-600 font-normal">Uncertainty Zone ({Math.round(tReal * 100)}% - {Math.round(tFake * 100)}%)</span>
+              <span className="text-emerald-600">Likely Real Threshold (≤ {Math.round(tReal * 100)}%)</span>
+            </div>
+          </>
+        ) : (
+          <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-500 font-mono">
+            Probabilities withheld by the backend for this verdict — displayed as N/A.
+          </div>
+        )}
       </div>
 
       {/* SECTION 3: DETECTED CLAIM */}
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
         <div className="flex items-center gap-2 mb-3">
-          <FileText className="w-4 h-4 text-slate-500" />
+          <FileText className="w-4 h-4 text-slate-400" />
           <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
             3. Detected Claim
           </span>
@@ -243,11 +294,11 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics }) =
           <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
             4. Contributing Signals (Model Vocabulary Attribution)
           </span>
-          <span className="text-[10px] font-mono text-slate-400">
+          <span className="text-[10px] font-mono text-slate-500">
             Linear SVM Weights × TF-IDF
           </span>
         </div>
-        <p className="text-xs text-amber-700 bg-amber-50 p-2.5 rounded-lg border border-amber-200 mb-4 font-medium">
+        <p className="text-xs bg-amber-50 p-2.5 rounded-lg border border-amber-200 mb-4 font-medium text-amber-700">
           ⚠️ <strong>Disclaimer:</strong> These are model indicators based on statistical correlations in the training dataset; they are NOT proof that the article is factually false.
         </p>
 
@@ -310,7 +361,7 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics }) =
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <ExternalLink className="w-4 h-4 text-slate-500" />
+            <ExternalLink className="w-4 h-4 text-slate-400" />
             <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
               5. Source Information & Provenance (Phase 3 Acquisition)
             </span>
@@ -339,19 +390,19 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics }) =
               {result.source_name && (
                 <div>
                   <span className="text-[10px] font-bold uppercase text-slate-400 block font-mono">Publisher / Wire:</span>
-                  <span className="font-semibold text-slate-800">{result.source_name}</span>
+                  <span className="font-semibold text-slate-900 text-sm">{result.source_name}</span>
                 </div>
               )}
               {result.published_at && (
                 <div>
                   <span className="text-[10px] font-bold uppercase text-slate-400 block font-mono">Published Date:</span>
-                  <span className="text-slate-700">{new Date(result.published_at).toLocaleString()}</span>
+                  <span className="font-semibold text-slate-700">{new Date(result.published_at).toLocaleString()}</span>
                 </div>
               )}
               {result.word_count && (
                 <div>
                   <span className="text-[10px] font-bold uppercase text-slate-400 block font-mono">Article Length:</span>
-                  <span className="text-slate-700">{result.word_count} words extracted</span>
+                  <span className="font-semibold text-slate-700">{result.word_count} words extracted</span>
                 </div>
               )}
             </div>
@@ -407,7 +458,7 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics }) =
       <TruthLensVerificationSection
         initialVerification={result.verification}
         articleTitle={result.article_title}
-        articleContent={result.text_preview || result.full_text || ''}
+        articleContent={result.text_snippet}
         sourceUrl={result.canonical_url || result.source_url}
         mlRiskLevel={result.risk_level as any}
         analysisId={result.id}

@@ -110,8 +110,14 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
                   <div className="flex items-center gap-6 shrink-0 w-full md:w-auto justify-between md:justify-end">
                     <div className="text-right">
-                      <span className="text-2xl font-black text-slate-900 font-mono">
-                        {item.confidence_score}%
+                      <span className={`text-2xl font-black font-mono ${
+                        item.confidence_score === null || item.confidence_score === undefined
+                          ? 'text-slate-400'
+                          : 'text-slate-900'
+                      }`}>
+                        {item.confidence_score === null || item.confidence_score === undefined
+                          ? 'N/A'
+                          : `${item.confidence_score}%`}
                       </span>
                       <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
                         Confidence

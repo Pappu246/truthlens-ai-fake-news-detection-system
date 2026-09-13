@@ -1,4 +1,25 @@
-export type PredictionLabel = 'REAL' | 'FAKE' | 'SUSPICIOUS' | 'LIKELY REAL' | 'LIKELY FAKE' | 'INSUFFICIENT INFORMATION';
+/**
+ * Canonical verdict contract (backend is the single source of truth):
+ *   LIKELY REAL | LIKELY FAKE | NEEDS MORE CONTEXT
+ * The legacy labels below are kept for backward compatibility with history
+ * records written before the contract change.
+ */
+export type PredictionLabel =
+  | 'LIKELY REAL'
+  | 'LIKELY FAKE'
+  | 'NEEDS MORE CONTEXT'
+  | 'SUSPICIOUS'
+  | 'INSUFFICIENT INFORMATION'
+  | 'REAL'
+  | 'FAKE';
+
+export function isNeedsMoreContextLabel(label: string | undefined | null): boolean {
+  return (
+    label === 'NEEDS MORE CONTEXT' ||
+    label === 'INSUFFICIENT INFORMATION' ||
+    label === 'SUSPICIOUS'
+  );
+}
 
 export interface LinguisticSignals {
   sensational_count: number;
@@ -46,20 +67,32 @@ export interface AnalysisResult {
   id: string;
   status?: 'SUCCESS' | 'INSUFFICIENT_INFORMATION';
   message?: string;
+  /** Canonical verdict from the backend (alias of `prediction`). */
+  verdict?: PredictionLabel;
   prediction: PredictionLabel;
+  /** Why the backend withheld or softened the verdict, when applicable. */
+  reason?: string;
   risk_level: 'LOW' | 'MODERATE' | 'HIGH' | 'UNDETERMINED';
-  fake_probability: number;
-  real_probability: number;
-  confidence_score: number;
-  model_score?: number;
-  uncertainty_score?: number;
+  /**
+   * NULL means the backend withheld the probability (e.g. NEEDS MORE CONTEXT
+   * for short/vague input). The UI must render N/A — never a fabricated %.
+   */
+  fake_probability: number | null;
+  real_probability: number | null;
+  /** NULL means the confidence is not meaningful for this verdict (render N/A). */
+  confidence_score: number | null;
+  model_score?: number | null;
+  uncertainty_score?: number | null;
   model_used: string;
+  model_reliability?: string;
+  probability_caveat?: string;
   summary: string;
   text_snippet: string;
   source_url?: string;
   detected_claim?: string;
   input_length?: number;
   min_required_length?: number;
+  min_required_words?: number;
   input_type?: 'text' | 'url' | 'live_news';
   original_url?: string;
   canonical_url?: string;
@@ -75,7 +108,9 @@ export interface AnalysisResult {
     fake_threshold: number;
     real_threshold: number;
     min_text_length?: number;
+    min_word_count?: number;
     suspicious_zone?: string;
+    widened_for_demo?: boolean;
   };
   source_info?: SourceProvenanceInfo;
   evidence_verification?: EvidenceVerificationInfo;
@@ -162,9 +197,11 @@ export interface HistoryItem {
   full_text?: string;
   source_url: string;
   prediction: PredictionLabel;
-  fake_probability: number;
-  real_probability?: number;
-  confidence_score: number;
+  /** NULL = probability was withheld by the backend (render N/A). */
+  fake_probability: number | null;
+  real_probability?: number | null;
+  /** NULL = confidence not meaningful (render N/A). */
+  confidence_score: number | null;
   risk_level?: string;
   model_used: string;
   detected_claim?: string;

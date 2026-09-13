@@ -247,7 +247,7 @@ export const InputSection: React.FC<InputSectionProps> = ({
                 >
                   {eg.expected_outcome === 'LIKELY FAKE' && <span className="text-red-600 mr-1 font-black">●</span>}
                   {eg.expected_outcome === 'LIKELY REAL' && <span className="text-emerald-600 mr-1 font-black">●</span>}
-                  {eg.expected_outcome === 'SUSPICIOUS' && <span className="text-amber-600 mr-1 font-black">●</span>}
+                  {(eg.expected_outcome === 'SUSPICIOUS' || eg.expected_outcome === 'NEEDS MORE CONTEXT') && <span className="text-amber-600 mr-1 font-black">●</span>}
                   {eg.category}
                 </button>
               ))}
