@@ -1,0 +1,6 @@
+{
+  "name": "TruthLens - AI Fake News Detection System",
+  "description": "Production-quality AI Fake News Detection System featuring machine learning pipelines, TF-IDF vectorization, calibrated Linear SVM, explainable AI linguistic indicators, ISOT benchmark training, LIAR external validation, live news acquisition, and Phase 4 factual claim extraction with live multi-source evidence verification.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

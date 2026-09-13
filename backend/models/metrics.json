@@ -1,0 +1,207 @@
+{
+  "status": "success",
+  "model_version": "2.2.0-calibrated",
+  "trained_at": "2026-09-05T09:03:10.636Z",
+  "is_demo": true,
+  "dataset_status": "DEMO DATASET",
+  "demo_badge_label": "DEMO DATASET — NOT SUITABLE FOR FINAL MODEL EVALUATION",
+  "evaluation_status": "Insufficient for reliable benchmark",
+  "strong_warning": "Only 36 articles available. Model performance is not statistically reliable.",
+  "why_misleading_accuracy": "In text classification with TF-IDF, the vocabulary dimension p (typically 2,000+ terms) vastly exceeds the sample size n (e.g. 28 training samples). In this sparse high-dimensional space (p >> n), data points are mathematically linearly separable, yielding perfect training and test separation on tiny test splits (N=8) despite having zero statistical generalization to real-world news.",
+  "real_dataset_required_notice": "Real labelled dataset required for final evaluation.",
+  "dataset_info": {
+    "source_path": "/app/applet/data/news.csv",
+    "filename": "news.csv",
+    "total_samples": 36,
+    "train_samples": 28,
+    "test_samples": 8,
+    "real_samples": 18,
+    "fake_samples": 18,
+    "vocabulary_size": 2910,
+    "is_demo": true,
+    "dataset_status": "DEMO DATASET",
+    "demo_badge_label": "DEMO DATASET — NOT SUITABLE FOR FINAL MODEL EVALUATION",
+    "evaluation_status": "Insufficient for reliable benchmark",
+    "strong_warning": "Only 36 articles available. Model performance is not statistically reliable."
+  },
+  "cross_validation": {
+    "n_splits": 5,
+    "method": "Stratified 5-Fold Cross-Validation",
+    "data_leakage_prevented": true,
+    "leakage_guard_note": "TF-IDF vocabulary and IDF weights fitted exclusively inside each training fold without access to validation fold.",
+    "logistic_regression": {
+      "accuracy_mean": 1,
+      "accuracy_std": 0,
+      "precision_mean": 1,
+      "precision_std": 0,
+      "recall_mean": 1,
+      "recall_std": 0,
+      "f1_mean": 1,
+      "f1_std": 0
+    },
+    "linear_svm": {
+      "accuracy_mean": 1,
+      "accuracy_std": 0,
+      "precision_mean": 1,
+      "precision_std": 0,
+      "recall_mean": 1,
+      "recall_std": 0,
+      "f1_mean": 1,
+      "f1_std": 0
+    }
+  },
+  "models": {
+    "logistic_regression": {
+      "name": "Logistic Regression",
+      "hyperparameters": {
+        "C": 1,
+        "max_iter": 1000,
+        "penalty": "l2"
+      },
+      "cv_metrics": {
+        "accuracy": {
+          "mean": 1,
+          "std": 0
+        },
+        "precision": {
+          "mean": 1,
+          "std": 0
+        },
+        "recall": {
+          "mean": 1,
+          "std": 0
+        },
+        "f1_score": {
+          "mean": 1,
+          "std": 0
+        }
+      },
+      "metrics": {
+        "positive_class": "FAKE (1)",
+        "accuracy": 1,
+        "precision": 1,
+        "recall": 1,
+        "f1_score": 1,
+        "confusion_matrix": {
+          "matrix": [
+            [
+              4,
+              0
+            ],
+            [
+              0,
+              4
+            ]
+          ],
+          "true_negative": 4,
+          "false_positive": 0,
+          "false_negative": 0,
+          "true_positive": 4,
+          "labels": [
+            "REAL (0)",
+            "FAKE (1)"
+          ],
+          "explanations": {
+            "false_positive": "Real news incorrectly classified as Fake.",
+            "false_negative": "Fake news incorrectly classified as Real."
+          }
+        }
+      }
+    },
+    "linear_svm": {
+      "name": "Linear SVM",
+      "hyperparameters": {
+        "C": 1,
+        "calibration": "sigmoid (Platt)",
+        "loss": "hinge",
+        "penalty": "l2"
+      },
+      "cv_metrics": {
+        "accuracy": {
+          "mean": 1,
+          "std": 0
+        },
+        "precision": {
+          "mean": 1,
+          "std": 0
+        },
+        "recall": {
+          "mean": 1,
+          "std": 0
+        },
+        "f1_score": {
+          "mean": 1,
+          "std": 0
+        }
+      },
+      "metrics": {
+        "positive_class": "FAKE (1)",
+        "accuracy": 1,
+        "precision": 1,
+        "recall": 1,
+        "f1_score": 1,
+        "confusion_matrix": {
+          "matrix": [
+            [
+              4,
+              0
+            ],
+            [
+              0,
+              4
+            ]
+          ],
+          "true_negative": 4,
+          "false_positive": 0,
+          "false_negative": 0,
+          "true_positive": 4,
+          "labels": [
+            "REAL (0)",
+            "FAKE (1)"
+          ],
+          "explanations": {
+            "false_positive": "Real news incorrectly classified as Fake.",
+            "false_negative": "Fake news incorrectly classified as Real."
+          }
+        }
+      }
+    }
+  },
+  "best_model": {
+    "name": "Linear SVM (Calibrated)",
+    "model_version": "2.2.0",
+    "selection_criterion": "Stratified 5-Fold Cross-Validation F1-score",
+    "selection_reason": "F1-scores tied across Stratified K-Fold CV; Linear SVM selected for maximum-margin regularization and Platt sigmoid calibration.",
+    "metrics": {
+      "positive_class": "FAKE (1)",
+      "accuracy": 1,
+      "precision": 1,
+      "recall": 1,
+      "f1_score": 1,
+      "confusion_matrix": {
+        "matrix": [
+          [
+            4,
+            0
+          ],
+          [
+            0,
+            4
+          ]
+        ],
+        "true_negative": 4,
+        "false_positive": 0,
+        "false_negative": 0,
+        "true_positive": 4,
+        "labels": [
+          "REAL (0)",
+          "FAKE (1)"
+        ],
+        "explanations": {
+          "false_positive": "Real news incorrectly classified as Fake.",
+          "false_negative": "Fake news incorrectly classified as Real."
+        }
+      }
+    }
+  }
+}
