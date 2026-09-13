@@ -37,7 +37,7 @@ const DEMO_EXAMPLES = [
     id: "ambiguous-1",
     title: "Suspicious / Ambiguous (Unverified Rumor)",
     category: "Commercial PR / Unverified Rumor",
-    expected_outcome: "SUSPICIOUS",
+    expected_outcome: "NEEDS MORE CONTEXT",
     source_url: "https://unverified-tech-leaks.blog",
     text: "Insiders claim that a groundbreaking quantum computing processor may launch ahead of schedule next month, according to unconfirmed supply chain rumors circulating in Asian markets. Early reports suggest performance improvements of up to 400 percent over existing silicon architectures, though independent benchmarks have not yet been made public. Company representatives declined to comment on future product roadmaps or verify specifications."
   }
@@ -555,7 +555,12 @@ async function startServer() {
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        // Accept proxied preview hosts (e.g. cloud sandboxes) — the app is
+        // intended to be reachable from the user's browser via any host.
+        allowedHosts: true as const,
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);

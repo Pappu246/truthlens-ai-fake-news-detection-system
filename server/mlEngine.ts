@@ -28,7 +28,25 @@ export interface Thresholds {
   fake_threshold: number;
   real_threshold: number;
   min_text_length?: number;
+  min_word_count?: number;
 }
+
+/** Canonical verdict contract — the backend is the single source of truth. */
+export const VERDICT_LIKELY_REAL = 'LIKELY REAL';
+export const VERDICT_LIKELY_FAKE = 'LIKELY FAKE';
+export const VERDICT_NEEDS_MORE_CONTEXT = 'NEEDS MORE CONTEXT';
+
+/**
+ * Models trained on small demo datasets (N <= 50) cannot support confident
+ * verdicts. Their uncertainty zone is widened so borderline inputs fall back
+ * to NEEDS MORE CONTEXT instead of a forced FAKE/REAL call:
+ *   - the FAKE bound moves OUT (0.65 -> 0.75): an unreliable model must
+ *     never accuse text of being fake without strong evidence;
+ *   - the REAL bound moves OUT (0.35 -> 0.40): an unreliable model must not
+ *     over-promise "real" on out-of-distribution text either.
+ */
+const DEMO_FAKE_ZONE_BOUND = 0.75;
+const DEMO_REAL_ZONE_BOUND = 0.40;
 
 export interface ModelArtifacts {
   model_name: string;
@@ -279,7 +297,7 @@ export class TruthLensMLEngine {
   private isTrained = false;
   private trainedAt: string = new Date().toISOString();
   private metrics: any = null;
-  private thresholds: Thresholds = { fake_threshold: 0.65, real_threshold: 0.35, min_text_length: 60 };
+  private thresholds: Thresholds = { fake_threshold: 0.65, real_threshold: 0.35, min_text_length: 60, min_word_count: 20 };
   private historyFile: string;
   private thresholdsFile: string;
   private artifactFile: string;
@@ -311,7 +329,8 @@ export class TruthLensMLEngine {
         this.thresholds = {
           fake_threshold: parsed.fake_threshold ?? 0.65,
           real_threshold: parsed.real_threshold ?? 0.35,
-          min_text_length: parsed.min_text_length ?? 60
+          min_text_length: parsed.min_text_length ?? 60,
+          min_word_count: parsed.min_word_count ?? 20
         };
       }
     } catch (e) {
@@ -323,6 +342,25 @@ export class TruthLensMLEngine {
     try {
       const raw = fs.readFileSync(filePath, 'utf-8');
       const artifact: ModelArtifacts = JSON.parse(raw);
+
+      // ARTIFACT INTEGRITY GUARD: a saved model is only usable when the
+      // vocabulary, IDF table, weight vector and Platt parameters are mutually
+      // consistent. A stale or truncated artifact (e.g. retrained model paired
+      // with an older vectorizer) produces saturated ~100% scores for every
+      // input. Refuse such artifacts and fall back to deterministic training.
+      const vocabSize = Object.keys(artifact.vocabulary || {}).length;
+      const idfLen = Array.isArray(artifact.idf) ? artifact.idf.length : 0;
+      const weightLen = Array.isArray(artifact.selected_model?.weights) ? artifact.selected_model.weights.length : 0;
+      const finite = Number.isFinite(artifact.selected_model?.bias) &&
+        Number.isFinite(artifact.selected_model?.plattA) &&
+        Number.isFinite(artifact.selected_model?.plattB);
+      if (vocabSize === 0 || idfLen !== vocabSize || weightLen !== vocabSize || !finite) {
+        console.error(
+          `[MLEngine] Model artifact integrity check FAILED (vocab=${vocabSize}, idf=${idfLen}, weights=${weightLen}). ` +
+          'Refusing to load an inconsistent artifact; retraining from dataset instead.'
+        );
+        return false;
+      }
 
       this.vocabulary = new Map(Object.entries(artifact.vocabulary));
       this.idf = artifact.idf;
@@ -336,7 +374,8 @@ export class TruthLensMLEngine {
         this.thresholds = {
           fake_threshold: artifact.thresholds.fake_threshold ?? this.thresholds.fake_threshold,
           real_threshold: artifact.thresholds.real_threshold ?? this.thresholds.real_threshold,
-          min_text_length: artifact.thresholds.min_text_length ?? this.thresholds.min_text_length ?? 60
+          min_text_length: artifact.thresholds.min_text_length ?? this.thresholds.min_text_length ?? 60,
+          min_word_count: artifact.thresholds.min_word_count ?? this.thresholds.min_word_count ?? 20
         };
       }
       this.isTrained = true;
@@ -348,6 +387,38 @@ export class TruthLensMLEngine {
       console.error('[MLEngine] Failed to load model artifact, falling back to training', err);
       return false;
     }
+  }
+
+  /**
+   * Reliability flag for the active model. Models trained on small demo
+   * datasets (N <= 50) are flagged so verdicts and confidence can be
+   * presented with appropriate caveats.
+   */
+  private isDemoModel(): boolean {
+    const di = this.metrics?.dataset_info;
+    return Boolean(this.metrics?.is_demo ?? di?.is_demo);
+  }
+
+  /**
+   * Effective decision zone for the active model. For demo (unreliable)
+   * models the uncertainty zone is widened so borderline text is returned as
+   * NEEDS MORE CONTEXT instead of a forced FAKE/REAL verdict.
+   */
+  private effectiveDecisionZone(): { fake_threshold: number; real_threshold: number; widened_for_demo: boolean } {
+    const tFake = this.thresholds.fake_threshold;
+    const tReal = this.thresholds.real_threshold;
+    if (this.isDemoModel()) {
+      return {
+        fake_threshold: Math.max(tFake, DEMO_FAKE_ZONE_BOUND),
+        real_threshold: Math.max(tReal, DEMO_REAL_ZONE_BOUND),
+        widened_for_demo: true
+      };
+    }
+    return { fake_threshold: tFake, real_threshold: tReal, widened_for_demo: false };
+  }
+
+  private modelReliabilityLabel(): string {
+    return this.isDemoModel() ? 'DEMO_DATASET' : 'VALIDATED';
   }
 
   private saveThresholds() {
@@ -1122,44 +1193,75 @@ export class TruthLensMLEngine {
   ): any {
     const textTrimmed = (rawText || '').trim();
 
-    // 1. Minimum Text Length Protection (Phase 7)
-    const minLength = this.thresholds.min_text_length ?? 60;
+    // 1. Hard validation — empty input is a request error, never a prediction
     if (textTrimmed.length === 0) {
       throw new Error('Please enter news article text for analysis.');
     }
 
-    if (textTrimmed.length < minLength) {
+    if (textTrimmed.length > 50000) {
+      throw new Error('Article text exceeds the maximum character limit (50,000 characters).');
+    }
+
+    const minLength = this.thresholds.min_text_length ?? 60;
+    const minWords = this.thresholds.min_word_count ?? 20;
+    const words = textTrimmed.split(/\s+/).filter(w => w.length > 0);
+    const hasSource = Boolean(sourceUrl && sourceUrl.trim());
+
+    // 2. Context guards — short, headline-only, vague, incomplete or
+    //    source-less content is NEVER classified. The response withholds
+    //    probabilities entirely (null) so no fake percentage can be shown.
+    const guardReason = (() => {
+      if (textTrimmed.length < minLength) {
+        return `The supplied text is too short (${textTrimmed.length}/${minLength} characters) or lacks sufficient source context for a reliable assessment.`;
+      }
+      if (options?.isHeadlineOnly) {
+        return 'Headline-only content was provided without article body text, which is not enough context for a reliable assessment.';
+      }
+      if (words.length < minWords && !hasSource) {
+        return `The supplied text is too short (${words.length} words) or lacks sufficient source context (no article body and no source URL).`;
+      }
+      return null;
+    })();
+
+    if (guardReason) {
       const sourceInfo = evaluateSourceProvenance(sourceUrl);
       const claimInfo = extractPrimaryClaim(textTrimmed);
-
       return {
+        id: null,
         status: 'INSUFFICIENT_INFORMATION',
-        prediction: 'INSUFFICIENT INFORMATION',
+        verdict: VERDICT_NEEDS_MORE_CONTEXT,
+        prediction: VERDICT_NEEDS_MORE_CONTEXT,
+        reason: guardReason,
         message: 'More article context is required for reliable ML analysis.',
+        fake_probability: null,
+        real_probability: null,
+        confidence: null,
+        confidence_score: null,
+        model_score: null,
+        uncertainty_score: null,
+        risk_level: 'UNDETERMINED',
         input_length: textTrimmed.length,
         min_required_length: minLength,
-        confidence: 0,
-        confidence_score: 0,
-        model_score: 0,
-        fake_probability: 0.5,
-        real_probability: 0.5,
-        risk_level: 'UNDETERMINED',
+        min_required_words: minWords,
+        input_words: words.length,
         detected_claim: claimInfo.detected_claim,
         claim_details: claimInfo,
         thresholds: {
           fake_threshold: this.thresholds.fake_threshold,
           real_threshold: this.thresholds.real_threshold,
           min_text_length: minLength,
+          min_word_count: minWords,
           suspicious_zone: `${this.thresholds.real_threshold} - ${this.thresholds.fake_threshold}`
         },
         indicators: [],
         explanation: [
-          `Article text is below the reliable analysis threshold (${textTrimmed.length}/${minLength} characters).`,
-          'Statistical natural language models require multi-sentence context to measure vocabulary distribution and syntactic markers accurately.',
-          'Please provide more text (such as full article body or paragraph) for reliable assessment.'
+          'No classification is available: the supplied text does not contain enough context for a reliable model evaluation.',
+          'Provide the full article body (or a source URL with article text) to obtain a verdict.'
         ],
         feature_attributions: [],
         model: 'Linear SVM (Calibrated)',
+        model_used: 'Linear SVM (Calibrated)',
+        model_reliability: this.modelReliabilityLabel(),
         source_info: sourceInfo,
         evidence_verification: {
           available: false,
@@ -1171,52 +1273,59 @@ export class TruthLensMLEngine {
       };
     }
 
-    if (textTrimmed.length > 50000) {
-      throw new Error('Article text exceeds the maximum character limit (50,000 characters).');
-    }
-
     const cleaned = cleanText(textTrimmed);
     if (!cleaned) {
       throw new Error('Article text contains only punctuation, stop words, or symbols.');
     }
 
-    // 2. Dynamic ML Prediction strictly from text (Source URL is completely decoupled)
+    // 3. Dynamic ML Prediction strictly from text (Source URL is completely decoupled)
     const fakeProbRaw = this.predictProbability(cleaned);
     const fakeProb = Math.round(fakeProbRaw * 10000) / 10000;
     const realProb = Math.round((1.0 - fakeProb) * 10000) / 10000;
 
-    const tFake = this.thresholds.fake_threshold;
-    const tReal = this.thresholds.real_threshold;
+    const zone = this.effectiveDecisionZone();
+    const tFake = zone.fake_threshold;
+    const tReal = zone.real_threshold;
+    const demoModel = this.isDemoModel();
 
-    // 3. Suspicious Category as an Uncertainty Boundary (Phase 6)
-    let prediction: 'LIKELY REAL' | 'LIKELY FAKE' | 'SUSPICIOUS';
-    let riskLevel: 'LOW' | 'MODERATE' | 'HIGH';
-    let confidence: number;
+    // 4. Verdict contract (backend = single source of truth):
+    //    LIKELY REAL | LIKELY FAKE | NEEDS MORE CONTEXT
+    let prediction: string;
+    let riskLevel: 'LOW' | 'MODERATE' | 'HIGH' | 'UNDETERMINED';
+    let confidence: number | null;
+    let verdictReason: string | null = null;
 
     if (fakeProb >= tFake) {
-      prediction = 'LIKELY FAKE';
+      prediction = VERDICT_LIKELY_FAKE;
       riskLevel = 'HIGH';
       confidence = fakeProb;
     } else if (fakeProb <= tReal) {
-      prediction = 'LIKELY REAL';
+      prediction = VERDICT_LIKELY_REAL;
       riskLevel = 'LOW';
       confidence = realProb;
     } else {
-      prediction = 'SUSPICIOUS';
-      riskLevel = 'MODERATE';
-      confidence = Math.max(fakeProb, realProb);
+      prediction = VERDICT_NEEDS_MORE_CONTEXT;
+      riskLevel = 'UNDETERMINED';
+      confidence = null;
+      verdictReason = `The model probability (P(FAKE)=${fakeProb}) falls inside the configured uncertainty zone (${tReal} - ${tFake}); the model does not have sufficient certainty to classify this text as real or fake.` +
+        (zone.widened_for_demo ? ' The uncertainty zone is widened because the active model was trained on a small demo dataset.' : '');
     }
 
-    const confidenceScore = Math.round(confidence * 100);
+    // Overconfident scores from demo models are not statistically supported
+    const probabilityCaveat = demoModel && (fakeProb >= 0.9 || realProb >= 0.9)
+      ? `The active model was trained on a small demo dataset; extreme probabilities are not statistically supported and must not be treated as verified truth.`
+      : undefined;
+
+    const confidenceScore = confidence !== null ? Math.round(confidence * 100) : null;
     const uncertaintyScore = Math.round((1.0 - Math.abs(fakeProb - realProb)) * 10000) / 10000;
 
-    // 4. Claim Extraction (Phase 9)
+    // 5. Claim Extraction (Phase 9)
     const claimInfo = extractPrimaryClaim(textTrimmed);
 
-    // 5. Source Provenance & Evidence Verification (Phase 10 & 11)
+    // 6. Source Provenance & Evidence Verification (Phase 10 & 11)
     const sourceInfo = evaluateSourceProvenance(sourceUrl);
 
-    // 6. Linguistic Indicators & Feature Attributions (Phase 8)
+    // 7. Linguistic Indicators & Feature Attributions (Phase 8)
     const indicators = extractLinguisticIndicators(textTrimmed, sourceUrl);
     const featureAttributions = this.getFeatureAttributions(cleaned, 8);
 
@@ -1245,7 +1354,14 @@ export class TruthLensMLEngine {
       summaryReasons.push('Source provenance: No source URL supplied. Evaluation is based strictly on text content.');
     }
 
-    // 7. Persist to SQLite History (Phase 15 & Phase 3 provenance)
+    if (verdictReason) {
+      summaryReasons.push(verdictReason);
+    }
+    if (probabilityCaveat) {
+      summaryReasons.push(probabilityCaveat);
+    }
+
+    // 8. Persist to SQLite History (Phase 15 & Phase 3 provenance)
     const effectiveInputType = options?.inputType || (sourceUrl ? 'url' : 'text');
     const recordId = sqliteHistory.insertHistory({
       full_text: textTrimmed,
@@ -1267,13 +1383,14 @@ export class TruthLensMLEngine {
       explanation: featureAttributions
     });
 
-    const words = textTrimmed.split(/\s+/).filter(w => w.length > 0);
     const calculatedWordCount = options?.wordCount ?? words.length;
 
     return {
       id: recordId,
       status: 'SUCCESS',
+      verdict: prediction,
       prediction,
+      reason: verdictReason,
       fake_probability: fakeProb,
       real_probability: realProb,
       confidence,
@@ -1298,14 +1415,18 @@ export class TruthLensMLEngine {
         fake_threshold: tFake,
         real_threshold: tReal,
         min_text_length: minLength,
-        suspicious_zone: `${tReal} - ${tFake}`
+        min_word_count: minWords,
+        suspicious_zone: `${tReal} - ${tFake}`,
+        widened_for_demo: zone.widened_for_demo
       },
       indicators,
       explanation: summaryReasons,
       feature_attributions: featureAttributions,
       model: 'Linear SVM (Calibrated)',
       model_used: 'Linear SVM (Calibrated)',
-      model_version: '2.1.0',
+      model_reliability: this.modelReliabilityLabel(),
+      probability_caveat: probabilityCaveat,
+      model_version: '2.2.0',
       calibration: 'CalibratedClassifierCV (Platt Scaling via Sigmoid)',
       vectorizer: 'TF-IDF (1-2 ngrams, sublinear tf)',
       source_info: sourceInfo,

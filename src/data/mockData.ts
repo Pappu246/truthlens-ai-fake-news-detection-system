@@ -21,94 +21,99 @@ export const DEFAULT_DEMO_EXAMPLES: DemoExample[] = [
     id: 'ambiguous-1',
     title: 'Suspicious / Ambiguous (Unverified Rumor)',
     category: 'Tech Rumor / PR',
-    expected_outcome: 'SUSPICIOUS',
+    expected_outcome: 'NEEDS MORE CONTEXT',
     source_url: 'http://unverified-tech-leaks.blog',
     text: 'Insiders claim that a groundbreaking quantum computing processor may launch ahead of schedule next month, according to unconfirmed supply chain rumors circulating in Asian markets. Early reports suggest performance improvements of up to 400 percent over existing silicon architectures, though independent benchmarks have not yet been made public. Company representatives declined to comment on future product roadmaps or verify specifications.'
   }
 ];
 
+/**
+ * Honest placeholder shown ONLY until /api/models/metrics responds. It must
+ * never masquerade as a real benchmark: all numbers are zero and the status
+ * makes it clear that real metrics are being fetched from the backend.
+ */
 export const INITIAL_METRICS_DATA: ModelComparisonData = {
-  dataset_path: "data/True.csv & data/Fake.csv",
-  dataset_name: "ISOT Fake News Dataset",
-  total_samples: 38656,
-  training_samples: 30924,
-  test_samples: 7732,
+  dataset_path: "data/news.csv",
+  dataset_name: "Loading from backend…",
+  total_samples: 0,
+  training_samples: 0,
+  test_samples: 0,
   best_model: "linear_svm",
   selection_metric: "f1_score",
-  last_trained: "2026-09-06T10:50:50.640552Z",
-  is_demo: false,
-  dataset_status: "ISOT BENCHMARK DATASET",
-  evaluation_status: "Evaluated on genuine 20% held-out test split (N=7,732)",
-  demo_badge_label: "PRODUCTION BENCHMARK (ISOT DATASET)",
-  limitation: "The model is trained on the ISOT dataset, which primarily contains English news from an older time period. Performance may not generalize to current news, Hindi/Hinglish content, satire, or domains outside the training distribution.",
+  last_trained: new Date(0).toISOString(),
+  is_demo: true,
+  dataset_status: "AWAITING BACKEND",
+  evaluation_status: "Fetching real evaluation metrics from the backend…",
+  demo_badge_label: "LOADING FROM BACKEND…",
+  limitation: "Metrics are being fetched from the backend. Values shown until then are placeholders, not real benchmark results.",
   raw_counts_before_cleaning: {
-    real_articles: 21417,
-    fake_articles: 23481,
-    total_articles: 44898
+    real_articles: 0,
+    fake_articles: 0,
+    total_articles: 0
   },
   cleaning_statistics: {
-    removed_empty_title_text: 631,
-    removed_duplicates: 5611,
+    removed_empty_title_text: 0,
+    removed_duplicates: 0,
     removed_invalid_rows: 0,
-    total_removed_rows: 6242
+    total_removed_rows: 0
   },
   cross_validation: {
-    n_splits: 5,
-    method: "Stratified 5-Fold Cross-Validation",
-    leakage_guard_note: "TF-IDF vocabulary and IDF weights fitted exclusively inside each training fold without access to validation fold.",
+    n_splits: 0,
+    method: "Not loaded yet",
+    leakage_guard_note: "TF-IDF vocabulary and IDF weights are fitted exclusively inside each training fold without access to validation fold.",
     logistic_regression: {
-      accuracy_mean: 0.9904,
-      accuracy_std: 0.0013,
-      precision_mean: 0.9947,
-      precision_std: 0.0005,
-      recall_mean: 0.9840,
-      recall_std: 0.0032,
-      f1_mean: 0.9893,
-      f1_std: 0.0015
+      accuracy_mean: 0,
+      accuracy_std: 0,
+      precision_mean: 0,
+      precision_std: 0,
+      recall_mean: 0,
+      recall_std: 0,
+      f1_mean: 0,
+      f1_std: 0
     },
     linear_svm: {
-      accuracy_mean: 0.9959,
-      accuracy_std: 0.0007,
-      precision_mean: 0.9960,
-      precision_std: 0.0008,
-      recall_mean: 0.9949,
-      recall_std: 0.0013,
-      f1_mean: 0.9955,
-      f1_std: 0.0008
+      accuracy_mean: 0,
+      accuracy_std: 0,
+      precision_mean: 0,
+      precision_std: 0,
+      recall_mean: 0,
+      recall_std: 0,
+      f1_mean: 0,
+      f1_std: 0
     }
   },
   logistic_regression: {
-    accuracy: 0.9908,
-    macro_f1: 0.9898,
-    weighted_f1: 0.9898,
-    precision_fake: 0.9942,
-    recall_fake: 0.9854,
-    f1_fake: 0.9898,
-    precision_real: 0.9942,
-    recall_real: 0.9854,
-    f1_real: 0.9898,
+    accuracy: 0,
+    macro_f1: 0,
+    weighted_f1: 0,
+    precision_fake: 0,
+    recall_fake: 0,
+    f1_fake: 0,
+    precision_real: 0,
+    recall_real: 0,
+    f1_real: 0,
     confusion_matrix: {
-      true_real: 4219,
-      false_fake: 20,
-      false_real: 51,
-      true_fake: 3442
+      true_real: 0,
+      false_fake: 0,
+      false_real: 0,
+      true_fake: 0
     }
   },
   linear_svm: {
-    accuracy: 0.9957,
-    macro_f1: 0.9953,
-    weighted_f1: 0.9953,
-    precision_fake: 0.9940,
-    recall_fake: 0.9966,
-    f1_fake: 0.9953,
-    precision_real: 0.9940,
-    recall_real: 0.9966,
-    f1_real: 0.9953,
+    accuracy: 0,
+    macro_f1: 0,
+    weighted_f1: 0,
+    precision_fake: 0,
+    recall_fake: 0,
+    f1_fake: 0,
+    precision_real: 0,
+    recall_real: 0,
+    f1_real: 0,
     confusion_matrix: {
-      true_real: 4218,
-      false_fake: 21,
-      false_real: 12,
-      true_fake: 3481
+      true_real: 0,
+      false_fake: 0,
+      false_real: 0,
+      true_fake: 0
     }
   }
 };

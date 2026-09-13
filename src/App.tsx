@@ -69,6 +69,9 @@ export default function App() {
     if (!articleText.trim()) return;
     setIsLoading(true);
     setErrorMessage(null);
+    // Clear any stale result before starting a new analysis so the UI never
+    // shows an outdated verdict while the new one is in flight.
+    setAnalysisResult(null);
     try {
       const result = await executeNewsAnalysis(articleText, sourceUrl, options);
       setAnalysisResult(result);
