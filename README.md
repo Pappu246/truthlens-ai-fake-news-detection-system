@@ -1,20 +1,46 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# TruthLens AI
 
-# Run and deploy your AI Studio app
+**AI-powered fake-news detection and claim verification system.**
 
-This contains everything you need to run your app locally.
-
-View your app in AI Studio: https://ai.studio/apps/58f4c736-e5cf-4e83-bfc9-b8ccc4139e5a
+TruthLens AI combines machine-learning predictions with claim extraction, evidence analysis, source evaluation, and a web interface for reviewing news credibility.
 
 ## Run Locally
 
-**Prerequisites:**  Node.js
+### Prerequisites
 
+- Node.js
+- Python 3
+- A configured Gemini API key if using Gemini-powered features
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+### Installation
+
+```bash
+npm install
+python -m pip install -r requirements.txt
+```
+
+### Environment
+
+Create a local environment file and add your API key:
+
+```bash
+GEMINI_API_KEY=your_gemini_api_key
+```
+
+### Start the app
+
+```bash
+npm run dev
+```
+
+## Project Structure
+
+- `src/` — frontend application and UI components
+- `server/` — server-side services, ML engine, verification, security, and history
+- `backend/` — Python ML pipeline, models, and verification utilities
+- `data/` — datasets and validation data
+- `scripts/` — training, evaluation, and acceptance-test scripts
+
+## Important
+
+Model predictions are decision-support signals, not absolute proof that a claim is true or false. Always review the available evidence and source context.
