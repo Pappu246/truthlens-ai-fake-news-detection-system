@@ -528,7 +528,7 @@ export const ModelSpecsView: React.FC<ModelSpecsViewProps> = ({ metrics, onRetra
         </div>
 
         <p className="text-xs text-slate-500 mb-6 leading-relaxed">
-          The underlying model is strictly binary (<code className="font-mono">REAL</code> vs <code className="font-mono">FAKE</code>). The <code className="font-mono">SUSPICIOUS</code> category is an operational uncertainty buffer for predictions falling near the decision boundary.
+          The underlying model is strictly binary (<code className="font-mono">REAL</code> vs <code className="font-mono">FAKE</code>). Predictions falling inside the uncertainty zone between the two thresholds are returned as <code className="font-mono">NEEDS MORE CONTEXT</code> instead of a forced verdict. Models trained on small demo datasets use a widened zone so borderline text is never classified with unsupported confidence.
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">

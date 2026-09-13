@@ -55,8 +55,12 @@ export async function fetchHistory(): Promise<HistoryItem[]> {
         text_snippet: r.full_text ? (r.full_text.length > 120 ? r.full_text.substring(0, 117) + '...' : r.full_text) : (r.text_snippet || ''),
         source_url: r.source_url || '',
         prediction: r.prediction,
-        fake_probability: r.fake_probability,
-        confidence_score: r.confidence_score ?? Math.round((r.confidence ?? 0) * 100),
+        fake_probability: typeof r.fake_probability === 'number' ? r.fake_probability : null,
+        real_probability: typeof r.real_probability === 'number' ? r.real_probability : null,
+        // Preserve NULL (N/A) — never fabricate a score for withheld verdicts.
+        confidence_score: typeof r.confidence_score === 'number'
+          ? r.confidence_score
+          : (typeof r.confidence === 'number' ? Math.round(r.confidence * 100) : null),
         model_used: r.model_name || r.model_used || 'Linear SVM (Calibrated)',
         created_at: r.created_at || new Date().toISOString()
       }));
@@ -127,10 +131,10 @@ export async function fetchModelMetrics(): Promise<ModelComparisonData> {
             recall_real: data.models.logistic_regression.metrics.recall,
             f1_real: data.models.logistic_regression.metrics.f1_score,
             confusion_matrix: {
-              true_real: data.models.logistic_regression.metrics.confusion_matrix?.true_negative ?? 4,
+              true_real: data.models.logistic_regression.metrics.confusion_matrix?.true_negative ?? 0,
               false_fake: data.models.logistic_regression.metrics.confusion_matrix?.false_positive ?? 0,
               false_real: data.models.logistic_regression.metrics.confusion_matrix?.false_negative ?? 0,
-              true_fake: data.models.logistic_regression.metrics.confusion_matrix?.true_positive ?? 4,
+              true_fake: data.models.logistic_regression.metrics.confusion_matrix?.true_positive ?? 0,
             }
           },
           linear_svm: {
@@ -144,10 +148,10 @@ export async function fetchModelMetrics(): Promise<ModelComparisonData> {
             recall_real: data.models.linear_svm.metrics.recall,
             f1_real: data.models.linear_svm.metrics.f1_score,
             confusion_matrix: {
-              true_real: data.models.linear_svm.metrics.confusion_matrix?.true_negative ?? 4,
+              true_real: data.models.linear_svm.metrics.confusion_matrix?.true_negative ?? 0,
               false_fake: data.models.linear_svm.metrics.confusion_matrix?.false_positive ?? 0,
               false_real: data.models.linear_svm.metrics.confusion_matrix?.false_negative ?? 0,
-              true_fake: data.models.linear_svm.metrics.confusion_matrix?.true_positive ?? 4,
+              true_fake: data.models.linear_svm.metrics.confusion_matrix?.true_positive ?? 0,
             }
           }
         };
@@ -266,24 +270,34 @@ export async function executeNewsAnalysis(
     summary = backendData.explanation.join(' ');
   } else if (backendData.summary) {
     summary = backendData.summary;
+  } else if (backendData.reason) {
+    summary = backendData.reason;
+  } else if (backendData.message) {
+    summary = backendData.message;
   } else {
-    summary = `Model classified this article as ${backendData.prediction} with ${Math.round((backendData.confidence || 0) * 100)}% confidence score.`;
+    summary = `The backend returned verdict "${backendData.prediction}" for this article.`;
   }
 
-  const confidencePercentage = typeof backendData.confidence_score === 'number'
+  // Backend is the source of truth for scores: pass nulls through untouched.
+  // The frontend must NEVER fabricate or re-derive probabilities/confidence.
+  const backendConfidenceScore = typeof backendData.confidence_score === 'number'
     ? backendData.confidence_score
-    : Math.round((backendData.confidence ?? Math.max(backendData.fake_probability || 0.5, backendData.real_probability || 0.5)) * 100);
+    : (typeof backendData.confidence === 'number' ? Math.round(backendData.confidence * 100) : null);
 
   const fullResult: AnalysisResult = {
     id: backendData.id ? `#${backendData.id}` : `#${Date.now().toString().slice(-5)}`,
     status: backendData.status,
     message: backendData.message,
-    prediction: backendData.prediction,
+    verdict: backendData.verdict || backendData.prediction,
+    prediction: backendData.prediction || backendData.verdict,
+    reason: backendData.reason,
     risk_level: backendData.risk_level,
-    fake_probability: backendData.fake_probability ?? 0.5,
-    real_probability: backendData.real_probability ?? 0.5,
-    confidence_score: confidencePercentage,
+    fake_probability: typeof backendData.fake_probability === 'number' ? backendData.fake_probability : null,
+    real_probability: typeof backendData.real_probability === 'number' ? backendData.real_probability : null,
+    confidence_score: backendConfidenceScore,
     model_used: backendData.model || backendData.model_used || 'Linear SVM (Calibrated)',
+    model_reliability: backendData.model_reliability,
+    probability_caveat: backendData.probability_caveat,
     summary,
     text_snippet: textTrimmed.length > 120 ? textTrimmed.substring(0, 117) + '...' : textTrimmed,
     source_url: sourceUrl && sourceUrl.trim() ? sourceUrl.trim() : (metadata?.originalUrl || undefined),
@@ -301,6 +315,7 @@ export async function executeNewsAnalysis(
     detected_claim: backendData.detected_claim,
     input_length: backendData.input_length,
     min_required_length: backendData.min_required_length,
+    min_required_words: backendData.min_required_words,
     thresholds: backendData.thresholds,
     source_info: backendData.source_info,
     evidence_verification: backendData.evidence_verification,
@@ -400,24 +415,33 @@ export async function analyzeUrlApi(url: string, fallbackTitle?: string): Promis
     summary = backendData.explanation.join(' ');
   } else if (backendData.summary) {
     summary = backendData.summary;
+  } else if (backendData.reason) {
+    summary = backendData.reason;
+  } else if (backendData.message) {
+    summary = backendData.message;
   } else {
-    summary = `Model classified this article as ${backendData.prediction} with ${Math.round((backendData.confidence || 0) * 100)}% confidence score.`;
+    summary = `The backend returned verdict "${backendData.prediction}" for this article.`;
   }
 
-  const confidencePercentage = typeof backendData.confidence_score === 'number'
+  // Backend is the source of truth for scores: pass nulls through untouched.
+  const backendConfidenceScoreUrl = typeof backendData.confidence_score === 'number'
     ? backendData.confidence_score
-    : Math.round((backendData.confidence ?? Math.max(backendData.fake_probability || 0.5, backendData.real_probability || 0.5)) * 100);
+    : (typeof backendData.confidence === 'number' ? Math.round(backendData.confidence * 100) : null);
 
   const fullResult: AnalysisResult = {
     id: backendData.id ? `#${backendData.id}` : `#${Date.now().toString().slice(-5)}`,
     status: backendData.status,
     message: backendData.message,
-    prediction: backendData.prediction,
+    verdict: backendData.verdict || backendData.prediction,
+    prediction: backendData.prediction || backendData.verdict,
+    reason: backendData.reason,
     risk_level: backendData.risk_level,
-    fake_probability: backendData.fake_probability ?? 0.5,
-    real_probability: backendData.real_probability ?? 0.5,
-    confidence_score: confidencePercentage,
+    fake_probability: typeof backendData.fake_probability === 'number' ? backendData.fake_probability : null,
+    real_probability: typeof backendData.real_probability === 'number' ? backendData.real_probability : null,
+    confidence_score: backendConfidenceScoreUrl,
     model_used: backendData.model || backendData.model_used || 'Linear SVM (Calibrated)',
+    model_reliability: backendData.model_reliability,
+    probability_caveat: backendData.probability_caveat,
     summary,
     text_snippet: backendData.article_title || (backendData.detected_claim ? backendData.detected_claim : cleanUrl),
     source_url: cleanUrl,
@@ -435,6 +459,7 @@ export async function analyzeUrlApi(url: string, fallbackTitle?: string): Promis
     detected_claim: backendData.detected_claim,
     input_length: backendData.input_length,
     min_required_length: backendData.min_required_length,
+    min_required_words: backendData.min_required_words,
     thresholds: backendData.thresholds,
     source_info: backendData.source_info,
     evidence_verification: backendData.evidence_verification,

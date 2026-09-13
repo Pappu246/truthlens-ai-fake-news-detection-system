@@ -185,10 +185,23 @@ def train_and_evaluate(custom_path: str = None) -> Dict[str, Any]:
     joblib.dump(lr_model, MODELS_DIR / "logistic_regression.joblib")
     joblib.dump(svm_base, MODELS_DIR / "linear_svm_base.joblib")
     
+    # Honesty flags: small demo datasets (N <= 50) cannot support production
+    # claims. The verdict engine reads these to widen the uncertainty zone.
+    is_demo = len(df) <= 50
+    strong_warning = (
+        f"Only {len(df)} articles available. Model performance is not statistically reliable."
+        if is_demo else
+        (f"Moderate sample size ({len(df)} articles). 500+ articles recommended for production evaluation."
+         if len(df) < 150 else None)
+    )
+
     # Compile performance payload
     results = {
         "status": "success",
         "trained_at": datetime.utcnow().isoformat(),
+        "is_demo": is_demo,
+        "demo_badge_label": "DEMO DATASET — NOT SUITABLE FOR FINAL MODEL EVALUATION" if is_demo else "VALIDATED BENCHMARK",
+        "strong_warning": strong_warning,
         "dataset_info": {
             "source_path": dataset_source,
             "total_samples": len(df),
@@ -196,7 +209,9 @@ def train_and_evaluate(custom_path: str = None) -> Dict[str, Any]:
             "test_samples": len(X_test),
             "real_samples": real_count,
             "fake_samples": fake_count,
-            "vocabulary_size": len(vectorizer.vocabulary_)
+            "vocabulary_size": len(vectorizer.vocabulary_),
+            "is_demo": is_demo,
+            "strong_warning": strong_warning
         },
         "models": {
             "logistic_regression": {
