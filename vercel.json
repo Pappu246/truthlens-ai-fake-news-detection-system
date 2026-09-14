@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://truthlens-backend-74h6.onrender.com/api/:path*"
+    }
+  ]
+}
