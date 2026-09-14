@@ -1,4 +1,4 @@
-import { mlEngine } from '../server/mlEngine';
+import { mlEngine } from '../server/mlEngine.ts';
 
 export default function handler(req: any, res: any) {
   if (req.method !== 'POST') {
