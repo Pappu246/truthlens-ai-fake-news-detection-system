@@ -14,7 +14,8 @@ import { extractArticleFromHtml } from './server/extraction/articleExtractor';
 import { liveNewsService } from './server/news/newsService';
 import { createRateLimiter } from './server/security/rateLimiter';
 
-const PORT = 3000;
+// Render/Railway inject PORT at runtime; 3000 is only a local-dev fallback.
+const PORT = Number(process.env.PORT) || 3000;
 
 const DEMO_EXAMPLES = [
   {
@@ -552,6 +553,16 @@ async function startServer() {
     res.json(diag.dataset_size);
   });
 
+  // Any /api/* path that didn't match a route above is a genuinely missing
+  // endpoint — return a clean JSON 404 instead of falling through to the
+  // SPA catch-all (which would otherwise serve index.html with a 200).
+  app.all('/api/*', (req, res) => {
+    res.status(404).json({
+      ok: false,
+      error: { code: 'NOT_FOUND', message: `No API route for ${req.method} ${req.path}` }
+    });
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
@@ -571,6 +582,22 @@ async function startServer() {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
+
+  // Global error handler — guarantees every error (including malformed JSON
+  // bodies from express.json(), which throw before any route handler runs)
+  // comes back as consistent JSON instead of Express's default HTML page.
+  app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    console.error('[Server] Unhandled error:', err?.message || err);
+    if (res.headersSent) return;
+    const status = err?.status || err?.statusCode || 500;
+    res.status(status).json({
+      ok: false,
+      error: {
+        code: status === 400 ? 'BAD_REQUEST' : 'INTERNAL_ERROR',
+        message: status === 400 ? 'The request body could not be parsed.' : 'An unexpected server error occurred.'
+      }
+    });
+  });
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`[Server] TruthLens AI running at http://0.0.0.0:${PORT}`);
