@@ -133,11 +133,19 @@ async function startServer() {
 
       res.json(extracted);
     } catch (err: any) {
-      console.error('[API /api/article/extract error]', err.message);
-      res.status(400).json({
-        success: false,
-        error: err.message || 'Failed to extract article from URL.'
-      });
+      const message: string = err.message || 'Failed to extract article from URL.';
+      console.error('[API /api/article/extract error]', message);
+
+      // Anything reaching this catch happened AFTER our own input/SSRF
+      // validation already passed (those return their own 400s above), so
+      // it's always the target site or network that failed — never a bad
+      // client request. Map to the status that actually describes it.
+      let status = 502; // default: upstream/target site failure
+      if (/timed out/i.test(message)) status = 504;
+      else if (/HTTP 404/.test(message)) status = 404;
+      else if (/HTTP 429/.test(message)) status = 429;
+
+      res.status(status).json({ success: false, error: message });
     }
   });
 
