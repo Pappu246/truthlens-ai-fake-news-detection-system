@@ -335,10 +335,10 @@ export const TruthLensVerificationSection: React.FC<TruthLensVerificationSection
               </span>
               <div className="flex items-baseline gap-1.5">
                 <span className="text-2xl font-black text-emerald-900">
-                  {verification.summary.supported}
+                  {verification.summary?.supported ?? 0}
                 </span>
                 <span className="text-xs text-emerald-700 font-mono">
-                  / {verification.summary.totalClaims} claims
+                  / {verification.summary?.totalClaims ?? 0} claims
                 </span>
               </div>
             </div>
@@ -349,10 +349,10 @@ export const TruthLensVerificationSection: React.FC<TruthLensVerificationSection
               </span>
               <div className="flex items-baseline gap-1.5">
                 <span className="text-2xl font-black text-red-900">
-                  {verification.summary.contradicted}
+                  {verification.summary?.contradicted ?? 0}
                 </span>
                 <span className="text-xs text-red-700 font-mono">
-                  / {verification.summary.totalClaims} claims
+                  / {verification.summary?.totalClaims ?? 0} claims
                 </span>
               </div>
             </div>
@@ -363,10 +363,10 @@ export const TruthLensVerificationSection: React.FC<TruthLensVerificationSection
               </span>
               <div className="flex items-baseline gap-1.5">
                 <span className="text-2xl font-black text-amber-900">
-                  {verification.summary.mixed}
+                  {verification.summary?.mixed ?? 0}
                 </span>
                 <span className="text-xs text-amber-700 font-mono">
-                  / {verification.summary.totalClaims} claims
+                  / {verification.summary?.totalClaims ?? 0} claims
                 </span>
               </div>
             </div>
@@ -377,10 +377,10 @@ export const TruthLensVerificationSection: React.FC<TruthLensVerificationSection
               </span>
               <div className="flex items-baseline gap-1.5">
                 <span className="text-2xl font-black text-slate-900">
-                  {verification.summary.insufficient}
+                  {verification.summary?.insufficient ?? 0}
                 </span>
                 <span className="text-xs text-slate-600 font-mono">
-                  / {verification.summary.totalClaims} claims
+                  / {verification.summary?.totalClaims ?? 0} claims
                 </span>
               </div>
             </div>

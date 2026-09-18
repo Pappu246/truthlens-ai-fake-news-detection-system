@@ -33,16 +33,43 @@ GEMINI_API_KEY=your_gemini_api_key
 npm run dev
 ```
 
-### Python/FastAPI backend (optional alternative API)
+### Deployment architecture
 
-```bash
-python -m venv .venv
-.venv/bin/pip install -r requirements.txt
-.venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8000
-```
+TruthLens AI runs as **one Node/Express service** (`server.ts`): it serves the
+built React frontend and every `/api/*` route from the same process and port.
+There is no separate serverless proxy layer and no separate Python API in
+production — the frontend only ever calls same-origin, relative `/api/*`
+paths, and `server/mlEngine.ts` (backed by `data/saved_model_artifacts.json`)
+is the single active model.
 
-Both backends implement the same verdict contract (below) and are the single
-source of truth for verdicts; the frontend only renders what the backend returns.
+`backend/` (Python/FastAPI + scikit-learn) is kept in the repo as an **offline
+research/training reference only** — useful for the TDP report's data-science
+sections (`scripts/train_isot.py`, `scripts/evaluate_liar.py`,
+`backend/ml/*.py`) — but it is not deployed and is not called by the running
+app. Do not run both backends against the same frontend; the Node engine is
+the single source of truth for verdicts.
+
+### Deploying to Render
+
+1. Push this repo to GitHub (already public: see repo URL above).
+2. In Render, "New +" → "Web Service" → connect the repo. Render will detect
+   `render.yaml` and pre-fill these settings (or set them manually):
+   - **Runtime:** Node
+   - **Build Command:** `npm install && npm run build`
+   - **Start Command:** `npm start`
+   - **Environment variables:**
+     - `NODE_ENV=production` (required — without this the server tries to
+       start the Vite *dev* middleware instead of serving the built app)
+     - `GEMINI_API_KEY` (optional — only needed for claim extraction /
+       evidence-search features under `/api/claims/extract`,
+       `/api/evidence/search`, `/api/verify-claims`, `/api/verify-article`;
+       everything else works without it)
+   - `PORT` — do **not** set this yourself; Render injects it automatically
+     and `server.ts` reads `process.env.PORT`.
+3. Deploy. Render gives you a stable URL like
+   `https://truthlens-ai.onrender.com` — that is the one and only production
+   URL; there is no separate Vercel deployment or frontend/backend split to
+   keep in sync.
 
 ## Verdict Contract
 
