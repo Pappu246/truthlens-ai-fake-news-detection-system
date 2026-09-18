@@ -171,12 +171,13 @@ export const InputSection: React.FC<InputSectionProps> = ({
       publishedAt: item.publishedAt,
       wordCount: content.split(/\s+/).filter(Boolean).length,
       extractionStatus: 'SUCCESS',
-      // Bug fix: this must check `content` (what's actually being analyzed,
-      // falling back through content -> summary -> title), not `item.content`
-      // alone. RSS feeds almost never populate `item.content`, so checking
-      // it directly meant every live-news item was flagged headline-only
-      // even when its summary was hundreds of characters long.
-      isHeadlineOnly: content.length < 150
+      // Only flag headline-only when we genuinely have nothing but the
+      // title (no summary/content at all from the RSS feed). A previous
+      // version used an arbitrary 150-char cutoff here, which silently
+      // blocked perfectly analyzable 60-149 char summaries even though the
+      // model's own documented minimum is 60 chars / 20 words -- let the
+      // model's own thresholds (server/mlEngine.ts) decide the rest.
+      isHeadlineOnly: !item.content && !item.summary
     });
   };
 
