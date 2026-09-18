@@ -171,7 +171,12 @@ export const InputSection: React.FC<InputSectionProps> = ({
       publishedAt: item.publishedAt,
       wordCount: content.split(/\s+/).filter(Boolean).length,
       extractionStatus: 'SUCCESS',
-      isHeadlineOnly: !item.content || item.content.length < 150
+      // Bug fix: this must check `content` (what's actually being analyzed,
+      // falling back through content -> summary -> title), not `item.content`
+      // alone. RSS feeds almost never populate `item.content`, so checking
+      // it directly meant every live-news item was flagged headline-only
+      // even when its summary was hundreds of characters long.
+      isHeadlineOnly: content.length < 150
     });
   };
 
