@@ -160,6 +160,7 @@ export default function App() {
           onSourceUrlChange={setSourceUrl}
           onAnalyze={handleAnalyze}
           onClear={handleClear}
+          onClearResult={() => setAnalysisResult(null)}
           isLoading={isLoading}
         />
 
