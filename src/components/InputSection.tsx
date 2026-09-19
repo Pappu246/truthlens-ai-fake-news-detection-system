@@ -35,6 +35,7 @@ interface InputSectionProps {
     isHeadlineOnly?: boolean;
   }) => void;
   onClear: () => void;
+  onClearResult: () => void;
   isLoading: boolean;
 }
 
@@ -45,6 +46,7 @@ export const InputSection: React.FC<InputSectionProps> = ({
   onSourceUrlChange,
   onAnalyze,
   onClear,
+  onClearResult,
   isLoading
 }) => {
   const [inputMode, setInputMode] = useState<AnalysisInputMode>('text');
@@ -93,6 +95,7 @@ export const InputSection: React.FC<InputSectionProps> = ({
     if (!targetUrl.trim()) return;
     setIsExtracting(true);
     setUrlError(null);
+    onClearResult();
     try {
       const article = await extractArticleApi(targetUrl);
       setExtractedData(article);
@@ -109,6 +112,7 @@ export const InputSection: React.FC<InputSectionProps> = ({
   // Direct URL Analysis
   const handleAnalyzeUrlDirectly = async () => {
     if (!targetUrl.trim()) return;
+    onClearResult();
     if (extractedData && extractedData.content) {
       onAnalyze({
         inputType: 'url',
