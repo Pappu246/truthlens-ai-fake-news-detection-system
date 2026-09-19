@@ -1,0 +1,96 @@
+{
+  "project": "TruthLens AI world-level ML upgrade",
+  "spec_source": "19-phase upgrade requested by project owner",
+  "last_updated_phase": 1,
+  "current_status": "Phase 1 (audit) complete. Phase 2 (real dataset pipeline) not started.",
+  "phases": [
+    {
+      "id": 1,
+      "name": "Full repository audit",
+      "status": "complete",
+      "notes": "See docs/ML_UPGRADE_PROGRESS.md for full findings."
+    },
+    {
+      "id": 2,
+      "name": "Real dataset pipeline",
+      "status": "blocked",
+      "blocked_reason": "Real ISOT dataset bytes (data/Fake.csv, data/True.csv) exist only as Git LFS pointer files in this working copy. LFS handshake with GitHub succeeded (valid signed download URLs were issued), confirming the objects exist in GitHub's LFS storage, but the actual download is blocked by this sandbox's network egress allowlist (github-cloud.githubusercontent.com is not permitted). Needs `git lfs pull` from an environment with unrestricted internet access.",
+      "notes": "scripts/train_isot.py already exists and is a reasonable foundation once real data is available."
+    },
+    { "id": 3, "name": "Data cleaning + label normalization", "status": "not_started" },
+    { "id": 4, "name": "Duplicate / near-duplicate removal", "status": "not_started", "notes": "scripts/train_isot.py currently only does exact-string dedup; near-duplicate detection is not implemented anywhere." },
+    { "id": 5, "name": "Data leakage prevention", "status": "not_started", "notes": "Known ISOT risk: True.csv articles frequently carry a Reuters dateline pattern that could act as a shortcut label signal. Not yet checked against real data." },
+    { "id": 6, "name": "Train/validation/test + temporal + cross-domain splits", "status": "partial", "notes": "Stratified random train/test split exists (no separate validation split, CV substitutes for it). No temporal split. Cross-domain check exists via scripts/evaluate_liar.py against LIAR, but is evaluation-only, not integrated into the split strategy." },
+    { "id": 7, "name": "Model benchmarking", "status": "partial", "notes": "5-fold CV + held-out test implemented in scripts/train_isot.py, but never executed against real data. Out-of-domain LIAR benchmarking script exists and has been run once, but only against the 36-row demo model." },
+    { "id": 8, "name": "Proper calibration", "status": "implemented_on_demo_data_only", "notes": "Platt sigmoid calibration via CalibratedClassifierCV is already implemented in scripts/train_isot.py and is the mechanism behind the currently-live demo model's confidence scores." },
+    { "id": 9, "name": "Model versioning", "status": "not_started", "notes": "Three separate, uncoordinated training code paths currently exist (server/mlEngine.ts train(), backend/ml/train.py, scripts/train_isot.py). Needs consolidation to one canonical pipeline." },
+    { "id": 10, "name": "Claim + evidence verification", "status": "already_implemented", "notes": "server/verification/* already implements claim extraction and evidence search via Gemini, confirmed working live in production." },
+    { "id": 11, "name": "Live news -> full article extraction", "status": "already_implemented", "notes": "server/extraction/articleExtractor.ts + server/news/* already implemented and confirmed working live." },
+    { "id": 12, "name": "Uncertainty / needs-more-context logic", "status": "already_implemented", "notes": "Confirmed working live: short/headline-only guards, uncertainty-zone widening for demo-dataset models." },
+    { "id": 13, "name": "Multilingual architecture", "status": "not_started" },
+    { "id": 14, "name": "Security review", "status": "not_started", "notes": "SSRF protections and rate limiting already exist (server/security/*) but have not had a dedicated review pass as part of this upgrade." },
+    { "id": 15, "name": "API improvement", "status": "not_started" },
+    { "id": 16, "name": "UI improvement", "status": "not_started" },
+    { "id": 17, "name": "Automated tests", "status": "partial", "notes": "scripts/regressionVerdictTests.ts, scripts/test_pipeline.ts, scripts/adversarialAcceptanceTests.ts, backend/tests/test_verdicts.py already exist. Coverage against a real (non-demo) model has not been exercised." },
+    { "id": 18, "name": "README + documentation", "status": "partial", "notes": "README already substantially rewritten in prior work. This progress file is new." },
+    { "id": 19, "name": "Build / lint / deployment verification", "status": "ongoing", "notes": "Verified working as of the most recent deploy prior to this upgrade starting." }
+  ],
+  "datasets": {
+    "demo_dataset": {
+      "path": "data/news.csv",
+      "status": "verified_real_present",
+      "rows": 36,
+      "columns": ["title", "text", "label"],
+      "currently_used_by_production": true
+    },
+    "liar": {
+      "paths": ["train.tsv", "test.tsv", "valid.tsv", "data/train.tsv", "data/test.tsv", "data/valid.tsv"],
+      "status": "verified_real_present_authentic",
+      "rows": { "train": 10269, "test": 1283, "valid": 1284 },
+      "columns": 14,
+      "label_distribution": {
+        "train": { "half-true": 2123, "false": 1998, "mostly-true": 1966, "true": 1683, "barely-true": 1657, "pants-fire": 842 },
+        "test": { "half-true": 267, "false": 250, "mostly-true": 249, "barely-true": 214, "true": 211, "pants-fire": 92 },
+        "valid": { "false": 263, "mostly-true": 251, "half-true": 248, "barely-true": 237, "true": 169, "pants-fire": 116 }
+      },
+      "used_for": "out-of-domain validation only, not training"
+    },
+    "isot": {
+      "paths": ["data/Fake.csv", "data/True.csv"],
+      "status": "lfs_pointer_only_real_data_not_present",
+      "git_lfs_configured": true,
+      "git_lfs_handshake_succeeded": true,
+      "download_blocked_reason": "sandbox network egress does not allow github-cloud.githubusercontent.com",
+      "declared_sizes_bytes": { "Fake.csv": 62789876, "True.csv": 53582940 },
+      "schema_verified": false,
+      "next_step": "git lfs pull from an environment with full internet access"
+    }
+  },
+  "training_pipelines": {
+    "server_mlEngine_ts_train": {
+      "location": "server/mlEngine.ts",
+      "trains_on": "data/news.csv",
+      "writes_to": "data/saved_model_artifacts.json",
+      "used_by_production": true
+    },
+    "backend_ml_train_py": {
+      "location": "backend/ml/train.py",
+      "trains_on": "data/news.csv or data/sample_news.csv",
+      "writes_to": ["backend/models/*.joblib", "backend/models/metrics.json"],
+      "used_by_production": false,
+      "recommendation": "retire or clearly document as demo/offline-only"
+    },
+    "scripts_train_isot_py": {
+      "location": "scripts/train_isot.py",
+      "trains_on": "data/True.csv + data/Fake.csv (real ISOT, once available)",
+      "writes_to": ["backend/models/*.joblib", "backend/models/metrics.json", "data/saved_model_artifacts.json"],
+      "used_by_production": false,
+      "ever_executed": false,
+      "recommendation": "evolve into the single canonical training pipeline"
+    }
+  },
+  "next_task": {
+    "phase": 2,
+    "description": "Obtain real ISOT dataset bytes via git lfs pull from an environment with unrestricted internet access, verify schema/label balance against real data, check for Reuters-dateline leakage pattern, then extend scripts/train_isot.py with near-duplicate detection, temporal split, and a true train/validation/test split before running it."
+  }
+}
