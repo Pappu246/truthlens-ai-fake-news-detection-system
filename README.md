@@ -107,11 +107,11 @@ flowchart TD
     B -- Yes --> D[Clean text]
     D --> E[TF-IDF vectorization]
     E --> F[Calibrated Linear SVM]
-    F --> G[P(FAKE)]
+    F --> G["P(FAKE)"]
     G --> H{Inside uncertainty zone?}
 
     H -- Yes --> C2[NEEDS MORE CONTEXT<br/>confidence = null]
-    H -- No --> I{P(FAKE) >= fake threshold?}
+    H -- No --> I{"P(FAKE) >= fake threshold?"}
 
     I -- Yes --> J[LIKELY FAKE]
     I -- No --> K[LIKELY REAL]
