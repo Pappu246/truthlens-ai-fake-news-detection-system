@@ -1,175 +1,307 @@
 # TruthLens AI
 
-**AI-Powered Fake News Detection and Article Verification System**
+A TypeScript/Node.js news analysis system that combines calibrated text classification, article extraction, claim verification, live RSS news, and persistent verification history.
 
-A calibrated Linear SVM verification engine for news content, safe web URL extraction, and live RSS wire feeds.
+[![Live Demo](https://img.shields.io/badge/demo-live-667085?style=flat-square)](https://truthlens-ai-dvpf.onrender.com)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D20-667085?style=flat-square)](package.json)
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-667085?style=flat-square)](tsconfig.json)
 
-[![Live Demo](https://img.shields.io/badge/demo-live-brightgreen?style=flat-square)](https://truthlens-ai-dvpf.onrender.com)
-[![Node](https://img.shields.io/badge/node-%3E%3D20-339933?style=flat-square&logo=node.js&logoColor=white)](package.json)
-[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat-square&logo=typescript&logoColor=white)](tsconfig.json)
-[![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](package.json)
+[Live demo](https://truthlens-ai-dvpf.onrender.com) | [Features](#features) | [Architecture](#architecture) | [Verdict logic](#verdict-logic) | [Getting started](#getting-started) | [Deployment](#deployment) | [Testing](#testing)
 
-**[Live demo](https://truthlens-ai-dvpf.onrender.com)** &nbsp;|&nbsp; [Features](#features) &nbsp;|&nbsp; [Architecture](#architecture) &nbsp;|&nbsp; [Verdict logic](#verdict-logic) &nbsp;|&nbsp; [Deploying](#deploying-to-render) &nbsp;|&nbsp; [Tests](#running-the-tests)
+## Contents
 
----
+- [About](#about)
+- [Features](#features)
+- [Architecture](#architecture)
+- [Verdict Logic](#verdict-logic)
+- [Getting Started](#getting-started)
+- [Environment Variables](#environment-variables)
+- [Deployment](#deployment)
+- [Testing](#testing)
+- [Project Structure](#project-structure)
+- [TDP / Academic Report](#tdp--academic-report)
+- [Limitations](#limitations)
 
 ## About
 
-TruthLens AI estimates whether a piece of news text is likely real, likely fake, or whether it simply needs more context to judge fairly — and says so honestly. It never forces a confident verdict out of a headline, a one-line rumor, or a claim with no source. It combines a calibrated ML classifier with real evidence retrieval, and surfaces its reasoning at every step.
+TruthLens AI analyzes news text and returns one of three backend verdicts:
 
-Built as a B.Tech CSE-AIML Trans-Disciplinary Project (TDP), spanning machine learning, NLP, full-stack engineering, and responsible-AI design.
+- `LIKELY REAL`
+- `LIKELY FAKE`
+- `NEEDS MORE CONTEXT`
+
+The production inference path is implemented in TypeScript. The core model is a calibrated Linear SVM using TF-IDF features with 1-2 ngrams and sublinear term frequency. Probabilities are calibrated with Platt sigmoid scaling.
+
+The server also supports URL article extraction, RSS news ingestion, claim extraction, evidence search, article verification, model diagnostics, dataset validation, and SQLite-backed history.
+
+The repository also contains a Python ML/research pipeline under `backend/`. That code is retained for offline training, evaluation, and research work. It is not the production API.
 
 ## Features
 
-| Feature | Description |
+| Capability | Implementation |
 |---|---|
-| Calibrated ML classification | TF-IDF + Linear SVM with Platt sigmoid calibration — real probabilities, not guesses |
-| Honest uncertainty | Short, headline-only, or source-less input returns `NEEDS MORE CONTEXT`, never a fabricated confidence score |
-| Safe URL extraction | SSRF-protected article fetching — validates, sandboxes, and cleanly extracts article bodies from any link |
-| Claim-level verification | Extracts factual claims and cross-checks them against live web evidence (Wikipedia, news sources) via Gemini |
-| Live news wire | Real-time RSS dispatches from BBC, NPR, PBS and more — click any headline to analyze instantly |
-| Model transparency | Full model specs, cross-validation metrics, and dataset validation reports |
-| Analysis history | Every analysis is persisted locally (SQLite) and browsable |
-| Single-service deploy | One Node/Express service serves the frontend and every API route — no multi-service split |
+| Calibrated text classification | TF-IDF vectorization followed by a calibrated Linear SVM |
+| Context guards | Minimum text length, minimum word count when no source is supplied, and an explicit headline-only guard |
+| Uncertainty handling | Inputs inside the configured probability zone return `NEEDS MORE CONTEXT` instead of a forced binary verdict |
+| URL article extraction | URL security validation, safe fetching, redirect checks, size/time limits, and article-body extraction |
+| Live news | RSS/Atom news acquisition with caching and deduplication |
+| Claim verification | Claim extraction, evidence search, and article-level verification endpoints |
+| Model diagnostics | Dataset information, evaluation metrics, thresholds, calibration details, and model metadata |
+| Analysis history | Verification and analysis records persisted through SQLite |
+| Dataset workflows | Dataset validation, import/retraining, and demo-dataset reset endpoints |
+| Single-service deployment | Vite frontend and Express API are built and served from one Node service |
 
 ## Screenshots
 
 <!--
-  Drop screenshots into a `docs/screenshots/` folder and reference them here,
-  e.g.:
-    ![Analyze view](docs/screenshots/analyze.png)
-    ![Live News](docs/screenshots/live-news.png)
-    ![Claim verification](docs/screenshots/verification.png)
+Add screenshots under docs/screenshots/ and uncomment the image references when
+the files actually exist.
+
+Example locations:
+
+![Analyze view](docs/screenshots/analyze.png)
+![Live News](docs/screenshots/live-news.png)
+![Claim Verification](docs/screenshots/verification.png)
 -->
-*(Add screenshots of the Analyze, Live News, and Claim Verification views to `docs/screenshots/` and reference them above.)*
 
 ## Architecture
 
-TruthLens AI runs as **one Node/Express service**. There is no separate serverless proxy layer and no separate Python API in production — the frontend only calls same-origin, relative `/api/*` paths.
+TruthLens runs as a single Node/Express service in production. The browser uses same-origin `/api/*` routes. There is no separate Python API in the production request path.
 
 ```mermaid
 flowchart LR
-    U[Browser] -->|same-origin api calls| S[Node / Express<br/>server.ts]
-    S --> ML[ML Engine<br/>TF-IDF + Linear SVM<br/>server/mlEngine.ts]
-    S --> EX[Article Extractor<br/>SSRF-safe fetch and clean]
-    S --> RSS[Live News<br/>RSS aggregator]
-    S --> VER[Verification<br/>claim extraction + evidence search]
-    S --> DB[(SQLite<br/>history)]
-    VER -.optional.-> GEM[Gemini API]
-    EX --> WEB[Public news sites]
-    RSS --> FEEDS[RSS feeds]
-    VER --> EVID[External evidence<br/>Wikipedia, news, web]
+    F[React / Vite frontend] --> S[Node / Express server<br/>server.ts]
+
+    S --> M[ML engine<br/>TF-IDF + calibrated Linear SVM]
+    S --> X[Article extractor<br/>URL validation + safe fetch]
+    S --> N[Live news service<br/>RSS / Atom]
+    S --> V[Claim verification<br/>claim extraction + evidence]
+    S --> H[(SQLite history)]
+
+    X --> W[Target article website]
+    N --> R[RSS / Atom feeds]
+    V --> E[External evidence sources]
+    V -. optional API .-> G[Gemini]
 ```
 
-`backend/` (Python/FastAPI + scikit-learn) is kept in the repo as an offline research/training reference only — useful for the TDP report's data-science sections (`scripts/train_isot.py`, `scripts/evaluate_liar.py`, `backend/ml/*.py`) — but it is not deployed and is not called by the running app. The Node engine is the single source of truth for verdicts.
+The main production components are:
+
+- `server.ts`: Express application, API routes, frontend serving, and service wiring.
+- `server/mlEngine.ts`: model loading, training, vectorization, calibrated probability calculation, guards, thresholds, and verdict selection.
+- `server/extraction/articleExtractor.ts`: article extraction after URL security checks and safe fetching.
+- `server/news/newsService.ts`: live RSS/Atom acquisition.
+- `server/verification/`: claim extraction, evidence lookup, and verification logic.
+- `server/sqliteHistory.ts`: persistent analysis and verification history.
+
+The `backend/` directory contains the offline Python/scikit-learn research pipeline. It is not called by the deployed Node service.
 
 ## Verdict Logic
 
-Every analysis returns exactly one of three verdicts (`prediction`, with a `verdict` alias in the API response):
+The backend is the source of truth for the three verdict labels. The decision process first checks whether the input contains enough usable context. Only then does it calculate the calibrated model probability.
 
 ```mermaid
 flowchart TD
-    A[Input text / URL] --> B{Long enough?<br/>Has source context?}
+    A[Text input or extracted article] --> B{Guard checks pass?}
+
     B -- No --> C[NEEDS MORE CONTEXT<br/>probabilities = null]
-    B -- Yes --> D[TF-IDF + Linear SVM<br/>P of FAKE]
-    D --> E{P inside<br/>uncertainty zone?}
-    E -- Yes --> C
-    E -- No, P is low --> F[LIKELY REAL]
-    E -- No, P is high --> G[LIKELY FAKE]
+    B -- Yes --> D[Clean text]
+    D --> E[TF-IDF vectorization]
+    E --> F[Calibrated Linear SVM]
+    F --> G[P(FAKE)]
+    G --> H{Inside uncertainty zone?}
+
+    H -- Yes --> C2[NEEDS MORE CONTEXT<br/>confidence = null]
+    H -- No --> I{P(FAKE) >= fake threshold?}
+
+    I -- Yes --> J[LIKELY FAKE]
+    I -- No --> K[LIKELY REAL]
 ```
 
-| Verdict | Meaning |
-| --- | --- |
-| `LIKELY REAL` | Model probability P(FAKE) at or below the real threshold |
-| `LIKELY FAKE` | Model probability P(FAKE) at or above the fake threshold |
-| `NEEDS MORE CONTEXT` | Input was guarded (too short / headline-only / vague / no source context) or the probability fell inside the configured uncertainty zone |
+### Guard conditions
 
-**Guarantees:**
+The current implementation applies these guards before classification:
 
-- Short, headline-only, vague, incomplete, or source-less content is never classified. The response sets `fake_probability`, `real_probability`, `confidence` and `confidence_score` to `null` (rendered as `N/A`) so no fake percentage can be displayed.
-- Empty input is a validation error (HTTP 400/422), never a crash.
-- Uncertain predictions inside the uncertainty zone return `NEEDS MORE CONTEXT` with a `reason` explaining the zone; confidence is `null`.
-- Models trained on small demo datasets (N <= 50) use a widened uncertainty zone (0.40-0.75 instead of 0.35-0.65) and are flagged with `model_reliability: "DEMO_DATASET"`; extreme (>= 90%) probabilities carry a `probability_caveat` explaining they are not statistically supported.
-- Probabilities are mapped from `predict_proba` columns via `model.classes_` (FAKE = class 1, REAL = class 0) — never by positional assumption — and loaded model artifacts are integrity-checked at startup; broken or out-of-sync artifacts trigger an automatic retrain instead of saturated ~99% scores.
-- Failed article extraction (blocked/forbidden/unreachable target site) is surfaced with the correct HTTP status (`502`/`504`/`404`) and a clear message — never silently treated as success, never a raw crash.
+1. Empty input is rejected as a request error.
+2. Text longer than 50,000 characters is rejected.
+3. Text shorter than the configured minimum length is not classified.
+4. Explicit `isHeadlineOnly` input is not classified.
+5. If the input has fewer than the configured minimum word count and no source URL is supplied, it is not classified.
+6. When a guard fires, fake/real probabilities and confidence values are returned as `null`.
+
+The current default thresholds in `server/mlEngine.ts` are:
+
+| Setting | Default |
+|---|---:|
+| Fake threshold | 0.65 |
+| Real threshold | 0.35 |
+| Minimum text length | 60 characters |
+| Minimum word count | 20 words |
+
+Persisted threshold settings or model artifacts can override these defaults.
+
+### Verdict reference
+
+| Verdict | Meaning | What the backend guarantees |
+|---|---|---|
+| `LIKELY REAL` | Calculated P(FAKE) is at or below the effective real threshold. | This is a model classification, not proof that the article or claim is true. |
+| `LIKELY FAKE` | Calculated P(FAKE) is at or above the effective fake threshold. | This is a model classification, not proof that the article or claim is false. |
+| `NEEDS MORE CONTEXT` | A guard blocked classification, or P(FAKE) falls inside the configured uncertainty zone. | Guarded responses do not expose fake/real probabilities. Uncertain model responses return `confidence: null` and include a reason. |
+
+For models marked as demo datasets, the effective uncertainty zone is widened. The implementation raises the fake boundary to at least 0.75 and the real boundary to at least 0.40. Extreme probabilities from such a model carry an additional caveat because a small training set does not support treating those values as verified truth.
+
+Model artifacts are also checked for internal consistency before loading. If the vocabulary, IDF vector, weight vector, or calibration parameters are inconsistent, the artifact is rejected and the server falls back to training from the dataset.
 
 ## Getting Started
 
 ### Prerequisites
 
-- Node.js >= 20
-- (Optional) Python 3, only if you want to run the offline research pipeline in `backend/`
-- (Optional) A [Gemini API key](https://ai.google.dev/) for claim extraction / evidence-search features
+- Node.js 20 or newer.
+- Python 3 only if you want to run the offline research pipeline under `backend/`.
+- A Gemini API key is optional. It is used by the claim/evidence verification routes when configured.
 
-### Install and run locally
+### Install
 
 ```bash
 npm install
+```
+
+### Production-style local run
+
+```bash
 npm run build
-npm start          # production mode -> http://localhost:3000
-# or, for hot-reload during development:
+npm start
+```
+
+The local server uses port 3000 when `PORT` is not supplied.
+
+Open:
+
+```
+http://localhost:3000
+```
+
+### Development run
+
+```bash
 npm run dev
 ```
 
-### Environment variables
+The development command runs `tsx server.ts`.
 
-| Variable | Required | Purpose |
+## Environment Variables
+
+| Variable | Required | Source / behavior |
 |---|---|---|
-| `NODE_ENV=production` | Yes, for production | Serves the built app instead of the Vite dev server |
-| `PORT` | Auto-set by host | Render/Railway inject this — don't set it yourself |
-| `GEMINI_API_KEY` | Optional | Powers `/api/claims/extract`, `/api/evidence/search`, `/api/verify-claims`, `/api/verify-article` |
+| `NODE_ENV` | Required for production deployment | `render.yaml` sets this to `production`. |
+| `PORT` | No | Render supplies it at runtime. The server falls back to `3000` locally. |
+| `GEMINI_API_KEY` | Optional | Used by the claim/evidence verification services when configured. |
 
-## Deploying to Render
+Do not commit API keys to the repository.
 
-1. Push this repo to GitHub.
-2. In Render: **New +** -> **Web Service** -> connect the repo. `render.yaml` pre-fills everything, or set manually:
-   - **Runtime:** Node
-   - **Build Command:** `npm install && npm run build`
-   - **Start Command:** `npm start`
-   - **Env vars:** `NODE_ENV=production` (required), `GEMINI_API_KEY` (optional)
-3. Deploy. Render gives you one stable URL — that's the only production URL; there's no separate frontend/backend deployment to keep in sync.
+## Deployment
 
-## Running the Tests
+### Render
+
+The repository includes `render.yaml` with the production service definition.
+
+Current configuration:
+
+| Setting | Value |
+|---|---|
+| Service type | Web service |
+| Runtime | Node |
+| Plan | Free |
+| Build command | `npm install && npm run build` |
+| Start command | `npm start` |
+| Auto deploy | Enabled |
+| `NODE_ENV` | `production` |
+| `GEMINI_API_KEY` | Secret environment variable, optional |
+
+For a new Render deployment:
+
+1. Connect the GitHub repository to Render.
+2. Use the settings from `render.yaml`.
+3. Add `GEMINI_API_KEY` only if the verification features need it.
+4. Deploy the service.
+
+The application is designed to run as one Node service. The frontend and API do not require separate Render services.
+
+## Testing
+
+Type-check the TypeScript code:
 
 ```bash
-# Frontend type-check / build
 npm run lint
+```
+
+Build the production bundle:
+
+```bash
 npm run build
+```
 
-# Node (Express) backend suites
-npx tsx scripts/regressionVerdictTests.ts   # verdict contract + label-swap + artifact integrity
-npx tsx scripts/test_pipeline.ts            # full ML pipeline validation
+Run the Node regression suites:
 
-# Python (offline research pipeline)
+```npx tsx scripts/regressionVerdictTests.ts
+npx tsx scripts/test_pipeline.ts
+```
+
+The first suite covers the verdict contract, label-swap behavior, and model-artifact integrity. The second exercises the ML pipeline.
+
+The repository also contains an offline Python test suite:
+
+```bash
 .venv/bin/python backend/tests/test_verdicts.py
 ```
+
+That command assumes a Python virtual environment named `.venv` has already been created and configured for the offline research pipeline.
 
 ## Project Structure
 
 ```
-src/       frontend application and UI components
-server/    server-side services, ML engine, verification, security, and history
-backend/   Python ML pipeline, models, and verification utilities (offline reference)
-data/      datasets and validation data
-scripts/   training, evaluation, and acceptance-test scripts
+.
+├── src/                         # React/Vite frontend
+├── server.ts                    # Express entry point and API routes
+├── server/
+│   ├── mlEngine.ts              # Production ML engine and verdict logic
+│   ├── extraction/              # URL/article extraction
+│   ├── news/                    # RSS/Atom news service
+│   ├── verification/            # Claims and evidence verification
+│   ├── security/                # URL and request security
+│   └── sqliteHistory.ts         # SQLite-backed history
+├── backend/                     # Offline Python ML/research pipeline
+├── data/                        # Datasets, thresholds, model artifacts, history
+├── scripts/                     # Training, evaluation, and regression scripts
+├── render.yaml                  # Render service configuration
+├── package.json                 # Node scripts and dependencies
+└── tsconfig.json                # TypeScript configuration
 ```
 
-## For the TDP Report
+## TDP / Academic Report
 
-This project spans:
+TruthLens is a B.Tech CSE-AIML Trans-Disciplinary Project covering several engineering areas:
 
-- **AI/ML:** TF-IDF feature extraction, calibrated Linear SVM classification, model evaluation, and honest reporting of demo-dataset limitations
-- **Data Science:** dataset preprocessing, feature engineering, confusion matrix, precision/recall/F1
-- **Full-Stack Development:** React/Vite frontend, Node/Express API, single-service deployment
-- **Information Verification:** URL extraction, source metadata, claim-level evidence retrieval
-- **Responsible AI:** no fabricated confidence, transparent uncertainty, clear disclaimers throughout
+| Area | Project work |
+|---|---|
+| Machine Learning | TF-IDF features, Linear SVM, probability calibration, threshold-based decision logic |
+| NLP | Text normalization, n-gram features, linguistic indicators, claim extraction |
+| Data Science | Dataset validation, stratified evaluation, cross-validation, precision, recall, F1, and confusion-matrix metrics |
+| Full-stack engineering | React/Vite frontend with a Node/Express backend |
+| Information verification | URL extraction, claim extraction, external evidence lookup, and source metadata |
+| Responsible ML | Explicit uncertainty handling, model caveats, artifact integrity checks, and a clear distinction between model output and factual proof |
 
-Future scope: transformer-based models (BERT), multilingual (Hindi/regional) support, retrieval-augmented verification, knowledge-graph fact-checking, browser extension, deepfake/image misinformation detection.
+For the academic report, model metrics should be taken from the repository's generated diagnostics/evaluation artifacts rather than from README marketing claims. Demo datasets are explicitly marked in the implementation and should not be presented as final-model validation.
 
-## Important
+## Limitations
 
-Model predictions are decision-support signals, not absolute proof that a claim is true or false. Always review the available evidence and source context.
+TruthLens is a text-classification and verification-support system. A model probability is not proof that a real-world claim is true or false.
 
----
+The production classifier evaluates linguistic patterns learned from its training data. Source provenance and verification services provide additional context, but the current ML response explicitly reports evidence verification as unavailable when the required external search/index configuration is not present.
 
-Built by **Pappu Yadav** — B.Tech CSE-AIML Trans-Disciplinary Project
+The repository therefore treats uncertainty as a valid output rather than forcing every input into a binary real/fake result.
+
+## License / Project Status
+
+This repository is maintained as a university TDP project. Refer to the repository for the current implementation and deployment state.
+
+Built by Pappu Yadav — B.Tech CSE-AIML Trans-Disciplinary Project
