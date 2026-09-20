@@ -5,6 +5,7 @@ A TypeScript/Node.js news analysis system that combines calibrated text classifi
 [![Live Demo](https://img.shields.io/badge/demo-live-667085?style=flat-square)](https://truthlens-ai-dvpf.onrender.com)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-667085?style=flat-square)](package.json)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-667085?style=flat-square)](tsconfig.json)
+[![CI](https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/actions/workflows/ci.yml/badge.svg)](https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/actions/workflows/ci.yml)
 
 [Live demo](https://truthlens-ai-dvpf.onrender.com) | [Features](#features) | [Architecture](#architecture) | [Verdict logic](#verdict-logic) | [Getting started](#getting-started) | [Deployment](#deployment) | [Testing](#testing)
 
