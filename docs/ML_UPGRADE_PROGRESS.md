@@ -418,3 +418,4 @@ automated acceptance coverage, documentation, and deployment verification.
    intentionally requested and all external validation gates pass.
 5. Integrate the LIAR benchmark as an explicit out-of-domain validation
    stage before production promotion.
+\n\n## Phase 9 — Model Governance (IN PROGRESS)\n\nA dedicated branch now contains the canonical real-data candidate training pipeline, deterministic dataset fingerprinting, versioned model manifests, candidate LIAR out-of-domain validation, and explicit promotion/backup safeguards. Normal training never writes `data/saved_model_artifacts.json`.\n\nThe production artifact remains unchanged pending explicit human review and promotion.\n
