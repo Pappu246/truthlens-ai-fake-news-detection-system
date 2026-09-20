@@ -1,0 +1,56 @@
+name: Phase 7 Real ISOT Benchmark
+
+on:
+  push:
+    branches:
+      - ml-upgrade-phase7-benchmark
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install benchmark dependencies
+        run: python -m pip install --upgrade pip numpy scikit-learn datasketch
+
+      - name: Download and verify ISOT release assets
+        env:
+          FAKE_URL: https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/releases/download/isot-data-v1/Fake.csv
+          REAL_URL: https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/releases/download/isot-data-v1/True.csv
+          FAKE_SHA256: bebf8bcfe95678bf2c732bf413a2ce5f621af0102c82bf08083b2e5d3c693d0c
+          REAL_SHA256: ba0844414a65dc6ae7402b8eee5306da24b6b56488d6767135af466c7dcb2775
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --retry-delay 2 "$FAKE_URL" -o data/Fake.csv
+          curl --fail --location --retry 3 --retry-delay 2 "$REAL_URL" -o data/True.csv
+          echo "$FAKE_SHA256  data/Fake.csv" | sha256sum --check -
+          echo "$REAL_SHA256  data/True.csv" | sha256sum --check -
+
+      - name: Prepare leakage-aware splits
+        run: python scripts/isot_data_pipeline.py
+
+      - name: Run Phase 7 benchmark
+        run: python scripts/benchmark_isot.py
+
+      - name: Upload benchmark report
+        uses: actions/upload-artifact@v4
+        with:
+          name: isot-phase7-benchmark
+          path: data/isot_benchmarks/benchmark.json
+          if-no-files-found: error
