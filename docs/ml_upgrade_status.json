@@ -1,8 +1,8 @@
 {
   "project": "TruthLens AI world-level ML upgrade",
   "spec_source": "19-phase upgrade requested by project owner",
-  "last_updated_phase": 8,
-  "current_status": "Phases 1-8 complete through real-data preparation, benchmarking, and calibration evaluation. Production model artifact is still unchanged; model promotion remains a separate decision after cross-domain validation and versioning.",
+  "last_updated_phase": 9,
+  "current_status": "Phases 1-8 complete. Phase 9 implementation is in progress on a dedicated branch; production artifact remains unchanged.",
   "phases": [
     {
       "id": 1,
@@ -56,8 +56,8 @@
     {
       "id": 9,
       "name": "Model versioning",
-      "status": "not_started",
-      "notes": "Next: define one canonical training/evaluation entry point and explicit model version manifest before any production model promotion."
+      "status": "in_progress",
+      "notes": "Canonical candidate training, dataset fingerprinting, versioned manifests, LIAR candidate validation, and explicit promotion/rollback tooling are being implemented on ml-upgrade-phase9-model-versioning. No production artifact is changed by training."
     },
     {
       "id": 10,
@@ -259,6 +259,6 @@
   },
   "next_task": {
     "phase": 9,
-    "description": "Consolidate the real-data training/evaluation workflow into one canonical versioned pipeline. Add model metadata, dataset fingerprint, preprocessing configuration, benchmark provenance, and an explicit promotion step that cannot silently overwrite the production artifact."
+    "description": "Finish Phase 9 verification: run canonical candidate training and LIAR external validation in CI, review actual metrics, then decide separately whether any candidate should be explicitly promoted."
   }
 }
