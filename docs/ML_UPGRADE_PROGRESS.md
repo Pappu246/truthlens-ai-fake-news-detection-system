@@ -344,27 +344,77 @@ The measured report is retained as a GitHub Actions artifact.
 
 ---
 
-## Remaining tasks (Phases 7–19)
+## Phase 7 — Model Benchmarking (COMPLETE)
 
-Phase 1–6 preparation work is now verified. Model training has **not** been promoted to production.
+The real-data benchmark was executed in GitHub Actions using the verified
+Phase 2 preparation pipeline. The benchmark compared TF-IDF Logistic
+Regression and a Platt-calibrated Linear SVM on the group-aware random
+splits and the separate temporal test set.
 
-The next work is Phase 7 model benchmarking, followed by calibration/model
-selection, versioning, multilingual support, security/API/UI hardening,
+### Measured benchmark results
+
+| Model / variant | Test F1 | Temporal F1 | Test Brier | Test ECE (10-bin) |
+|---|---:|---:|---:|---:|
+| Logistic Regression / raw | 0.98983 | 0.99382 | 0.01470 | 0.05929 |
+| Calibrated Linear SVM / raw | 0.99390 | 0.99811 | 0.00536 | 0.00582 |
+| Logistic Regression / Reuters dateline mitigated | 0.98983 | 0.99387 | 0.01471 | 0.05931 |
+| Calibrated Linear SVM / Reuters dateline mitigated | 0.99405 | 0.99811 | 0.00536 | 0.00582 |
+
+These numbers are measurements on the ISOT benchmark and should not be
+treated as proof of real-world fake-news detection accuracy. In particular,
+the extremely strong scores, combined with the previously measured
+source-pattern imbalance, require cross-domain validation before production
+promotion.
+
+The strict Reuters dateline ablation changed the aggregate metrics only
+slightly. That means removing the leading dateline alone does not explain
+the benchmark performance; additional source/style artifacts and
+out-of-domain testing remain important.
+
+### Calibration
+
+The calibrated Linear SVM achieved a test Brier score of approximately
+**0.00536** and 10-bin ECE of approximately **0.00582** in the raw-text
+benchmark. Calibration is therefore measured on real data, but it still
+needs validation outside the ISOT domain.
+
+### Production safety
+
+- `data/saved_model_artifacts.json` was **not modified**.
+- No benchmark model was promoted to production.
+- Benchmark output was retained as a GitHub Actions artifact.
+
+---
+
+## Phase 8 — Proper Calibration (COMPLETE FOR ISOT BENCHMARK)
+
+Platt-sigmoid calibration is exercised through
+`CalibratedClassifierCV` and evaluated using Brier score and ECE. The
+production artifact remains unchanged until the full model-versioning and
+cross-domain validation process is complete.
+
+---
+
+## Remaining tasks (Phases 9–19)
+
+Phase 1–8 are now verified at the preparation/benchmark level. The next
+stage is model versioning and canonical training, followed by cross-domain
+validation integration, multilingual support, security/API/UI hardening,
 automated acceptance coverage, documentation, and deployment verification.
 
 ---
 
 ## Next Task (read this first in the next session)
 
-**Phase 7: Model benchmarking on the real ISOT data.**
+**Phase 9: Model versioning and canonical training pipeline.**
 
-1. Build a leakage-aware baseline using the verified train/validation/test
-   splits.
-2. Benchmark TF-IDF + Logistic Regression and calibrated Linear SVM.
-3. Measure accuracy, precision, recall, F1, macro-F1, ROC-AUC, PR-AUC,
-   confusion matrix, calibration quality, and inference latency.
-4. Evaluate the temporal split separately.
-5. Run an explicit ablation with Reuters dateline/source markers retained
-   versus mitigated, so the shortcut effect is measurable.
-6. Do **not** overwrite `data/saved_model_artifacts.json` until the
-   benchmark and model-selection report is complete.
+1. Create one canonical real-data training/evaluation entry point.
+2. Add a model-version manifest containing dataset fingerprint, split
+   configuration, preprocessing parameters, model family, calibration
+   method, benchmark results, and training timestamp.
+3. Make model promotion explicit and auditable; never silently overwrite
+   `data/saved_model_artifacts.json`.
+4. Keep benchmark and production artifacts separate until promotion is
+   intentionally requested and all external validation gates pass.
+5. Integrate the LIAR benchmark as an explicit out-of-domain validation
+   stage before production promotion.
