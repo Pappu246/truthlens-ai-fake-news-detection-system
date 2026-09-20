@@ -1,0 +1,56 @@
+name: Phase 2 Real ISOT Data Validation
+
+on:
+  push:
+    branches:
+      - ml-upgrade-phase2
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  validate-real-isot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout Phase 2
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install pipeline dependency
+        run: python -m pip install --upgrade pip datasketch
+
+      - name: Download and verify official Phase 2 dataset assets
+        env:
+          FAKE_URL: https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/releases/download/isot-data-v1/Fake.csv
+          REAL_URL: https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/releases/download/isot-data-v1/True.csv
+          FAKE_SHA256: bebf8bcfe95678bf2c732bf413a2ce5f621af0102c82bf08083b2e5d3c693d0c
+          REAL_SHA256: ba0844414a65dc6ae7402b8eee5306da24b6b56488d6767135af466c7dcb2775
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --retry-delay 2 "$FAKE_URL" -o data/Fake.csv
+          curl --fail --location --retry 3 --retry-delay 2 "$REAL_URL" -o data/True.csv
+          echo "$FAKE_SHA256  data/Fake.csv" | sha256sum --check -
+          echo "$REAL_SHA256  data/True.csv" | sha256sum --check -
+          printf "Fake.csv\t%s bytes\tsha256:%s\n" "$(stat -c%s data/Fake.csv)" "$FAKE_SHA256" > data/isot_source_checksums.txt
+          printf "True.csv\t%s bytes\tsha256:%s\n" "$(stat -c%s data/True.csv)" "$REAL_SHA256" >> data/isot_source_checksums.txt
+          cat data/isot_source_checksums.txt
+
+      - name: Run real-data Phase 2 pipeline
+        run: python scripts/isot_data_pipeline.py
+
+      - name: Upload measured Phase 2 report
+        uses: actions/upload-artifact@v4
+        with:
+          name: isot-phase2-validation
+          path: |
+            data/isot_prepared/stats.json
+            data/isot_prepared/manifest.csv
+            data/isot_prepared/splits/*.txt
+            data/isot_source_checksums.txt
+          if-no-files-found: error

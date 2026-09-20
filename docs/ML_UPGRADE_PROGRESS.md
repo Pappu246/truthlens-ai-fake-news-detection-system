@@ -279,37 +279,142 @@ instructed.
 - [x] Identified the exact, concrete list of changes needed for a real
       training pipeline
 
-## Remaining tasks (Phases 2–19, not started)
+## Phase 2 — Real Dataset Pipeline (COMPLETE)
 
-All 19 phases from the original request remain, in the originally
-specified order, starting from Phase 2. See "Next Task" below for the
-immediate next step.
+The real ISOT dataset is now verified through the published `isot-data-v1`
+release assets and the Phase 2 GitHub Actions validation workflow.
+
+### Verified source integrity
+
+| File | Bytes | SHA-256 |
+|---|---:|---|
+| `Fake.csv` | 62,789,876 | `bebf8bcfe95678bf2c732bf413a2ce5f621af0102c82bf08083b2e5d3c693d0c` |
+| `True.csv` | 53,582,940 | `ba0844414a65dc6ae7402b8eee5306da24b6b56488d6767135af466c7dcb2775` |
+
+Both files were verified in CI with the expected schema:
+`title,text,subject,date`.
+
+### Measured dataset quality
+
+- Raw articles: **44,898**
+- REAL: **21,417**
+- FAKE: **23,481**
+- Empty text rows: **631**
+- Very short text rows: **246**
+- Exact duplicate extra rows: **5,795**
+- Invalid dates: **10**
+- Near-duplicate groups with more than one article: **5,401**
+- Articles involved in near-duplicate groups: **12,133**
+- Largest near-duplicate group: **631 articles**
+- Cross-label near-duplicate groups: **2**
+- Near-duplicate groups straddling the random train/validation/test splits: **0**
+
+### Leakage finding
+
+The dataset contains a strong Reuters-source shortcut:
+
+- Strict Reuters dateline matches: **18,618**
+- Strict matches among REAL rows: **86.93%**
+- Strict matches among FAKE rows: **0.0%**
+
+This is a measured dataset property, not a model-quality claim. It must be treated explicitly during Phase 7 benchmarking so that headline/source artifacts are not mistaken for general fake-news understanding.
+
+### Splits
+
+The preparation pipeline produced:
+
+- Train: **31,428**
+- Validation: **6,735**
+- Test: **6,735**
+- Temporal train (before 2017-01-01): **19,198**
+- Temporal test (2017-01-01 onward): **25,690**
+- Undated rows excluded from temporal split: **10**
+
+No production model artifact was changed by Phase 2.
+
+### Phase 2 CI verification
+
+The following workflows completed successfully on the Phase 2 pull request:
+
+1. Node type-check + production build
+2. Phase 2 synthetic pipeline tests
+3. Real ISOT download, SHA-256 verification, preparation pipeline, and artifact upload
+
+The measured report is retained as a GitHub Actions artifact.
+
+---
+
+## Phase 7 — Model Benchmarking (COMPLETE)
+
+The real-data benchmark was executed in GitHub Actions using the verified
+Phase 2 preparation pipeline. The benchmark compared TF-IDF Logistic
+Regression and a Platt-calibrated Linear SVM on the group-aware random
+splits and the separate temporal test set.
+
+### Measured benchmark results
+
+| Model / variant | Test F1 | Temporal F1 | Test Brier | Test ECE (10-bin) |
+|---|---:|---:|---:|---:|
+| Logistic Regression / raw | 0.98983 | 0.99382 | 0.01470 | 0.05929 |
+| Calibrated Linear SVM / raw | 0.99390 | 0.99811 | 0.00536 | 0.00582 |
+| Logistic Regression / Reuters dateline mitigated | 0.98983 | 0.99387 | 0.01471 | 0.05931 |
+| Calibrated Linear SVM / Reuters dateline mitigated | 0.99405 | 0.99811 | 0.00536 | 0.00582 |
+
+These numbers are measurements on the ISOT benchmark and should not be
+treated as proof of real-world fake-news detection accuracy. In particular,
+the extremely strong scores, combined with the previously measured
+source-pattern imbalance, require cross-domain validation before production
+promotion.
+
+The strict Reuters dateline ablation changed the aggregate metrics only
+slightly. That means removing the leading dateline alone does not explain
+the benchmark performance; additional source/style artifacts and
+out-of-domain testing remain important.
+
+### Calibration
+
+The calibrated Linear SVM achieved a test Brier score of approximately
+**0.00536** and 10-bin ECE of approximately **0.00582** in the raw-text
+benchmark. Calibration is therefore measured on real data, but it still
+needs validation outside the ISOT domain.
+
+### Production safety
+
+- `data/saved_model_artifacts.json` was **not modified**.
+- No benchmark model was promoted to production.
+- Benchmark output was retained as a GitHub Actions artifact.
+
+---
+
+## Phase 8 — Proper Calibration (COMPLETE FOR ISOT BENCHMARK)
+
+Platt-sigmoid calibration is exercised through
+`CalibratedClassifierCV` and evaluated using Brier score and ECE. The
+production artifact remains unchanged until the full model-versioning and
+cross-domain validation process is complete.
+
+---
+
+## Remaining tasks (Phases 9–19)
+
+Phase 1–8 are now verified at the preparation/benchmark level. The next
+stage is model versioning and canonical training, followed by cross-domain
+validation integration, multilingual support, security/API/UI hardening,
+automated acceptance coverage, documentation, and deployment verification.
 
 ---
 
 ## Next Task (read this first in the next session)
 
-**Phase 2: Real dataset pipeline.**
+**Phase 9: Model versioning and canonical training pipeline.**
 
-Immediate blocking dependency: the real ISOT dataset bytes need to be
-pulled with `git lfs pull` from an environment with real internet access
-(not this sandbox — see §6 above for why). This is most likely something
-the user needs to run locally and confirm, or Claude needs to be given
-a work environment with LFS network access.
-
-Once the real `data/Fake.csv` / `data/True.csv` bytes are present:
-
-1. Verify the real header row and label balance before doing anything
-   else (§10 point 2).
-2. Check for the Reuters-dateline leakage signal (§10 point 3).
-3. Extend `scripts/train_isot.py` with: near-duplicate detection,
-   temporal split, and a true train/validation/test three-way split
-   (§10 points 4–6).
-4. Only then actually run training and report real, measured metrics —
-   never fabricated ones.
-
-If LFS access genuinely cannot be obtained by either party, the
-fallback is to source the ISOT dataset (or an equivalent
-real, adequately-sized, properly-licensed fake-news dataset) through
-another verifiable channel, and to say so explicitly rather than
-silently substituting something smaller and calling it equivalent.
+1. Create one canonical real-data training/evaluation entry point.
+2. Add a model-version manifest containing dataset fingerprint, split
+   configuration, preprocessing parameters, model family, calibration
+   method, benchmark results, and training timestamp.
+3. Make model promotion explicit and auditable; never silently overwrite
+   `data/saved_model_artifacts.json`.
+4. Keep benchmark and production artifacts separate until promotion is
+   intentionally requested and all external validation gates pass.
+5. Integrate the LIAR benchmark as an explicit out-of-domain validation
+   stage before production promotion.
