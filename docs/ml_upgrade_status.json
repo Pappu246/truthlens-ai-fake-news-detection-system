@@ -1,0 +1,264 @@
+{
+  "project": "TruthLens AI world-level ML upgrade",
+  "spec_source": "19-phase upgrade requested by project owner",
+  "last_updated_phase": 6,
+  "current_status": "Phases 1-2 complete; data preparation, duplicate analysis, leakage analysis, and split construction verified on the real ISOT dataset. Training is intentionally not promoted to production yet.",
+  "phases": [
+    {
+      "id": 1,
+      "name": "Full repository audit",
+      "status": "complete",
+      "notes": "See docs/ML_UPGRADE_PROGRESS.md for full findings."
+    },
+    {
+      "id": 2,
+      "name": "Real dataset pipeline",
+      "status": "complete",
+      "blocked_reason": "Real ISOT dataset bytes (data/Fake.csv, data/True.csv) exist only as Git LFS pointer files in this working copy. LFS handshake with GitHub succeeded (valid signed download URLs were issued), confirming the objects exist in GitHub's LFS storage, but the actual download is blocked by this sandbox's network egress allowlist (github-cloud.githubusercontent.com is not permitted). Needs `git lfs pull` from an environment with unrestricted internet access.",
+      "notes": "Real ISOT bytes downloaded from release asset in CI, SHA-256 verified, schema verified, and the Phase 2 preparation pipeline completed successfully."
+    },
+    {
+      "id": 3,
+      "name": "Data cleaning + label normalization",
+      "status": "complete",
+      "notes": "Real-data cleaning/normalization stage executed; raw counts, empty/short text, exact duplicates, schema, and label assignments were measured."
+    },
+    {
+      "id": 4,
+      "name": "Duplicate / near-duplicate removal",
+      "status": "complete",
+      "notes": "MinHash/LSH near-duplicate analysis executed with Jaccard threshold 0.7; split construction keeps near-duplicate groups together."
+    },
+    {
+      "id": 5,
+      "name": "Data leakage prevention",
+      "status": "complete",
+      "notes": "Reuters dateline leakage was measured. The current dataset shows a strong source shortcut: 18,618 strict dateline matches, 86.93% of REAL rows; mitigation is intentionally deferred until model benchmarking."
+    },
+    {
+      "id": 6,
+      "name": "Train/validation/test + temporal + cross-domain splits",
+      "status": "complete",
+      "notes": "Constructed stratified train/validation/test splits plus a temporal split and verified zero near-duplicate groups straddling random splits."
+    },
+    {
+      "id": 7,
+      "name": "Model benchmarking",
+      "status": "partial",
+      "notes": "5-fold CV + held-out test implemented in scripts/train_isot.py, but never executed against real data. Out-of-domain LIAR benchmarking script exists and has been run once, but only against the 36-row demo model."
+    },
+    {
+      "id": 8,
+      "name": "Proper calibration",
+      "status": "implemented_on_demo_data_only",
+      "notes": "Platt sigmoid calibration via CalibratedClassifierCV is already implemented in scripts/train_isot.py and is the mechanism behind the currently-live demo model's confidence scores."
+    },
+    {
+      "id": 9,
+      "name": "Model versioning",
+      "status": "not_started",
+      "notes": "Three separate, uncoordinated training code paths currently exist (server/mlEngine.ts train(), backend/ml/train.py, scripts/train_isot.py). Needs consolidation to one canonical pipeline."
+    },
+    {
+      "id": 10,
+      "name": "Claim + evidence verification",
+      "status": "already_implemented",
+      "notes": "server/verification/* already implements claim extraction and evidence search via Gemini, confirmed working live in production."
+    },
+    {
+      "id": 11,
+      "name": "Live news -> full article extraction",
+      "status": "already_implemented",
+      "notes": "server/extraction/articleExtractor.ts + server/news/* already implemented and confirmed working live."
+    },
+    {
+      "id": 12,
+      "name": "Uncertainty / needs-more-context logic",
+      "status": "already_implemented",
+      "notes": "Confirmed working live: short/headline-only guards, uncertainty-zone widening for demo-dataset models."
+    },
+    {
+      "id": 13,
+      "name": "Multilingual architecture",
+      "status": "not_started"
+    },
+    {
+      "id": 14,
+      "name": "Security review",
+      "status": "not_started",
+      "notes": "SSRF protections and rate limiting already exist (server/security/*) but have not had a dedicated review pass as part of this upgrade."
+    },
+    {
+      "id": 15,
+      "name": "API improvement",
+      "status": "not_started"
+    },
+    {
+      "id": 16,
+      "name": "UI improvement",
+      "status": "not_started"
+    },
+    {
+      "id": 17,
+      "name": "Automated tests",
+      "status": "partial",
+      "notes": "scripts/regressionVerdictTests.ts, scripts/test_pipeline.ts, scripts/adversarialAcceptanceTests.ts, backend/tests/test_verdicts.py already exist. Coverage against a real (non-demo) model has not been exercised."
+    },
+    {
+      "id": 18,
+      "name": "README + documentation",
+      "status": "partial",
+      "notes": "README already substantially rewritten in prior work. This progress file is new."
+    },
+    {
+      "id": 19,
+      "name": "Build / lint / deployment verification",
+      "status": "ongoing",
+      "notes": "Verified working as of the most recent deploy prior to this upgrade starting."
+    }
+  ],
+  "datasets": {
+    "demo_dataset": {
+      "path": "data/news.csv",
+      "status": "verified_real_present",
+      "rows": 36,
+      "columns": [
+        "title",
+        "text",
+        "label"
+      ],
+      "currently_used_by_production": true
+    },
+    "liar": {
+      "paths": [
+        "train.tsv",
+        "test.tsv",
+        "valid.tsv",
+        "data/train.tsv",
+        "data/test.tsv",
+        "data/valid.tsv"
+      ],
+      "status": "verified_real_present_authentic",
+      "rows": {
+        "train": 10269,
+        "test": 1283,
+        "valid": 1284
+      },
+      "columns": 14,
+      "label_distribution": {
+        "train": {
+          "half-true": 2123,
+          "false": 1998,
+          "mostly-true": 1966,
+          "true": 1683,
+          "barely-true": 1657,
+          "pants-fire": 842
+        },
+        "test": {
+          "half-true": 267,
+          "false": 250,
+          "mostly-true": 249,
+          "barely-true": 214,
+          "true": 211,
+          "pants-fire": 92
+        },
+        "valid": {
+          "false": 263,
+          "mostly-true": 251,
+          "half-true": 248,
+          "barely-true": 237,
+          "true": 169,
+          "pants-fire": 116
+        }
+      },
+      "used_for": "out-of-domain validation only, not training"
+    },
+    "isot": {
+      "paths": [
+        "data/Fake.csv",
+        "data/True.csv"
+      ],
+      "status": "verified_real_present_via_release_asset_in_CI",
+      "git_lfs_configured": true,
+      "release_tag": "isot-data-v1",
+      "verified_sizes_bytes": {
+        "Fake.csv": 62789876,
+        "True.csv": 53582940
+      },
+      "sha256": {
+        "Fake.csv": "bebf8bcfe95678bf2c732bf413a2ce5f621af0102c82bf08083b2e5d3c693d0c",
+        "True.csv": "ba0844414a65dc6ae7402b8eee5306da24b6b56488d6767135af466c7dcb2775"
+      },
+      "schema": [
+        "title",
+        "text",
+        "subject",
+        "date"
+      ],
+      "raw_rows": 44898,
+      "cleaning": {
+        "empty_text": 631,
+        "very_short_text": 246,
+        "exact_duplicate_extra_rows": 5795,
+        "invalid_dates": 10
+      },
+      "near_duplicates": {
+        "groups_size_gt1": 5401,
+        "articles_involved": 12133,
+        "largest_group_size": 631,
+        "cross_label_groups": 2
+      },
+      "reuters_dateline_leakage": {
+        "strict_dateline_matches": 18618,
+        "strict_dateline_pct_of_real": 86.93,
+        "strict_dateline_pct_of_fake": 0
+      },
+      "split": {
+        "train": 31428,
+        "val": 6735,
+        "test": 6735,
+        "groups_straddling_splits": 0
+      },
+      "temporal_split": {
+        "cutoff_date": "2017-01-01",
+        "temporal_train": 19198,
+        "temporal_test": 25690,
+        "excluded_undated_rows": 10
+      }
+    }
+  },
+  "training_pipelines": {
+    "server_mlEngine_ts_train": {
+      "location": "server/mlEngine.ts",
+      "trains_on": "data/news.csv",
+      "writes_to": "data/saved_model_artifacts.json",
+      "used_by_production": true
+    },
+    "backend_ml_train_py": {
+      "location": "backend/ml/train.py",
+      "trains_on": "data/news.csv or data/sample_news.csv",
+      "writes_to": [
+        "backend/models/*.joblib",
+        "backend/models/metrics.json"
+      ],
+      "used_by_production": false,
+      "recommendation": "retire or clearly document as demo/offline-only"
+    },
+    "scripts_train_isot_py": {
+      "location": "scripts/train_isot.py",
+      "trains_on": "data/True.csv + data/Fake.csv (real ISOT, once available)",
+      "writes_to": [
+        "backend/models/*.joblib",
+        "backend/models/metrics.json",
+        "data/saved_model_artifacts.json"
+      ],
+      "used_by_production": false,
+      "ever_executed": false,
+      "recommendation": "evolve into the single canonical training pipeline"
+    }
+  },
+  "next_task": {
+    "phase": 7,
+    "description": "Run real-data model benchmarking without changing the production artifact: establish TF-IDF Logistic Regression and calibrated Linear SVM baselines, report stratified and temporal metrics, and explicitly measure performance with and without Reuters-dateline leakage mitigation."
+  }
+}
