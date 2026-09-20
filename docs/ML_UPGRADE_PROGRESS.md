@@ -279,37 +279,92 @@ instructed.
 - [x] Identified the exact, concrete list of changes needed for a real
       training pipeline
 
-## Remaining tasks (Phases 2–19, not started)
+## Phase 2 — Real Dataset Pipeline (COMPLETE)
 
-All 19 phases from the original request remain, in the originally
-specified order, starting from Phase 2. See "Next Task" below for the
-immediate next step.
+The real ISOT dataset is now verified through the published `isot-data-v1`
+release assets and the Phase 2 GitHub Actions validation workflow.
+
+### Verified source integrity
+
+| File | Bytes | SHA-256 |
+|---|---:|---|
+| `Fake.csv` | 62,789,876 | `bebf8bcfe95678bf2c732bf413a2ce5f621af0102c82bf08083b2e5d3c693d0c` |
+| `True.csv` | 53,582,940 | `ba0844414a65dc6ae7402b8eee5306da24b6b56488d6767135af466c7dcb2775` |
+
+Both files were verified in CI with the expected schema:
+`title,text,subject,date`.
+
+### Measured dataset quality
+
+- Raw articles: **44,898**
+- REAL: **21,417**
+- FAKE: **23,481**
+- Empty text rows: **631**
+- Very short text rows: **246**
+- Exact duplicate extra rows: **5,795**
+- Invalid dates: **10**
+- Near-duplicate groups with more than one article: **5,401**
+- Articles involved in near-duplicate groups: **12,133**
+- Largest near-duplicate group: **631 articles**
+- Cross-label near-duplicate groups: **2**
+- Near-duplicate groups straddling the random train/validation/test splits: **0**
+
+### Leakage finding
+
+The dataset contains a strong Reuters-source shortcut:
+
+- Strict Reuters dateline matches: **18,618**
+- Strict matches among REAL rows: **86.93%**
+- Strict matches among FAKE rows: **0.0%**
+
+This is a measured dataset property, not a model-quality claim. It must be treated explicitly during Phase 7 benchmarking so that headline/source artifacts are not mistaken for general fake-news understanding.
+
+### Splits
+
+The preparation pipeline produced:
+
+- Train: **31,428**
+- Validation: **6,735**
+- Test: **6,735**
+- Temporal train (before 2017-01-01): **19,198**
+- Temporal test (2017-01-01 onward): **25,690**
+- Undated rows excluded from temporal split: **10**
+
+No production model artifact was changed by Phase 2.
+
+### Phase 2 CI verification
+
+The following workflows completed successfully on the Phase 2 pull request:
+
+1. Node type-check + production build
+2. Phase 2 synthetic pipeline tests
+3. Real ISOT download, SHA-256 verification, preparation pipeline, and artifact upload
+
+The measured report is retained as a GitHub Actions artifact.
+
+---
+
+## Remaining tasks (Phases 7–19)
+
+Phase 1–6 preparation work is now verified. Model training has **not** been promoted to production.
+
+The next work is Phase 7 model benchmarking, followed by calibration/model
+selection, versioning, multilingual support, security/API/UI hardening,
+automated acceptance coverage, documentation, and deployment verification.
 
 ---
 
 ## Next Task (read this first in the next session)
 
-**Phase 2: Real dataset pipeline.**
+**Phase 7: Model benchmarking on the real ISOT data.**
 
-Immediate blocking dependency: the real ISOT dataset bytes need to be
-pulled with `git lfs pull` from an environment with real internet access
-(not this sandbox — see §6 above for why). This is most likely something
-the user needs to run locally and confirm, or Claude needs to be given
-a work environment with LFS network access.
-
-Once the real `data/Fake.csv` / `data/True.csv` bytes are present:
-
-1. Verify the real header row and label balance before doing anything
-   else (§10 point 2).
-2. Check for the Reuters-dateline leakage signal (§10 point 3).
-3. Extend `scripts/train_isot.py` with: near-duplicate detection,
-   temporal split, and a true train/validation/test three-way split
-   (§10 points 4–6).
-4. Only then actually run training and report real, measured metrics —
-   never fabricated ones.
-
-If LFS access genuinely cannot be obtained by either party, the
-fallback is to source the ISOT dataset (or an equivalent
-real, adequately-sized, properly-licensed fake-news dataset) through
-another verifiable channel, and to say so explicitly rather than
-silently substituting something smaller and calling it equivalent.
+1. Build a leakage-aware baseline using the verified train/validation/test
+   splits.
+2. Benchmark TF-IDF + Logistic Regression and calibrated Linear SVM.
+3. Measure accuracy, precision, recall, F1, macro-F1, ROC-AUC, PR-AUC,
+   confusion matrix, calibration quality, and inference latency.
+4. Evaluate the temporal split separately.
+5. Run an explicit ablation with Reuters dateline/source markers retained
+   versus mitigated, so the shortcut effect is measurable.
+6. Do **not** overwrite `data/saved_model_artifacts.json` until the
+   benchmark and model-selection report is complete.
