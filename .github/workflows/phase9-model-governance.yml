@@ -1,0 +1,26 @@
+name: Phase 9 model governance
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/train_isot_canonical.py"
+      - "scripts/evaluate_liar_candidate.py"
+      - "scripts/promote_model.py"
+      - "backend/tests/test_phase9_model_governance.py"
+      - "docs/ML_UPGRADE_PROGRESS.md"
+      - "docs/ml_upgrade_status.json"
+      - ".github/workflows/phase9-model-governance.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  governance-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt datasketch
+      - run: python -m pytest backend/tests/test_phase9_model_governance.py -q
+      - run: python -m py_compile scripts/train_isot_canonical.py scripts/evaluate_liar_candidate.py scripts/promote_model.py
