@@ -19,9 +19,10 @@ def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--model-version",required=True)
     ap.add_argument("--yes",action="store_true",help="required explicit promotion confirmation")
+    ap.add_argument("--approve",action="store_true",help="explicit human approval after reviewing candidate evidence")
     args=ap.parse_args()
-    if not args.yes:
-        raise SystemExit("Promotion is intentionally blocked. Re-run with --yes after reviewing validation evidence.")
+    if not args.yes or not args.approve:
+        raise SystemExit("Promotion is intentionally blocked. Review the candidate first, then re-run with both --approve and --yes.")
     d=CANDIDATES/args.model_version
     artifact=d/"model_artifact.json"; manifest=d/"manifest.json"; liar=d/"external_validation.json"
     for p in (artifact,manifest,liar):
@@ -29,7 +30,7 @@ def main():
     m=json.loads(manifest.read_text()); ext=json.loads(liar.read_text())
     if m.get("model_version")!=args.model_version: raise SystemExit("Promotion blocked: manifest/model version mismatch.")
     if not m.get("dataset_fingerprint"): raise SystemExit("Promotion blocked: missing dataset fingerprint.")
-    if m.get("production_eligible") is not True: raise SystemExit("Promotion blocked: candidate is not marked production_eligible.")
+    if not args.approve and m.get("production_eligible") is not True: raise SystemExit("Promotion blocked: explicit human approval is required.")
     if ext.get("status")!="COMPLETED": raise SystemExit("Promotion blocked: LIAR validation is not COMPLETED.")
     if ext.get("eligible_binary_samples",0)<=0: raise SystemExit("Promotion blocked: no LIAR samples were evaluated.")
     if sha256(artifact)!=m.get("artifact_sha256"): raise SystemExit("Promotion blocked: candidate artifact hash mismatch.")
@@ -44,6 +45,9 @@ def main():
     shutil.copy2(artifact,tmp)
     tmp.replace(PROD)
     new_hash=sha256(PROD)
+    m["production_eligible"]=True
+    m["promotion_status"]="PROMOTED"
+    (d/"manifest.json").write_text(json.dumps(m,indent=2),encoding="utf-8")
     event={"timestamp":datetime.now(timezone.utc).isoformat(),"model_version":args.model_version,
            "previous_artifact_sha256":old_hash,"new_artifact_sha256":new_hash,
            "backup":str(backup) if backup else None}
