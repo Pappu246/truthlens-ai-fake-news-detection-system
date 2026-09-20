@@ -1,0 +1,59 @@
+name: Phase 9 real candidate validation
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/train_isot_canonical.py"
+      - "scripts/evaluate_liar_candidate.py"
+      - "scripts/isot_data_pipeline.py"
+      - "docs/PHASE9_MODEL_GOVERNANCE.md"
+      - ".github/workflows/phase9-real-candidate.yml"
+permissions:
+  contents: read
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install ML dependencies
+        run: pip install -r requirements.txt datasketch pytest
+      - name: Download verified ISOT release assets
+        run: |
+          mkdir -p data
+          curl -fL --retry 3 -o data/Fake.csv https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/releases/download/isot-data-v1/Fake.csv
+          curl -fL --retry 3 -o data/True.csv https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/releases/download/isot-data-v1/True.csv
+      - name: Verify ISOT SHA-256
+        run: |
+          echo "bebf8bcfe95678bf2c732bf413a2ce5f621af0102c82bf08083b2e5d3c693d0c  data/Fake.csv" | sha256sum -c -
+          echo "ba0844414a65dc6ae7402b8eee5306da24b6b56488d6767135af466c7dcb2775  data/True.csv" | sha256sum -c -
+      - name: Prepare leakage-safe splits
+        run: python scripts/isot_data_pipeline.py
+      - name: Train canonical candidate
+        run: |
+          python scripts/train_isot_canonical.py --variant raw | tee phase9-training.json
+          python -c "import json; x=json.load(open('phase9-training.json')); print(x['model_version'])"
+      - name: Evaluate LIAR out of domain
+        run: |
+          VERSION=$(python -c "import json; print(json.load(open('phase9-training.json'))['model_version'])")
+          python scripts/evaluate_liar_candidate.py --model-version "$VERSION"
+      - name: Verify production artifact was not modified
+        run: |
+          git show HEAD:data/saved_model_artifacts.json > /tmp/before.json
+          sha256sum /tmp/before.json data/saved_model_artifacts.json
+          cmp /tmp/before.json data/saved_model_artifacts.json
+      - name: Upload candidate evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase9-candidate-evidence
+          path: |
+            phase9-training.json
+            data/isot_prepared/stats.json
+            artifacts/models/*/manifest.json
+            artifacts/models/*/metrics.json
+            artifacts/models/*/external_validation.json
+          if-no-files-found: error
