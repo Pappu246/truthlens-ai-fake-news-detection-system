@@ -418,9 +418,77 @@ automated acceptance coverage, documentation, and deployment verification.
    intentionally requested and all external validation gates pass.
 5. Integrate the LIAR benchmark as an explicit out-of-domain validation
    stage before production promotion.
-\n\n## Phase 9 — Model Governance (IN PROGRESS)
+## Phase 9 — Model Governance (COMPLETE, independently verified)
 
-A dedicated branch now contains the canonical real-data candidate training pipeline, deterministic dataset fingerprinting, versioned model manifests, candidate LIAR out-of-domain validation, and explicit promotion/backup safeguards. Normal training never writes `data/saved_model_artifacts.json`.
+A dedicated branch (`ml-upgrade-phase9-model-versioning`, PR #12) contains the
+canonical real-data candidate training pipeline, deterministic dataset
+fingerprinting, versioned model manifests, candidate LIAR out-of-domain
+validation, and explicit promotion/backup safeguards. Normal training never
+writes `data/saved_model_artifacts.json`.
 
-The production artifact remains unchanged pending explicit human review and promotion.
-\n
+The production artifact remains unchanged pending explicit human review and
+promotion.
+
+### Independent live verification of this session (2026-09-20)
+
+Everything below was executed directly, from scratch, in this session --
+not copied from an earlier claim without re-running it:
+
+- Downloaded the real ISOT `Fake.csv`/`True.csv` (via the `isot-data-v1`
+  GitHub Release, since Git LFS objects are not reachable from this
+  session's network) and verified both SHA-256 hashes match the values
+  recorded in the repository's Git LFS pointer files exactly.
+- Re-ran `scripts/isot_data_pipeline.py`: 44,898 total rows, 5,401
+  near-duplicate groups covering 12,133 articles, 2 cross-label
+  near-duplicate groups, 0 groups straddling a split boundary -- these
+  numbers match the previously-reported Phase 2 figures exactly, which is
+  itself a strong reproducibility confirmation.
+- Ran `scripts/train_isot_canonical.py --variant raw` end-to-end. Produced
+  a real candidate, `isot-svm-37fc02617260`. Verified the manifest's
+  claimed `artifact_sha256` matches the real artifact file's computed
+  hash. Metrics: test F1 0.9962, temporal_test F1 0.9988, validation F1
+  0.9949 (Linear SVM, Platt-calibrated on a disjoint validation split).
+- Ran `scripts/evaluate_liar_candidate.py` against that exact candidate:
+  790 eligible LIAR test samples after excluding `barely-true`/`half-true`,
+  **accuracy 0.4266 -- worse than chance**, precision 0.4282, recall
+  0.9795, F1 0.5959, macro-F1 0.3045. The model predicts FAKE on nearly
+  everything when applied out-of-domain. This is measured, not assumed,
+  evidence that the >99% ISOT number does not represent real-world
+  accuracy and must never be quoted without this figure alongside it.
+- Confirmed `data/saved_model_artifacts.json` is byte-identical
+  (SHA-256 match) between `main` and this branch throughout -- no
+  training or evaluation step touched it.
+- Found a real failure in `backend/tests/test_phase9_model_governance.py`
+  (`test_promotion_requires_explicit_confirmation`): `promote_model.py`'s
+  unconditional blocking message did not contain the literal word
+  "required" that the test asserted for, even though the underlying
+  safety behavior (refusing promotion without both `--approve` and
+  `--yes`) was already correct. Root cause: two different blocking
+  messages in `promote_model.py` used inconsistent wording. Fixed by
+  aligning both messages to state confirmation/approval is "required" --
+  no safety behavior changed. Also found and documented (not removed) a
+  second approval check that is provably unreachable given the
+  unconditional gate above it, kept intentionally as defense-in-depth.
+  Governance suite now passes 3/3.
+
+## Next Task (read this first in the next session)
+
+**Phase 9 governance is complete and independently verified. Do not repeat
+it.** PR #12 should be safe to merge once its CI re-runs green with the
+`promote_model.py` fix above (governance-tests job specifically; the other
+Phase 2/Phase 7/Phase 9-real-candidate jobs were already passing before this
+fix). Merging the PR is a code-review action only -- it must never be
+treated as, or trigger, production model promotion. Promotion remains a
+separate, explicit, human-run command
+(`scripts/promote_model.py --model-version <VERSION> --approve --yes`) and
+has not been run.
+
+**Next priority: Task 10, production runtime audit of `server/mlEngine.ts`.**
+Specifically verify: correct production artifact loading; artifact
+integrity/version handling; short-text/headline guards still match what was
+verified live in earlier sessions; `NEEDS MORE CONTEXT` threshold behavior;
+safe handling of a missing/corrupt artifact (no silent fallback to an
+unrelated model); and that nothing here breaks API compatibility. After
+that: Task 11, an end-to-end Live News audit (headline -> URL -> safe fetch
+-> article extraction -> actual article body -> analysis), confirming a
+headline is never presented as if it were a full-article analysis.

@@ -22,7 +22,7 @@ def main():
     ap.add_argument("--approve",action="store_true",help="explicit human approval after reviewing candidate evidence")
     args=ap.parse_args()
     if not args.yes or not args.approve:
-        raise SystemExit("Promotion is intentionally blocked. Review the candidate first, then re-run with both --approve and --yes.")
+        raise SystemExit("Promotion is intentionally blocked: explicit confirmation is required. Review the candidate first, then re-run with both --approve and --yes.")
     d=CANDIDATES/args.model_version
     artifact=d/"model_artifact.json"; manifest=d/"manifest.json"; liar=d/"external_validation.json"
     for p in (artifact,manifest,liar):
@@ -30,6 +30,12 @@ def main():
     m=json.loads(manifest.read_text()); ext=json.loads(liar.read_text())
     if m.get("model_version")!=args.model_version: raise SystemExit("Promotion blocked: manifest/model version mismatch.")
     if not m.get("dataset_fingerprint"): raise SystemExit("Promotion blocked: missing dataset fingerprint.")
+    # NOTE: the unconditional gate above already guarantees args.approve is
+    # True by this point (execution cannot reach here otherwise), which
+    # makes this specific check currently unreachable. Kept intentionally
+    # as defense-in-depth in case the gate above is ever relaxed to accept
+    # --yes alone -- do not delete this without re-verifying the gate above
+    # still enforces both --approve and --yes unconditionally.
     if not args.approve and m.get("production_eligible") is not True: raise SystemExit("Promotion blocked: explicit human approval is required.")
     if ext.get("status")!="COMPLETED": raise SystemExit("Promotion blocked: LIAR validation is not COMPLETED.")
     if ext.get("eligible_binary_samples",0)<=0: raise SystemExit("Promotion blocked: no LIAR samples were evaluated.")
