@@ -6,7 +6,7 @@ on:
       - ml-upgrade-phase2
   pull_request:
     branches:
-      - ml-upgrade-phase2
+      - main
 
 jobs:
   isot-pipeline-tests:
