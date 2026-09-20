@@ -19,7 +19,7 @@ Normal training never writes the production artifact.
 ```bash
 python scripts/train_isot_canonical.py --variant raw
 python scripts/evaluate_liar_candidate.py --model-version <VERSION>
-python scripts/promote_model.py --model-version <VERSION> --yes
+python scripts/promote_model.py --model-version <VERSION> --approve --yes
 ```
 
 Promotion remains intentionally blocked unless the candidate manifest is explicitly marked `production_eligible: true`. External validation alone does not make that decision.
