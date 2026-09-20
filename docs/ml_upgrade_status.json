@@ -1,8 +1,8 @@
 {
   "project": "TruthLens AI world-level ML upgrade",
   "spec_source": "19-phase upgrade requested by project owner",
-  "last_updated_phase": 6,
-  "current_status": "Phases 1-2 complete; data preparation, duplicate analysis, leakage analysis, and split construction verified on the real ISOT dataset. Training is intentionally not promoted to production yet.",
+  "last_updated_phase": 8,
+  "current_status": "Phases 1-8 complete through real-data preparation, benchmarking, and calibration evaluation. Production model artifact is still unchanged; model promotion remains a separate decision after cross-domain validation and versioning.",
   "phases": [
     {
       "id": 1,
@@ -44,20 +44,20 @@
     {
       "id": 7,
       "name": "Model benchmarking",
-      "status": "partial",
-      "notes": "5-fold CV + held-out test implemented in scripts/train_isot.py, but never executed against real data. Out-of-domain LIAR benchmarking script exists and has been run once, but only against the 36-row demo model."
+      "status": "complete",
+      "notes": "Real ISOT benchmark executed for TF-IDF Logistic Regression and calibrated Linear SVM on group-aware validation/test plus temporal test. Reuters-dateline mitigation ablation was measured. Results are retained as a CI artifact; no production artifact was modified."
     },
     {
       "id": 8,
       "name": "Proper calibration",
-      "status": "implemented_on_demo_data_only",
-      "notes": "Platt sigmoid calibration via CalibratedClassifierCV is already implemented in scripts/train_isot.py and is the mechanism behind the currently-live demo model's confidence scores."
+      "status": "complete",
+      "notes": "Calibrated Linear SVM was evaluated with Brier score and 10-bin expected calibration error on real ISOT. Cross-domain calibration/generalization still needs external validation."
     },
     {
       "id": 9,
       "name": "Model versioning",
       "status": "not_started",
-      "notes": "Three separate, uncoordinated training code paths currently exist (server/mlEngine.ts train(), backend/ml/train.py, scripts/train_isot.py). Needs consolidation to one canonical pipeline."
+      "notes": "Next: define one canonical training/evaluation entry point and explicit model version manifest before any production model promotion."
     },
     {
       "id": 10,
@@ -258,7 +258,7 @@
     }
   },
   "next_task": {
-    "phase": 7,
-    "description": "Run real-data model benchmarking without changing the production artifact: establish TF-IDF Logistic Regression and calibrated Linear SVM baselines, report stratified and temporal metrics, and explicitly measure performance with and without Reuters-dateline leakage mitigation."
+    "phase": 9,
+    "description": "Consolidate the real-data training/evaluation workflow into one canonical versioned pipeline. Add model metadata, dataset fingerprint, preprocessing configuration, benchmark provenance, and an explicit promotion step that cannot silently overwrite the production artifact."
   }
 }
