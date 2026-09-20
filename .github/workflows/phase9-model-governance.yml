@@ -21,6 +21,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install -r requirements.txt datasketch
+      - run: pip install -r requirements.txt datasketch pytest
       - run: python -m pytest backend/tests/test_phase9_model_governance.py -q
       - run: python -m py_compile scripts/train_isot_canonical.py scripts/evaluate_liar_candidate.py scripts/promote_model.py
