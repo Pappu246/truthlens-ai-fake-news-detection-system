@@ -11,3 +11,7 @@ coverage/
 __pycache__/
 *.pyc
 data/thresholds.json
+
+# Phase 9 generated candidate/production evidence (kept out of Git)
+artifacts/models/
+artifacts/production_backups/

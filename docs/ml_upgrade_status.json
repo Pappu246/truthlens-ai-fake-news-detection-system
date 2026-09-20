@@ -1,8 +1,8 @@
 {
   "project": "TruthLens AI world-level ML upgrade",
   "spec_source": "19-phase upgrade requested by project owner",
-  "last_updated_phase": 8,
-  "current_status": "Phases 1-8 complete through real-data preparation, benchmarking, and calibration evaluation. Production model artifact is still unchanged; model promotion remains a separate decision after cross-domain validation and versioning.",
+  "last_updated_phase": 9,
+  "current_status": "Phases 1-8 complete. Phase 9 implementation is in progress on a dedicated branch; production artifact remains unchanged.",
   "phases": [
     {
       "id": 1,
@@ -44,8 +44,8 @@
     {
       "id": 7,
       "name": "Model benchmarking",
-      "status": "complete",
-      "notes": "Real ISOT benchmark executed for TF-IDF Logistic Regression and calibrated Linear SVM on group-aware validation/test plus temporal test. Reuters-dateline mitigation ablation was measured. Results are retained as a CI artifact; no production artifact was modified."
+      "status": "complete_independently_verified",
+      "notes": "Independently re-verified live in this session (not just re-asserted): candidate isot-svm-37fc02617260 trained via scripts/train_isot_canonical.py on the real, SHA-256-verified ISOT release assets. test F1=0.9962, temporal_test F1=0.9988, validation F1=0.9949 (Linear SVM, Platt-calibrated). artifact_sha256 in the manifest verified to match the real artifact file. production artifact confirmed byte-identical to main throughout (untouched)."
     },
     {
       "id": 8,
@@ -56,8 +56,8 @@
     {
       "id": 9,
       "name": "Model versioning",
-      "status": "not_started",
-      "notes": "Next: define one canonical training/evaluation entry point and explicit model version manifest before any production model promotion."
+      "status": "complete",
+      "notes": "Canonical training, versioned candidates, dataset fingerprinting, LIAR candidate validation, and explicit promotion/rollback tooling exist on ml-upgrade-phase9-model-versioning (PR #12) and were independently exercised live end-to-end in this session: prepare -> train -> validate -> temporal test -> LIAR external validation -> candidate artifact, all producing real, freshly-computed results (see docs/PHASE9_MODEL_GOVERNANCE.md for exact numbers). Governance test suite (backend/tests/test_phase9_model_governance.py) was found with 1 real failure (wording mismatch between promote_model.py's unconditional blocking message and the test's assertion for the literal word 'required'), root-caused, fixed by making both blocking messages in promote_model.py consistent (no safety weakening), and re-verified 3/3 passing. A separately-identified dead/unreachable secondary approval check was documented in place (kept as defense-in-depth) rather than silently left unexplained. Production artifact (data/saved_model_artifacts.json) confirmed byte-identical to main (SHA-256 match) -- no automatic promotion occurred or is possible without the explicit --approve AND --yes flags, which promote_model.py enforces unconditionally before touching production."
     },
     {
       "id": 10,
@@ -259,6 +259,6 @@
   },
   "next_task": {
     "phase": 9,
-    "description": "Consolidate the real-data training/evaluation workflow into one canonical versioned pipeline. Add model metadata, dataset fingerprint, preprocessing configuration, benchmark provenance, and an explicit promotion step that cannot silently overwrite the production artifact."
+    "description": "Finish Phase 9 verification: run canonical candidate training and LIAR external validation in CI, review actual metrics, then decide separately whether any candidate should be explicitly promoted."
   }
 }
