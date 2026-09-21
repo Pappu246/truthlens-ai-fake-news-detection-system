@@ -1,8 +1,8 @@
 {
   "project": "TruthLens AI world-level ML upgrade",
   "spec_source": "19-phase upgrade requested by project owner",
-  "last_updated_phase": 9,
-  "current_status": "Phases 1-8 complete. Phase 9 implementation is in progress on a dedicated branch; production artifact remains unchanged.",
+  "last_updated_phase": 10,
+  "current_status": "Tasks 1, 2, 7, 9, 10 complete and independently verified. Task 11 (Live News / article pipeline audit) is next.",
   "phases": [
     {
       "id": 1,
@@ -61,9 +61,9 @@
     },
     {
       "id": 10,
-      "name": "Claim + evidence verification",
-      "status": "already_implemented",
-      "notes": "server/verification/* already implements claim extraction and evidence search via Gemini, confirmed working live in production."
+      "name": "Production runtime audit (server/mlEngine.ts, /api/health)",
+      "status": "complete",
+      "notes": "Found and fixed a real bug: the constructor checked file existence but never checked loadModelArtifact()'s return value, so a present-but-corrupt/inconsistent artifact left the engine with an empty vocabulary forever (every prediction silently exactly P(FAKE)=0.5, always landing in the uncertainty zone, with /api/health still hardcoded to 'ok'). Fixed: constructor now falls back to train() whenever loadModelArtifact() returns false, matching the missing-file behavior. Added isModelTrained() and an additive, backward-compatible model_trained field + status:'degraded' case on /api/health. Verified live with an intentionally corrupted artifact on a running server. Added scripts/test_artifact_lifecycle.ts (9/9 passing) covering valid/missing/corrupt/inconsistent/empty-vocab artifacts via a new artifactFileOverride constructor parameter (isolated temp dirs only, never touches the real production file). No regressions: regressionVerdictTests.ts 28/28, adversarialAcceptanceTests.ts 24/25 (the one failure requires GEMINI_API_KEY, confirmed pre-existing/environmental, unrelated to this change). Production artifact confirmed byte-identical (SHA-256) throughout."
     },
     {
       "id": 11,

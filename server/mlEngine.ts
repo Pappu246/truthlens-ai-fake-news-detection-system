@@ -303,20 +303,25 @@ export class TruthLensMLEngine {
   private artifactFile: string;
   private metricsArtifactFile: string;
 
-  constructor() {
+  constructor(artifactFileOverride?: string) {
     this.historyFile = path.join(process.cwd(), 'data', 'history.json');
     this.thresholdsFile = path.join(process.cwd(), 'data', 'thresholds.json');
-    this.artifactFile = path.join(process.cwd(), 'data', 'saved_model_artifacts.json');
+    this.artifactFile = artifactFileOverride ?? path.join(process.cwd(), 'data', 'saved_model_artifacts.json');
     this.metricsArtifactFile = path.join(process.cwd(), 'backend', 'models', 'metrics.json');
     
     // Initialize SQLite storage
     sqliteHistory.init().catch(err => console.error('[MLEngine] SQLite init error:', err));
     this.loadPersistedState();
 
-    // Load saved model artifact if present; otherwise perform training
-    if (fs.existsSync(this.artifactFile)) {
-      this.loadModelArtifact(this.artifactFile);
-    } else {
+    // Load saved model artifact if present; otherwise perform training.
+    // loadModelArtifact() returns false both when the file is unreadable
+    // AND when it fails the integrity check below -- in either case we
+    // must fall back to training, or the engine silently runs with an
+    // empty vocabulary (every prediction becomes exactly P(FAKE)=0.5,
+    // landing in the uncertainty zone forever, with no visible error).
+    const loaded = fs.existsSync(this.artifactFile) && this.loadModelArtifact(this.artifactFile);
+    if (!loaded) {
+      console.warn('[MLEngine] No usable model artifact was loaded; training a fresh model now.');
       this.train();
     }
   }
@@ -429,6 +434,16 @@ export class TruthLensMLEngine {
     } catch (e) {
       console.error('[MLEngine] Failed to write thresholds file', e);
     }
+  }
+
+  /**
+   * True only when a real, integrity-checked model is loaded (vocabulary
+   * non-empty, weights/idf consistent with it). False means every
+   * prediction would silently return exactly P(FAKE)=0.5 -- callers such
+   * as /api/health use this to surface that condition instead of hiding it.
+   */
+  public isModelTrained(): boolean {
+    return this.isTrained;
   }
 
   public getThresholds(): Thresholds {
