@@ -65,10 +65,12 @@ async function startServer() {
 
   // 1. Health Endpoint
   app.get('/api/health', (req, res) => {
+    const modelTrained = mlEngine.isModelTrained();
     res.json({
-      status: 'ok',
+      status: modelTrained ? 'ok' : 'degraded',
       service: 'TruthLens ML Engine',
       model: 'Linear SVM (Calibrated)',
+      model_trained: modelTrained,
       uptime_seconds: Math.round(process.uptime())
     });
   });
