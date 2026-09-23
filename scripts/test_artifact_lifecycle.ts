@@ -5,13 +5,27 @@
  * deterministically, that TruthLensMLEngine never ends up in a state where
  * it silently serves predictions from an empty/uninitialized model.
  *
- * Regression target: previously, when data/saved_model_artifacts.json
+ * Regression target #1: previously, when data/saved_model_artifacts.json
  * existed but failed its own integrity check (vocabulary/idf/weights
  * length mismatch, or non-finite calibration parameters), the constructor
  * did not check loadModelArtifact()'s return value and never fell back to
  * training. The engine was left with an empty vocabulary, silently
  * returning exactly P(FAKE)=0.5 for every single request forever, with
  * /api/health still unconditionally reporting status "ok".
+ *
+ * Regression target #2: the initial fix for #1 called train() as a
+ * fallback, but train() unconditionally persisted its result to the
+ * canonical production artifact path. That meant merely IMPORTING this
+ * module (which constructs a module-level mlEngine singleton against the
+ * real production path) -- or calling the lazy getDiagnostics()/
+ * getMetrics() initializers -- could silently overwrite the canonical,
+ * possibly carefully-promoted production model, with no human action and
+ * no record of it happening. train() now takes a persist flag (default
+ * true, preserving the existing behavior of the three genuinely explicit,
+ * human-initiated call sites: POST /api/train, POST /api/dataset/reset-
+ * demo, and the dataset-import method); every implicit/lazy fallback call
+ * site now passes persist=false, so recovery still works in memory but
+ * can never silently touch disk.
  *
  * All fixtures below use a temp directory and an artifactFileOverride
  * constructor argument -- no test in this file ever reads or writes the
@@ -157,7 +171,65 @@ function write(name: string, obj: unknown): string {
     'the engine is always left in a trained state -- never silently untrained');
 }
 
-fs.rmSync(tmpDir, { recursive: true, force: true });
+// ---------------------------------------------------------------------
+// G. REGRESSION: constructing an engine against a CORRUPT artifact must
+//    train a working in-memory model WITHOUT writing that fallback back
+//    to disk -- neither to the real production path, nor even to the
+//    override path it was given. Only an explicit, human-initiated action
+//    (the /api/train or /api/dataset/reset-demo routes, or the separate
+//    scripts/promote_model.py governance flow) may ever write to a
+//    canonical artifact location. A merely-imported/constructed engine
+//    recovering from a bad file must never silently do so on disk.
+// ---------------------------------------------------------------------
+{
+  const p = artifactPath('corrupt-must-not-persist.json');
+  fs.writeFileSync(p, '{ not valid json ][');
+  const beforeBytes = fs.readFileSync(p, 'utf-8');
+
+  const engine = new TruthLensMLEngine(p);
+  assert(engine.isModelTrained() === true,
+    'G: engine still recovers to a working in-memory model from a corrupt artifact');
+
+  const afterBytes = fs.readFileSync(p, 'utf-8');
+  assert(afterBytes === beforeBytes,
+    'G (regression): the corrupt artifact FILE ON DISK is byte-identical before and after ' +
+    'construction -- the fallback trained in memory only and never wrote back to it',
+    `before had ${beforeBytes.length} bytes, after has ${afterBytes.length} bytes`);
+}
+
+// ---------------------------------------------------------------------
+// H. REGRESSION: the real production artifact must be completely
+//    unaffected by merely importing this module and exercising the
+//    engine, including calling getDiagnostics()/getMetrics() on a
+//    freshly-constructed instance whose in-memory metrics are initially
+//    unset (their own lazy-init path used to persist too).
+// ---------------------------------------------------------------------
+{
+  const REAL_PRODUCTION_ARTIFACT = path.join(process.cwd(), 'data', 'saved_model_artifacts.json');
+  const before = fs.existsSync(REAL_PRODUCTION_ARTIFACT)
+    ? fs.readFileSync(REAL_PRODUCTION_ARTIFACT, 'utf-8')
+    : null;
+
+  // Construct several engines against isolated temp paths (as all tests in
+  // this file do) and call the lazy getters that used to trigger a
+  // same-process persist side effect.
+  const p1 = write('h-check-1.json', VALID_ARTIFACT);
+  const e1 = new TruthLensMLEngine(p1);
+  e1.getDiagnostics();
+  e1.getMetrics();
+
+  const after = fs.existsSync(REAL_PRODUCTION_ARTIFACT)
+    ? fs.readFileSync(REAL_PRODUCTION_ARTIFACT, 'utf-8')
+    : null;
+
+  assert(before === after,
+    'H (regression): the real production artifact at data/saved_model_artifacts.json is ' +
+    'byte-identical before and after constructing engines and calling getDiagnostics()/' +
+    'getMetrics() -- importing/exercising this module never touches the canonical file',
+    before === null ? 'production artifact did not exist' : 'production artifact content changed');
+}
+
+
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
