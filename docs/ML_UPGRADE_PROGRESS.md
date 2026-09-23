@@ -404,6 +404,66 @@ automated acceptance coverage, documentation, and deployment verification.
 
 ---
 
+## Task 10 — Continued: root-caused and fixed the accidental production-write side effect
+
+The initial Task 10 fix (commit a55c746) correctly stopped the engine from
+silently serving degenerate P(FAKE)=0.5 predictions on a corrupt artifact,
+but introduced a more serious problem: its fallback called `train()`, and
+`train()` unconditionally persists to `data/saved_model_artifacts.json`.
+That meant merely **importing** `server/mlEngine.ts` -- which constructs a
+module-level `mlEngine` singleton against the real production path as a
+side effect -- or calling the lazy `getDiagnostics()`/`getMetrics()`
+initializers, could silently overwrite the canonical, possibly carefully-
+promoted production model, with no human action and no record of it
+happening. This was caught during this session's own testing (a real
+working-tree mutation of the local production artifact was observed,
+investigated, and traced to this exact mechanism) and is exactly the kind
+of accidental production-model replacement the Phase 9 governance system
+(explicit `--approve`/`--yes` promotion only) exists to prevent -- an
+implicit runtime fallback should never be able to bypass it.
+
+**Fix:** `train()` now takes a `persist` parameter (default `true`,
+preserving existing behavior exactly for the three genuinely explicit,
+human-initiated call sites -- `POST /api/train`, `POST /api/dataset/reset-
+demo`, and the dataset-import method). Every implicit/lazy fallback call
+site (constructor recovery, `getDiagnostics()`, `getMetrics()`) now passes
+`persist: false`: recovery still trains a real, working in-memory model
+(so `isModelTrained()` is `true` and predictions are non-degenerate), but
+can never write to disk.
+
+**A second, related real bug was found and fixed in the same pass:**
+`getDiagnostics()`/`getMetrics()` only checked `this.metrics` for
+truthiness before using it. An artifact whose `metrics` field is *present
+but incomplete* (missing `best_model`, e.g. from a different pipeline or a
+hand-edited file) passed that check and then crashed with an unhandled
+`TypeError` reading `this.metrics.best_model.metrics`. Fixed by checking
+for the specific shape both methods actually depend on
+(`this.metrics && this.metrics.best_model && this.metrics.dataset_info`)
+before proceeding, falling back to an in-memory (non-persisting) retrain
+otherwise -- found via the new regression test below, not assumed.
+
+**Regression tests added** (`scripts/test_artifact_lifecycle.ts`, now 12
+assertions, 12/12 passing):
+- A corrupt artifact recovers to a working in-memory model, and the
+  corrupt file on disk is verified byte-identical before and after
+  construction -- proving the fallback never wrote back to it.
+- The real production artifact (`data/saved_model_artifacts.json`) is read
+  and compared byte-for-byte before and after constructing engines and
+  calling `getDiagnostics()`/`getMetrics()` on isolated instances --
+  proving that importing/exercising this module can never touch the
+  canonical file.
+
+**Verified exhaustively with a hash guard around every test run in this
+session:** `sha256sum data/saved_model_artifacts.json` was checked
+immediately before and after each of the following, all showing zero
+change (`e8b904c4...` throughout): the new 12-test suite,
+`scripts/regressionVerdictTests.ts` (28/28 passing), and
+`scripts/adversarialAcceptanceTests.ts` run against a live server (24/25
+groups passing -- the sole failure, "REAL EVIDENCE TEST", requires
+`GEMINI_API_KEY` for live search and is confirmed pre-existing/
+environmental, unrelated to this change; that suite's own Test 24, "MODEL
+INTEGRITY", independently self-reports "Production model retrained = NO").
+
 ## Next Task (read this first in the next session)
 
 **Tasks 1, 2, 7, 9, and 10 are all complete and independently verified. Do

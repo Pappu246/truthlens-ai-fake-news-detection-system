@@ -321,8 +321,8 @@ export class TruthLensMLEngine {
     // landing in the uncertainty zone forever, with no visible error).
     const loaded = fs.existsSync(this.artifactFile) && this.loadModelArtifact(this.artifactFile);
     if (!loaded) {
-      console.warn('[MLEngine] No usable model artifact was loaded; training a fresh model now.');
-      this.train();
+      console.warn('[MLEngine] No usable model artifact was loaded; training a fresh model in memory now (not persisted to disk -- only an explicit retrain/promotion action may modify the canonical artifact).');
+      this.train(undefined, undefined, false);
     }
   }
 
@@ -494,7 +494,23 @@ export class TruthLensMLEngine {
    *    - Includes educational rationale on high-dimensional linear separability (p >> n).
    * 5. Saves artifacts to disk for real-time inference.
    */
-  public train(customRecords?: ParsedArticleRecord[], customInfo?: { filename?: string; source_path?: string }): any {
+  /**
+   * Trains a model in memory. By default also persists the result to the
+   * canonical production artifact path (data/saved_model_artifacts.json) --
+   * this matches the long-standing behavior of the explicit, human-
+   * initiated POST /api/train endpoint (the "Retrain" UI action), which
+   * relies on train() writing to disk as its whole purpose.
+   *
+   * Pass persist=false for any call site where training is only an
+   * implicit fallback to keep the engine usable (a missing/corrupt
+   * artifact, or a lazy getDiagnostics()/getMetrics() initializer) rather
+   * than a deliberate, human-visible retrain action. This is required so
+   * that merely importing this module, running the test suite, or a GET
+   * request for diagnostics/metrics can NEVER silently overwrite the
+   * canonical production artifact -- only an explicit retrain/promotion
+   * action may do that. See docs/ML_UPGRADE_PROGRESS.md, Task 10.
+   */
+  public train(customRecords?: ParsedArticleRecord[], customInfo?: { filename?: string; source_path?: string }, persist: boolean = true): any {
     const rng = createPRNG(42);
     const datasetPath = customInfo?.source_path || path.join(process.cwd(), 'data', 'news.csv');
     const filename = customInfo?.filename || path.basename(datasetPath);
@@ -1051,17 +1067,21 @@ export class TruthLensMLEngine {
       thresholds: this.thresholds
     };
 
-    try {
-      const dataDir = path.dirname(this.artifactFile);
-      if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-      fs.writeFileSync(this.artifactFile, JSON.stringify(artifactData, null, 2), 'utf-8');
+    if (persist) {
+      try {
+        const dataDir = path.dirname(this.artifactFile);
+        if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+        fs.writeFileSync(this.artifactFile, JSON.stringify(artifactData, null, 2), 'utf-8');
 
-      const backendDir = path.dirname(this.metricsArtifactFile);
-      if (!fs.existsSync(backendDir)) fs.mkdirSync(backendDir, { recursive: true });
-      fs.writeFileSync(this.metricsArtifactFile, JSON.stringify(this.metrics, null, 2), 'utf-8');
-      console.log(`[MLEngine] Saved calibrated model artifacts to ${this.artifactFile}`);
-    } catch (err) {
-      console.error('[MLEngine] Failed to write model artifacts', err);
+        const backendDir = path.dirname(this.metricsArtifactFile);
+        if (!fs.existsSync(backendDir)) fs.mkdirSync(backendDir, { recursive: true });
+        fs.writeFileSync(this.metricsArtifactFile, JSON.stringify(this.metrics, null, 2), 'utf-8');
+        console.log(`[MLEngine] Saved calibrated model artifacts to ${this.artifactFile}`);
+      } catch (err) {
+        console.error('[MLEngine] Failed to write model artifacts', err);
+      }
+    } else {
+      console.log('[MLEngine] Trained in memory only (persist=false) -- canonical artifact on disk was not modified.');
     }
 
     console.log(`[MLEngine] Training complete. Selected: ${bestName} | Vocab: ${V} | CV F1: ${this.metrics.best_model.name.includes('SVM') ? svmCVStats.f1_score.mean : lrCVStats.f1_score.mean} | Test F1: ${bestMetrics.f1_score}`);
@@ -1456,8 +1476,13 @@ export class TruthLensMLEngine {
   }
 
   public getDiagnostics(): any {
-    if (!this.metrics) {
-      this.train();
+    // A loaded artifact can have a `metrics` field that is present but
+    // incomplete (e.g. produced by a different pipeline, or hand-edited) --
+    // checking only truthiness let such an artifact through, then crashed
+    // below on this.metrics.best_model. Guard on the specific shape this
+    // method actually depends on.
+    if (!this.metrics || !this.metrics.best_model || !this.metrics.dataset_info) {
+      this.train(undefined, undefined, false);
     }
     const datasetInfo = this.metrics.dataset_info;
     const totalSamples = datasetInfo.total_samples;
@@ -1512,8 +1537,8 @@ export class TruthLensMLEngine {
   }
 
   public getMetrics(): any {
-    if (!this.metrics) {
-      this.train();
+    if (!this.metrics || !this.metrics.best_model || !this.metrics.dataset_info) {
+      this.train(undefined, undefined, false);
     }
     return this.metrics;
   }
