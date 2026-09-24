@@ -404,91 +404,83 @@ automated acceptance coverage, documentation, and deployment verification.
 
 ---
 
-## Next Task (read this first in the next session)
+## Task 10 — Continued: root-caused and fixed the accidental production-write side effect
 
-**Phase 9: Model versioning and canonical training pipeline.**
+The initial Task 10 fix (commit a55c746) correctly stopped the engine from
+silently serving degenerate P(FAKE)=0.5 predictions on a corrupt artifact,
+but introduced a more serious problem: its fallback called `train()`, and
+`train()` unconditionally persists to `data/saved_model_artifacts.json`.
+That meant merely **importing** `server/mlEngine.ts` -- which constructs a
+module-level `mlEngine` singleton against the real production path as a
+side effect -- or calling the lazy `getDiagnostics()`/`getMetrics()`
+initializers, could silently overwrite the canonical, possibly carefully-
+promoted production model, with no human action and no record of it
+happening. This was caught during this session's own testing (a real
+working-tree mutation of the local production artifact was observed,
+investigated, and traced to this exact mechanism) and is exactly the kind
+of accidental production-model replacement the Phase 9 governance system
+(explicit `--approve`/`--yes` promotion only) exists to prevent -- an
+implicit runtime fallback should never be able to bypass it.
 
-1. Create one canonical real-data training/evaluation entry point.
-2. Add a model-version manifest containing dataset fingerprint, split
-   configuration, preprocessing parameters, model family, calibration
-   method, benchmark results, and training timestamp.
-3. Make model promotion explicit and auditable; never silently overwrite
-   `data/saved_model_artifacts.json`.
-4. Keep benchmark and production artifacts separate until promotion is
-   intentionally requested and all external validation gates pass.
-5. Integrate the LIAR benchmark as an explicit out-of-domain validation
-   stage before production promotion.
-## Phase 9 — Model Governance (COMPLETE, independently verified)
+**Fix:** `train()` now takes a `persist` parameter (default `true`,
+preserving existing behavior exactly for the three genuinely explicit,
+human-initiated call sites -- `POST /api/train`, `POST /api/dataset/reset-
+demo`, and the dataset-import method). Every implicit/lazy fallback call
+site (constructor recovery, `getDiagnostics()`, `getMetrics()`) now passes
+`persist: false`: recovery still trains a real, working in-memory model
+(so `isModelTrained()` is `true` and predictions are non-degenerate), but
+can never write to disk.
 
-A dedicated branch (`ml-upgrade-phase9-model-versioning`, PR #12) contains the
-canonical real-data candidate training pipeline, deterministic dataset
-fingerprinting, versioned model manifests, candidate LIAR out-of-domain
-validation, and explicit promotion/backup safeguards. Normal training never
-writes `data/saved_model_artifacts.json`.
+**A second, related real bug was found and fixed in the same pass:**
+`getDiagnostics()`/`getMetrics()` only checked `this.metrics` for
+truthiness before using it. An artifact whose `metrics` field is *present
+but incomplete* (missing `best_model`, e.g. from a different pipeline or a
+hand-edited file) passed that check and then crashed with an unhandled
+`TypeError` reading `this.metrics.best_model.metrics`. Fixed by checking
+for the specific shape both methods actually depend on
+(`this.metrics && this.metrics.best_model && this.metrics.dataset_info`)
+before proceeding, falling back to an in-memory (non-persisting) retrain
+otherwise -- found via the new regression test below, not assumed.
 
-The production artifact remains unchanged pending explicit human review and
-promotion.
+**Regression tests added** (`scripts/test_artifact_lifecycle.ts`, now 12
+assertions, 12/12 passing):
+- A corrupt artifact recovers to a working in-memory model, and the
+  corrupt file on disk is verified byte-identical before and after
+  construction -- proving the fallback never wrote back to it.
+- The real production artifact (`data/saved_model_artifacts.json`) is read
+  and compared byte-for-byte before and after constructing engines and
+  calling `getDiagnostics()`/`getMetrics()` on isolated instances --
+  proving that importing/exercising this module can never touch the
+  canonical file.
 
-### Independent live verification of this session (2026-09-20)
-
-Everything below was executed directly, from scratch, in this session --
-not copied from an earlier claim without re-running it:
-
-- Downloaded the real ISOT `Fake.csv`/`True.csv` (via the `isot-data-v1`
-  GitHub Release, since Git LFS objects are not reachable from this
-  session's network) and verified both SHA-256 hashes match the values
-  recorded in the repository's Git LFS pointer files exactly.
-- Re-ran `scripts/isot_data_pipeline.py`: 44,898 total rows, 5,401
-  near-duplicate groups covering 12,133 articles, 2 cross-label
-  near-duplicate groups, 0 groups straddling a split boundary -- these
-  numbers match the previously-reported Phase 2 figures exactly, which is
-  itself a strong reproducibility confirmation.
-- Ran `scripts/train_isot_canonical.py --variant raw` end-to-end. Produced
-  a real candidate, `isot-svm-37fc02617260`. Verified the manifest's
-  claimed `artifact_sha256` matches the real artifact file's computed
-  hash. Metrics: test F1 0.9962, temporal_test F1 0.9988, validation F1
-  0.9949 (Linear SVM, Platt-calibrated on a disjoint validation split).
-- Ran `scripts/evaluate_liar_candidate.py` against that exact candidate:
-  790 eligible LIAR test samples after excluding `barely-true`/`half-true`,
-  **accuracy 0.4266 -- worse than chance**, precision 0.4282, recall
-  0.9795, F1 0.5959, macro-F1 0.3045. The model predicts FAKE on nearly
-  everything when applied out-of-domain. This is measured, not assumed,
-  evidence that the >99% ISOT number does not represent real-world
-  accuracy and must never be quoted without this figure alongside it.
-- Confirmed `data/saved_model_artifacts.json` is byte-identical
-  (SHA-256 match) between `main` and this branch throughout -- no
-  training or evaluation step touched it.
-- Found a real failure in `backend/tests/test_phase9_model_governance.py`
-  (`test_promotion_requires_explicit_confirmation`): `promote_model.py`'s
-  unconditional blocking message did not contain the literal word
-  "required" that the test asserted for, even though the underlying
-  safety behavior (refusing promotion without both `--approve` and
-  `--yes`) was already correct. Root cause: two different blocking
-  messages in `promote_model.py` used inconsistent wording. Fixed by
-  aligning both messages to state confirmation/approval is "required" --
-  no safety behavior changed. Also found and documented (not removed) a
-  second approval check that is provably unreachable given the
-  unconditional gate above it, kept intentionally as defense-in-depth.
-  Governance suite now passes 3/3.
+**Verified exhaustively with a hash guard around every test run in this
+session:** `sha256sum data/saved_model_artifacts.json` was checked
+immediately before and after each of the following, all showing zero
+change (`e8b904c4...` throughout): the new 12-test suite,
+`scripts/regressionVerdictTests.ts` (28/28 passing), and
+`scripts/adversarialAcceptanceTests.ts` run against a live server (24/25
+groups passing -- the sole failure, "REAL EVIDENCE TEST", requires
+`GEMINI_API_KEY` for live search and is confirmed pre-existing/
+environmental, unrelated to this change; that suite's own Test 24, "MODEL
+INTEGRITY", independently self-reports "Production model retrained = NO").
 
 ## Next Task (read this first in the next session)
 
-**Phase 9 governance is complete and independently verified. Do not repeat
-it.** PR #12 should be safe to merge once its CI re-runs green with the
-`promote_model.py` fix above (governance-tests job specifically; the other
-Phase 2/Phase 7/Phase 9-real-candidate jobs were already passing before this
-fix). Merging the PR is a code-review action only -- it must never be
-treated as, or trigger, production model promotion. Promotion remains a
-separate, explicit, human-run command
-(`scripts/promote_model.py --model-version <VERSION> --approve --yes`) and
-has not been run.
+**Tasks 1, 2, 7, 9, and 10 are all complete and independently verified. Do
+not repeat any of them.**
 
-**Next priority: Task 10, production runtime audit of `server/mlEngine.ts`.**
-Specifically verify: correct production artifact loading; artifact
-integrity/version handling; short-text/headline guards still match what was
-verified live in earlier sessions; `NEEDS MORE CONTEXT` threshold behavior;
-safe handling of a missing/corrupt artifact (no silent fallback to an
-unrelated model); and that nothing here breaks API compatibility. After
-that: Task 11, an end-to-end Live News audit (headline -> URL -> safe fetch
--> article extraction -> actual article body -> analysis), confirming a
-headline is never presented as if it were a full-article analysis.
+**Next priority: Task 11, end-to-end Live News / article pipeline audit.**
+Trace the full path: headline -> article URL -> SSRF-safe URL validation ->
+fetch -> article extraction -> actual article body -> content-quality gate
+-> ML analysis -> claim extraction -> evidence verification. The critical
+requirement: a headline alone must never be presented as if it were a full
+article analysis -- if the real article body cannot be obtained, the result
+must be NEEDS MORE CONTEXT with a clear reason, not a verdict based on the
+headline text alone. Test specifically: successful extraction, extraction
+failure, headline-only, malformed URL, private/loopback IP, localhost,
+redirects, oversized response, timeout, unsupported content type, and that
+fetched HTML/article text is always treated as untrusted data, never as
+instructions (prompt-injection-via-webpage resistance). After Task 11:
+Task 12 (evidence/claim verification audit -- corroborated / contradicted /
+unsupported / insufficient-evidence must stay distinct, "no evidence found"
+must never become "fake"), then Task 13 (security audit).
