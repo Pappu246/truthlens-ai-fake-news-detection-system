@@ -186,6 +186,16 @@ export function extractArticleFromHtml(options: RawExtractionOptions): Extracted
     $(selector).remove();
   });
 
+  // SECURITY: Remove HTML comments to prevent hidden prompt injection via <!-- comments -->
+  // Also remove elements with display:none or visibility hidden that could hide injection
+  $('*').contents().each((_, el: any) => {
+    if (el.type === 'comment') {
+      $(el).remove();
+    }
+  });
+  // Remove inline hidden styles
+  $('[style*=\"display:none\"], [style*=\"display: none\"], [style*=\"visibility:hidden\"], [style*=\"visibility: hidden\"]').remove();
+
   // Candidate semantic content containers
   const containerCandidates = [
     'article',
