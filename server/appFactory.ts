@@ -96,7 +96,8 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
         wordCount: req.body.word_count,
         extractionStatus: req.body.extraction_status,
         warnings: req.body.warnings,
-        isHeadlineOnly: req.body.is_headline_only
+        isHeadlineOnly: req.body.is_headline_only,
+        contentSource: req.body.content_source
       });
       res.json(result);
     } catch (err: any) {
@@ -142,12 +143,19 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
       const message: string = err.message || 'Failed to extract article from URL.';
       console.error('[API /api/article/extract error]', message);
 
+      // Correct HTTP semantics — never collapse publisher blocks into generic 502.
       let status = 502;
       if (/timed out/i.test(message)) status = 504;
-      else if (/HTTP 404/.test(message)) status = 404;
-      else if (/HTTP 429/.test(message)) status = 429;
+      else if (/HTTP 404|Article not found/i.test(message)) status = 404;
+      else if (/HTTP 429|Rate limited/i.test(message)) status = 429;
+      else if (/HTTP 403|Access forbidden|blocked the extraction request/i.test(message)) status = 403;
+      else if (/Invalid URL|Security violation|SSRF|forbidden protocol|DNS resolution failed|Could not resolve/i.test(message)) status = 400;
 
-      res.status(status).json({ success: false, error: message });
+      res.status(status).json({
+        success: false,
+        error: message,
+        httpStatus: status
+      });
     }
   });
 
@@ -173,7 +181,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
       });
 
       if (extracted.extractionStatus === 'FAILED' || !extracted.content.trim()) {
-        return res.status(400).json({
+        return res.status(422).json({
           detail: extracted.warnings[0] || 'No readable article content could be extracted from this webpage.'
         });
       }
@@ -189,13 +197,24 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
         wordCount: extracted.wordCount,
         extractionStatus: extracted.extractionStatus,
         warnings: extracted.warnings,
-        isHeadlineOnly: extracted.isHeadlineOnly
+        isHeadlineOnly: extracted.isHeadlineOnly,
+        contentSource: 'FULL_ARTICLE_EXTRACTED'
       });
 
       res.json(analysis);
     } catch (err: any) {
-      console.error('[API /api/analyze-url error]', err.message);
-      res.status(400).json({ detail: err.message || 'Failed to analyze article from URL.' });
+      const message: string = err.message || 'Failed to analyze article from URL.';
+      console.error('[API /api/analyze-url error]', message);
+
+      // Propagate precise HTTP status — never collapse 403/404/429/504 into generic 400.
+      let status = 502;
+      if (/timed out/i.test(message)) status = 504;
+      else if (/HTTP 404|Article not found/i.test(message)) status = 404;
+      else if (/HTTP 429|Rate limited/i.test(message)) status = 429;
+      else if (/HTTP 403|Access forbidden|blocked the extraction request/i.test(message)) status = 403;
+      else if (/Invalid URL|Security violation|SSRF|forbidden protocol|DNS resolution failed|Could not resolve|URL is required/i.test(message)) status = 400;
+
+      res.status(status).json({ detail: message, httpStatus: status });
     }
   });
 

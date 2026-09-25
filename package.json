@@ -11,7 +11,10 @@
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test:contracts": "tsx scripts/contractTests.ts",
+    "test:vercel-sim": "tsx scripts/vercel-sim.ts",
+    "test:verdicts": "tsx scripts/regressionVerdictTests.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

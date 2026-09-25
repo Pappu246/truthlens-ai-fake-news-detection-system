@@ -1224,6 +1224,12 @@ export class TruthLensMLEngine {
       extractionStatus?: 'SUCCESS' | 'PARTIAL' | 'FAILED';
       warnings?: string[];
       isHeadlineOnly?: boolean;
+      contentSource?:
+        | 'FULL_ARTICLE_EXTRACTED'
+        | 'RSS_SUMMARY_ONLY'
+        | 'HEADLINE_ONLY'
+        | 'EXTRACTION_BLOCKED'
+        | 'TEXT_DIRECT';
     }
   ): any {
     const textTrimmed = (rawText || '').trim();
@@ -1241,6 +1247,7 @@ export class TruthLensMLEngine {
     const minWords = this.thresholds.min_word_count ?? 20;
     const words = textTrimmed.split(/\s+/).filter(w => w.length > 0);
     const hasSource = Boolean(sourceUrl && sourceUrl.trim());
+    const effectiveInputType = options?.inputType || (sourceUrl ? 'url' : 'text');
 
     // 2. Context guards — short, headline-only, vague, incomplete or
     //    source-less content is NEVER classified. The response withholds
@@ -1261,6 +1268,12 @@ export class TruthLensMLEngine {
     if (guardReason) {
       const sourceInfo = evaluateSourceProvenance(sourceUrl);
       const claimInfo = extractPrimaryClaim(textTrimmed);
+      // Derive content-source label for the UI when a verdict is withheld
+      const guardContentSource =
+        options?.contentSource ||
+        (options?.isHeadlineOnly ? 'HEADLINE_ONLY'
+          : effectiveInputType === 'text' ? 'TEXT_DIRECT'
+          : 'RSS_SUMMARY_ONLY');
       return {
         id: null,
         status: 'INSUFFICIENT_INFORMATION',
@@ -1275,6 +1288,7 @@ export class TruthLensMLEngine {
         model_score: null,
         uncertainty_score: null,
         risk_level: 'UNDETERMINED',
+        content_source: guardContentSource,
         input_length: textTrimmed.length,
         min_required_length: minLength,
         min_required_words: minWords,
@@ -1397,7 +1411,6 @@ export class TruthLensMLEngine {
     }
 
     // 8. Persist to SQLite History (Phase 15 & Phase 3 provenance)
-    const effectiveInputType = options?.inputType || (sourceUrl ? 'url' : 'text');
     const recordId = sqliteHistory.insertHistory({
       full_text: textTrimmed,
       prediction,
@@ -1444,6 +1457,7 @@ export class TruthLensMLEngine {
       extraction_status: options?.extractionStatus || (effectiveInputType === 'text' ? 'SUCCESS' : 'SUCCESS'),
       extraction_warnings: options?.warnings || [],
       is_headline_only: options?.isHeadlineOnly || false,
+      content_source: options?.contentSource || (effectiveInputType === 'text' ? 'TEXT_DIRECT' : 'FULL_ARTICLE_EXTRACTED'),
       detected_claim: claimInfo.detected_claim,
       claim_details: claimInfo,
       thresholds: {
