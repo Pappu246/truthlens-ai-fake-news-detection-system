@@ -33,6 +33,8 @@ interface InputSectionProps {
     extractionStatus?: 'SUCCESS' | 'PARTIAL' | 'FAILED';
     warnings?: string[];
     isHeadlineOnly?: boolean;
+    contentOverride?: string;
+    sourceUrlOverride?: string;
   }) => void;
   onClear: () => void;
   onClearResult: () => void;
@@ -63,6 +65,8 @@ export const InputSection: React.FC<InputSectionProps> = ({
   const [isFetchingNews, setIsFetchingNews] = useState(false);
   const [newsError, setNewsError] = useState<string | null>(null);
   const [selectedNewsId, setSelectedNewsId] = useState<string | null>(null);
+  const [isLiveExtracting, setIsLiveExtracting] = useState(false);
+  const [liveExtractError, setLiveExtractError] = useState<string | null>(null);
 
   // Load live news when switching to live news tab
   useEffect(() => {
@@ -125,7 +129,9 @@ export const InputSection: React.FC<InputSectionProps> = ({
         wordCount: extractedData.wordCount,
         extractionStatus: extractedData.extractionStatus,
         warnings: extractedData.warnings,
-        isHeadlineOnly: extractedData.isHeadlineOnly
+        isHeadlineOnly: extractedData.isHeadlineOnly,
+        contentOverride: extractedData.content,
+        sourceUrlOverride: extractedData.url
       });
       return;
     }
@@ -149,7 +155,9 @@ export const InputSection: React.FC<InputSectionProps> = ({
         wordCount: article.wordCount,
         extractionStatus: article.extractionStatus,
         warnings: article.warnings,
-        isHeadlineOnly: article.isHeadlineOnly
+        isHeadlineOnly: article.isHeadlineOnly,
+        contentOverride: article.content,
+        sourceUrlOverride: article.url
       });
     } catch (err: any) {
       setUrlError(err.message || 'Article extraction failed.');
@@ -158,31 +166,97 @@ export const InputSection: React.FC<InputSectionProps> = ({
     }
   };
 
-  // Analyze a live news item
-  const handleSelectAndAnalyzeNews = (item: NewsArticle) => {
+  // Analyze a live news item — SECURE PIPELINE:
+  // RSS article -> actual article URL -> secure extraction -> extracted content -> analysis
+  // Reuses the existing SSRF-protected extraction pipeline (extractArticleApi -> /api/article/extract)
+  const handleSelectAndAnalyzeNews = async (item: NewsArticle) => {
     setSelectedNewsId(item.id);
-    const content = item.content || item.summary || item.title;
-    onTextChange(content);
-    onSourceUrlChange(item.url);
+    setLiveExtractError(null);
+    onClearResult();
 
-    onAnalyze({
-      inputType: 'live_news',
-      originalUrl: item.url,
-      canonicalUrl: item.url,
-      articleTitle: item.title,
-      sourceName: item.sourceName,
-      author: item.author,
-      publishedAt: item.publishedAt,
-      wordCount: content.split(/\s+/).filter(Boolean).length,
-      extractionStatus: 'SUCCESS',
-      // Only flag headline-only when we genuinely have nothing but the
-      // title (no summary/content at all from the RSS feed). A previous
-      // version used an arbitrary 150-char cutoff here, which silently
-      // blocked perfectly analyzable 60-149 char summaries even though the
-      // model's own documented minimum is 60 chars / 20 words -- let the
-      // model's own thresholds (server/mlEngine.ts) decide the rest.
-      isHeadlineOnly: !item.content && !item.summary
-    });
+    // If no URL is available from RSS, fall back to RSS summary with clear semantics
+    if (!item.url || !item.url.trim()) {
+      const fallbackContent = item.content || item.summary || item.title;
+      onTextChange(fallbackContent);
+      onSourceUrlChange('');
+      onAnalyze({
+        inputType: 'live_news',
+        originalUrl: '',
+        canonicalUrl: '',
+        articleTitle: item.title,
+        sourceName: item.sourceName,
+        author: item.author,
+        publishedAt: item.publishedAt,
+        wordCount: fallbackContent.split(/\s+/).filter(Boolean).length,
+        extractionStatus: 'FAILED',
+        warnings: ['No article URL available from RSS feed. Using RSS summary.'],
+        isHeadlineOnly: !item.content && !item.summary,
+        contentOverride: fallbackContent,
+        sourceUrlOverride: ''
+      });
+      return;
+    }
+
+    // Attempt secure full-article extraction via existing pipeline
+    setIsLiveExtracting(true);
+    try {
+      const article = await extractArticleApi(item.url);
+      // Success: use extracted full article content — pass override to avoid React state race
+      onTextChange(article.content);
+      onSourceUrlChange(article.url);
+      onAnalyze({
+        inputType: 'live_news',
+        originalUrl: article.url,
+        canonicalUrl: article.canonicalUrl || article.url,
+        articleTitle: article.title || item.title,
+        sourceName: article.sourceName || item.sourceName,
+        author: article.author || item.author,
+        publishedAt: article.publishedAt || item.publishedAt,
+        wordCount: article.wordCount,
+        extractionStatus: article.extractionStatus,
+        warnings: article.warnings,
+        isHeadlineOnly: article.isHeadlineOnly,
+        contentOverride: article.content,
+        sourceUrlOverride: article.url
+      });
+    } catch (err: any) {
+      const errMsg = err?.message || 'Article extraction failed';
+      // Graceful degradation: preserve fallback behavior per spec
+      // Show user-facing message but still allow manual paste / fallback analysis
+      setLiveExtractError('Article extraction is currently unavailable. You can paste the article text manually.');
+
+      // Fallback: use RSS summary/content so user still has something to analyze manually
+      const fallbackContent = item.content || item.summary || item.title;
+      onTextChange(fallbackContent);
+      onSourceUrlChange(item.url);
+
+      // Only auto-analyze fallback if we have at least summary/content; otherwise let user paste
+      // If extraction failed due to SSRF/security/timeout, we still provide RSS content as fallback
+      // but mark extraction as FAILED and include warning for transparency
+      if (fallbackContent && fallbackContent.trim().length >= 20) {
+        onAnalyze({
+          inputType: 'live_news',
+          originalUrl: item.url,
+          canonicalUrl: item.url,
+          articleTitle: item.title,
+          sourceName: item.sourceName,
+          author: item.author,
+          publishedAt: item.publishedAt,
+          wordCount: fallbackContent.split(/\s+/).filter(Boolean).length,
+          extractionStatus: 'FAILED',
+          warnings: [
+            `Full article extraction failed: ${errMsg}. Falling back to RSS summary. For full verification, paste the article text manually.`
+          ],
+          isHeadlineOnly: !item.content && !item.summary,
+          contentOverride: fallbackContent,
+          sourceUrlOverride: item.url
+        });
+      }
+      // If fallback is too short, we leave it in the textarea for manual paste without auto-analyzing
+      // The error banner will instruct the user
+    } finally {
+      setIsLiveExtracting(false);
+    }
   };
 
   return (
@@ -494,6 +568,23 @@ export const InputSection: React.FC<InputSectionProps> = ({
             </div>
           )}
 
+          {liveExtractError && (
+            <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-lg text-xs flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-600" />
+              <div>
+                <span className="font-bold block">Extraction Notice:</span>
+                <span>{liveExtractError}</span>
+              </div>
+            </div>
+          )}
+
+          {isLiveExtracting && (
+            <div className="bg-slate-900 text-white p-3 rounded-lg text-xs flex items-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>Extracting full article via secure pipeline...</span>
+            </div>
+          )}
+
           {isFetchingNews && newsArticles.length === 0 ? (
             <div className="flex-1 flex flex-col items-center justify-center py-12 text-slate-400">
               <Loader2 className="w-6 h-6 animate-spin mb-2" />
@@ -513,11 +604,14 @@ export const InputSection: React.FC<InputSectionProps> = ({
             <div className="flex-1 overflow-y-auto space-y-2.5 pr-1">
               {newsArticles.map((article) => {
                 const isSelected = selectedNewsId === article.id;
+                const isThisExtracting = isSelected && isLiveExtracting;
                 return (
                   <div
                     key={article.id}
-                    onClick={() => handleSelectAndAnalyzeNews(article)}
-                    className={`p-3 rounded-xl border transition-all cursor-pointer text-left ${
+                    onClick={() => !isLiveExtracting && handleSelectAndAnalyzeNews(article)}
+                    className={`p-3 rounded-xl border transition-all text-left ${
+                      isLiveExtracting ? 'opacity-60 pointer-events-none' : 'cursor-pointer'
+                    } ${
                       isSelected
                         ? 'bg-slate-900 text-white border-slate-900 shadow-md'
                         : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-800'
@@ -528,7 +622,7 @@ export const InputSection: React.FC<InputSectionProps> = ({
                         {article.sourceName}
                       </span>
                       <span className={isSelected ? 'text-slate-300' : 'text-slate-400'}>
-                        {new Date(article.publishedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {article.publishedAt ? new Date(article.publishedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                       </span>
                     </div>
                     <h4 className={`text-xs font-bold leading-snug line-clamp-2 ${isSelected ? 'text-white' : 'text-slate-900'}`}>
@@ -544,8 +638,17 @@ export const InputSection: React.FC<InputSectionProps> = ({
                         {article.category || 'News'}
                       </span>
                       <span className={`flex items-center gap-1 ${isSelected ? 'text-amber-300' : 'text-slate-900'}`}>
-                        <span>Click to Analyze</span>
-                        <span>→</span>
+                        {isThisExtracting ? (
+                          <>
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            <span>Extracting...</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>Click to Analyze</span>
+                            <span>→</span>
+                          </>
+                        )}
                       </span>
                     </div>
                   </div>
