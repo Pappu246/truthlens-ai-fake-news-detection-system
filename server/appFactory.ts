@@ -1,7 +1,11 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
-import { createServer as createViteServer } from 'vite';
+// NOTE: 'vite' is intentionally NOT imported at module top-level.
+// It is lazily imported inside createExpressApp() only for local dev
+// (includeVite && !isProduction). A static import would force Vercel's
+// serverless bundler to package all of Vite into the /api function,
+// exploding bundle size / cold starts and risking init failure.
 import { mlEngine } from './mlEngine';
 import { validateDataset, validateDatasetContent } from './dataValidation';
 import { verifyClaim, verifyArticleContent } from './verification/evidenceService';
@@ -546,6 +550,9 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
 
   if (includeVite) {
     if (!isProduction) {
+      // Lazy import: dev-only. Never loaded in production (Render) or
+      // serverless (Vercel, where includeVite=false skips this entirely).
+      const { createServer: createViteServer } = await import('vite');
       const vite = await createViteServer({
         server: {
           middlewareMode: true,

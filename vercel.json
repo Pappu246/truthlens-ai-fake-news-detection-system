@@ -6,7 +6,11 @@
   "framework": "vite",
   "functions": {
     "api/index.ts": {
-      "includeFiles": "data/**"
+      "includeFiles": [
+        "data/**",
+        "node_modules/sql.js/dist/sql-wasm.wasm",
+        "node_modules/sql.js/dist/sql-wasm.js"
+      ]
     }
   },
   "rewrites": [
