@@ -162,6 +162,24 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics }) =
                 Input: {result.input_type === 'url' ? 'URL Extraction' : result.input_type === 'live_news' ? 'Live News' : 'Text'}
               </span>
             )}
+            {result.content_source && (() => {
+              const cs = result.content_source;
+              const badge =
+                cs === 'FULL_ARTICLE_EXTRACTED'
+                  ? { label: 'FULL ARTICLE EXTRACTED', cls: 'bg-emerald-100 text-emerald-800' }
+                  : cs === 'RSS_SUMMARY_ONLY'
+                  ? { label: 'RSS SUMMARY ONLY', cls: 'bg-amber-100 text-amber-800' }
+                  : cs === 'HEADLINE_ONLY'
+                  ? { label: 'HEADLINE ONLY — NEEDS MORE CONTEXT', cls: 'bg-red-100 text-red-800' }
+                  : cs === 'EXTRACTION_BLOCKED'
+                  ? { label: 'EXTRACTION BLOCKED', cls: 'bg-orange-100 text-orange-800' }
+                  : { label: 'TEXT DIRECT', cls: 'bg-slate-100 text-slate-700' };
+              return (
+                <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${badge.cls}`}>
+                  {badge.label}
+                </span>
+              );
+            })()}
             <span className="text-slate-400 text-[10px] font-mono">
               ID: {result.id} • {new Date(result.timestamp).toLocaleTimeString()}
             </span>
@@ -424,6 +442,26 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics }) =
                 ⚠️ <strong>Extraction Warning:</strong> {result.extraction_warnings.join(' ')}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Content Source / Classification Basis */}
+        {result.content_source && (
+          <div className={`p-3 rounded-xl border mb-4 text-xs ${
+            result.content_source === 'FULL_ARTICLE_EXTRACTED'
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+              : result.content_source === 'RSS_SUMMARY_ONLY' || result.content_source === 'EXTRACTION_BLOCKED'
+              ? 'bg-amber-50 border-amber-200 text-amber-900'
+              : 'bg-red-50 border-red-200 text-red-900'
+          }`}>
+            <div className="font-black uppercase tracking-wider text-[10px] mb-1">Classification Basis</div>
+            <div className="font-bold text-sm">
+              {result.content_source === 'FULL_ARTICLE_EXTRACTED' && 'Analysis used the FULL extracted article body.'}
+              {result.content_source === 'RSS_SUMMARY_ONLY' && 'Analysis used the RSS SUMMARY only — full article was not retrieved. Verdict reliability may be reduced.'}
+              {result.content_source === 'EXTRACTION_BLOCKED' && 'The publisher blocked automated article extraction (HTTP 403). Analysis used available RSS summary only.'}
+              {result.content_source === 'HEADLINE_ONLY' && 'Only a headline was available — verdict was WITHHELD (NEEDS MORE CONTEXT). No forced prediction was made.'}
+              {result.content_source === 'TEXT_DIRECT' && 'Text was provided directly by the user.'}
+            </div>
           </div>
         )}
 
