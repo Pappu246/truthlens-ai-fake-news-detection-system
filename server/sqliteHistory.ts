@@ -62,7 +62,11 @@ export class SqliteHistoryManager {
   }> = [];
 
   constructor() {
-    this.dbPath = path.join(process.cwd(), 'backend', 'database', 'truthlens.db');
+    // Vercel serverless filesystem is read-only except /tmp. Use /tmp there so
+    // history works per-instance; Render/local keep the persistent disk path.
+    this.dbPath = process.env.VERCEL === '1'
+      ? path.join('/tmp', 'truthlens.db')
+      : path.join(process.cwd(), 'backend', 'database', 'truthlens.db');
   }
 
   public async init(): Promise<void> {
@@ -71,10 +75,19 @@ export class SqliteHistoryManager {
 
     this.initPromise = (async () => {
       try {
-        const wasmDir = path.join(process.cwd(), 'node_modules', 'sql.js', 'dist');
-        this.SQL = await initSqlJs({
-          locateFile: (file: string) => path.join(wasmDir, file)
-        });
+        // Resolve the sql.js WASM binary defensively across runtimes:
+        //  1. data/sql-wasm.wasm -- placed there by the Vercel buildCommand
+        //     (shipped to the function via includeFiles "data/**").
+        //  2. node_modules/sql.js/dist/sql-wasm.wasm -- local dev / Render.
+        //  3. sql.js built-in default resolution (colocated with its dist files).
+        const wasmCandidates = [
+          path.join(process.cwd(), 'data', 'sql-wasm.wasm'),
+          path.join(process.cwd(), 'node_modules', 'sql.js', 'dist', 'sql-wasm.wasm')
+        ];
+        const foundWasm = wasmCandidates.find((f) => fs.existsSync(f));
+        this.SQL = foundWasm
+          ? await initSqlJs({ locateFile: (file: string) => path.join(path.dirname(foundWasm), file) })
+          : await initSqlJs();
 
         const dir = path.dirname(this.dbPath);
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
