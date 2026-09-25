@@ -88,6 +88,26 @@ async function main() {
     return null;
   });
 
+  // History must actually persist the analyzed record (proves SQLite/WASM works,
+  // not just degraded empty arrays). Poll briefly: SQLite init is async.
+  {
+    let persisted = false;
+    let lastStatus = 0;
+    for (let i = 0; i < 25 && !persisted; i++) {
+      try {
+        const res = await fetch(base + '/api/history?limit=5', { signal: AbortSignal.timeout(10000) });
+        lastStatus = res.status;
+        const arr: any = await res.json();
+        if (res.status === 200 && Array.isArray(arr) && arr.length >= 1) persisted = true;
+        else await new Promise((r) => setTimeout(r, 200));
+      } catch {
+        await new Promise((r) => setTimeout(r, 200));
+      }
+    }
+    if (persisted) console.log('PASS: history persists analyzed record (SQLite/WASM functional)');
+    else { failures++; console.error(`FAIL: history persistence (last status ${lastStatus}, no records after analyze)`); }
+  }
+
   await check('GET /api/models/metrics', 'GET', '/api/models/metrics', null, (s, j) => {
     if (s !== 200) return `expected 200, got ${s}`;
     return mustBeJson(s, j);

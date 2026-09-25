@@ -75,13 +75,18 @@ export class SqliteHistoryManager {
 
     this.initPromise = (async () => {
       try {
-        // Resolve the sql.js WASM binary defensively: prefer the node_modules copy
-        // (present locally and via vercel.json includeFiles), otherwise fall back
-        // to sql.js's own default resolution (colocated with its dist files).
-        const wasmDir = path.join(process.cwd(), 'node_modules', 'sql.js', 'dist');
-        const wasmFile = path.join(wasmDir, 'sql-wasm.wasm');
-        this.SQL = fs.existsSync(wasmFile)
-          ? await initSqlJs({ locateFile: (file: string) => path.join(wasmDir, file) })
+        // Resolve the sql.js WASM binary defensively across runtimes:
+        //  1. data/sql-wasm.wasm -- placed there by the Vercel buildCommand
+        //     (shipped to the function via includeFiles "data/**").
+        //  2. node_modules/sql.js/dist/sql-wasm.wasm -- local dev / Render.
+        //  3. sql.js built-in default resolution (colocated with its dist files).
+        const wasmCandidates = [
+          path.join(process.cwd(), 'data', 'sql-wasm.wasm'),
+          path.join(process.cwd(), 'node_modules', 'sql.js', 'dist', 'sql-wasm.wasm')
+        ];
+        const foundWasm = wasmCandidates.find((f) => fs.existsSync(f));
+        this.SQL = foundWasm
+          ? await initSqlJs({ locateFile: (file: string) => path.join(path.dirname(foundWasm), file) })
           : await initSqlJs();
 
         const dir = path.dirname(this.dbPath);

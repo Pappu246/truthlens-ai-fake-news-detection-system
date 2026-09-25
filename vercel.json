@@ -1,16 +1,12 @@
 {
   "version": 2,
-  "buildCommand": "npm run build",
+  "buildCommand": "npm run build && (cp node_modules/sql.js/dist/sql-wasm.wasm data/sql-wasm.wasm || true)",
   "outputDirectory": "dist",
   "installCommand": "npm install",
   "framework": "vite",
   "functions": {
     "api/index.ts": {
-      "includeFiles": [
-        "data/**",
-        "node_modules/sql.js/dist/sql-wasm.wasm",
-        "node_modules/sql.js/dist/sql-wasm.js"
-      ]
+      "includeFiles": "data/**"
     }
   },
   "rewrites": [
