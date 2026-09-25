@@ -63,6 +63,18 @@ export interface EvidenceVerificationInfo {
   results?: any[];
 }
 
+/**
+ * Content source labeling — explicitly distinguishes what the analysis is
+ * based on so the UI never implies "full article" when only RSS summary or
+ * a headline was available.
+ */
+export type ContentSource =
+  | 'FULL_ARTICLE_EXTRACTED'
+  | 'RSS_SUMMARY_ONLY'
+  | 'HEADLINE_ONLY'
+  | 'EXTRACTION_BLOCKED'
+  | 'TEXT_DIRECT';
+
 export interface AnalysisResult {
   id: string;
   status?: 'SUCCESS' | 'INSUFFICIENT_INFORMATION';
@@ -104,6 +116,8 @@ export interface AnalysisResult {
   extraction_status?: 'SUCCESS' | 'PARTIAL' | 'FAILED';
   extraction_warnings?: string[];
   is_headline_only?: boolean;
+  /** Content-source label describing exactly what was analyzed. */
+  content_source?: ContentSource;
   thresholds?: {
     fake_threshold: number;
     real_threshold: number;

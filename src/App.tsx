@@ -5,7 +5,7 @@ import { AnalysisView } from './components/AnalysisView';
 import { HistoryView } from './components/HistoryView';
 import { ModelSpecsView } from './components/ModelSpecsView';
 import { AboutView } from './components/AboutView';
-import { AnalysisResult, HistoryItem, ModelComparisonData } from './types';
+import { AnalysisResult, ContentSource, HistoryItem, ModelComparisonData } from './types';
 import { INITIAL_METRICS_DATA } from './data/mockData';
 import {
   executeNewsAnalysis,
@@ -65,6 +65,7 @@ export default function App() {
     extractionStatus?: 'SUCCESS' | 'PARTIAL' | 'FAILED';
     warnings?: string[];
     isHeadlineOnly?: boolean;
+    contentSource?: ContentSource;
     contentOverride?: string;
     sourceUrlOverride?: string;
   }) => {
