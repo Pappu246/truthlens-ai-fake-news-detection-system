@@ -65,15 +65,21 @@ export default function App() {
     extractionStatus?: 'SUCCESS' | 'PARTIAL' | 'FAILED';
     warnings?: string[];
     isHeadlineOnly?: boolean;
+    contentOverride?: string;
+    sourceUrlOverride?: string;
   }) => {
-    if (!articleText.trim()) return;
+    // Use contentOverride if provided (for Live News secure extraction pipeline to avoid React state race)
+    // Otherwise fall back to current articleText state
+    const effectiveText = options?.contentOverride?.trim() || articleText.trim();
+    const effectiveSourceUrl = options?.sourceUrlOverride?.trim() || sourceUrl.trim();
+    if (!effectiveText) return;
     setIsLoading(true);
     setErrorMessage(null);
     // Clear any stale result before starting a new analysis so the UI never
     // shows an outdated verdict while the new one is in flight.
     setAnalysisResult(null);
     try {
-      const result = await executeNewsAnalysis(articleText, sourceUrl, options);
+      const result = await executeNewsAnalysis(effectiveText, effectiveSourceUrl, options);
       setAnalysisResult(result);
       // Refresh history from backend
       const updatedHistory = await fetchHistory();

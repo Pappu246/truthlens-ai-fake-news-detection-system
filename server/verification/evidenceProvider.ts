@@ -13,7 +13,6 @@ import {
   classifyEvidenceRelation,
   aggregateClaimAssessment
 } from './evidenceAnalyzer';
-import { GoogleGenAI } from '@google/genai';
 
 export interface EvidenceSearchOptions {
   maxResultsPerClaim?: number;
