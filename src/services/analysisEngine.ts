@@ -1,4 +1,4 @@
-import { AnalysisResult, HistoryItem, ModelComparisonData, FeatureAttribution, LinguisticSignals, ExtractedArticle, NewsFeedResponse } from '../types';
+import { AnalysisResult, ContentSource, HistoryItem, ModelComparisonData, FeatureAttribution, LinguisticSignals, ExtractedArticle, NewsFeedResponse } from '../types';
 import { INITIAL_METRICS_DATA } from '../data/mockData';
 
 const HISTORY_STORAGE_KEY = 'truthlens_analysis_history';
@@ -191,6 +191,7 @@ export async function executeNewsAnalysis(
     extractionStatus?: 'SUCCESS' | 'PARTIAL' | 'FAILED';
     warnings?: string[];
     isHeadlineOnly?: boolean;
+    contentSource?: ContentSource;
   }
 ): Promise<AnalysisResult> {
   const textTrimmed = (rawText || '').trim();
@@ -214,7 +215,8 @@ export async function executeNewsAnalysis(
       word_count: metadata?.wordCount,
       extraction_status: metadata?.extractionStatus,
       warnings: metadata?.warnings,
-      is_headline_only: metadata?.isHeadlineOnly
+      is_headline_only: metadata?.isHeadlineOnly,
+      content_source: metadata?.contentSource
     })
   });
 
@@ -312,6 +314,7 @@ export async function executeNewsAnalysis(
     extraction_status: backendData.extraction_status || metadata?.extractionStatus || undefined,
     extraction_warnings: backendData.extraction_warnings || metadata?.warnings || undefined,
     is_headline_only: backendData.is_headline_only ?? metadata?.isHeadlineOnly ?? false,
+    content_source: (backendData.content_source as ContentSource) || metadata?.contentSource || 'TEXT_DIRECT',
     detected_claim: backendData.detected_claim,
     input_length: backendData.input_length,
     min_required_length: backendData.min_required_length,
@@ -456,6 +459,7 @@ export async function analyzeUrlApi(url: string, fallbackTitle?: string): Promis
     extraction_status: backendData.extraction_status,
     extraction_warnings: backendData.extraction_warnings,
     is_headline_only: backendData.is_headline_only ?? false,
+    content_source: (backendData.content_source as ContentSource) || 'FULL_ARTICLE_EXTRACTED',
     detected_claim: backendData.detected_claim,
     input_length: backendData.input_length,
     min_required_length: backendData.min_required_length,

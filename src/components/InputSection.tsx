@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { DemoExample, AnalysisInputMode, ExtractedArticle, NewsArticle } from '../types';
+import { DemoExample, AnalysisInputMode, ExtractedArticle, NewsArticle, ContentSource } from '../types';
 import { DEFAULT_DEMO_EXAMPLES } from '../data/mockData';
 import { extractArticleApi, fetchLiveNewsApi } from '../services/analysisEngine';
 import {
@@ -33,6 +33,7 @@ interface InputSectionProps {
     extractionStatus?: 'SUCCESS' | 'PARTIAL' | 'FAILED';
     warnings?: string[];
     isHeadlineOnly?: boolean;
+    contentSource?: ContentSource;
     contentOverride?: string;
     sourceUrlOverride?: string;
   }) => void;
@@ -117,6 +118,11 @@ export const InputSection: React.FC<InputSectionProps> = ({
   const handleAnalyzeUrlDirectly = async () => {
     if (!targetUrl.trim()) return;
     onClearResult();
+    const mapUrlContentSource = (a: ExtractedArticle): ContentSource => {
+      if (a.extractionStatus === 'FAILED') return 'EXTRACTION_BLOCKED';
+      if (a.isHeadlineOnly || a.wordCount < 40) return 'HEADLINE_ONLY';
+      return 'FULL_ARTICLE_EXTRACTED';
+    };
     if (extractedData && extractedData.content) {
       onAnalyze({
         inputType: 'url',
@@ -130,6 +136,7 @@ export const InputSection: React.FC<InputSectionProps> = ({
         extractionStatus: extractedData.extractionStatus,
         warnings: extractedData.warnings,
         isHeadlineOnly: extractedData.isHeadlineOnly,
+        contentSource: mapUrlContentSource(extractedData),
         contentOverride: extractedData.content,
         sourceUrlOverride: extractedData.url
       });
@@ -156,6 +163,7 @@ export const InputSection: React.FC<InputSectionProps> = ({
         extractionStatus: article.extractionStatus,
         warnings: article.warnings,
         isHeadlineOnly: article.isHeadlineOnly,
+        contentSource: mapUrlContentSource(article),
         contentOverride: article.content,
         sourceUrlOverride: article.url
       });
@@ -166,6 +174,15 @@ export const InputSection: React.FC<InputSectionProps> = ({
     }
   };
 
+  // Helpers to compute content-source from a live-news item/fallback state
+  const rssBodyText = (item: NewsArticle): string =>
+    (item.content || item.summary || item.description || '').trim();
+  const isSubstantiveRssDescription = (text: string): boolean => {
+    // A substantive description is >= 40 words; otherwise treat as headline-only
+    const words = text.split(/\s+/).filter(Boolean);
+    return words.length >= 40;
+  };
+
   // Analyze a live news item — SECURE PIPELINE:
   // RSS article -> actual article URL -> secure extraction -> extracted content -> analysis
   // Reuses the existing SSRF-protected extraction pipeline (extractArticleApi -> /api/article/extract)
@@ -174,9 +191,28 @@ export const InputSection: React.FC<InputSectionProps> = ({
     setLiveExtractError(null);
     onClearResult();
 
-    // If no URL is available from RSS, fall back to RSS summary with clear semantics
+    // If no URL is available from RSS, we cannot attempt full-article extraction.
+    // Use RSS description (the data contract from rssProvider), and correctly
+    // label RSS_SUMMARY_ONLY vs HEADLINE_ONLY.
     if (!item.url || !item.url.trim()) {
-      const fallbackContent = item.content || item.summary || item.title;
+      const rssText = rssBodyText(item);
+      const substantive = isSubstantiveRssDescription(rssText);
+      const fallbackContent = substantive ? `${item.title}\n\n${rssText}` : item.title;
+      const warnings: string[] = [];
+      let contentSource: ContentSource;
+      let isHeadlineOnly = false;
+      let extractionStatus: 'SUCCESS' | 'PARTIAL' | 'FAILED' = 'FAILED';
+
+      if (substantive) {
+        contentSource = 'RSS_SUMMARY_ONLY';
+        extractionStatus = 'PARTIAL';
+        warnings.push('No article URL available from RSS feed. Analysis is based on the RSS description only — not the full article body.');
+      } else {
+        contentSource = 'HEADLINE_ONLY';
+        isHeadlineOnly = true;
+        warnings.push('HEADLINE ONLY — NEEDS MORE CONTEXT: No URL and no substantive RSS description available. Provide the full article body for a reliable assessment.');
+      }
+
       onTextChange(fallbackContent);
       onSourceUrlChange('');
       onAnalyze({
@@ -188,9 +224,10 @@ export const InputSection: React.FC<InputSectionProps> = ({
         author: item.author,
         publishedAt: item.publishedAt,
         wordCount: fallbackContent.split(/\s+/).filter(Boolean).length,
-        extractionStatus: 'FAILED',
-        warnings: ['No article URL available from RSS feed. Using RSS summary.'],
-        isHeadlineOnly: !item.content && !item.summary,
+        extractionStatus,
+        warnings,
+        isHeadlineOnly,
+        contentSource,
         contentOverride: fallbackContent,
         sourceUrlOverride: ''
       });
@@ -201,7 +238,11 @@ export const InputSection: React.FC<InputSectionProps> = ({
     setIsLiveExtracting(true);
     try {
       const article = await extractArticleApi(item.url);
-      // Success: use extracted full article content — pass override to avoid React state race
+      const isHeadlineOnly = Boolean(article.isHeadlineOnly) || article.wordCount < 40;
+      let contentSource: ContentSource = 'FULL_ARTICLE_EXTRACTED';
+      if (isHeadlineOnly) contentSource = 'HEADLINE_ONLY';
+      else if (article.extractionStatus === 'PARTIAL') contentSource = 'RSS_SUMMARY_ONLY';
+
       onTextChange(article.content);
       onSourceUrlChange(article.url);
       onAnalyze({
@@ -215,25 +256,56 @@ export const InputSection: React.FC<InputSectionProps> = ({
         wordCount: article.wordCount,
         extractionStatus: article.extractionStatus,
         warnings: article.warnings,
-        isHeadlineOnly: article.isHeadlineOnly,
+        isHeadlineOnly,
+        contentSource,
         contentOverride: article.content,
         sourceUrlOverride: article.url
       });
     } catch (err: any) {
-      const errMsg = err?.message || 'Article extraction failed';
-      // Graceful degradation: preserve fallback behavior per spec
-      // Show user-facing message but still allow manual paste / fallback analysis
-      setLiveExtractError('Article extraction is currently unavailable. You can paste the article text manually.');
+      const errMsg: string = err?.message || 'Article extraction failed';
+      const isBlocked = /HTTP 403|Access forbidden|blocked the extraction|publisher blocked/i.test(errMsg);
 
-      // Fallback: use RSS summary/content so user still has something to analyze manually
-      const fallbackContent = item.content || item.summary || item.title;
+      // Graceful degradation: use RSS description (data contract) — never fabricate body text.
+      const rssText = rssBodyText(item);
+      const substantive = isSubstantiveRssDescription(rssText);
+
+      let contentSource: ContentSource;
+      let warnings: string[] = [];
+      let isHeadlineOnly = false;
+      let extractionStatus: 'SUCCESS' | 'PARTIAL' | 'FAILED' = 'FAILED';
+      let fallbackContent = item.title;
+
+      if (substantive) {
+        // We have a substantive RSS description — analyze it, NEVER force a prediction.
+        contentSource = isBlocked ? 'EXTRACTION_BLOCKED' : 'RSS_SUMMARY_ONLY';
+        extractionStatus = 'PARTIAL';
+        fallbackContent = `${item.title}\n\n${rssText}`;
+        const baseWarn = isBlocked
+          ? `Publisher blocked automated article retrieval (HTTP 403). Analysis is based on the RSS description only — not the full article body.`
+          : `Full article extraction failed: ${errMsg}. Analysis is based on the RSS description only.`;
+        warnings.push(baseWarn);
+      } else {
+        // No usable body AND no substantive description -> headline only, no forced prediction.
+        contentSource = isBlocked ? 'EXTRACTION_BLOCKED' : 'HEADLINE_ONLY';
+        isHeadlineOnly = true;
+        fallbackContent = item.title;
+        if (isBlocked) {
+          warnings.push('EXTRACTION BLOCKED: Publisher blocked automated retrieval and RSS description is insufficient. Paste the article text manually for analysis.');
+        } else {
+          warnings.push('HEADLINE ONLY — NEEDS MORE CONTEXT: Article body could not be extracted and RSS description is insufficient. Provide the full article body for a reliable assessment.');
+        }
+        setLiveExtractError(
+          isBlocked
+            ? 'The publisher blocked automated extraction. Paste the article text manually for full analysis.'
+            : 'Article extraction failed. Paste the article text manually, or select a different article.'
+        );
+      }
+
       onTextChange(fallbackContent);
       onSourceUrlChange(item.url);
 
-      // Only auto-analyze fallback if we have at least summary/content; otherwise let user paste
-      // If extraction failed due to SSRF/security/timeout, we still provide RSS content as fallback
-      // but mark extraction as FAILED and include warning for transparency
-      if (fallbackContent && fallbackContent.trim().length >= 20) {
+      if (substantive) {
+        // Auto-analyze the substantive RSS summary
         onAnalyze({
           inputType: 'live_news',
           originalUrl: item.url,
@@ -243,17 +315,16 @@ export const InputSection: React.FC<InputSectionProps> = ({
           author: item.author,
           publishedAt: item.publishedAt,
           wordCount: fallbackContent.split(/\s+/).filter(Boolean).length,
-          extractionStatus: 'FAILED',
-          warnings: [
-            `Full article extraction failed: ${errMsg}. Falling back to RSS summary. For full verification, paste the article text manually.`
-          ],
-          isHeadlineOnly: !item.content && !item.summary,
+          extractionStatus,
+          warnings,
+          isHeadlineOnly,
+          contentSource,
           contentOverride: fallbackContent,
           sourceUrlOverride: item.url
         });
       }
-      // If fallback is too short, we leave it in the textarea for manual paste without auto-analyzing
-      // The error banner will instruct the user
+      // If not substantive, we leave the textarea populated for the user to paste;
+      // the banner above instructs them. We do NOT force a prediction.
     } finally {
       setIsLiveExtracting(false);
     }
