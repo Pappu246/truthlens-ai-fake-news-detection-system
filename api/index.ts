@@ -24,8 +24,28 @@ async function getApp() {
   return app;
 }
 
-// Vercel expects a default export that is a request handler
+// Vercel expects a default export that is a request handler.
+// Initialization failures are converted into a JSON 500 response instead of
+// an unhandled rejection (which surfaces as an opaque FUNCTION_INVOCATION_FAILED).
 export default async function handler(req: any, res: any) {
-  const expressApp = await getApp();
-  return expressApp(req, res);
+  try {
+    const expressApp = await getApp();
+    return expressApp(req, res);
+  } catch (err: any) {
+    console.error('[Vercel] API handler initialization failed:', err?.stack || err);
+    if (!res.headersSent) {
+      res.statusCode = 500;
+      if (typeof res.setHeader === 'function') {
+        res.setHeader('Content-Type', 'application/json');
+      }
+      res.end(JSON.stringify({
+        ok: false,
+        error: {
+          code: 'FUNCTION_INIT_FAILED',
+          message: 'API initialization failed. Please retry in a moment.'
+        }
+      }));
+    }
+    return;
+  }
 }
