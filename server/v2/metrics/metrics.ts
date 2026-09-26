@@ -135,3 +135,68 @@ export function expectedCalibrationError(
   });
   return { expectedCalibrationError: ece, bins: binsOut };
 }
+
+
+export function brierScore(predictions: Array<{ correct: boolean; confidence: number }>): number {
+  if (predictions.length === 0) return 0;
+  const mean = predictions.reduce((sum, p) => {
+    const confidence = Math.max(0, Math.min(1, p.confidence));
+    const target = p.correct ? 1 : 0;
+    return sum + Math.pow(confidence - target, 2);
+  }, 0);
+  return mean / predictions.length;
+}
+
+function logit(probability: number): number {
+  const p = Math.max(1e-6, Math.min(1 - 1e-6, probability));
+  return Math.log(p / (1 - p));
+}
+
+function sigmoid(value: number): number {
+  if (value >= 0) {
+    const z = Math.exp(-value);
+    return 1 / (1 + z);
+  }
+  const z = Math.exp(value);
+  return z / (1 + z);
+}
+
+/**
+ * Fits a scalar temperature on a calibration split by minimising binary NLL
+ * of "is this final verdict correct?" over the supplied confidence values.
+ * This does not change categorical verdicts and is intentionally separate from
+ * the runtime policy until a held-out calibration artifact is adopted.
+ */
+export function fitConfidenceTemperature(
+  samples: Array<{ correct: boolean; confidence: number }>,
+  minTemperature = 0.25,
+  maxTemperature = 4,
+  step = 0.05
+): number {
+  if (samples.length === 0) return 1;
+
+  let bestTemperature = 1;
+  let bestLoss = Number.POSITIVE_INFINITY;
+
+  for (let temperature = minTemperature; temperature <= maxTemperature + 1e-9; temperature += step) {
+    let loss = 0;
+    for (const sample of samples) {
+      const calibrated = sigmoid(logit(sample.confidence) / temperature);
+      const target = sample.correct ? 1 : 0;
+      loss += -(target * Math.log(Math.max(calibrated, 1e-12)) +
+        (1 - target) * Math.log(Math.max(1 - calibrated, 1e-12)));
+    }
+    loss /= samples.length;
+    if (loss < bestLoss) {
+      bestLoss = loss;
+      bestTemperature = Number(temperature.toFixed(4));
+    }
+  }
+
+  return bestTemperature;
+}
+
+export function applyConfidenceTemperature(confidence: number, temperature: number): number {
+  if (!Number.isFinite(temperature) || temperature <= 0) return Math.max(0, Math.min(1, confidence));
+  return sigmoid(logit(confidence) / temperature);
+}
