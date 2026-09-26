@@ -25,6 +25,15 @@ import {
   abstentionRate,
   expectedCalibrationError
 } from '../server/v2/metrics/metrics';
+import {
+  EMBEDDING_MODEL_DIMENSIONS,
+  EMBEDDING_MODEL_NAME,
+  EMBEDDING_MODEL_VERSION,
+  NLI_MODEL_NAME,
+  NLI_MODEL_VERSION,
+  V2_1_RUNTIME
+} from '../server/v2/ml/modelManifest';
+import { resolveModelMode } from '../server/v2/ml/modelResolution';
 
 interface FixtureCorpusDoc {
   id: string; url: string; title: string; snippet: string; publisher: string;
@@ -67,12 +76,22 @@ function toRawDocuments(fixture: Fixture): RawDocument[] {
 }
 
 async function main() {
+  // V2.1: select the adapter mode explicitly. `--mode=pretrained|fixture` or
+  // TRUTHLENS_V2_MODEL_MODE; defaults to pretrained (the V2.1 stack). The
+  // mode is pinned BEFORE any pipeline call resolves adapters.
+  const modeArg = (process.argv.find(a => a.startsWith('--mode=')) || '').split('=')[1] || process.env.TRUTHLENS_V2_MODEL_MODE || 'pretrained';
+  process.env.TRUTHLENS_V2_MODEL_MODE = modeArg;
+  const resolvedMode = resolveModelMode();
+
   const fixturePath = path.join(process.cwd(), 'data', 'v2', 'eval_fixtures.json');
   const file: FixtureFile = JSON.parse(fs.readFileSync(fixturePath, 'utf-8'));
 
   console.log('='.repeat(78));
   console.log(`TRUTHLENS V2 EVALUATION — ${file.dataset_name} (${file.total_fixtures} fixtures)`);
   console.log(`Dataset type: ${file.dataset_type}`);
+  console.log(`Adapter mode: ${resolvedMode}` + (resolvedMode === 'pretrained'
+    ? ` (embeddings=${EMBEDDING_MODEL_NAME} ${EMBEDDING_MODEL_VERSION}, nli=${NLI_MODEL_NAME} ${NLI_MODEL_VERSION})`
+    : ' (V2 first-slice research placeholders: hashing n-gram embeddings + heuristic NLI; NOT equivalent to real models)'));
   console.log('This is a development/evaluation harness for the first vertical slice.');
   console.log('It is NOT a world-level benchmark and is NOT used to claim any global accuracy figure.');
   console.log('='.repeat(78));
@@ -181,6 +200,16 @@ async function main() {
     dataset: file.dataset_name,
     dataset_type: file.dataset_type,
     n_fixtures: file.fixtures.length,
+    adapter_mode: resolvedMode,
+    adapters: resolvedMode === 'pretrained'
+      ? {
+          embedding: { name: EMBEDDING_MODEL_NAME, version: EMBEDDING_MODEL_VERSION, dimensions: EMBEDDING_MODEL_DIMENSIONS, normalization: 'mean-pooling + L2', runtime: V2_1_RUNTIME },
+          nli: { name: NLI_MODEL_NAME, version: NLI_MODEL_VERSION, runtime: V2_1_RUNTIME }
+        }
+      : {
+          embedding: { name: 'truthlens-hashing-ngram-embedding', version: 'v0.1.0-deterministic', dimensions: 256 },
+          nli: { name: 'truthlens-heuristic-nli', version: 'v0.1.0-rule-based' }
+        },
     verdict_accuracy: verdictReport.accuracy,
     verdict_macro_f1: verdictReport.macroF1,
     per_class: verdictReport.perClass,
@@ -191,7 +220,9 @@ async function main() {
     abstention_rate: abstRate,
     calibration_ece: calibration.expectedCalibrationError,
     generated_at: new Date().toISOString(),
-    note: 'Development/evaluation harness for the first vertical slice, not a world-level benchmark.'
+    note: resolvedMode === 'pretrained'
+      ? 'V2.1 pretrained-adapter run (real ONNX models, offline). Development/evaluation harness, not a world-level benchmark.'
+      : 'V2 baseline run (fixture research adapters). Development/evaluation harness, not a world-level benchmark.'
   };
   const outPath = path.join(process.cwd(), 'data', 'v2', 'eval_results.json');
   fs.writeFileSync(outPath, JSON.stringify(summary, null, 2) + '\n');

@@ -2,50 +2,65 @@
   "dataset": "truthlens_v2_dev_eval_fixtures",
   "dataset_type": "DEVELOPMENT_EVALUATION_SET_NOT_A_BENCHMARK",
   "n_fixtures": 56,
-  "verdict_accuracy": 0.8392857142857143,
-  "verdict_macro_f1": 0.7344810595441378,
+  "adapter_mode": "pretrained",
+  "adapters": {
+    "embedding": {
+      "name": "Xenova/all-MiniLM-L6-v2",
+      "version": "q8@afdb6f1a",
+      "dimensions": 384,
+      "normalization": "mean-pooling + L2",
+      "runtime": "@huggingface/transformers@3.7.6 + onnxruntime-node@1.21.0 (Node, CPU)"
+    },
+    "nli": {
+      "name": "Xenova/nli-deberta-v3-xsmall",
+      "version": "q8@3fac2500",
+      "runtime": "@huggingface/transformers@3.7.6 + onnxruntime-node@1.21.0 (Node, CPU)"
+    }
+  },
+  "verdict_accuracy": 0.4107142857142857,
+  "verdict_macro_f1": 0.3016483516483517,
   "per_class": [
+    {
+      "label": "INSUFFICIENT_EVIDENCE",
+      "precision": 0.32653061224489793,
+      "recall": 1,
+      "f1": 0.4923076923076923,
+      "support": 16
+    },
     {
       "label": "VERIFIED",
       "precision": 1,
-      "recall": 0.9411764705882353,
-      "f1": 0.9696969696969697,
+      "recall": 0.23529411764705882,
+      "f1": 0.38095238095238093,
       "support": 17
     },
     {
       "label": "REFUTED",
       "precision": 1,
-      "recall": 0.9333333333333333,
-      "f1": 0.9655172413793104,
+      "recall": 0.2,
+      "f1": 0.33333333333333337,
       "support": 15
     },
     {
-      "label": "INSUFFICIENT_EVIDENCE",
-      "precision": 0.64,
-      "recall": 1,
-      "f1": 0.7804878048780487,
-      "support": 16
-    },
-    {
       "label": "CONFLICTED",
-      "precision": 1,
-      "recall": 0.125,
-      "f1": 0.2222222222222222,
+      "precision": 0,
+      "recall": 0,
+      "f1": 0,
       "support": 8
     }
   ],
   "evidence_recall_at_5": 1,
   "evidence_recall_at_5_coverage_n": 32,
-  "evidence_precision": 1,
+  "evidence_precision": 0.9148936170212766,
   "high_confidence_precision": {
     "confidenceThreshold": 0.75,
-    "coverage": 0.48214285714285715,
+    "coverage": 0.125,
     "precisionAtThreshold": 1,
-    "nAboveThreshold": 27,
+    "nAboveThreshold": 7,
     "nTotal": 56
   },
-  "abstention_rate": 0.4642857142857143,
-  "calibration_ece": 0.39435714285714285,
-  "generated_at": "2026-09-26T16:16:54.177Z",
-  "note": "Development/evaluation harness for the first vertical slice, not a world-level benchmark."
+  "abstention_rate": 0.875,
+  "calibration_ece": 0.3526071428571429,
+  "generated_at": "2026-09-26T17:20:28.470Z",
+  "note": "V2.1 pretrained-adapter run (real ONNX models, offline). Development/evaluation harness, not a world-level benchmark."
 }

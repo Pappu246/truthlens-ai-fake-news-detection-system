@@ -174,6 +174,13 @@ export interface ProvenanceRecord {
   abstained: boolean;
   abstention_reason: string | null;
   evidence: ProvenanceEvidenceRecord[];
+  /** V2.1 (additive): the intelligence adapters that produced this record.
+   * Absent only for pre-adapter early exits (e.g. uncheckable input), in
+   * which case `limitations` states that no adapter ran. */
+  models?: {
+    embedding: { name: string; version: string; dimensions: number };
+    nli: { name: string; version: string };
+  };
   evidence_counts: { supports: number; refutes: number; neutral: number; unclear: number };
   source_diversity: { independent_domains: number; duplicate_clusters: number };
   prior_signal: PriorSignal;

@@ -6,7 +6,17 @@
  * makes a network call. Mirrors the check()/section() harness style already
  * used by `scripts/evidenceTests.ts` for consistency with the rest of the
  * repo's test scripts.
+ *
+ * ADAPTER MODE (V2.1): these are the LIGHTWEIGHT pipeline-logic tests. They
+ * run in explicit FIXTURE mode — the V2 first-slice research adapters
+ * (hashing n-gram embeddings + rule-based heuristic NLI) whose exact,
+ * deterministic behavior these tests were written against. The real
+ * pretrained adapters are covered separately by `npm run test:v2-models`,
+ * which fails loudly when the sealed model files are absent instead of
+ * degrading silently.
  */
+process.env.TRUTHLENS_V2_MODEL_MODE = process.env.TRUTHLENS_V2_MODEL_MODE || 'fixture';
+
 import { verifyClaimV2 } from '../server/v2/pipeline';
 import { FixtureCorpusSource } from '../server/v2/retrieval/corpusSource';
 import { enrichWithFullText } from '../server/v2/retrieval/fullTextEnricher';

@@ -18,8 +18,8 @@ import { hybridRetrieve, HybridRetrievalOptions } from './retrieval/hybridRetrie
 import { enrichWithFullText } from './retrieval/fullTextEnricher';
 import { rerankEvidence } from './rerank/reranker';
 import { NliAdapter } from './nli/nliAdapter';
-import { defaultNliAdapter } from './nli/heuristicNliAdapter';
 import { decideVerdict, RawPriorInput, DecisionThresholds, DEFAULT_DECISION_THRESHOLDS } from './decision/decisionPolicy';
+import { describeActiveAdapters, resolveDefaultEmbeddingModel, resolveDefaultNliAdapter } from './ml/modelResolution';
 import { buildProvenance } from './provenance';
 import { ClassifiedEvidence, ProvenanceRecord, RetrievedCandidate, V2VerificationResult } from './types';
 import { sanitiseUntrustedEvidence } from '../verification/evidenceEngine';
@@ -60,15 +60,30 @@ function lookupPrior(claimText: string): RawPriorInput {
 export async function verifyClaimV2(claimText: string, options?: V2PipelineOptions): Promise<V2VerificationResult> {
   const text = (claimText || '').trim();
   const corpus = options?.corpus ?? new LiveEvidenceProviderCorpusSource();
-  const nliAdapter = options?.nliAdapter ?? defaultNliAdapter;
   const thresholds = options?.thresholds ?? DEFAULT_DECISION_THRESHOLDS;
 
+  // ---- V2.1 adapter resolution -------------------------------------------
+  // Explicitly injected adapters (tests, experiments) win; otherwise the
+  // mode resolver selects the REAL pretrained ONNX adapters by default, or
+  // the fixture research adapters when TRUTHLENS_V2_MODEL_MODE=fixture was
+  // set explicitly, and throws a clear actionable error when pretrained
+  // models were requested but their sealed files are unavailable. There is
+  // never a silent fallback to heuristic inference.
+  const nliAdapter = options?.nliAdapter ?? resolveDefaultNliAdapter();
+  const embeddingModel = options?.retrieval?.embeddingModel ?? resolveDefaultEmbeddingModel();
+  const retrievalOptions: HybridRetrievalOptions = { ...options?.retrieval, embeddingModel };
+  const adapterInfo = describeActiveAdapters();
+
   const limitations: string[] = [
-    'This is the TruthLens V2 RESEARCH STACK first vertical slice. It is not the production verdict pipeline.',
-    'Dense retrieval uses a deterministic hashing-based embedding, not a pretrained transformer sentence encoder (see docs/V2_KNOWN_LIMITATIONS.md).',
-    'Evidence classification uses a transparent rule-based NLI adapter, not a pretrained entailment model (see docs/V2_KNOWN_LIMITATIONS.md).',
+    'This is the TruthLens V2 RESEARCH STACK (V2.1 pretrained-adapter upgrade). It is not the production verdict pipeline.',
+    adapterInfo.description,
     'The evaluation fixture set is a small, manually curated development set, not a world-level benchmark.'
   ];
+
+  const modelsInfo = {
+    embedding: { name: embeddingModel.name, version: embeddingModel.version, dimensions: embeddingModel.dimensions },
+    nli: { name: nliAdapter.modelName, version: nliAdapter.modelVersion }
+  };
 
   if (!text || text.split(/\s+/).filter(Boolean).length < 4) {
     const claim: ExtractedClaim = buildClaim(text || ' ');
@@ -90,6 +105,7 @@ export async function verifyClaimV2(claimText: string, options?: V2PipelineOptio
       rationale: `INSUFFICIENT_EVIDENCE: ${reason}`,
       ruleTrace: [{ rule: 'input_guard', detail: reason }]
     };
+    limitations.push('The input was rejected by the input guard before any retrieval or model adapter actually ran.');
     const provenance = buildProvenance(text, queries, [], decision,
       { channelsUsed: [], totalRetrievedBeforeDedup: 0, totalAfterDedup: 0 }, limitations);
     return { available: false, claim: text, provenance };
@@ -98,7 +114,7 @@ export async function verifyClaimV2(claimText: string, options?: V2PipelineOptio
   const claim = buildClaim(text);
   const queries = expandQueries(text);
 
-  const retrieval = await hybridRetrieve(claim, queries, corpus, options?.retrieval);
+  const retrieval = await hybridRetrieve(claim, queries, corpus, retrievalOptions);
 
   let candidates = retrieval.candidates;
   if (options?.enableFullTextEnrichment) {
@@ -140,7 +156,8 @@ export async function verifyClaimV2(claimText: string, options?: V2PipelineOptio
       totalRetrievedBeforeDedup: retrieval.totalRetrievedBeforeDedup,
       totalAfterDedup: candidates.length
     },
-    limitations
+    limitations,
+    modelsInfo
   );
 
   return { available: classified.length > 0, claim: text, provenance };

@@ -6,7 +6,13 @@
  * network access, exactly like the existing `/api/evidence/verify` tests) —
  * only response shape, status codes, and the "never crash, never fabricate"
  * contract are checked.
+ *
+ * ADAPTER MODE (V2.1): explicit FIXTURE mode — these are route-shape tests
+ * and must never require the pretrained model files (which are absent in
+ * lightweight CI). The pretrained path is exercised by `test:v2-models`.
  */
+process.env.TRUTHLENS_V2_MODEL_MODE = process.env.TRUTHLENS_V2_MODEL_MODE || 'fixture';
+
 import { createExpressApp } from '../server/appFactory';
 
 let pass = 0;
