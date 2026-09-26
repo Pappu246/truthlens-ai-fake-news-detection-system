@@ -48,6 +48,15 @@ function flattenAndMean(input: unknown): number[] {
   return pooled.map(value => value / rows.length);
 }
 
+function parseBatchVectors(input: unknown, expectedCount: number): number[][] {
+  if (!Array.isArray(input) || input.length !== expectedCount) return [];
+  const vectors = input.map(item => {
+    const vector = flattenAndMean(item);
+    return vector.length > 0 ? normalise(vector) : [];
+  });
+  return vectors.every(vector => vector.length > 0) ? vectors : [];
+}
+
 export interface HuggingFaceEmbeddingOptions {
   token?: string;
   model?: string;
@@ -79,6 +88,13 @@ export class HuggingFaceEmbeddingModel implements EmbeddingModel {
   }
 
   public async embed(text: string): Promise<number[]> {
+    const vectors = await this.embedBatch([text]);
+    return vectors[0];
+  }
+
+  public async embedBatch(texts: string[]): Promise<number[][]> {
+    if (texts.length === 0) return [];
+
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
 
@@ -90,7 +106,7 @@ export class HuggingFaceEmbeddingModel implements EmbeddingModel {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          inputs: text,
+          inputs: texts,
           normalize: true
         }),
         signal: controller.signal
@@ -102,11 +118,11 @@ export class HuggingFaceEmbeddingModel implements EmbeddingModel {
         throw new Error(`Hugging Face embedding request failed (${response.status})${detail ? `: ${detail}` : ''}`);
       }
 
-      const vector = normalise(flattenAndMean(raw));
-      if (vector.length === 0) {
-        throw new Error('Hugging Face embedding response did not contain numeric vectors.');
+      const vectors = parseBatchVectors(raw, texts.length);
+      if (vectors.length !== texts.length) {
+        throw new Error(`Hugging Face embedding response did not contain ${texts.length} usable vectors.`);
       }
-      return vector;
+      return vectors;
     } finally {
       clearTimeout(timeout);
     }
