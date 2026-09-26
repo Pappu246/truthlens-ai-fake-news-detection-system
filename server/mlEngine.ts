@@ -319,10 +319,26 @@ export class TruthLensMLEngine {
     // must fall back to training, or the engine silently runs with an
     // empty vocabulary (every prediction becomes exactly P(FAKE)=0.5,
     // landing in the uncertainty zone forever, with no visible error).
+    //
+    // PRODUCTION SAFETY GUARD:
+    // In production (NODE_ENV=production) we NEVER silently train a demo
+    // fallback from data/news.csv when the real promoted artifact is
+    // missing or corrupt. Doing so would mask a failed deploy and serve a
+    // 36-row toy model labeled as production. Instead fail loudly so the
+    // deploy / health check surfaces the problem to an operator.
     const loaded = fs.existsSync(this.artifactFile) && this.loadModelArtifact(this.artifactFile);
     if (!loaded) {
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error(
+          `FATAL: Production model artifact (${this.artifactFile}) is missing, unreadable, or failed integrity checks. ` +
+          `Refusing to silently downgrade to the demo dataset in production. Run "npm run build" and the ISOT training pipeline to promote a verified artifact before deploying.`
+        );
+      }
       console.warn('[MLEngine] No usable model artifact was loaded; training a fresh model in memory now (not persisted to disk -- only an explicit retrain/promotion action may modify the canonical artifact).');
       this.train(undefined, undefined, false);
+    } else if (this.isDemoModel() && process.env.NODE_ENV === 'production') {
+      console.error('[MLEngine] FATAL: Loaded artifact is marked is_demo=true. Production deployments must use a verified ISOT-trained artifact (is_demo=false). Failing to start.');
+      throw new Error('Production deployment loaded the 36-row DEMO artifact instead of the verified ISOT model. Promote scripts/train_isot.py output before deploying.');
     }
   }
 

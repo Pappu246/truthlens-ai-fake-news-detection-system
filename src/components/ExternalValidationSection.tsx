@@ -95,7 +95,7 @@ export const ExternalValidationSection: React.FC = () => {
             </h2>
             <p className="text-xs text-slate-300 mt-1 max-w-3xl leading-relaxed">
               Strict out-of-domain generalization evaluation of the active production runtime pipeline (
-              <strong className="text-white">Linear SVM with Platt Calibration, 2,910 features</strong>) against the LIAR benchmark.
+              <strong className="text-white">{report.production_model}{report.runtime_feature_space ? `, ${report.runtime_feature_space}` : ''}</strong>) against the LIAR benchmark.
               Zero retraining, zero parameter modifications, and zero training data contamination.
             </p>
           </div>
@@ -488,7 +488,7 @@ export const ExternalValidationSection: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs text-amber-950/90 leading-relaxed mb-4">
             <div className="bg-white/70 p-4 rounded-xl border border-amber-200/60">
               <span className="font-bold uppercase tracking-wider text-[10px] text-amber-800 block mb-1">
-                Production Training Corpus Characteristics (data/news.csv)
+                Production Training Corpus Characteristics ({report.source_training_dataset})
               </span>
               <ul className="list-disc pl-4 space-y-1 text-slate-700">
                 {(report.domain_shift_explanation.production_model_characteristics || report.domain_shift_explanation.isot_characteristics || []).map((item, i) => (
@@ -556,8 +556,8 @@ export const ExternalValidationSection: React.FC = () => {
                   <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Model & Preprocessing</span>
                   <div className="space-y-0.5 font-mono text-[11px] text-slate-800">
                     <div><strong>Production Model:</strong> {report.production_model}</div>
-                    <div><strong>Runtime Vocab:</strong> 2,910 features (Active Model)</div>
-                    <div><strong>Offline Artifact:</strong> 8,000 terms (Unused Python)</div>
+                    <div><strong>Runtime Vocab:</strong> {report.runtime_feature_space || 'Production artifact vocab'}</div>
+                    <div><strong>Training Samples:</strong> {report.training_sample_count?.toLocaleString?.() || report.training_sample_count || '—'}</div>
                     <div><strong>Calibration:</strong> Platt Sigmoid (Platt A & B)</div>
                     <div><strong>Contamination:</strong> 0% (Strictly isolated)</div>
                   </div>

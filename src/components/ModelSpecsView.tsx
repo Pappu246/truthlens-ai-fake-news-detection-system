@@ -95,16 +95,16 @@ export const ModelSpecsView: React.FC<ModelSpecsViewProps> = ({ metrics, onRetra
         <div>
           <div className="flex flex-wrap items-center gap-2 mb-1">
             <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase tracking-wider rounded">
-              Production Model: Linear SVM (Calibrated)
+              {metrics.is_demo ? 'DEMO MODEL (NOT FOR PRODUCTION)' : 'Production Model: Linear SVM (Calibrated)'}
             </span>
             <span className="px-2.5 py-0.5 bg-blue-100 text-blue-800 text-[10px] font-black uppercase tracking-wider rounded">
-              Runtime Features: 2,910 TF-IDF terms
+              Runtime Features: {(metrics.vocabulary_size || metrics.total_samples ? (metrics.vocabulary_size || '—') : '2,910')} TF-IDF terms
             </span>
-            <span className="px-2.5 py-0.5 bg-purple-100 text-purple-800 text-[10px] font-black uppercase tracking-wider rounded">
-              Training Set: data/news.csv (36 articles)
+            <span className={`px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider rounded ${metrics.is_demo ? 'bg-red-100 text-red-800' : 'bg-purple-100 text-purple-800'}`}>
+              Training Set: {metrics.dataset_path || (metrics.is_demo ? 'data/news.csv (36 articles)' : 'ISOT True.csv + Fake.csv')}
             </span>
             <span className="px-2.5 py-0.5 bg-amber-100 text-amber-800 text-[10px] font-black uppercase tracking-wider rounded">
-              External Validation: LIAR test.tsv (N = 790)
+              Dataset Status: {metrics.dataset_status || (metrics.is_demo ? 'DEMO DATASET' : 'ISOT BENCHMARK DATASET')}
             </span>
           </div>
           <h2 className="text-4xl lg:text-5xl font-black uppercase tracking-tighter text-slate-900">
@@ -139,33 +139,45 @@ export const ModelSpecsView: React.FC<ModelSpecsViewProps> = ({ metrics, onRetra
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-xs font-mono mb-4">
           <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
             <span className="text-[10px] text-slate-400 uppercase font-sans block mb-1">Production Runtime Model</span>
-            <strong className="text-slate-900 block text-sm">Linear SVM (Calibrated)</strong>
+            <strong className="text-slate-900 block text-sm">{metrics.best_model === 'linear_svm' ? 'Linear SVM (Calibrated)' : 'Logistic Regression'}</strong>
             <span className="text-[10px] text-slate-500 font-sans mt-0.5 block">Platt Sigmoid (CalibratedClassifierCV)</span>
           </div>
 
           <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
             <span className="text-[10px] text-slate-400 uppercase font-sans block mb-1">Runtime Feature Space</span>
-            <strong className="text-slate-900 block text-sm">2,910 TF-IDF features</strong>
-            <span className="text-[10px] text-slate-500 font-sans mt-0.5 block">2,910 terms, 2,910 weights & IDF values</span>
+            <strong className="text-slate-900 block text-sm">{(metrics.vocabulary_size || 2910).toLocaleString()} TF-IDF features</strong>
+            <span className="text-[10px] text-slate-500 font-sans mt-0.5 block">{(metrics.vocabulary_size || 2910).toLocaleString()} terms, {(metrics.vocabulary_size || 2910).toLocaleString()} weights & IDF values</span>
           </div>
 
           <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-            <span className="text-[10px] text-slate-400 uppercase font-sans block mb-1">Training Baseline & Provenance</span>
-            <strong className="text-slate-900 block text-sm">data/news.csv</strong>
-            <span className="text-[10px] text-slate-500 font-sans mt-0.5 block">36 benchmark articles (18 REAL, 18 FAKE)</span>
+            <span className="text-[10px] text-slate-400 uppercase font-sans block mb-1">Training Dataset & Provenance</span>
+            <strong className="text-slate-900 block text-sm">{metrics.dataset_name || 'ISOT Fake News Dataset'}</strong>
+            <span className="text-[10px] text-slate-500 font-sans mt-0.5 block">
+              {metrics.is_demo
+                ? 'DEMO — 36 articles (NOT production suitable)'
+                : `${metrics.total_samples?.toLocaleString() || '38,656'} cleaned articles (${metrics.dataset_info?.real_samples?.toLocaleString() || '21,195'} REAL, ${metrics.dataset_info?.fake_samples?.toLocaleString() || '17,461'} FAKE)`}
+            </span>
           </div>
 
           <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-            <span className="text-[10px] text-slate-400 uppercase font-sans block mb-1">External Validation Benchmark</span>
-            <strong className="text-slate-900 block text-sm">LIAR test.tsv</strong>
-            <span className="text-[10px] text-slate-500 font-sans mt-0.5 block">N = 790 eligible (strictly separate from training)</span>
+            <span className="text-[10px] text-slate-400 uppercase font-sans block mb-1">Model Reliability</span>
+            <strong className="text-slate-900 block text-sm">{metrics.is_demo ? 'DEMO — UNRELIABLE' : 'VALIDATED / BENCHMARK'}</strong>
+            <span className="text-[10px] text-slate-500 font-sans mt-0.5 block">{metrics.evaluation_status || 'Evaluated on genuine 20% held-out test split'}</span>
           </div>
         </div>
 
-        <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl flex items-start gap-2 text-xs text-amber-950">
-          <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+        <div className={`p-3 border rounded-xl flex items-start gap-2 text-xs ${metrics.is_demo ? 'bg-red-50 border-red-200 text-red-900' : 'bg-emerald-50/60 border-emerald-200 text-emerald-900'}`}>
+          <Info className={`w-4 h-4 shrink-0 mt-0.5 ${metrics.is_demo ? 'text-red-600' : 'text-emerald-600'}`} />
           <div className="leading-relaxed">
-            <strong>Offline Artifact Clarification:</strong> The file <code className="font-mono bg-white px-1 py-0.5 rounded border border-amber-300 text-amber-900">backend/models/vectorizer.joblib</code> (8,000 features) is an unused offline Python research artifact and is <strong>NOT</strong> loaded by the production Node.js runtime. The production runtime exclusively loads <code className="font-mono bg-white px-1 py-0.5 rounded border border-amber-300 text-amber-900">data/saved_model_artifacts.json</code> (2,910 vocabulary terms, 2,910 IDF values, and 2,910 calibrated SVM weights).
+            {metrics.is_demo ? (
+              <>
+                <strong>DEMO MODEL ACTIVE:</strong> The runtime is currently serving a model trained on <strong>only 36 demo articles</strong>. Production must deploy the ISOT-trained artifact (<code className="font-mono bg-white px-1 py-0.5 rounded border">data/saved_model_artifacts.json</code>, {'>'}38,000 samples).
+              </>
+            ) : (
+              <>
+                <strong>Production Artifact Integrity:</strong> The Node.js runtime is loading <code className="font-mono bg-white px-1 py-0.5 rounded border">data/saved_model_artifacts.json</code> with {(metrics.vocabulary_size || 8000).toLocaleString()} vocabulary terms, matching IDF length, weight count and finite Platt parameters. The offline <code className="font-mono bg-white px-1 py-0.5 rounded border">backend/models/*.joblib</code> artifacts are Python-serialized copies used for research scripts; the runtime uses only the JSON artifact.
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -177,8 +189,9 @@ export const ModelSpecsView: React.FC<ModelSpecsViewProps> = ({ metrics, onRetra
           <strong className="font-black uppercase tracking-wide block mb-1 text-amber-900">
             Model Scope & Generalization Boundaries Notice
           </strong>
-          {metrics.limitation || (
-            "The runtime model is trained from data/news.csv (36 benchmark articles across health, science, and politics) utilizing 2,910 TF-IDF features. Performance may not generalize to breaking real-time news, Hindi/Hinglish content, satire, or isolated short claims outside the training distribution."
+          {metrics.limitation || (metrics.is_demo
+            ? "The runtime model is trained from data/news.csv (36 benchmark articles). Performance is not statistically reliable — this model is for demonstration only and must not be treated as production output."
+            : "Trained and evaluated on the ISOT benchmark dataset. Performance may vary on current, multilingual, satirical, or out-of-distribution content. The model detects linguistic patterns associated with known fake-news samples — it does NOT mathematically prove truth."
           )}
         </div>
       </div>
@@ -190,8 +203,8 @@ export const ModelSpecsView: React.FC<ModelSpecsViewProps> = ({ metrics, onRetra
           <span className="text-xs font-black uppercase text-slate-500 tracking-wider">
             Dataset Audit, Provenance & Cleaning Report
           </span>
-          <span className="ml-auto px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold font-mono">
-            ISOT VERIFIED
+          <span className={`ml-auto px-2 py-0.5 rounded text-[10px] font-bold font-mono ${metrics.is_demo ? 'bg-red-100 text-red-800' : 'bg-emerald-100 text-emerald-800'}`}>
+            {metrics.is_demo ? 'DEMO — NOT PRODUCTION' : (metrics.dataset_status || 'ISOT VERIFIED')}
           </span>
         </div>
 
@@ -208,9 +221,13 @@ export const ModelSpecsView: React.FC<ModelSpecsViewProps> = ({ metrics, onRetra
           <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
             <span className="text-[10px] text-slate-400 font-sans block mb-1">Rows Removed</span>
             <span className="font-bold text-amber-700 text-sm">
-              {metrics.cleaning_statistics?.total_removed_rows?.toLocaleString() || '6,242'}
+              {metrics.cleaning_statistics?.total_removed_rows?.toLocaleString() || (metrics.raw_counts_before_cleaning ? '—' : '0')}
             </span>
-            <span className="text-[9px] text-slate-400 block mt-0.5">5,611 dup, 631 empty</span>
+            <span className="text-[9px] text-slate-400 block mt-0.5">
+              {metrics.cleaning_statistics
+                ? `${metrics.cleaning_statistics.removed_duplicates?.toLocaleString() || '—'} dup, ${metrics.cleaning_statistics.removed_empty_title_text?.toLocaleString() || '—'} empty`
+                : 'Cleaning stats reported by training pipeline'}
+            </span>
           </div>
 
           <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
@@ -218,13 +235,13 @@ export const ModelSpecsView: React.FC<ModelSpecsViewProps> = ({ metrics, onRetra
             <span className="font-bold text-slate-900 text-sm">
               {metrics.total_samples.toLocaleString()}
             </span>
-            <span className="text-[9px] text-slate-400 block mt-0.5">38,656 valid articles</span>
+            <span className="text-[9px] text-slate-400 block mt-0.5">{metrics.total_samples.toLocaleString()} valid articles</span>
           </div>
 
           <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
             <span className="text-[10px] text-slate-400 font-sans block mb-1">REAL Articles</span>
             <span className="font-bold text-emerald-700 text-sm">
-              21,195 (54.8%)
+              {(metrics.dataset_info?.real_samples ?? 0).toLocaleString()} ({((metrics.dataset_info?.real_samples ?? 0) / metrics.total_samples * 100).toFixed(1)}%)
             </span>
             <span className="text-[9px] text-slate-400 block mt-0.5">Label: 0 (REAL)</span>
           </div>
@@ -232,7 +249,7 @@ export const ModelSpecsView: React.FC<ModelSpecsViewProps> = ({ metrics, onRetra
           <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
             <span className="text-[10px] text-slate-400 font-sans block mb-1">FAKE Articles</span>
             <span className="font-bold text-red-700 text-sm">
-              17,461 (45.2%)
+              {(metrics.dataset_info?.fake_samples ?? 0).toLocaleString()} ({((metrics.dataset_info?.fake_samples ?? 0) / metrics.total_samples * 100).toFixed(1)}%)
             </span>
             <span className="text-[9px] text-slate-400 block mt-0.5">Label: 1 (FAKE)</span>
           </div>
@@ -260,7 +277,7 @@ export const ModelSpecsView: React.FC<ModelSpecsViewProps> = ({ metrics, onRetra
             <div className="flex items-center gap-2">
               <Zap className="w-5 h-5 text-amber-600" />
               <h3 className="text-sm font-black uppercase text-slate-900 tracking-wider">
-                Stratified 5-Fold Cross-Validation on Training Partition (N = 30,924)
+                Stratified {cv?.n_splits || 5}-Fold Cross-Validation on Training Partition (N = {metrics.training_samples.toLocaleString()})
               </h3>
             </div>
             <span className="text-[10px] font-mono text-slate-400">Zero Data Leakage Guard Verified</span>
@@ -349,17 +366,19 @@ export const ModelSpecsView: React.FC<ModelSpecsViewProps> = ({ metrics, onRetra
             Linear SVM (Calibrated)
           </h3>
           <p className="text-xs text-slate-500 mb-3 leading-relaxed">
-            Support Vector Machine maximizing geometric margin in 2,910-dimensional TF-IDF space with Platt Sigmoid calibration (CalibratedClassifierCV) providing reliable probability estimates.
+            Support Vector Machine maximizing geometric margin in {(metrics.vocabulary_size || 8000).toLocaleString()}-dimensional TF-IDF space with Platt Sigmoid calibration (CalibratedClassifierCV) providing reliable probability estimates.
           </p>
 
           <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-[11px] font-mono">
             <div>
               <span className="text-slate-500">Active Production Runtime: </span>
-              <strong className="text-slate-900 font-black">2,910 features / 2,910 terms</strong>
+              <strong className="text-slate-900 font-black">{(metrics.vocabulary_size || 8000).toLocaleString()} features / {(metrics.vocabulary_size || 8000).toLocaleString()} terms</strong>
               <span className="text-emerald-700 font-bold ml-2">(saved_model_artifacts.json)</span>
             </div>
             <div className="text-slate-500 text-[10px]">
-              Offline Artifact: <span className="text-slate-600 font-bold">vectorizer.joblib (8,000 features, unused by Node runtime)</span>
+              <span className={metrics.is_demo ? 'text-red-700 font-bold' : ''}>
+                {metrics.is_demo ? 'DEMO ARTIFACT — do not deploy' : 'Verified dimensions match vocabulary / IDF / weights / Platt params'}
+              </span>
             </div>
           </div>
 

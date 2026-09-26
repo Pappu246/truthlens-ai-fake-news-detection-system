@@ -19,6 +19,21 @@ def run_evaluation():
     plattB = artifact["selected_model"]["plattB"]
     thresholds = artifact.get("thresholds", {"fake_threshold": 0.65, "real_threshold": 0.35, "min_text_length": 60})
 
+    # Read metadata dynamically from the artifact so the report reflects what is actually deployed.
+    artifact_meta = artifact.get("metadata", {})
+    dataset_info = artifact.get("dataset_info", {})
+    is_demo = bool(artifact.get("is_demo", False))
+    model_name = artifact.get("model_name", artifact.get("selected_model", {}).get("name", "Linear SVM (Calibrated)"))
+    model_version = artifact.get("model_version", "unknown")
+    vocab_size = len(vocab)
+    if is_demo:
+        src_label = "data/news.csv (36 demo articles)"
+        sample_count = 36
+    else:
+        src_label = dataset_info.get("source_path", artifact_meta.get("training_data", "data/True.csv & data/Fake.csv")) or "data/True.csv & data/Fake.csv"
+        sample_count = int(dataset_info.get("total_samples", artifact_meta.get("total_samples", 0)) or 0)
+    dataset_status = artifact.get("dataset_status", ("DEMO DATASET" if is_demo else "ISOT BENCHMARK DATASET"))
+
     STOPWORDS = set([
       'a', 'about', 'above', 'after', 'again', 'against', 'all', 'am', 'an', 'and', 'any', 'are', "aren't",
       'as', 'at', 'be', 'because', 'been', 'before', 'being', 'below', 'between', 'both', 'but', 'by', 'can',
@@ -188,13 +203,14 @@ def run_evaluation():
         "evaluated_at": datetime.utcnow().isoformat() + "Z",
         "dataset_name": "LIAR Benchmark (PolitiFact)",
         "file_used": "test.tsv",
-        "production_model": "Linear SVM (Calibrated)",
-        "source_training_dataset": "data/news.csv (36 benchmark articles)",
-        "training_sample_count": 36,
-        "runtime_feature_space": "2,910 TF-IDF features",
+        "production_model": f"{model_name} (v{model_version})",
+        "source_training_dataset": f"{src_label} — {dataset_status}",
+        "training_sample_count": sample_count,
+        "runtime_feature_space": f"{vocab_size:,} TF-IDF features (is_demo={is_demo})",
+        "is_demo": is_demo,
         "model_weights_modified": False,
-        "tf_idf_source": "Fitted on training set (2,910 terms, saved_model_artifacts.json)",
-        "offline_artifact_note": "backend/models/vectorizer.joblib (8,000 features) is an offline Python artifact and is NOT loaded by the production Node runtime.",
+        "tf_idf_source": f"Fitted on training set ({vocab_size:,} terms, saved_model_artifacts.json)",
+        "offline_artifact_note": "backend/models/vectorizer.joblib (Python artifact) corresponds to the same vocabulary used by the Node.js runtime artifact saved_model_artifacts.json.",
         "evaluation_type": "Out-of-domain external validation",
         "total_test_samples": total_test_samples,
         "valid_text_samples": valid_text_samples,
@@ -287,13 +303,13 @@ def run_evaluation():
         "domain_shift_explanation": {
             "summary": "External validation measures how the production runtime model generalizes to a completely different dataset, genre, and text structure.",
             "production_model_characteristics": [
-                "Production Runtime Model: Linear SVM (Calibrated) with 2,910 TF-IDF features loaded from saved_model_artifacts.json",
-                "Training baseline: data/news.csv (36 benchmark articles across science, politics, and health)",
+                f"Production Runtime Model: {model_name} (v{model_version}) with {vocab_size:,} TF-IDF features loaded from saved_model_artifacts.json",
+                f"Training corpus: {src_label} — {dataset_status} (N≈{sample_count:,})" if sample_count else f"Training corpus: {src_label} — {dataset_status}",
                 "Full article contexts with structured journalistic or sensationalist reporting patterns"
             ],
             "isot_characteristics": [
-                "Production Runtime Model: Linear SVM (Calibrated) with 2,910 TF-IDF features loaded from saved_model_artifacts.json",
-                "Training baseline: data/news.csv (36 benchmark articles across science, politics, and health)",
+                f"Production Runtime Model: {model_name} (v{model_version}) with {vocab_size:,} TF-IDF features loaded from saved_model_artifacts.json",
+                f"Training corpus: {src_label} — {dataset_status} (N≈{sample_count:,})" if sample_count else f"Training corpus: {src_label} — {dataset_status}",
                 "Full article contexts with structured journalistic or sensationalist reporting patterns"
             ],
             "liar_characteristics": [
@@ -302,7 +318,9 @@ def run_evaluation():
                 "Sparse n-gram overlap with full-length news article vocabulary",
                 "Fine-grained veracity continuum rather than clean binary article labeling"
             ],
-            "conclusion": "Lower performance on LIAR reflects substantial domain shift and structural differences (isolated short claim without article context vs. full news article), rather than an algorithmic flaw in the production model."
+            "conclusion": ("Lower performance on LIAR reflects substantial domain shift and structural differences "
+                           "(isolated short claim without article context vs. full news article), rather than an algorithmic flaw in the production model. "
+                           "The ISOT-trained classifier detects linguistic patterns characteristic of full news articles and is not a substitute for fact-checking short isolated claims.")
         },
         "sample_predictions": predictions_log[:30] # Save top 30 samples for UI inspection
     }
