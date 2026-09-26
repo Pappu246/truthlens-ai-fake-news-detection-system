@@ -152,7 +152,126 @@ assert(/FULL ARTICLE EXTRACTED/.test(analysisViewSrc), 'AnalysisView shows FULL 
 assert(/RSS SUMMARY ONLY/.test(analysisViewSrc), 'AnalysisView shows RSS SUMMARY ONLY badge');
 assert(/Classification Basis/.test(analysisViewSrc), 'AnalysisView shows Classification Basis panel');
 
-console.log(`\n====================================================`);
-console.log(`CONTRACT TESTS SUMMARY: ${passed} PASSED, ${failed} FAILED`);
-console.log(`====================================================`);
-process.exit(failed === 0 ? 0 : 1);
+// ---------------------------------------------------------------------------
+// LIVE HTTP CONTRACTS -- claim model, model separation, evidence engine
+// ---------------------------------------------------------------------------
+import { createExpressApp } from '../server/appFactory';
+import type { Server } from 'http';
+
+async function httpContracts(): Promise<void> {
+  console.log('=== CLAIM MODEL / MODEL SEPARATION / EVIDENCE HTTP CONTRACTS ===');
+  const app = await createExpressApp({ isProduction: true, includeVite: false });
+  const server: Server = await new Promise(resolve => {
+    const s = app.listen(0, '127.0.0.1', () => resolve(s));
+  });
+  const port = (server.address() as any).port;
+  const base = `http://127.0.0.1:${port}`;
+
+  const call = async (method: 'GET' | 'POST', route: string, body?: any) => {
+    const res = await fetch(`${base}${route}`, {
+      method,
+      headers: body ? { 'content-type': 'application/json' } : undefined,
+      body: body ? JSON.stringify(body) : undefined
+    });
+    let json: any = null;
+    try { json = await res.json(); } catch { /* ignore */ }
+    return { status: res.status, json };
+  };
+
+  try {
+    const health = await call('GET', '/api/health');
+    assert(health.status === 200, '/api/health returns 200');
+    assert(health.json?.components?.article_model?.role === 'article_model',
+      '/api/health reports the article model component');
+    assert(health.json?.components?.claim_model?.status === 'READY',
+      '/api/health reports the claim model as READY',
+      JSON.stringify(health.json?.components?.claim_model));
+    assert(health.json?.components?.evidence_engine?.role === 'evidence_engine',
+      '/api/health reports the evidence engine component');
+
+    const cmetrics = await call('GET', '/api/claim/metrics');
+    assert(cmetrics.status === 200, '/api/claim/metrics returns 200');
+    assert(cmetrics.json?.model_role === 'claim_model', '/api/claim/metrics is claim-scoped');
+    assert(cmetrics.json?.variants?.text_only?.test?.n === 802,
+      '/api/claim/metrics reports the full 802-row TEST split');
+    assert(cmetrics.json?.decision_threshold === 0.5,
+      '/api/claim/metrics reports the fixed 0.50 threshold');
+    assert(Array.isArray(cmetrics.json?.honesty_notes) && cmetrics.json.honesty_notes.length >= 4,
+      '/api/claim/metrics publishes the honesty notes');
+
+    const pred = await call('POST', '/api/claim/predict',
+      { claim: 'The unemployment rate for college graduates is 4.4 percent.' });
+    assert(pred.status === 200, '/api/claim/predict returns 200');
+    assert(pred.json?.model_role === 'claim_model', '/api/claim/predict is tagged claim_model');
+    assert(pred.json?.variant_used === 'text_only',
+      '/api/claim/predict serves text_only when metadata is absent');
+    assert(pred.json?.metadata_available === false,
+      '/api/claim/predict reports metadata_available=false explicitly');
+    assert((pred.json?.limitations || []).some((l: string) => /mis-specified/i.test(l)),
+      '/api/claim/predict documents why the metadata variant is withheld');
+    assert(pred.json?.benchmark?.dataset?.includes('LIAR'),
+      '/api/claim/predict reports the LIAR benchmark, not the article benchmark');
+
+    const predMeta = await call('POST', '/api/claim/predict', {
+      claim: 'The unemployment rate for college graduates is 4.4 percent.',
+      metadata: { speaker: 'rick-santorum', party: 'republican', credit_history: {
+        barely_true_count: 12, false_count: 16, half_true_count: 13,
+        mostly_true_count: 7, pants_on_fire_count: 5 } }
+    });
+    assert(predMeta.json?.variant_used === 'text_meta',
+      '/api/claim/predict switches to text_meta when full metadata is supplied');
+
+    const predEmpty = await call('POST', '/api/claim/predict', { claim: '' });
+    assert(predEmpty.status === 400, '/api/claim/predict rejects an empty claim with 400');
+
+    const mm = await call('GET', '/api/models/metrics');
+    assert(mm.status === 200, '/api/models/metrics returns 200');
+    assert(Boolean(mm.json?.article_model), '/api/models/metrics separates article_model');
+    assert(Boolean(mm.json?.claim_model), '/api/models/metrics separates claim_model');
+    assert(Boolean(mm.json?.benchmarks), '/api/models/metrics separates benchmarks');
+    assert(/Never merged/.test(mm.json?.separation_policy?.rule || ''),
+      '/api/models/metrics states the models are never merged into one number');
+
+    const analyzed = await call('POST', '/api/analyze', {
+      text: 'Federal regulators announced on Tuesday that quarterly inflation data showed consumer ' +
+            'prices rose 0.3 percent in March, according to figures published by the Bureau of Labor ' +
+            'Statistics. Officials said the reading was consistent with earlier projections and that ' +
+            'the committee would review the data at its next scheduled meeting.',
+      include_evidence: false
+    });
+    assert(analyzed.status === 200, '/api/analyze returns 200');
+    assert(Boolean(analyzed.json?.claim_model), '/api/analyze carries a claim_model block');
+    assert(analyzed.json?.evidence_verification?.status === 'SEARCH_UNAVAILABLE',
+      '/api/analyze honours include_evidence=false without inventing a verdict',
+      analyzed.json?.evidence_verification?.status);
+    assert(analyzed.json?.evidence_verification?.evidence?.length === 0,
+      '/api/analyze returns zero citations when evidence retrieval is off');
+    assert(analyzed.json?.evidence_verification?.security?.evidence_treated_as === 'UNTRUSTED_DATA',
+      '/api/analyze declares retrieved evidence as untrusted data');
+
+    const evShort = await call('POST', '/api/evidence/verify', { claim: 'taxes rose' });
+    assert(evShort.json?.status === 'NEEDS_MORE_CONTEXT',
+      '/api/evidence/verify returns NEEDS_MORE_CONTEXT for an unusable claim',
+      evShort.json?.status);
+    const evEmpty = await call('POST', '/api/evidence/verify', { claim: '' });
+    assert(evEmpty.status === 400, '/api/evidence/verify rejects an empty claim with 400');
+    const evOff = await call('POST', '/api/evidence/verify',
+      { claim: 'The national unemployment rate fell to 4.1 percent in March.', enabled: false });
+    assert(evOff.json?.status === 'SEARCH_UNAVAILABLE',
+      '/api/evidence/verify reports SEARCH_UNAVAILABLE rather than a fabricated verdict');
+    assert(evOff.json?.evidence?.length === 0,
+      '/api/evidence/verify returns no citations when retrieval is unavailable');
+  } finally {
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  }
+}
+
+httpContracts().then(() => {
+  console.log(`\n====================================================`);
+  console.log(`CONTRACT TESTS SUMMARY: ${passed} PASSED, ${failed} FAILED`);
+  console.log(`====================================================`);
+  process.exit(failed === 0 ? 0 : 1);
+}).catch(err => {
+  console.error('[contractTests] fatal:', err);
+  process.exit(1);
+});

@@ -35,3 +35,27 @@ jobs:
 
       - name: Production build
         run: npm run build
+
+      - name: Contract tests
+        run: npm run test:contracts
+
+      - name: Vercel runtime simulation
+        run: npm run test:vercel-sim
+
+      - name: Verdict regression tests
+        run: npm run test:verdicts
+
+      - name: Claim model tests
+        run: npm run test:claim
+
+      - name: Claim model Python/Node parity
+        run: npm run test:claim-parity
+
+      - name: Evidence engine tests
+        run: npm run test:evidence
+
+      - name: Model artifact lifecycle tests
+        run: npm run test:artifacts
+
+      - name: SSRF tests
+        run: npm run test:ssrf
