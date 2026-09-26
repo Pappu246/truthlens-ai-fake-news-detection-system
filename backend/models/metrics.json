@@ -1,51 +1,136 @@
 {
   "status": "success",
-  "trained_at": "2026-09-13T19:11:24.639426",
-  "is_demo": true,
-  "demo_badge_label": "DEMO DATASET \u2014 NOT SUITABLE FOR FINAL MODEL EVALUATION",
-  "strong_warning": "Only 36 articles available. Model performance is not statistically reliable.",
+  "dataset_name": "ISOT Fake News Dataset",
+  "model_version": "3.0.0-isot",
+  "trained_at": "2026-09-26T05:55:41.588029Z",
+  "is_demo": false,
+  "dataset_status": "ISOT BENCHMARK DATASET",
+  "demo_badge_label": "PRODUCTION BENCHMARK (ISOT DATASET)",
+  "evaluation_status": "Evaluated on genuine 20% held-out test split (N=7,732)",
+  "limitation": "The model is trained on the ISOT dataset, which primarily contains English news from an older time period. Performance may not generalize to current news, Hindi/Hinglish content, satire, or domains outside the training distribution.",
+  "raw_counts_before_cleaning": {
+    "real_articles": 21417,
+    "fake_articles": 23481,
+    "total_articles": 44898
+  },
+  "cleaning_statistics": {
+    "removed_empty_title_text": 631,
+    "removed_duplicates": 5611,
+    "removed_invalid_rows": 0,
+    "total_removed_rows": 6242
+  },
   "dataset_info": {
-    "source_path": "/home/user/truthlens-ai-fake-news-detection-system/data/news.csv",
-    "total_samples": 36,
-    "train_samples": 28,
-    "test_samples": 8,
-    "real_samples": 18,
-    "fake_samples": 18,
-    "vocabulary_size": 2920,
-    "is_demo": true,
-    "strong_warning": "Only 36 articles available. Model performance is not statistically reliable."
+    "name": "ISOT Fake News Dataset",
+    "source_path": "data/True.csv & data/Fake.csv",
+    "filename": "True.csv / Fake.csv (ISOT)",
+    "total_samples": 38656,
+    "train_samples": 30924,
+    "test_samples": 7732,
+    "real_samples": 21195,
+    "fake_samples": 17461,
+    "train_real": 16956,
+    "train_fake": 13968,
+    "test_real": 4239,
+    "test_fake": 3493,
+    "vocabulary_size": 8000,
+    "is_demo": false,
+    "dataset_status": "ISOT BENCHMARK DATASET",
+    "demo_badge_label": "PRODUCTION BENCHMARK (ISOT DATASET)",
+    "evaluation_status": "Evaluated on genuine 20% held-out test split (N=7,732)"
+  },
+  "tfidf_configuration": {
+    "ngram_range": [
+      1,
+      2
+    ],
+    "max_features": 8000,
+    "sublinear_tf": true,
+    "min_df": 3,
+    "strip_accents": "unicode",
+    "stop_words": "english"
+  },
+  "cross_validation": {
+    "n_splits": 5,
+    "method": "Stratified 5-Fold Cross-Validation",
+    "data_leakage_prevented": true,
+    "leakage_guard_note": "TF-IDF vocabulary extraction and IDF computation performed strictly inside each fold training split.",
+    "logistic_regression": {
+      "accuracy_mean": 0.9904,
+      "accuracy_std": 0.0012,
+      "precision_mean": 0.9948,
+      "precision_std": 0.0004,
+      "recall_mean": 0.9838,
+      "recall_std": 0.003,
+      "f1_mean": 0.9893,
+      "f1_std": 0.0014
+    },
+    "linear_svm": {
+      "accuracy_mean": 0.9959,
+      "accuracy_std": 0.0007,
+      "precision_mean": 0.996,
+      "precision_std": 0.0008,
+      "recall_mean": 0.995,
+      "recall_std": 0.0013,
+      "f1_mean": 0.9955,
+      "f1_std": 0.0008
+    }
   },
   "models": {
     "logistic_regression": {
       "name": "Logistic Regression",
       "hyperparameters": {
         "C": 1.0,
-        "max_iter": 1000
+        "max_iter": 1000,
+        "penalty": "l2",
+        "solver": "lbfgs"
+      },
+      "cv_metrics": {
+        "accuracy": {
+          "mean": 0.9904,
+          "std": 0.0012
+        },
+        "precision": {
+          "mean": 0.9948,
+          "std": 0.0004
+        },
+        "recall": {
+          "mean": 0.9838,
+          "std": 0.003
+        },
+        "f1_score": {
+          "mean": 0.9893,
+          "std": 0.0014
+        }
       },
       "metrics": {
-        "accuracy": 1.0,
-        "precision": 1.0,
-        "recall": 1.0,
-        "f1_score": 1.0,
+        "positive_class": "FAKE (1)",
+        "accuracy": 0.9903,
+        "precision": 0.9942,
+        "recall": 0.9843,
+        "f1_score": 0.9892,
         "confusion_matrix": {
           "matrix": [
             [
-              4,
-              0
+              4219,
+              20
             ],
             [
-              0,
-              4
+              55,
+              3438
             ]
           ],
-          "true_negative": 4,
-          "false_positive": 0,
-          "false_negative": 0,
-          "true_positive": 4,
+          "true_negative": 4219,
+          "false_positive": 20,
+          "false_negative": 55,
+          "true_positive": 3438,
           "labels": [
             "REAL (0)",
             "FAKE (1)"
-          ]
+          ],
+          "explanations": {
+            "false_positive": "Real news incorrectly classified as Fake.",
+            "false_negative": "Fake news incorrectly classified as Real."
+          }
         }
       }
     },
@@ -53,65 +138,103 @@
       "name": "Linear SVM",
       "hyperparameters": {
         "C": 1.0,
-        "calibration": "sigmoid (Platt)"
+        "calibration": "sigmoid (Platt)",
+        "cv": 3,
+        "loss": "squared_hinge",
+        "penalty": "l2"
+      },
+      "cv_metrics": {
+        "accuracy": {
+          "mean": 0.9959,
+          "std": 0.0007
+        },
+        "precision": {
+          "mean": 0.996,
+          "std": 0.0008
+        },
+        "recall": {
+          "mean": 0.995,
+          "std": 0.0013
+        },
+        "f1_score": {
+          "mean": 0.9955,
+          "std": 0.0008
+        }
       },
       "metrics": {
-        "accuracy": 1.0,
-        "precision": 1.0,
-        "recall": 1.0,
-        "f1_score": 1.0,
+        "positive_class": "FAKE (1)",
+        "accuracy": 0.9959,
+        "precision": 0.9943,
+        "recall": 0.9966,
+        "f1_score": 0.9954,
         "confusion_matrix": {
           "matrix": [
             [
-              4,
-              0
+              4219,
+              20
             ],
             [
-              0,
-              4
+              12,
+              3481
             ]
           ],
-          "true_negative": 4,
-          "false_positive": 0,
-          "false_negative": 0,
-          "true_positive": 4,
+          "true_negative": 4219,
+          "false_positive": 20,
+          "false_negative": 12,
+          "true_positive": 3481,
           "labels": [
             "REAL (0)",
             "FAKE (1)"
-          ]
+          ],
+          "explanations": {
+            "false_positive": "Real news incorrectly classified as Fake.",
+            "false_negative": "Fake news incorrectly classified as Real."
+          }
         }
       }
     }
   },
   "best_model": {
     "name": "Linear SVM (Calibrated)",
-    "selection_criterion": "Primary: F1-score, Secondary: Accuracy",
-    "selection_reason": "Linear SVM selected as superior margin classifier with equal or better accuracy.",
+    "model_version": "3.0.0-isot",
+    "selection_criterion": "Stratified 5-Fold Cross-Validation F1-score",
+    "selection_reason": "Linear SVM achieved equal or higher 5-fold CV F1-score (0.9955 vs 0.9893) with maximum-margin separation and Platt sigmoid probability calibration.",
+    "calibration_method": "Platt Sigmoid (CalibratedClassifierCV)",
     "metrics": {
-      "accuracy": 1.0,
-      "precision": 1.0,
-      "recall": 1.0,
-      "f1_score": 1.0,
+      "positive_class": "FAKE (1)",
+      "accuracy": 0.9959,
+      "precision": 0.9943,
+      "recall": 0.9966,
+      "f1_score": 0.9954,
       "confusion_matrix": {
         "matrix": [
           [
-            4,
-            0
+            4219,
+            20
           ],
           [
-            0,
-            4
+            12,
+            3481
           ]
         ],
-        "true_negative": 4,
-        "false_positive": 0,
-        "false_negative": 0,
-        "true_positive": 4,
+        "true_negative": 4219,
+        "false_positive": 20,
+        "false_negative": 12,
+        "true_positive": 3481,
         "labels": [
           "REAL (0)",
           "FAKE (1)"
-        ]
+        ],
+        "explanations": {
+          "false_positive": "Real news incorrectly classified as Fake.",
+          "false_negative": "Fake news incorrectly classified as Real."
+        }
       }
     }
+  },
+  "thresholds": {
+    "fake_threshold": 0.65,
+    "real_threshold": 0.35,
+    "min_text_length": 60
   }
 }
