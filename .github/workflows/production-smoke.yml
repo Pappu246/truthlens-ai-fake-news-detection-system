@@ -1,0 +1,53 @@
+name: Production Smoke Test
+
+# Verifies the LIVE deployment end to end: health, model metrics, model
+# separation, claim model (with and without metadata), evidence engine,
+# URL extraction HTTP semantics, analyze-url freshness and live-news
+# content-source labelling.
+#
+# Runs after a push to main (giving Render time to deploy) and on demand.
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: Base URL of the deployment to verify
+        required: false
+        default: https://truthlens-ai-dvpf.onrender.com
+  schedule:
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Verify live deployment
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Wake the deployment (free tier cold start)
+        env:
+          BASE_URL: ${{ github.event.inputs.base_url || 'https://truthlens-ai-dvpf.onrender.com' }}
+        run: |
+          for i in $(seq 1 20); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 60 "$BASE_URL/api/health" || true)
+            echo "attempt $i -> $code"
+            [ "$code" = "200" ] && exit 0
+            sleep 15
+          done
+          echo "deployment did not become reachable"
+          exit 1
+
+      - name: Production smoke test
+        env:
+          BASE_URL: ${{ github.event.inputs.base_url || 'https://truthlens-ai-dvpf.onrender.com' }}
+        run: npx tsx scripts/productionSmokeTest.ts "$BASE_URL"
