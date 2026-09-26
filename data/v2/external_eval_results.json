@@ -1,0 +1,228 @@
+{
+  "protocol_version": "truthlens-v2-external-scifact-v1",
+  "dataset": {
+    "name": "SciFact",
+    "split": "dev",
+    "untouched": true,
+    "claims_evaluated": 300,
+    "claims_available": 300,
+    "corpus_documents": 5183,
+    "claims_sha256": "86f0435d08fdb65d1aa41d1472684f57e6e71930626497bdf4d7a9ec1a632217",
+    "corpus_sha256": "b8d6c89624cb2ed74dee8938effc4f5d8bd2086887880af8110d64be4ceade62",
+    "selection": "all 300 dev claims, sorted by numeric claim id",
+    "label_mapping": {
+      "SUPPORT": "VERIFIED / SUPPORTS",
+      "CONTRADICT": "REFUTED / REFUTES",
+      "empty_evidence": "INSUFFICIENT_EVIDENCE / NEUTRAL"
+    }
+  },
+  "frozen_policy": {
+    "decision_thresholds": "DEFAULT_DECISION_THRESHOLDS (unchanged)",
+    "lexical_candidates_per_expanded_query": 25,
+    "evidence_k": 5,
+    "high_confidence_threshold": 0.75,
+    "independence_mapping": "one reserved .test domain per SciFact paper",
+    "prior": "disabled/unavailable so the LIAR prior cannot affect external calibration"
+  },
+  "runs": [
+    {
+      "model": {
+        "nli": {
+          "id": "Xenova/nli-deberta-v3-xsmall",
+          "version": "q8@3fac2500",
+          "dtype": "q8",
+          "onnx_sha256": "3fac2500c45c75af42c7711de0d1b93d59577456100208be0dc1f9e8811946b6"
+        },
+        "embedding": {
+          "id": "Xenova/all-MiniLM-L6-v2",
+          "version": "q8@afdb6f1a",
+          "dimensions": 384
+        },
+        "id2label": {
+          "0": "contradiction",
+          "1": "entailment",
+          "2": "neutral"
+        },
+        "runtime": "@huggingface/transformers@3.7.6 + onnxruntime-node@1.21.0 (Node, CPU)"
+      },
+      "metrics": {
+        "accuracy": 0.37333333333333335,
+        "macro_f1": 0.3084841627446751,
+        "final_per_class": [
+          {
+            "label": "VERIFIED",
+            "precision": 1,
+            "recall": 0.024193548387096774,
+            "f1": 0.047244094488188976,
+            "support": 124
+          },
+          {
+            "label": "REFUTED",
+            "precision": 0.2857142857142857,
+            "recall": 0.46875,
+            "f1": 0.35502958579881655,
+            "support": 64
+          },
+          {
+            "label": "INSUFFICIENT_EVIDENCE",
+            "precision": 0.41578947368421054,
+            "recall": 0.7053571428571429,
+            "f1": 0.5231788079470199,
+            "support": 112
+          }
+        ],
+        "nli_accuracy": 0.5309168443496801,
+        "nli_f1": 0.542975710796193,
+        "nli_per_class": [
+          {
+            "label": "SUPPORTS",
+            "precision": 0.9411764705882353,
+            "recall": 0.2962962962962963,
+            "f1": 0.45070422535211263,
+            "support": 216
+          },
+          {
+            "label": "REFUTES",
+            "precision": 0.6788990825688074,
+            "recall": 0.6065573770491803,
+            "f1": 0.6406926406926408,
+            "support": 122
+          },
+          {
+            "label": "NEUTRAL",
+            "precision": 0.39361702127659576,
+            "recall": 0.8473282442748091,
+            "f1": 0.5375302663438257,
+            "support": 131
+          }
+        ],
+        "nli_gold_passages": 469,
+        "nli_ece": 0.30577611940298566,
+        "lexical_candidate_recall": 0.8085106382978723,
+        "evidence_recall_at_5": 0.6648936170212766,
+        "evidence_recall_at_5_claims": 188,
+        "evidence_precision_at_5": 0.1351063829787234,
+        "high_confidence_precision": 0.2717391304347826,
+        "high_confidence_coverage": 0.30666666666666664,
+        "high_confidence_n": 92,
+        "coverage": 0.36,
+        "abstention": 0.64,
+        "ece": 0.42866333333333323
+      },
+      "resources": {
+        "total_runtime_seconds": 924.317953337,
+        "passage_nli_runtime_seconds": 52.948099016,
+        "retrieval_pipeline_runtime_seconds": 870.959347146,
+        "peak_rss_mb": 1200.875,
+        "ending_rss_mb": 1109.3984375,
+        "nli_model_disk_mb": 91.4619026184082,
+        "embedding_model_disk_mb": 22.80872344970703,
+        "memoized_embedding_texts": 7591,
+        "cpu_count": 2,
+        "node": "v22.22.3",
+        "platform": "linux/x64"
+      },
+      "generated_at": "2026-09-26T18:37:11.800Z"
+    },
+    {
+      "model": {
+        "nli": {
+          "id": "Xenova/distilbert-base-uncased-mnli",
+          "version": "q8@5b7e374d",
+          "dtype": "q8",
+          "onnx_sha256": "5b7e374d8d1e44149fafa498efe80166f740914b3e53bcfa6115fb3ecaca0945"
+        },
+        "embedding": {
+          "id": "Xenova/all-MiniLM-L6-v2",
+          "version": "q8@afdb6f1a",
+          "dimensions": 384
+        },
+        "id2label": {
+          "0": "ENTAILMENT",
+          "1": "NEUTRAL",
+          "2": "CONTRADICTION"
+        },
+        "runtime": "@huggingface/transformers@3.7.6 + onnxruntime-node@1.21.0 (Node, CPU)"
+      },
+      "metrics": {
+        "accuracy": 0.25333333333333335,
+        "macro_f1": 0.2948895281326717,
+        "final_per_class": [
+          {
+            "label": "VERIFIED",
+            "precision": 0.453125,
+            "recall": 0.23387096774193547,
+            "f1": 0.30851063829787234,
+            "support": 124
+          },
+          {
+            "label": "REFUTED",
+            "precision": 0.22018348623853212,
+            "recall": 0.375,
+            "f1": 0.27745664739884396,
+            "support": 64
+          },
+          {
+            "label": "INSUFFICIENT_EVIDENCE",
+            "precision": 0.5476190476190477,
+            "recall": 0.20535714285714285,
+            "f1": 0.29870129870129875,
+            "support": 112
+          }
+        ],
+        "nli_accuracy": 0.3368869936034115,
+        "nli_f1": 0.355838998620315,
+        "nli_per_class": [
+          {
+            "label": "SUPPORTS",
+            "precision": 0.4897959183673469,
+            "recall": 0.2222222222222222,
+            "f1": 0.3057324840764331,
+            "support": 216
+          },
+          {
+            "label": "REFUTES",
+            "precision": 0.5212765957446809,
+            "recall": 0.4016393442622951,
+            "f1": 0.4537037037037037,
+            "support": 122
+          },
+          {
+            "label": "NEUTRAL",
+            "precision": 0.23018867924528302,
+            "recall": 0.46564885496183206,
+            "f1": 0.3080808080808081,
+            "support": 131
+          }
+        ],
+        "nli_gold_passages": 469,
+        "nli_ece": 0.5580063965884876,
+        "lexical_candidate_recall": 0.8085106382978723,
+        "evidence_recall_at_5": 0.6648936170212766,
+        "evidence_recall_at_5_claims": 188,
+        "evidence_precision_at_5": 0.1351063829787234,
+        "high_confidence_precision": 0.3105590062111801,
+        "high_confidence_coverage": 0.5366666666666666,
+        "high_confidence_n": 161,
+        "coverage": 0.5766666666666667,
+        "abstention": 0.42333333333333334,
+        "ece": 0.5627766666666665
+      },
+      "resources": {
+        "total_runtime_seconds": 959.522925364,
+        "passage_nli_runtime_seconds": 44.334334561999995,
+        "retrieval_pipeline_runtime_seconds": 914.611541488,
+        "peak_rss_mb": 1012.1015625,
+        "ending_rss_mb": 1012.1015625,
+        "nli_model_disk_mb": 65.13070678710938,
+        "embedding_model_disk_mb": 22.80872344970703,
+        "memoized_embedding_texts": 7591,
+        "cpu_count": 2,
+        "node": "v22.22.3",
+        "platform": "linux/x64"
+      },
+      "generated_at": "2026-09-26T18:56:31.191Z"
+    }
+  ],
+  "note": "Untouched SciFact dev external evaluation. Full per-claim/per-passage artifacts are intentionally gitignored; regenerate with npm run eval:v2-external. No thresholds were changed and no 56-fixture examples were used for model selection."
+}

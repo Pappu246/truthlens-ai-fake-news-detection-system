@@ -69,6 +69,17 @@ function candidateWorkerPaths(): string[] {
   return candidates;
 }
 
+export interface MlWorkerClientOptions {
+  modelDir?: string;
+  /** Additive experiment hook. Defaults remain the sealed production-independent
+   * V2.1 manifests; external evaluations may point the same worker protocol at
+   * another locally provisioned, Transformers.js-compatible model. */
+  embeddingModelId?: string;
+  nliModelId?: string;
+  embeddingDtype?: 'q8' | 'fp32' | 'fp16';
+  nliDtype?: 'q8' | 'fp32' | 'fp16';
+}
+
 export class MlWorkerClient {
   private worker: Worker | null = null;
   private deadReason: string | null = null;
@@ -78,7 +89,7 @@ export class MlWorkerClient {
   private reqSeq = 0;
   private metaCache: MlWorkerMeta | null = null;
 
-  constructor(private options?: { modelDir?: string }) {}
+  constructor(private options?: MlWorkerClientOptions) {}
 
   private ensureStarted(): void {
     if (this.deadReason) {
@@ -121,8 +132,10 @@ export class MlWorkerClient {
       req: reqSab,
       resp: respSab,
       modelDir: this.options?.modelDir ?? getV2ModelDir(),
-      embModelId: EMBEDDING_MODEL_MANIFEST.id,
-      nliModelId: NLI_MODEL_MANIFEST.id
+      embModelId: this.options?.embeddingModelId ?? EMBEDDING_MODEL_MANIFEST.id,
+      nliModelId: this.options?.nliModelId ?? NLI_MODEL_MANIFEST.id,
+      embDtype: this.options?.embeddingDtype ?? 'q8',
+      nliDtype: this.options?.nliDtype ?? 'q8'
     });
     this.worker = worker;
   }

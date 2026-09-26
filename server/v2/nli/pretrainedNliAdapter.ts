@@ -84,6 +84,10 @@ export interface PretrainedNliOptions {
   relatednessFloor?: number;
   /** Embedding model used for the relatedness gate. */
   embeddingModel?: EmbeddingModel;
+  /** Additive evaluation hooks. Defaults preserve the sealed V2.1 identity;
+   * supplying another identity does not alter the NliAdapter interface. */
+  modelName?: string;
+  modelVersion?: string;
 }
 
 /**
@@ -165,8 +169,8 @@ export function mapModelProbsToNliScores(
 }
 
 export class PretrainedNliAdapter implements NliAdapter {
-  public readonly modelName = NLI_MODEL_NAME;
-  public readonly modelVersion = NLI_MODEL_VERSION;
+  public readonly modelName: string;
+  public readonly modelVersion: string;
   private readonly maxPairTokens: number;
   private readonly relatednessFloor: number;
   private readonly client: MlWorkerClient;
@@ -175,6 +179,8 @@ export class PretrainedNliAdapter implements NliAdapter {
   private lastClaimVector: number[] | null = null;
 
   constructor(options?: PretrainedNliOptions) {
+    this.modelName = options?.modelName ?? NLI_MODEL_NAME;
+    this.modelVersion = options?.modelVersion ?? NLI_MODEL_VERSION;
     this.maxPairTokens = options?.maxPairTokens ?? 384;
     this.relatednessFloor = options?.relatednessFloor ?? 0.15;
     this.client = options?.client ?? getMlWorkerClient();
