@@ -1,0 +1,172 @@
+name: V2.4 Exact Artifact Pack
+
+on:
+  push:
+    branches:
+      - assistant/v2.4-artifacts-20260927
+
+permissions:
+  contents: read
+
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout pinned TruthLens branch
+        uses: actions/checkout@v4
+
+      - name: Download exact SciFact and sealed model artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          rm -rf artifact-bundle
+          mkdir -p artifact-bundle/scifact
+          mkdir -p artifact-bundle/models/v2/Xenova/all-MiniLM-L6-v2/onnx
+          mkdir -p artifact-bundle/models/v2/Xenova/nli-deberta-v3-xsmall/onnx
+
+          # Frozen SciFact source
+          curl --fail --retry 4 --retry-all-errors -L \
+            "https://raw.githubusercontent.com/vidi-deshp12/scifact-claim-verification/051b5245aa9d4b98c1302920cc5e4958b9e30ef9/data/claims_dev.jsonl" \
+            -o artifact-bundle/scifact/claims_dev.jsonl
+
+          curl --fail --retry 4 --retry-all-errors -L \
+            "https://raw.githubusercontent.com/vidi-deshp12/scifact-claim-verification/051b5245aa9d4b98c1302920cc5e4958b9e30ef9/data/corpus.jsonl" \
+            -o artifact-bundle/scifact/corpus.jsonl
+
+          # Exact sealed MiniLM files from the pinned verified mirror.
+          MINI="https://raw.githubusercontent.com/Sagesheep/NarrativeEngine-P/463cdd7853954fb904e8bddf863001ae61726796/mobile/public/models/Xenova/all-MiniLM-L6-v2"
+          curl --fail --retry 4 --retry-all-errors -L "$MINI/onnx/model_quantized.onnx" -o artifact-bundle/models/v2/Xenova/all-MiniLM-L6-v2/onnx/model_quantized.onnx
+          curl --fail --retry 4 --retry-all-errors -L "$MINI/tokenizer.json" -o artifact-bundle/models/v2/Xenova/all-MiniLM-L6-v2/tokenizer.json
+          curl --fail --retry 4 --retry-all-errors -L "$MINI/tokenizer_config.json" -o artifact-bundle/models/v2/Xenova/all-MiniLM-L6-v2/tokenizer_config.json
+          curl --fail --retry 4 --retry-all-errors -L "$MINI/config.json" -o artifact-bundle/models/v2/Xenova/all-MiniLM-L6-v2/config.json
+          curl --fail --retry 4 --retry-all-errors -L "$MINI/vocab.txt" -o artifact-bundle/models/v2/Xenova/all-MiniLM-L6-v2/vocab.txt
+          curl --fail --retry 4 --retry-all-errors -L "$MINI/special_tokens_map.json" -o artifact-bundle/models/v2/Xenova/all-MiniLM-L6-v2/special_tokens_map.json
+
+          # Exact sealed xsmall NLI files from the pinned verified mirror.
+          NLI="https://raw.githubusercontent.com/ElicoftZ/CotoLyrics-alpha/487f0c6d1b2ec41ef8e7c1c2266515a2caeb9738/models/Xenova/nli-deberta-v3-xsmall"
+          curl --fail --retry 4 --retry-all-errors -L "$NLI/onnx/model_quantized.onnx" -o artifact-bundle/models/v2/Xenova/nli-deberta-v3-xsmall/onnx/model_quantized.onnx
+          curl --fail --retry 4 --retry-all-errors -L "$NLI/tokenizer.json" -o artifact-bundle/models/v2/Xenova/nli-deberta-v3-xsmall/tokenizer.json
+          curl --fail --retry 4 --retry-all-errors -L "$NLI/tokenizer_config.json" -o artifact-bundle/models/v2/Xenova/nli-deberta-v3-xsmall/tokenizer_config.json
+          curl --fail --retry 4 --retry-all-errors -L "$NLI/config.json" -o artifact-bundle/models/v2/Xenova/nli-deberta-v3-xsmall/config.json
+          curl --fail --retry 4 --retry-all-errors -L "$NLI/added_tokens.json" -o artifact-bundle/models/v2/Xenova/nli-deberta-v3-xsmall/added_tokens.json
+          curl --fail --retry 4 --retry-all-errors -L "$NLI/special_tokens_map.json" -o artifact-bundle/models/v2/Xenova/nli-deberta-v3-xsmall/special_tokens_map.json
+
+      - name: Verify exact bytes, sizes, and SciFact record counts
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cd artifact-bundle
+
+          cat > expected.sha256 <<'EOF'
+          86f0435d08fdb65d1aa41d1472684f57e6e71930626497bdf4d7a9ec1a632217  scifact/claims_dev.jsonl
+          b8d6c89624cb2ed74dee8938effc4f5d8bd2086887880af8110d64be4ceade62  scifact/corpus.jsonl
+          1afdb6f1a0e45b715d0bb9b11772f032c399babd23bfc31fed1c170afc848bdb1  models/v2/Xenova/all-MiniLM-L6-v2/onnx/model_quantized.onnx
+          da0e79933b9ed51798a3ae27893d3c5fa4a201126cef75586296df9b4d2c62a0  models/v2/Xenova/all-MiniLM-L6-v2/tokenizer.json
+          9261e7d79b44c8195c1cada2b453e55b00aeb81e907a6664974b4d7776172ab3  models/v2/Xenova/all-MiniLM-L6-v2/tokenizer_config.json
+          7135149f7cffa1a573466c6e4d8423ed73b62fd2332c575bf738a0d033f70df7  models/v2/Xenova/all-MiniLM-L6-v2/config.json
+          07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3  models/v2/Xenova/all-MiniLM-L6-v2/vocab.txt
+          b6d346be366a7d1d48332dbc9fdf3bf8960b5d879522b7799ddba59e76237ee3  models/v2/Xenova/all-MiniLM-L6-v2/special_tokens_map.json
+          3fac2500c45c75af42c7711de0d1b93d59577456100208be0dc1f9e8811946b6  models/v2/Xenova/nli-deberta-v3-xsmall/onnx/model_quantized.onnx
+          a86f883318afa11c8c10466f1bf4efaeb6ded28a52cbe57217a8fa0d0a2a87df  models/v2/Xenova/nli-deberta-v3-xsmall/tokenizer.json
+          d8d3bb123b99317634d5ee3d1d2d8b2ddb01510a0654687fc2639a5347a7291f  models/v2/Xenova/nli-deberta-v3-xsmall/tokenizer_config.json
+          ec0bd14cc28640326474399cd61d38ccd52b64900228799d0f81debda8c4bc53  models/v2/Xenova/nli-deberta-v3-xsmall/config.json
+          dc046d04c9b0ada7ae6f1dc89c465801799acdf0c9a6aab8c15a1b2d5ca4e91f  models/v2/Xenova/nli-deberta-v3-xsmall/added_tokens.json
+          311de3f4eed9d76a43bf0d71f10e62e086ca65ccce9f15d5da0d2098bf519ecc  models/v2/Xenova/nli-deberta-v3-xsmall/special_tokens_map.json
+          EOF
+
+          # Ensure the generated file has no accidental indentation.
+          sed -i 's/^[[:space:]]*//' expected.sha256
+          sha256sum -c expected.sha256
+
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          claims = Path("scifact/claims_dev.jsonl")
+          corpus = Path("scifact/corpus.jsonl")
+
+          claim_lines = [line for line in claims.read_text().splitlines() if line.strip()]
+          corpus_lines = [line for line in corpus.read_text().splitlines() if line.strip()]
+
+          claim_records = [json.loads(line) for line in claim_lines]
+          corpus_records = [json.loads(line) for line in corpus_lines]
+
+          gold_judgments = 0
+          for row in claim_records:
+              evidence = row.get("evidence", {})
+              for judgments in evidence.values():
+                  gold_judgments += len(judgments)
+
+          assert len(claim_records) == 300, len(claim_records)
+          assert len(corpus_records) == 5183, len(corpus_records)
+          assert gold_judgments == 469, gold_judgments
+
+          expected_sizes = {
+              "models/v2/Xenova/all-MiniLM-L6-v2/onnx/model_quantized.onnx": 22972370,
+              "models/v2/Xenova/all-MiniLM-L6-v2/tokenizer.json": 711661,
+              "models/v2/Xenova/all-MiniLM-L6-v2/tokenizer_config.json": 366,
+              "models/v2/Xenova/all-MiniLM-L6-v2/config.json": 650,
+              "models/v2/Xenova/all-MiniLM-L6-v2/vocab.txt": 231508,
+              "models/v2/Xenova/all-MiniLM-L6-v2/special_tokens_map.json": 125,
+              "models/v2/Xenova/nli-deberta-v3-xsmall/onnx/model_quantized.onnx": 87246587,
+              "models/v2/Xenova/nli-deberta-v3-xsmall/tokenizer.json": 8656551,
+              "models/v2/Xenova/nli-deberta-v3-xsmall/tokenizer_config.json": 384,
+              "models/v2/Xenova/nli-deberta-v3-xsmall/config.json": 1038,
+              "models/v2/Xenova/nli-deberta-v3-xsmall/added_tokens.json": 23,
+              "models/v2/Xenova/nli-deberta-v3-xsmall/special_tokens_map.json": 173,
+          }
+          for rel, expected in expected_sizes.items():
+              actual = Path(rel).stat().st_size
+              assert actual == expected, (rel, actual, expected)
+
+          print("SciFact claims:", len(claim_records))
+          print("SciFact corpus docs:", len(corpus_records))
+          print("SciFact gold passage judgments:", gold_judgments)
+          print("All sealed model file sizes verified.")
+          PY
+
+          sha256sum scifact/claims_dev.jsonl scifact/corpus.jsonl \
+            models/v2/Xenova/all-MiniLM-L6-v2/onnx/model_quantized.onnx \
+            models/v2/Xenova/all-MiniLM-L6-v2/tokenizer.json \
+            models/v2/Xenova/all-MiniLM-L6-v2/tokenizer_config.json \
+            models/v2/Xenova/all-MiniLM-L6-v2/config.json \
+            models/v2/Xenova/all-MiniLM-L6-v2/vocab.txt \
+            models/v2/Xenova/all-MiniLM-L6-v2/special_tokens_map.json \
+            models/v2/Xenova/nli-deberta-v3-xsmall/onnx/model_quantized.onnx \
+            models/v2/Xenova/nli-deberta-v3-xsmall/tokenizer.json \
+            models/v2/Xenova/nli-deberta-v3-xsmall/tokenizer_config.json \
+            models/v2/Xenova/nli-deberta-v3-xsmall/config.json \
+            models/v2/Xenova/nli-deberta-v3-xsmall/added_tokens.json \
+            models/v2/Xenova/nli-deberta-v3-xsmall/special_tokens_map.json > SHA256SUMS.txt
+
+          cat > ARTIFACT_PROVENANCE.txt <<'EOF'
+          TruthLens V2.4 external artifact bundle
+          SciFact source:
+            vidi-deshp12/scifact-claim-verification
+            commit 051b5245aa9d4b98c1302920cc5e4958b9e30ef9
+          MiniLM source mirror:
+            Sagesheep/NarrativeEngine-P
+            commit 463cdd7853954fb904e8bddf863001ae61726796
+            path mobile/public/models/Xenova/all-MiniLM-L6-v2
+          NLI source mirror:
+            ElicoftZ/CotoLyrics-alpha
+            commit 487f0c6d1b2ec41ef8e7c1c2266515a2caeb9738
+            path models/Xenova/nli-deberta-v3-xsmall
+          Expected TruthLens sealed model versions:
+            MiniLM q8@afdb6f1a
+            DeBERTa xsmall q8@3fac2500
+          Dataset counts:
+            claims 300
+            corpus documents 5183
+            gold passage judgments 469
+          EOF
+
+      - name: Upload verified artifact bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: truthlens-v2.4-exact-artifacts
+          path: artifact-bundle
+          if-no-files-found: error
+          retention-days: 7
