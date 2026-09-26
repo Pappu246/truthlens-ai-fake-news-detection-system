@@ -12,6 +12,7 @@ export interface EmbeddingModel {
   readonly version: string;
   readonly dimensions: number;
   embed(text: string): number[] | Promise<number[]>;
+  embedBatch?(texts: string[]): number[][] | Promise<number[][]>;
 }
 
 function charNgrams(text: string, n = 3): string[] {
@@ -83,13 +84,26 @@ export async function denseSearch(
   topK = 20
 ): Promise<DenseSearchResult[]> {
   if (documents.length === 0) return [];
-  const qVec = await model.embed(query);
-  const raw = await Promise.all(
-    documents.map(async d => ({
-      id: d.id,
-      score: cosineSimilarity(qVec, await model.embed(d.text))
-    }))
-  );
+  const texts = [query, ...documents.map(d => d.text)];
+  const batchEmbedder = model as EmbeddingModel & {
+    embedBatch?: (texts: string[]) => number[][] | Promise<number[][]>;
+  };
+
+  let vectors: number[][];
+  if (typeof batchEmbedder.embedBatch === 'function') {
+    vectors = await batchEmbedder.embedBatch(texts);
+    if (vectors.length !== texts.length) {
+      throw new Error(`Embedding batch returned ${vectors.length} vectors for ${texts.length} inputs.`);
+    }
+  } else {
+    vectors = await Promise.all(texts.map(text => model.embed(text)));
+  }
+
+  const qVec = vectors[0];
+  const raw = documents.map((d, index) => ({
+    id: d.id,
+    score: cosineSimilarity(qVec, vectors[index + 1])
+  }));
 
   const positive = raw.filter(r => r.score > 0);
   if (positive.length === 0) return [];
