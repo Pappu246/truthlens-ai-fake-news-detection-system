@@ -30,7 +30,7 @@
     "test:v2-route": "tsx scripts/v2RouteTests.ts",
     "test:v2-models": "tsx scripts/v2ModelTests.ts",
     "eval:v2": "tsx scripts/v2Evaluate.ts",
-    "external:v2-data": "tsx scripts/v2ExternalData.ts",
+    "external:v2-data": "tsx scripts/v2ExternalData.ts", "external:v2-data:offline": "tsx scripts/v2ProvisionSciFactOffline.ts",
     "eval:v2-external": "tsx scripts/v2ExternalEvaluate.ts",
     "download:v2-eval-model": "tsx scripts/v2DownloadEvaluationModel.ts",
     "download:v2-candidate": "tsx scripts/v2DownloadCandidateModel.ts",
