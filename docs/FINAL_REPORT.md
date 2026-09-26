@@ -1,8 +1,8 @@
 # TruthLens AI — Final Release Audit
 
-**Audit date:** 2026-09-26 UTC  
-**Audited repository:** `Pappu246/truthlens-ai-fake-news-detection-system`  
-**Source-of-truth branch:** `main`  
+**Audit date:** 2026-09-26 UTC
+**Audited repository:** `Pappu246/truthlens-ai-fake-news-detection-system`
+**Source-of-truth branch:** `main`
 **Current main SHA:** `7e570a56288da85f2a90acb8d0c1dd051bd142ab`
 
 This report records verified state only. Article and claim benchmarks are separate measurements and are not combined into one accuracy number. Neither benchmark accuracy is a guarantee of real-world fact-checking accuracy.
