@@ -23,7 +23,10 @@ import {
   multiClassAccuracyF1,
   highConfidencePrecisionWithCoverage,
   abstentionRate,
-  expectedCalibrationError
+  expectedCalibrationError,
+  brierScore,
+  fitConfidenceTemperature,
+  applyConfidenceTemperature
 } from '../server/v2/metrics/metrics';
 
 interface FixtureCorpusDoc {
@@ -133,6 +136,14 @@ async function main() {
   const hc = highConfidencePrecisionWithCoverage(confidencePredictions, gold, 0.75);
   const abstRate = abstentionRate(abstentions);
   const calibration = expectedCalibrationError(calibrationInputs, 5);
+  const calibrationSamples = calibrationInputs.filter((_sample, index) => index % 2 === 0);
+  const holdoutCalibrationSamples = calibrationInputs.filter((_sample, index) => index % 2 === 1);
+  const fittedTemperature = fitConfidenceTemperature(calibrationSamples);
+  const calibratedHoldout = holdoutCalibrationSamples.map(sample => ({
+    correct: sample.correct,
+    confidence: applyConfidenceTemperature(sample.confidence, fittedTemperature)
+  }));
+  const calibratedHoldoutEce = expectedCalibrationError(calibratedHoldout, 5);
 
   console.log('\nPer-fixture results:');
   console.log(perFixtureRows.join('\n'));
@@ -171,7 +182,11 @@ async function main() {
   console.log('\n' + '-'.repeat(78));
   console.log('CALIBRATION (Expected Calibration Error, 5 bins)');
   console.log('-'.repeat(78));
-  console.log(`ECE: ${calibration.expectedCalibrationError.toFixed(3)}`);
+  console.log(`Raw ECE: ${calibration.expectedCalibrationError.toFixed(3)}`);
+  console.log(`Raw Brier: ${brierScore(calibrationInputs).toFixed(3)}`);
+  console.log(`Calibration split: ${calibrationSamples.length} fixtures; holdout: ${holdoutCalibrationSamples.length} fixtures`);
+  console.log(`Fitted temperature (calibration split only): ${fittedTemperature.toFixed(2)}`);
+  console.log(`Holdout calibrated ECE: ${calibratedHoldoutEce.expectedCalibrationError.toFixed(3)}`);
   for (const b of calibration.bins) {
     if (b.n === 0) continue;
     console.log(`  [${b.rangeLow.toFixed(1)}-${b.rangeHigh.toFixed(1)}) n=${b.n} avgConfidence=${b.avgConfidence.toFixed(2)} accuracy=${b.accuracy.toFixed(2)}`);
@@ -190,6 +205,15 @@ async function main() {
     high_confidence_precision: hc,
     abstention_rate: abstRate,
     calibration_ece: calibration.expectedCalibrationError,
+    calibration_brier: brierScore(calibrationInputs),
+    heldout_calibration: {
+      method: 'deterministic_even_odd_split_temperature_scaling',
+      calibration_n: calibrationSamples.length,
+      holdout_n: holdoutCalibrationSamples.length,
+      temperature: fittedTemperature,
+      raw_holdout_ece: expectedCalibrationError(holdoutCalibrationSamples, 5).expectedCalibrationError,
+      calibrated_holdout_ece: calibratedHoldoutEce.expectedCalibrationError
+    },
     generated_at: new Date().toISOString(),
     note: 'Development/evaluation harness for the first vertical slice, not a world-level benchmark.'
   };
