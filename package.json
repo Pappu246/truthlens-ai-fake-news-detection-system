@@ -26,7 +26,7 @@
     "test:ssrf": "tsx scripts/ssrfTests.ts",
     "test:all": "npm run lint && npm run test:contracts && npm run test:vercel-sim && npm run test:verdicts && npm run test:claim && npm run test:claim-parity && npm run test:evidence && npm run test:artifacts && npm run test:ssrf",
     "test:production": "tsx scripts/productionSmokeTest.ts",
-    "test:v2": "tsx scripts/v2PipelineTests.ts",
+    "test:v2": "tsx scripts/v2PipelineTests.ts && tsx scripts/v2EvidenceReasoningTests.ts", "test:v2-reasoning": "tsx scripts/v2EvidenceReasoningTests.ts",
     "test:v2-route": "tsx scripts/v2RouteTests.ts",
     "test:v2-models": "tsx scripts/v2ModelTests.ts",
     "eval:v2": "tsx scripts/v2Evaluate.ts",

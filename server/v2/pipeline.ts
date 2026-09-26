@@ -24,6 +24,7 @@ import { describeClock, isClockFrozen, resolveNowMs } from './clock';
 import { buildProvenance } from './provenance';
 import { ClassifiedEvidence, ProvenanceRecord, RetrievedCandidate, V2VerificationResult } from './types';
 import { sanitiseUntrustedEvidence } from '../verification/evidenceEngine';
+import { buildEvidenceInput, EvidencePresentation } from './evidenceContext';
 
 export interface V2PipelineOptions {
   corpus?: CorpusSource;
@@ -31,6 +32,8 @@ export interface V2PipelineOptions {
   retrieval?: HybridRetrievalOptions;
   thresholds?: DecisionThresholds;
   enableFullTextEnrichment?: boolean;
+  /** Research-only NLI presentation experiment. Raw is the frozen default. */
+  evidencePresentation?: EvidencePresentation;
   /** Overrides the LIAR prior lookup — used by tests to inject a fixed prior. */
   priorOverride?: RawPriorInput;
   /** Minimum evidence pool size below which the pipeline reports a corpus
@@ -146,8 +149,9 @@ export async function verifyClaimV2(claimText: string, options?: V2PipelineOptio
 
   const reranked = rerankEvidence(candidates, { nowMs });
 
+  const presentation = options?.evidencePresentation ?? 'raw';
   const classified: ClassifiedEvidence[] = reranked.map(r => {
-    const passage = passageFor(r);
+    const passage = sanitiseUntrustedEvidence(buildEvidenceInput(claim, r, presentation), 4000).text;
     const nli = nliAdapter.classify(claim, passage, r.publishedAt || undefined);
     // Title/publisher are untrusted, retrieved strings just like the body —
     // sanitise them too so provenance never echoes a raw instruction-shaped
