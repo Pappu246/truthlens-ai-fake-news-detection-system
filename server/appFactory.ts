@@ -19,6 +19,8 @@ import { validateUrlSecurity, safeFetchHtml, normalizeUrl } from './security/url
 import { extractArticleFromHtml } from './extraction/articleExtractor';
 import { liveNewsService } from './news/newsService';
 import { createRateLimiter } from './security/rateLimiter';
+import { verifyClaimV2 } from './v2/pipeline';
+import { PIPELINE_VERSION as V2_PIPELINE_VERSION } from './v2/provenance';
 
 const DEMO_EXAMPLES = [
   {
@@ -100,6 +102,15 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
           ready: true,
           status: 'READY',
           note: 'Retrieval health is reported per request; it depends on outbound network access.'
+        },
+        v2_research_stack: {
+          role: 'v2_research_stack',
+          ready: true,
+          status: 'EXPERIMENTAL',
+          pipeline_version: V2_PIPELINE_VERSION,
+          note: 'TruthLens V2 evidence-grounded verification research stack (query expansion -> hybrid retrieval ' +
+            '-> rerank -> NLI classification -> aggregation/abstention -> provenance). Additive research endpoint; ' +
+            'does not affect the production article/claim model verdicts.'
         }
       },
       uptime_seconds: Math.round(process.uptime())
@@ -166,6 +177,30 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
     } catch (err: any) {
       console.error('[API /api/evidence/verify error]', err.message);
       res.status(500).json({ error: err.message || 'Evidence verification failed.' });
+    }
+  });
+
+  // 1d. TRUTHLENS V2 RESEARCH STACK (EXPERIMENTAL, ADDITIVE):
+  //     CLAIM -> QUERY EXPANSION -> HYBRID RETRIEVAL (lexical + dense)
+  //           -> RERANKING -> NLI EVIDENCE CLASSIFICATION
+  //           -> AGGREGATION/ABSTENTION -> PROVENANCE
+  //     This is the first vertical slice of the V2 evidence-grounded
+  //     verification architecture (see docs/V2_ARCHITECTURE.md). It is
+  //     entirely separate from, and does not alter, the production
+  //     `/api/evidence/verify` and `/api/analyze` verdict semantics above.
+  app.post('/api/v2/evidence/verify', extractRateLimiter, async (req, res) => {
+    try {
+      const claimText = (req.body?.claim || req.body?.text || req.body?.statement || '').toString();
+      if (!claimText.trim()) {
+        return res.status(400).json({ error: 'A claim text is required.', field: 'claim' });
+      }
+      const result = await verifyClaimV2(claimText, {
+        enableFullTextEnrichment: req.body?.enable_full_text_enrichment === true
+      });
+      res.json(result);
+    } catch (err: any) {
+      console.error('[API /api/v2/evidence/verify error]', err.message);
+      res.status(500).json({ error: err.message || 'V2 evidence verification failed.' });
     }
   });
 
