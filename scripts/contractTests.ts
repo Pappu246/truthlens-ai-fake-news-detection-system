@@ -139,6 +139,44 @@ assert(/status = 429/.test(appFactorySrc), 'appFactory maps errors to HTTP 429')
 assert(/status = 504/.test(appFactorySrc), 'appFactory maps timeouts to HTTP 504');
 assert(/status = 400/.test(appFactorySrc), 'appFactory maps validation errors to HTTP 400');
 
+console.log('=== LIVE NEWS CONTENT-SOURCE LABELLING (SERVER SIDE) ===');
+import { labelFeedContent, SUBSTANTIVE_RSS_WORD_COUNT } from '../server/news/rssProvider';
+
+// A feed item must be labelled by what the feed actually provided, at the
+// source, so every API consumer -- not only the browser -- sees the truth.
+const headlineLabel = labelFeedContent('');
+assert(headlineLabel.content_source === 'HEADLINE_ONLY',
+  'Empty feed description is labelled HEADLINE_ONLY');
+assert(headlineLabel.is_headline_only === true,
+  'Empty feed description sets is_headline_only');
+assert(headlineLabel.word_count === 0, 'Empty feed description reports word_count 0');
+
+const thin = labelFeedContent('A short wire blurb of only a handful of words here.');
+assert(thin.content_source === 'HEADLINE_ONLY',
+  'Sub-threshold feed description is labelled HEADLINE_ONLY, never as an article');
+assert(thin.is_headline_only === true, 'Sub-threshold feed description sets is_headline_only');
+
+const substantiveText = Array.from({ length: SUBSTANTIVE_RSS_WORD_COUNT + 5 },
+  (_, i) => `word${i}`).join(' ');
+const substantive = labelFeedContent(substantiveText);
+assert(substantive.content_source === 'RSS_SUMMARY_ONLY',
+  'Substantive feed description is labelled RSS_SUMMARY_ONLY');
+assert(substantive.is_headline_only === false,
+  'Substantive feed description is not flagged headline-only');
+assert(substantive.word_count === SUBSTANTIVE_RSS_WORD_COUNT + 5,
+  'Feed labelling reports the real word count');
+
+const boundary = labelFeedContent(Array.from({ length: SUBSTANTIVE_RSS_WORD_COUNT - 1 },
+  (_, i) => `w${i}`).join(' '));
+assert(boundary.content_source === 'HEADLINE_ONLY',
+  `Feed description just under ${SUBSTANTIVE_RSS_WORD_COUNT} words stays HEADLINE_ONLY`);
+
+const rssProviderSrc = fs.readFileSync('./server/news/rssProvider.ts', 'utf8');
+assert(!/content_source:\s*'FULL_ARTICLE_EXTRACTED'/.test(rssProviderSrc),
+  'RSS provider never labels a feed item as FULL_ARTICLE_EXTRACTED');
+assert((rssProviderSrc.match(/\.\.\.labelFeedContent\(/g) || []).length >= 2,
+  'Both the RSS and Atom parse paths label their items');
+
 console.log('=== CONTENT-SOURCE LABELS IN FRONTEND ===');
 const inputSectionSrc = fs.readFileSync('./src/components/InputSection.tsx', 'utf8');
 const analysisViewSrc = fs.readFileSync('./src/components/AnalysisView.tsx', 'utf8');
@@ -147,6 +185,8 @@ assert(/RSS_SUMMARY_ONLY/.test(inputSectionSrc), 'InputSection references RSS_SU
 assert(/HEADLINE_ONLY/.test(inputSectionSrc), 'InputSection references HEADLINE_ONLY');
 assert(/EXTRACTION_BLOCKED/.test(inputSectionSrc), 'InputSection references EXTRACTION_BLOCKED');
 assert(/description/.test(inputSectionSrc), 'InputSection uses RSS description field in fallback');
+assert(/item\?\.content_source/.test(inputSectionSrc),
+  'InputSection prefers the server-side content_source label over re-deriving it');
 
 assert(/FULL ARTICLE EXTRACTED/.test(analysisViewSrc), 'AnalysisView shows FULL ARTICLE EXTRACTED badge');
 assert(/RSS SUMMARY ONLY/.test(analysisViewSrc), 'AnalysisView shows RSS SUMMARY ONLY badge');
