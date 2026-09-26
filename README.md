@@ -25,6 +25,8 @@ Article and claim measurements below are separate benchmarks. They must not be a
 
 The API exposes separate `article_model`, `claim_model`, and `benchmarks` blocks from `/api/models/metrics`. The models solve different tasks on different corpora.
 
+> **Research stack note:** `server/v2/**` and `POST /api/v2/evidence/verify` are an additive, experimental TruthLens V2 evidence-grounded verification research stack — a first vertical slice, not a production component and not part of the verified release snapshot above. See [`docs/V2_ARCHITECTURE.md`](docs/V2_ARCHITECTURE.md), [`docs/V2_BENCHMARK_PROTOCOL.md`](docs/V2_BENCHMARK_PROTOCOL.md), and [`docs/V2_KNOWN_LIMITATIONS.md`](docs/V2_KNOWN_LIMITATIONS.md).
+
 ## Article model
 
 The production article artifact is **Linear SVM (Calibrated), `v3.0.0-isot`**, using an 8,000-feature TF-IDF representation with 1–2 grams and sublinear term frequency. Probabilities use Platt sigmoid calibration.
