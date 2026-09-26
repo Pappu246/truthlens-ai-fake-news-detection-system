@@ -127,7 +127,7 @@ The workflow covered health, article and claim metrics, claim prediction with an
 4. Evidence relation is inferred from retrieved headlines/snippets and is not proof of truth. Network restrictions can correctly produce `SEARCH_UNAVAILABLE`.
 5. RSS summaries are not full article bodies. Headline-only input is withheld as `NEEDS_MORE_CONTEXT` rather than forced into a binary prediction.
 6. Two moderate `qs`/Express dependency advisories remain open.
-7. The current task created the requested clean README documentation separately from the merged PR #23 application fix. The README pull request number is recorded below once opened.
+7. The current task created the requested clean README documentation separately from the merged PR #23 application fix. Historical progress notes outside the README may still describe earlier phases; they are not used as the current release metrics.
 
 ## Release decision
 
@@ -137,4 +137,6 @@ The workflow covered health, article and claim metrics, claim prediction with an
 
 ## Documentation promotion
 
-- **New README PR:** pending at the time of this report's initial creation; this field is updated after the clean README is pushed and the PR is opened.
+- **New README PR:** [#24](https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/pull/24)
+- **PR state at audit completion:** Open, documentation-only follow-up from the fixed Arena session branch; not merged in this audit.
+- **PR head:** `6ebdddc` (the pushed docs commit; subsequent report update is pushed on the same docs-only PR branch).
