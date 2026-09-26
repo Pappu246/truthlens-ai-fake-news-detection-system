@@ -2,17 +2,14 @@
  * V2 FINAL DECISION POLICY — AGGREGATION + ABSTENTION
  * =====================================================
  * Transparent, rule-based aggregation over classified evidence. Every branch
- * is logged into `ruleTrace` so a verdict can be audited after the fact.
+ * is logged into ruleTrace.
  *
- * Hard contract (PHASE 6 of the task spec):
- *   - The LIAR claim-model prior may nudge CONFIDENCE by a small, capped
- *     amount when it agrees with an evidence-driven verdict, and is recorded
- *     (with an explicit disagreement flag) when it does not — but it NEVER
- *     changes the categorical verdict on its own, and it never turns
- *     INSUFFICIENT_EVIDENCE/CONFLICTED into VERIFIED/REFUTED.
- *   - TRUE/FALSE-shaped verdicts are never forced when evidence is weak or
- *     genuinely conflicting; those cases abstain (INSUFFICIENT_EVIDENCE /
- *     CONFLICTED).
+ * Conflict detection is deliberately evidence-pair based: one independent
+ * high-quality support signal plus one independent high-quality refutation
+ * signal can establish CONFLICTED even when the weighted totals are not nearly
+ * symmetric. This prevents asymmetric but genuine disputes from collapsing
+ * into a directional verdict merely because one side has a slightly stronger
+ * source score.
  */
 import { ClassifiedEvidence, DecisionRuleTrace, PriorSignal, VerdictDecision, VerdictV2 } from '../types';
 
@@ -21,7 +18,8 @@ export interface DecisionThresholds {
   strongStrengthThreshold: number;
   weakTotalThreshold: number;
   conflictMinEachSide: number;
-  conflictRatioBand: number; // min/max ratio at/above which sides are "comparable"
+  conflictRatioBand: number;
+  conflictMinTopVoteEachSide: number;
   priorMaxConfidenceNudge: number;
 }
 
@@ -29,8 +27,10 @@ export const DEFAULT_DECISION_THRESHOLDS: DecisionThresholds = {
   minIndependentSourcesForVerdict: 2,
   strongStrengthThreshold: 0.5,
   weakTotalThreshold: 0.3,
-  conflictMinEachSide: 0.2,
-  conflictRatioBand: 0.6,
+  // A real conflict does not have to be mathematically symmetric.
+  conflictMinEachSide: 0.17,
+  conflictRatioBand: 0.4,
+  conflictMinTopVoteEachSide: 0.11,
   priorMaxConfidenceNudge: 0.05
 };
 
@@ -76,12 +76,14 @@ export function decideVerdict(
   const refuteStrength = refuting.reduce((sum, e) => sum + voteWeight(e), 0);
   const independentSupportingSources = new Set(supporting.map(e => e.domainClusterId)).size;
   const independentRefutingSources = new Set(refuting.map(e => e.domainClusterId)).size;
+  const strongestSupportVote = supporting.reduce((max, e) => Math.max(max, voteWeight(e)), 0);
+  const strongestRefuteVote = refuting.reduce((max, e) => Math.max(max, voteWeight(e)), 0);
   const total = supportStrength + refuteStrength;
 
   ruleTrace.push({
     rule: 'evidence_tally',
-    detail: `supportStrength=${supportStrength.toFixed(3)} (${independentSupportingSources} independent source(s)), ` +
-      `refuteStrength=${refuteStrength.toFixed(3)} (${independentRefutingSources} independent source(s)), ` +
+    detail: `supportStrength=${supportStrength.toFixed(3)} (${independentSupportingSources} independent source(s), topVote=${strongestSupportVote.toFixed(3)}), ` +
+      `refuteStrength=${refuteStrength.toFixed(3)} (${independentRefutingSources} independent source(s), topVote=${strongestRefuteVote.toFixed(3)}), ` +
       `${evidence.length - supporting.length - refuting.length} NEUTRAL/UNCLEAR item(s) contributed no vote.`
   });
 
@@ -97,76 +99,80 @@ export function decideVerdict(
       `(${thresholds.weakTotalThreshold}). There is not enough reliable evidence to reach a verdict.`;
     confidence = clamp(total * 0.3, 0, 0.35);
     ruleTrace.push({ rule: 'weak_evidence', detail: abstentionReason });
-  } else if (
-    supportStrength >= thresholds.conflictMinEachSide &&
-    refuteStrength >= thresholds.conflictMinEachSide &&
-    Math.min(supportStrength, refuteStrength) / Math.max(supportStrength, refuteStrength) >= thresholds.conflictRatioBand
-  ) {
-    verdict = 'CONFLICTED';
-    abstained = true;
-    abstentionReason = 'Independent sources present comparable strength support and refutation. ' +
-      'The evidence base is genuinely contested, not merely thin.';
-    confidence = clamp(Math.min(0.6, total / 2), 0, 0.6);
-    ruleTrace.push({
-      rule: 'comparable_support_and_refute',
-      detail: `support=${supportStrength.toFixed(3)} vs refute=${refuteStrength.toFixed(3)}, ratio=` +
-        `${(Math.min(supportStrength, refuteStrength) / Math.max(supportStrength, refuteStrength)).toFixed(2)}`
-    });
-  } else if (supportStrength > refuteStrength) {
-    if (independentSupportingSources >= thresholds.minIndependentSourcesForVerdict && supportStrength >= thresholds.strongStrengthThreshold) {
-      verdict = 'VERIFIED';
-      abstained = false;
-      const margin = total > 0 ? (supportStrength - refuteStrength) / total : 0;
-      confidence = clamp(
-        supportStrength * 0.55 + margin * 0.25 + Math.min(1, independentSupportingSources / 3) * 0.2,
-        0.5,
-        0.97
-      );
-      ruleTrace.push({
-        rule: 'support_dominant_and_corroborated',
-        detail: `${independentSupportingSources} independent supporting source(s), strength=${supportStrength.toFixed(3)} >= ` +
-          `threshold ${thresholds.strongStrengthThreshold}.`
-      });
-    } else {
-      verdict = 'INSUFFICIENT_EVIDENCE';
-      abstained = true;
-      abstentionReason = independentSupportingSources < thresholds.minIndependentSourcesForVerdict
-        ? `Only ${independentSupportingSources} independent supporting source(s) found; at least ` +
-          `${thresholds.minIndependentSourcesForVerdict} are required before a VERIFIED verdict is issued.`
-        : `Supporting evidence strength (${supportStrength.toFixed(3)}) did not reach the confidence threshold ` +
-          `(${thresholds.strongStrengthThreshold}).`;
-      confidence = clamp(supportStrength * 0.4, 0, 0.45);
-      ruleTrace.push({ rule: 'support_insufficient_corroboration', detail: abstentionReason });
-    }
   } else {
-    if (independentRefutingSources >= thresholds.minIndependentSourcesForVerdict && refuteStrength >= thresholds.strongStrengthThreshold) {
-      verdict = 'REFUTED';
-      abstained = false;
-      const margin = total > 0 ? (refuteStrength - supportStrength) / total : 0;
-      confidence = clamp(
-        refuteStrength * 0.55 + margin * 0.25 + Math.min(1, independentRefutingSources / 3) * 0.2,
-        0.5,
-        0.97
-      );
-      ruleTrace.push({
-        rule: 'refute_dominant_and_corroborated',
-        detail: `${independentRefutingSources} independent refuting source(s), strength=${refuteStrength.toFixed(3)} >= ` +
-          `threshold ${thresholds.strongStrengthThreshold}.`
-      });
-    } else {
-      verdict = 'INSUFFICIENT_EVIDENCE';
+    const comparableRatio = total === 0
+      ? 0
+      : Math.min(supportStrength, refuteStrength) / Math.max(supportStrength, refuteStrength, 1e-9);
+
+    const genuineConflict =
+      independentSupportingSources >= 1 &&
+      independentRefutingSources >= 1 &&
+      supportStrength >= thresholds.conflictMinEachSide &&
+      refuteStrength >= thresholds.conflictMinEachSide &&
+      strongestSupportVote >= thresholds.conflictMinTopVoteEachSide &&
+      strongestRefuteVote >= thresholds.conflictMinTopVoteEachSide &&
+      comparableRatio >= thresholds.conflictRatioBand;
+
+    if (genuineConflict) {
+      verdict = 'CONFLICTED';
       abstained = true;
-      abstentionReason = independentRefutingSources < thresholds.minIndependentSourcesForVerdict
-        ? `Only ${independentRefutingSources} independent refuting source(s) found; at least ` +
-          `${thresholds.minIndependentSourcesForVerdict} are required before a REFUTED verdict is issued.`
-        : `Refuting evidence strength (${refuteStrength.toFixed(3)}) did not reach the confidence threshold ` +
-          `(${thresholds.strongStrengthThreshold}).`;
-      confidence = clamp(refuteStrength * 0.4, 0, 0.45);
-      ruleTrace.push({ rule: 'refute_insufficient_corroboration', detail: abstentionReason });
+      abstentionReason = 'Independent sources provide material support and material refutation. ' +
+        'The evidence base is contested, so the system abstains from a directional verdict.';
+      confidence = clamp(Math.min(0.72, Math.min(supportStrength, refuteStrength) + comparableRatio * 0.25), 0, 0.72);
+      ruleTrace.push({
+        rule: 'independent_material_conflict',
+        detail: `support=${supportStrength.toFixed(3)} vs refute=${refuteStrength.toFixed(3)}, ratio=${comparableRatio.toFixed(2)}, ` +
+          `topVotes=${strongestSupportVote.toFixed(3)}/${strongestRefuteVote.toFixed(3)}.`
+      });
+    } else if (supportStrength > refuteStrength) {
+      if (independentSupportingSources >= thresholds.minIndependentSourcesForVerdict && supportStrength >= thresholds.strongStrengthThreshold) {
+        verdict = 'VERIFIED';
+        abstained = false;
+        const margin = total > 0 ? (supportStrength - refuteStrength) / total : 0;
+        confidence = clamp(
+          supportStrength * 0.55 + margin * 0.25 + Math.min(1, independentSupportingSources / 3) * 0.2,
+          0.5,
+          0.97
+        );
+        ruleTrace.push({
+          rule: 'support_dominant_and_corroborated',
+          detail: `${independentSupportingSources} independent supporting source(s), strength=${supportStrength.toFixed(3)} >= threshold ${thresholds.strongStrengthThreshold}.`
+        });
+      } else {
+        verdict = 'INSUFFICIENT_EVIDENCE';
+        abstained = true;
+        abstentionReason = independentSupportingSources < thresholds.minIndependentSourcesForVerdict
+          ? `Only ${independentSupportingSources} independent supporting source(s) found; at least ${thresholds.minIndependentSourcesForVerdict} are required before a VERIFIED verdict is issued.`
+          : `Supporting evidence strength (${supportStrength.toFixed(3)}) did not reach the confidence threshold (${thresholds.strongStrengthThreshold}).`;
+        confidence = clamp(supportStrength * 0.4, 0, 0.45);
+        ruleTrace.push({ rule: 'support_insufficient_corroboration', detail: abstentionReason });
+      }
+    } else {
+      if (independentRefutingSources >= thresholds.minIndependentSourcesForVerdict && refuteStrength >= thresholds.strongStrengthThreshold) {
+        verdict = 'REFUTED';
+        abstained = false;
+        const margin = total > 0 ? (refuteStrength - supportStrength) / total : 0;
+        confidence = clamp(
+          refuteStrength * 0.55 + margin * 0.25 + Math.min(1, independentRefutingSources / 3) * 0.2,
+          0.5,
+          0.97
+        );
+        ruleTrace.push({
+          rule: 'refute_dominant_and_corroborated',
+          detail: `${independentRefutingSources} independent refuting source(s), strength=${refuteStrength.toFixed(3)} >= threshold ${thresholds.strongStrengthThreshold}.`
+        });
+      } else {
+        verdict = 'INSUFFICIENT_EVIDENCE';
+        abstained = true;
+        abstentionReason = independentRefutingSources < thresholds.minIndependentSourcesForVerdict
+          ? `Only ${independentRefutingSources} independent refuting source(s) found; at least ${thresholds.minIndependentSourcesForVerdict} are required before a REFUTED verdict is issued.`
+          : `Refuting evidence strength (${refuteStrength.toFixed(3)}) did not reach the confidence threshold (${thresholds.strongStrengthThreshold}).`;
+        confidence = clamp(refuteStrength * 0.4, 0, 0.45);
+        ruleTrace.push({ rule: 'refute_insufficient_corroboration', detail: abstentionReason });
+      }
     }
   }
 
-  // ---- LIAR prior: recorded, capped nudge only, never decisive -----------
   let priorAgreesWithEvidence: boolean | null = null;
   let weightApplied = 0;
   let priorNote = 'No LIAR claim-model prior was supplied for this decision.';
@@ -178,33 +184,26 @@ export function decideVerdict(
       if (priorAgreesWithEvidence) {
         weightApplied = thresholds.priorMaxConfidenceNudge;
         confidence = clamp(confidence + weightApplied, 0, 0.99);
-        priorNote = 'LIAR claim-model prior agreed with the evidence-driven verdict; confidence nudged up by a capped amount.';
+        priorNote = 'LIAR prior agreed with the evidence-driven verdict; confidence was nudged only by a capped amount.';
       } else {
         weightApplied = -thresholds.priorMaxConfidenceNudge / 2;
         confidence = clamp(confidence + weightApplied, 0, 0.99);
-        priorNote = 'LIAR claim-model prior DISAGREED with the evidence-driven verdict. Per policy, the evidence-driven ' +
-          'verdict is retained unchanged in category; only a small confidence penalty was applied, and the ' +
-          'disagreement is recorded here rather than hidden.';
+        priorNote = 'LIAR prior disagreed with the evidence-driven verdict; category was retained and disagreement was recorded.';
         ruleTrace.push({
           rule: 'prior_disagreement_recorded_not_applied',
-          detail: `LIAR prior probability_true=${prior.probabilityTrue.toFixed(3)} (label=${prior.label}) disagreed ` +
-            `with evidence-driven verdict=${verdict}. Verdict was NOT changed by the prior.`
+          detail: `LIAR prior probability_true=${prior.probabilityTrue.toFixed(3)} disagreed with evidence-driven verdict=${verdict}. Verdict was NOT changed by the prior.`
         });
       }
     } else {
       priorAgreesWithEvidence = null;
-      priorNote = 'Evidence-driven decision abstained; the LIAR prior is recorded for transparency but was not used ' +
-        'to force a verdict, per policy.';
+      priorNote = 'Evidence-driven decision abstained; LIAR prior was recorded but not used to force a verdict.';
     }
   }
 
   const prior_signal = makePriorSignal(prior, weightApplied, priorNote);
-
   const rationale = abstained
     ? `${verdict}: ${abstentionReason}`
-    : `${verdict}: evidence from ${verdict === 'VERIFIED' ? independentSupportingSources : independentRefutingSources} ` +
-      `independent source(s) ${verdict === 'VERIFIED' ? 'corroborates' : 'contradicts'} the claim. ` +
-      'This is an evidence-grounded verdict, not a statistical style/linguistic classification.';
+    : `${verdict}: evidence from ${verdict === 'VERIFIED' ? independentSupportingSources : independentRefutingSources} independent source(s) ${verdict === 'VERIFIED' ? 'corroborates' : 'contradicts'} the claim. This is an evidence-grounded verdict, not a statistical style classification.`;
 
   return {
     verdict,
