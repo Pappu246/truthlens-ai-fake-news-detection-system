@@ -1,108 +1,54 @@
-# TruthLens V2 — Known Limitations & Next Milestone
+# TruthLens V2 — Known Limitations & Model Quality Notes
 
-This is an honest limitations list for the first vertical slice. None of
-these are hidden from, or smoothed over in, the evaluation output — see
-`docs/V2_BENCHMARK_PROTOCOL.md` and `data/v2/eval_results.json`.
+This document keeps the remaining limitations explicit. The V2 stack now has optional pretrained inference adapters, but deterministic offline adapters remain the CI-safe default.
 
-## 1. Dense retrieval is a deterministic hashing embedding, not a pretrained model
+## 1. Pretrained embeddings are optional, not the offline default
 
-`server/v2/retrieval/embeddings.ts#HashingNgramEmbeddingModel` builds a
-signed hashing-trick vector over character n-grams. It captures fuzzy /
-sub-word lexical overlap, which is a legitimate complement to exact-token
-BM25 — but it is **not** a pretrained sentence-transformer embedding and will
-not capture synonym-level semantics (e.g. "automobile" vs "car"). This
-design was chosen deliberately so retrieval is 100% reproducible offline,
-requires no model download, and needs no paid API key for local/CI testing —
-a hard constraint of this task.
+`server/v2/retrieval/embeddings.ts` still provides `HashingNgramEmbeddingModel` for deterministic, dependency-free CI. It is not a pretrained semantic encoder and cannot reliably capture synonym-level meaning.
 
-**Next milestone:** swap in a local sentence-embedding model (e.g. an
-ONNX/transformers.js encoder) behind the existing `EmbeddingModel` interface.
-No other retrieval/rerank code needs to change.
+An optional Hugging Face feature-extraction adapter is now available in `server/v2/retrieval/huggingFaceEmbeddingModel.ts`. Enable it with `TRUTHLENS_ENABLE_REMOTE_EMBEDDINGS=true` and `HF_TOKEN`. The model can be overridden with `TRUTHLENS_EMBEDDING_MODEL`.
 
-## 2. Evidence classification is a rule-based lexical adapter, not a pretrained NLI model
+Because remote inference depends on external service availability and rate limits, CI and offline evaluations continue to use the hashing adapter unless explicitly configured otherwise.
 
-`server/v2/nli/heuristicNliAdapter.ts` classifies SUPPORTS/REFUTES/NEUTRAL/
-UNCLEAR using cue-word lexicons, topical token overlap, and the existing
-numeric/temporal consistency checks — not a transformer entailment model.
-This is explicitly disclosed via `modelName`/`modelVersion` on every
-classification (`truthlens-heuristic-nli` / `v0.1.0-rule-based`) so no
-consumer of the API can mistake it for a real NLI model's output.
+## 2. Pretrained NLI is available, but the default fallback remains heuristic
 
-Concretely, this heuristic:
-- Cannot handle negation/scope robustly (`"officials confirmed the claim is
-  false"` is handled via an explicit asymmetric-weighting rule that treats
-  refutation vocabulary as the stronger signal, but more complex negation
-  patterns will still be misread).
-- Cannot detect entailment that requires world knowledge or multi-hop
-  reasoning.
-- Performs worst on the `CONFLICTED` class in the evaluation set (see
-  `docs/V2_BENCHMARK_PROTOCOL.md`) because `CONFLICTED` requires two
-  independent passages to land confidently on *opposite* sides — a heuristic
-  is more likely to end up with one confident side and one `NEUTRAL`/
-  `UNCLEAR` passage instead.
+`server/v2/nli/heuristicNliAdapter.ts` remains the deterministic fallback.
 
-**Next milestone:** swap in a real local entailment model (e.g. a
-DeBERTa/BART-MNLI style cross-encoder run via ONNX) behind the existing
-`NliAdapter` interface. No other classification/decision code needs to
-change; `ClassifiedEvidence.nli.modelName/modelVersion` already exists to
-carry the new model's identity through provenance.
+`server/v2/nli/huggingFaceNliAdapter.ts` adds an opt-in pretrained zero-shot NLI path using Hugging Face Inference Providers. The default model is `facebook/bart-large-mnli`.
 
-## 3. The evaluation fixture set is small, synthetic, and self-consistent — not a benchmark
+This is a material upgrade over cue-word classification, but it is not the same as a dedicated pairwise cross-encoder invocation. The next model-quality step should benchmark a managed or local pairwise NLI model such as a DeBERTa-style cross-encoder against the same held-out claims.
 
-`data/v2/eval_fixtures.json` (56 claims) pairs each claim with a small,
-hand-authored corpus whose language is written to plausibly resemble real
-reporting patterns. It is not scraped from real outlets, and is not a
-world-level or externally validated benchmark. Its purpose is narrowly to
-validate that the pipeline's plumbing (query expansion → retrieval → rerank
-→ classify → aggregate → abstain → provenance) behaves correctly end to end,
-and to give a reproducible number to diff future changes against. See the
-explicit `dataset_type: "DEVELOPMENT_EVALUATION_SET_NOT_A_BENCHMARK"` field in
-the file itself, and the printed banner in `scripts/v2Evaluate.ts`.
+## 3. Conflict detection is stronger, but still rule-based
 
-Because the fixture corpus text is written with the heuristic NLI adapter's
-cue lexicon in mind (it has to be, for a rule-based adapter to be
-testable at all), the evaluation numbers describe **pipeline correctness**,
-not real-world semantic accuracy against arbitrary phrasing. This is called
-out explicitly rather than left implicit.
+The decision policy now looks for independent material evidence on both sides and no longer requires near-perfect symmetry. This is intended to reduce the previously weak `CONFLICTED` recall.
 
-## 4. Live retrieval depends on outbound network access
+However, conflict resolution is still a deterministic aggregation policy, not a learned discourse-reasoning model. Temporal disagreement, source hierarchy, claim scope, and multi-hop dependencies can still create difficult edge cases.
 
-`LiveEvidenceProviderCorpusSource` wraps the existing production
-`evidenceProvider` (Google News RSS + Wikipedia). In network-restricted
-environments (including this development sandbox) it returns zero
-candidates, and the pipeline correctly abstains with `INSUFFICIENT_EVIDENCE`
-rather than fabricating results — this is exercised directly in
-`scripts/v2RouteTests.ts`.
+## 4. The evaluation fixture set is small and synthetic
 
-## 5. Full-text enrichment is implemented but disabled by default
+`data/v2/eval_fixtures.json` contains 56 manually authored fixtures across eight domains. The corpus text is synthetic and intentionally deterministic. The set is useful for regression and engineering comparisons, but it is not a world-level benchmark and should not be treated as evidence of general real-world accuracy.
 
-`server/v2/retrieval/fullTextEnricher.ts` can fetch and extract full article
-bodies (reusing the existing SSRF-safe `safeFetchHtml` and
-`extractArticleFromHtml`), but it is off by default (`enableFullTextEnrichment:
-false`) for the first vertical slice, which runs on headlines/snippets only
-and labels them honestly (`contentType: 'HEADLINE_ONLY' | 'SUMMARY'`) rather
-than pretending a headline is a full article.
+## 5. Live retrieval remains network-dependent
 
-## 6. Calibration is weak in the small evaluation set
+`LiveEvidenceProviderCorpusSource` wraps the existing production evidence provider. Network-restricted environments can return zero candidates, in which case the pipeline abstains rather than inventing evidence.
 
-The evaluation harness's Expected Calibration Error (~0.39 on the 56-fixture
-set) is not low. Confidence is currently a hand-tuned formula
-(`server/v2/decision/decisionPolicy.ts`), not a calibrated probability. A
-future milestone should fit calibration (e.g. Platt scaling, matching the
-existing pattern already used in `server/claimModel.ts`) against a larger,
-independently labelled set.
+## 6. Confidence calibration is still a separate research problem
 
-## Explicitly out of scope for this vertical slice (per task constraints)
+The evaluation harness now reports raw ECE, Brier score, and a held-out temperature-scaling analysis. Runtime confidence is deliberately not recalibrated from the same development fixtures.
 
-Multimodal verification, multilingual support, model retraining, and a
-human-review dashboard were explicitly out of scope for this milestone and
-are not implemented here.
+Before changing production confidence semantics, fit and version a calibration artifact on an independently labelled calibration set and evaluate it on a separate holdout.
 
-## Recommended next milestone (single, scoped increment)
+## 7. Full-text enrichment is still opt-in
 
-Swap the two rule-based adapters (`EmbeddingModel`, `NliAdapter`) for real
-local pretrained models behind their existing interfaces, re-run
-`npm run eval:v2` unchanged, and compare the new numbers against
-`data/v2/eval_results.json` from this slice — without touching retrieval
-fusion, reranking, decision policy, or provenance, which should remain
-stable across that swap.
+Full-text extraction is implemented but disabled by default. This keeps the first research slice deterministic and limits network/SSRF exposure.
+
+## 8. Multimodal, multilingual and continual-learning capabilities are not part of this milestone
+
+These remain out of scope for the current V2 research slice.
+
+## Current recommended research path
+
+1. Benchmark the optional pretrained embedding + NLI adapters on an external, held-out real-world dataset.
+2. Replace the zero-shot NLI bridge with a dedicated pairwise cross-encoder adapter if the benchmark shows a measurable gain.
+3. Fit a versioned confidence calibrator on a separate calibration split.
+4. Only then consider changing the production evidence engine or merging V2 behavior into it.
