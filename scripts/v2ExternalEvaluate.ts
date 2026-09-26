@@ -32,6 +32,7 @@ import {
   NLI_MODEL_VERSION
 } from '../server/v2/ml/modelManifest';
 import { PretrainedNliAdapter } from '../server/v2/nli/pretrainedNliAdapter';
+import { buildEvidenceInput, EvidencePresentation } from '../server/v2/evidenceContext';
 
 const DATASET_NOTE =
   'External evaluation on the untouched SciFact development split. SciFact scientific abstracts differ from live-news web evidence; synthetic .test document locators represent independent papers and are not real URLs.';
@@ -226,6 +227,10 @@ async function main(): Promise<void> {
   const nliModelId = arg('nli-model-id') || NLI_MODEL_NAME;
   const nliDtype = (arg('nli-dtype') || 'q8') as 'q8' | 'fp32' | 'fp16';
   if (!['q8', 'fp32', 'fp16'].includes(nliDtype)) throw new Error(`Unsupported --nli-dtype=${nliDtype}`);
+  const evidencePresentation = (arg('evidence-presentation') || 'raw') as EvidencePresentation;
+  if (evidencePresentation !== 'raw' && evidencePresentation !== 'enriched') {
+    throw new Error(`Unsupported --evidence-presentation=${evidencePresentation}; use raw or enriched.`);
+  }
   const nliOnnx = path.join(modelDir, nliModelId, 'onnx', modelFileName(nliDtype));
   const required = [
     path.join(modelDir, nliModelId, 'config.json'),
@@ -315,14 +320,23 @@ async function main(): Promise<void> {
         const passage = rationale.sentences.map(index => document.abstract[index]).filter(Boolean).join(' ');
         if (!passage) throw new Error(`SciFact claim ${claim.id}/${docId}: empty gold rationale ${rationaleIndex}`);
         const goldLabel: NliGold = rationale.label === 'SUPPORT' ? 'SUPPORTS' : 'REFUTES';
-        const prediction = nliAdapter.classify(builtClaim, passage);
+        const goldCandidate = {
+          id: String(docId), url: `https://scifact-${docId}.test/abstract`, title: document.title,
+          snippet: passage, contentType: 'SUMMARY' as const, publisher: `SciFact paper ${docId}`,
+          publishedAt: null, retrievedAt: FROZEN_EVALUATION_NOW,
+          retrievalMethod: 'scifact_gold_rationale', canonicalUrl: `https://scifact-${docId}.test/abstract`,
+          foundBy: [], lexicalScore: 0, denseScore: 0, fusionScore: 0
+        };
+        const presentedPassage = buildEvidenceInput(builtClaim, goldCandidate, evidencePresentation);
+        const prediction = nliAdapter.classify(builtClaim, presentedPassage);
         passagePredictions.push(prediction.label);
         passageGold.push(goldLabel);
         passageCalibration.push({ correct: prediction.label === goldLabel, confidence: prediction.confidence });
         passageRows.push({
           claim_id: claim.id, doc_id: Number(docId), rationale_index: rationaleIndex,
           source: 'gold_rationale', gold: goldLabel, prediction: prediction.label,
-          confidence: prediction.confidence, passage
+          confidence: prediction.confidence, raw_passage: passage, presented_passage: presentedPassage,
+          evidence_presentation: evidencePresentation
         });
       }
     }
@@ -334,14 +348,23 @@ async function main(): Promise<void> {
       const document = docsById.get(String(citedId));
       if (!document) throw new Error(`SciFact claim ${claim.id}: missing cited document ${citedId}`);
       const passage = document.abstract.join(' ');
-      const prediction = nliAdapter.classify(builtClaim, passage);
+      const neutralCandidate = {
+        id: String(citedId), url: `https://scifact-${citedId}.test/abstract`, title: document.title,
+        snippet: passage, contentType: 'SUMMARY' as const, publisher: `SciFact paper ${citedId}`,
+        publishedAt: null, retrievedAt: FROZEN_EVALUATION_NOW,
+        retrievalMethod: 'scifact_cited_no_evidence', canonicalUrl: `https://scifact-${citedId}.test/abstract`,
+        foundBy: [], lexicalScore: 0, denseScore: 0, fusionScore: 0
+      };
+      const presentedPassage = buildEvidenceInput(builtClaim, neutralCandidate, evidencePresentation);
+      const prediction = nliAdapter.classify(builtClaim, presentedPassage);
       passagePredictions.push(prediction.label);
       passageGold.push('NEUTRAL');
       passageCalibration.push({ correct: prediction.label === 'NEUTRAL', confidence: prediction.confidence });
       passageRows.push({
         claim_id: claim.id, doc_id: citedId, rationale_index: null,
         source: 'cited_no_evidence', gold: 'NEUTRAL', prediction: prediction.label,
-        confidence: prediction.confidence, passage
+        confidence: prediction.confidence, raw_passage: passage, presented_passage: presentedPassage,
+        evidence_presentation: evidencePresentation
       });
     }
   }
@@ -376,6 +399,7 @@ async function main(): Promise<void> {
       priorOverride: { available: false, probabilityTrue: null, label: null, modelVersion: null },
       minCandidatesExpectedWarning: 0,
       evaluationDatasetNote: DATASET_NOTE,
+      evidencePresentation,
       nowMs: FROZEN_EVALUATION_NOW_MS
     });
     const predicted = result.provenance.final_verdict;
@@ -477,7 +501,9 @@ async function main(): Promise<void> {
       evidence_k: EVIDENCE_K,
       high_confidence_threshold: HC_THRESHOLD,
       independence_mapping: 'one reserved .test domain per SciFact paper',
-      prior: 'disabled/unavailable so the LIAR prior cannot affect external calibration'
+      prior: 'disabled/unavailable so the LIAR prior cannot affect external calibration',
+      evidence_presentation: evidencePresentation,
+      presentation_contract: 'raw and enriched runs must use identical claims, corpus, retrieval, ranking, NLI, thresholds, policy, and frozen clock; only NLI evidence presentation differs'
     },
     model: {
       nli: {

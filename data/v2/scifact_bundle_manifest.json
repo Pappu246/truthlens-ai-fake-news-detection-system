@@ -1,0 +1,29 @@
+{
+  "bundle_version": "truthlens-scifact-dev-v1",
+  "dataset": "SciFact",
+  "split": "dev",
+  "source": {
+    "repository": "vidi-deshp12/scifact-claim-verification",
+    "commit": "051b5245aa9d4b98c1302920cc5e4958b9e30ef9",
+    "description": "Pinned upstream mirror used by the frozen V2 external evaluation protocol"
+  },
+  "files": [
+    {
+      "path": "claims_dev.jsonl",
+      "bytes": null,
+      "sha256": "86f0435d08fdb65d1aa41d1472684f57e6e71930626497bdf4d7a9ec1a632217"
+    },
+    {
+      "path": "corpus.jsonl",
+      "bytes": null,
+      "sha256": "b8d6c89624cb2ed74dee8938effc4f5d8bd2086887880af8110d64be4ceade62"
+    }
+  ],
+  "expected_records": {
+    "claims": 300,
+    "corpus_documents": 5183,
+    "gold_passage_judgments": 469
+  },
+  "install": "npm run external:v2-data:offline -- --source=/absolute/path/to/the/two-exact-files-or-directory",
+  "policy": "The importer copies only files whose SHA-256 matches this manifest; it never downloads, regenerates, edits, or silently replaces benchmark inputs."
+}
