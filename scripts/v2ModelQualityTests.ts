@@ -130,10 +130,14 @@ async function main(): Promise<void> {
 
   console.log('\n3. Hugging Face NLI adapter contract works without network');
   {
-    const fakeFetch: typeof fetch = (async () => new Response(JSON.stringify({
-      labels: ['supports the claim', 'refutes the claim', 'does not determine the claim'],
-      scores: [0.88, 0.08, 0.04]
-    }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as Response;
+    let capturedBody = '';
+    const fakeFetch: typeof fetch = (async (_url, init) => {
+      capturedBody = String(init?.body ?? '');
+      return new Response(JSON.stringify({
+        labels: ['supports the claim', 'refutes the claim', 'does not determine the claim'],
+        scores: [0.88, 0.08, 0.04]
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }) as Response;
 
     const adapter = new HuggingFaceNliAdapter({
       token: 'test-token',
@@ -152,13 +156,26 @@ async function main(): Promise<void> {
     check('remote adapter maps support label', result.label === 'SUPPORTS');
     check('remote adapter exposes model identity', result.modelName === 'facebook/bart-large-mnli');
     check('remote adapter preserves probability ordering', result.scores.supports > result.scores.refutes);
+    check('remote adapter sends the actual claim in the NLI hypothesis', capturedBody.includes('The office confirmed the number.'));
   }
 
   console.log('\n4. Hugging Face embedding adapter contract works without network');
   {
-    const fakeFetch: typeof fetch = (async () => new Response(JSON.stringify([
-      [1, 2, 3, 4]
-    ]), { status: 200, headers: { 'Content-Type': 'application/json' } })) as Response;
+    let embeddingRequestInputs: unknown = null;
+    const fakeFetch: typeof fetch = (async (_url, init) => {
+      const body = JSON.parse(String(init?.body ?? '{}')) as { inputs?: unknown };
+      embeddingRequestInputs = body.inputs;
+      const count = Array.isArray(body.inputs) ? body.inputs.length : 1;
+      const vectors = Array.from({ length: count }, (_value, index) => {
+        if (index === 0) return [1, 0, 0, 0];
+        if (index === 1) return [1, 0, 0, 0];
+        return [0.5, 0.5, 0, 0];
+      });
+      return new Response(JSON.stringify(Array.isArray(body.inputs) ? vectors : [1, 2, 3, 4]), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }) as Response;
 
     const model = new HuggingFaceEmbeddingModel({
       token: 'test-token',
@@ -177,6 +194,7 @@ async function main(): Promise<void> {
 
     const vector = await model.embed('semantic test');
     check('remote embedding returns ranked search results', results.length === 2);
+    check('remote embedding batches query + documents in one request', Array.isArray(embeddingRequestInputs) && embeddingRequestInputs.length === 3);
     check('remote embedding returns a numeric vector', vector.length === 4 && vector.every(Number.isFinite));
     check('dense search scores are normalised', results.every(item => item.score >= 0 && item.score <= 1));
   }
