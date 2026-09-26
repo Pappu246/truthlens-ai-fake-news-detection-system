@@ -49,7 +49,15 @@ function flattenAndMean(input: unknown): number[] {
 }
 
 function parseBatchVectors(input: unknown, expectedCount: number): number[][] {
-  if (!Array.isArray(input) || input.length !== expectedCount) return [];
+  if (!Array.isArray(input) || input.length === 0) return [];
+
+  // Providers may return a single vector or token-level matrix for one input.
+  if (expectedCount === 1) {
+    const vector = flattenAndMean(input);
+    return vector.length > 0 ? [normalise(vector)] : [];
+  }
+
+  if (input.length !== expectedCount) return [];
   const vectors = input.map(item => {
     const vector = flattenAndMean(item);
     return vector.length > 0 ? normalise(vector) : [];
