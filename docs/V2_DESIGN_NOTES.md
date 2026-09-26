@@ -82,3 +82,68 @@ by sanitising `title`/`publisher` at the same point in
 called out here because it is exactly the kind of gap a security-focused
 review should be looking for, and it was caught by the required test
 scenario rather than assumed away.
+
+---
+
+# V2.1 notes — real pretrained adapters behind frozen interfaces
+
+## How real async models fit the frozen SYNC adapter contracts
+
+`EmbeddingModel.embed()` and `NliAdapter.classify()` are synchronous, and the
+V2.1 contract explicitly forbids rewriting them. ONNX Runtime inference in
+JavaScript is async, so V2.1 runs both models in a single dedicated
+`worker_threads` worker (`server/v2/ml/mlWorker.cjs`, plain CommonJS so no
+bundler/tsx hook is needed) and exposes a blocking call through
+SharedArrayBuffer + `Atomics.wait` (`server/v2/ml/mlWorkerClient.ts`) —
+legal on Node's main thread, bounded by an explicit timeout, fails closed
+with `ModelUnavailableError` if the worker dies. Alternatives rejected:
+rewriting the pipeline to async (forbidden), per-call process spawning
+(~100ms+ overhead × thousands of calls), and `deasync`-style native event-loop
+spinning (fragile across Node builds). A side benefit: an ONNX crash kills
+an isolated worker, never the API process.
+
+## Why pytest-style "fixture mode" instead of making every test download models
+
+The contract requires lightweight deterministic CI AND real-model validation.
+`TRUTHLENS_V2_MODEL_MODE=fixture` pins the V2 research adapters (they remain
+honest, named code) for `test:v2`/`test:v2-route`; `test:v2-models` — the
+real-adapter suite — fails loudly with remediation when sealed files are
+absent. "Silent fallback to heuristic inference" would violate the milestone
+requirements, so the resolver (`server/v2/ml/modelResolution.ts`) throws in
+exactly that situation instead.
+
+## Why the NLI adapter has policies at all (are they "rules"?)
+
+The requirement bans *hardcoded lexical rules as the primary NLI decision*.
+Both adapter policies are model-derived:
+(1) two-pass hypothesis selection only CHOOSES which claim reading to score
+(claim-as-stated vs attribution-stripped content proposition) — both scores
+come from the cross-encoder; and (2) the relatedness gate uses the other
+pretrained model (bi-encoder cosine) to keep the cross-encoder on its
+trained distribution (MNLI has no "unrelated pair" semantics and
+over-predicts contradiction off-distribution — measured, not hypothetical).
+The threshold (0.15) was set from unrelated-vs-related cosine separation
+(~ −0.04 vs ~0.5 in the instrumented runs), not from fixture outcomes.
+
+## Why the fixture-era accuracy number was refused as a tuning target
+
+The 56-fixture dev set's corpus language shares cue vocabulary with the
+heuristic adapter. Tuning the pretrained adapter/thresholds toward that set
+would be benchmark leakage. V2.1 therefore ships the adapter as designed and
+reports the raw regression (accuracy −42.8 pt, abstention +41.1 pt,
+ECE −0.041 better, verdict precision still 1.00) in
+`docs/V2_BENCHMARK_PROTOCOL.md`, with per-fixture mechanisms. The correct
+remedy — a fact-verification-trained cross-encoder (MNLI+FEVER family) —
+is the proposed next milestone, queued behind the new sealed-provisioning
+machinery (`docs/V2_MODELS.md`).
+
+## Why model bytes come from pinned git-blob mirrors
+
+This project's sandbox/CI cannot reach huggingface.co. Files are fetched by
+exact git blob SHA-1 at pinned mirror commits (content-addressed), then
+re-verified against sealed size + SHA-256 in
+`server/v2/ml/modelManifest.ts`; the embedding ONNX blob is byte-identical
+across two independent mirrors (cross-attestation). The download script
+still tries the canonical Hugging Face repo first when reachable. The npm
+tarball alternative (`@xcidos/genesis-memory-model`) was rejected as sole
+source: only one unsigned publisher's copy, no independent attestation.
