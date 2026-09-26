@@ -19,6 +19,7 @@ import { ExtractedClaim } from '../../../src/types';
 import { normalizeUrl } from '../../security/urlValidator';
 import { bm25Search } from './bm25';
 import { defaultEmbeddingModel, denseSearch, EmbeddingModel } from './embeddings';
+import { createConfiguredEmbeddingModel } from './huggingFaceEmbeddingModel';
 import { CorpusSource } from './corpusSource';
 import { ExpandedQuerySet, RawDocument, RetrievedCandidate, RetrievalChannel } from '../types';
 
@@ -56,7 +57,7 @@ export async function hybridRetrieve(
   corpus: CorpusSource,
   options?: HybridRetrievalOptions
 ): Promise<HybridRetrievalResult> {
-  const embeddingModel = options?.embeddingModel ?? defaultEmbeddingModel;
+  const embeddingModel = options?.embeddingModel ?? createConfiguredEmbeddingModel() ?? defaultEmbeddingModel;
   const perQueryTopK = options?.perQueryTopK ?? 15;
   const finalTopK = options?.finalTopK ?? 12;
 
