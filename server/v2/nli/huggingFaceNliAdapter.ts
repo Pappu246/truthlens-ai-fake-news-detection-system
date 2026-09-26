@@ -36,6 +36,10 @@ const CANDIDATE_LABELS = [
   'does not determine the claim'
 ] as const;
 
+function claimForHypothesis(claim: ExtractedClaim): string {
+  return claim.normalizedText.replace(/["\\]/g, ' ').trim().slice(0, 800);
+}
+
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
 }
@@ -87,6 +91,7 @@ export class HuggingFaceNliAdapter implements NliAdapter {
     _publishedAt?: string | null
   ): Promise<NliClassification> {
     const controller = new AbortController();
+    const claimText = claimForHypothesis(claim);
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
 
     try {
@@ -100,7 +105,7 @@ export class HuggingFaceNliAdapter implements NliAdapter {
           inputs: passage,
           parameters: {
             candidate_labels: [...CANDIDATE_LABELS],
-            hypothesis_template: `This passage {}.`,
+            hypothesis_template: `The passage {}: "${claimText}".`,
             multi_label: false
           }
         }),
@@ -162,7 +167,7 @@ export class HuggingFaceNliAdapter implements NliAdapter {
         confidence,
         modelName: this.modelName,
         modelVersion: this.modelVersion,
-        basis: `HF zero-shot NLI model=${this.modelName}; top=${top.label}; confidence=${confidence.toFixed(3)}; margin=${margin.toFixed(3)}`
+        basis: `HF zero-shot NLI model=${this.modelName}; claim-aware hypothesis; top=${top.label}; confidence=${confidence.toFixed(3)}; margin=${margin.toFixed(3)}`
       };
     } finally {
       clearTimeout(timeout);
