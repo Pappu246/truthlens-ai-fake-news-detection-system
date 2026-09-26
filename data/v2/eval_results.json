@@ -1,0 +1,51 @@
+{
+  "dataset": "truthlens_v2_dev_eval_fixtures",
+  "dataset_type": "DEVELOPMENT_EVALUATION_SET_NOT_A_BENCHMARK",
+  "n_fixtures": 56,
+  "verdict_accuracy": 0.8392857142857143,
+  "verdict_macro_f1": 0.7344810595441378,
+  "per_class": [
+    {
+      "label": "VERIFIED",
+      "precision": 1,
+      "recall": 0.9411764705882353,
+      "f1": 0.9696969696969697,
+      "support": 17
+    },
+    {
+      "label": "REFUTED",
+      "precision": 1,
+      "recall": 0.9333333333333333,
+      "f1": 0.9655172413793104,
+      "support": 15
+    },
+    {
+      "label": "INSUFFICIENT_EVIDENCE",
+      "precision": 0.64,
+      "recall": 1,
+      "f1": 0.7804878048780487,
+      "support": 16
+    },
+    {
+      "label": "CONFLICTED",
+      "precision": 1,
+      "recall": 0.125,
+      "f1": 0.2222222222222222,
+      "support": 8
+    }
+  ],
+  "evidence_recall_at_5": 1,
+  "evidence_recall_at_5_coverage_n": 32,
+  "evidence_precision": 1,
+  "high_confidence_precision": {
+    "confidenceThreshold": 0.75,
+    "coverage": 0.48214285714285715,
+    "precisionAtThreshold": 1,
+    "nAboveThreshold": 27,
+    "nTotal": 56
+  },
+  "abstention_rate": 0.4642857142857143,
+  "calibration_ece": 0.39435714285714285,
+  "generated_at": "2026-09-26T16:16:54.177Z",
+  "note": "Development/evaluation harness for the first vertical slice, not a world-level benchmark."
+}
