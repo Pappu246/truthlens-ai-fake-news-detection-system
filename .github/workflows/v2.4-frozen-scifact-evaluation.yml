@@ -1,0 +1,191 @@
+name: V2.4 Frozen SciFact Raw Enriched Evaluation
+
+on:
+  push:
+    branches:
+      - assistant/v2.4-run-external-20260927
+
+permissions:
+  contents: read
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout frozen V2.4 code
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Download exact V2.4 artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          rm -rf /tmp/truthlens-v2-artifacts
+          mkdir -p /tmp/truthlens-v2-artifacts/scifact
+          mkdir -p models/v2/Xenova/all-MiniLM-L6-v2/onnx
+          mkdir -p models/v2/Xenova/nli-deberta-v3-xsmall/onnx
+
+          curl --fail --retry 4 --retry-all-errors -L "https://raw.githubusercontent.com/vidi-deshp12/scifact-claim-verification/051b5245aa9d4b98c1302920cc5e4958b9e30ef9/data/claims_dev.jsonl" -o /tmp/truthlens-v2-artifacts/scifact/claims_dev.jsonl
+          curl --fail --retry 4 --retry-all-errors -L "https://raw.githubusercontent.com/vidi-deshp12/scifact-claim-verification/051b5245aa9d4b98c1302920cc5e4958b9e30ef9/data/corpus.jsonl" -o /tmp/truthlens-v2-artifacts/scifact/corpus.jsonl
+
+          MINI="https://raw.githubusercontent.com/Sagesheep/NarrativeEngine-P/463cdd7853954fb904e8bddf863001ae61726796/mobile/public/models/Xenova/all-MiniLM-L6-v2"
+          curl --fail --retry 4 --retry-all-errors -L "$MINI/onnx/model_quantized.onnx" -o models/v2/Xenova/all-MiniLM-L6-v2/onnx/model_quantized.onnx
+          curl --fail --retry 4 --retry-all-errors -L "$MINI/tokenizer.json" -o models/v2/Xenova/all-MiniLM-L6-v2/tokenizer.json
+          curl --fail --retry 4 --retry-all-errors -L "$MINI/tokenizer_config.json" -o models/v2/Xenova/all-MiniLM-L6-v2/tokenizer_config.json
+          curl --fail --retry 4 --retry-all-errors -L "$MINI/config.json" -o models/v2/Xenova/all-MiniLM-L6-v2/config.json
+          curl --fail --retry 4 --retry-all-errors -L "$MINI/vocab.txt" -o models/v2/Xenova/all-MiniLM-L6-v2/vocab.txt
+          curl --fail --retry 4 --retry-all-errors -L "$MINI/special_tokens_map.json" -o models/v2/Xenova/all-MiniLM-L6-v2/special_tokens_map.json
+
+          NLI="https://raw.githubusercontent.com/ElicoftZ/CotoLyrics-alpha/487f0c6d1b2ec41ef8e7c1c2266515a2caeb9738/models/Xenova/nli-deberta-v3-xsmall"
+          curl --fail --retry 4 --retry-all-errors -L "$NLI/onnx/model_quantized.onnx" -o models/v2/Xenova/nli-deberta-v3-xsmall/onnx/model_quantized.onnx
+          curl --fail --retry 4 --retry-all-errors -L "$NLI/tokenizer.json" -o models/v2/Xenova/nli-deberta-v3-xsmall/tokenizer.json
+          curl --fail --retry 4 --retry-all-errors -L "$NLI/tokenizer_config.json" -o models/v2/Xenova/nli-deberta-v3-xsmall/tokenizer_config.json
+          curl --fail --retry 4 --retry-all-errors -L "$NLI/config.json" -o models/v2/Xenova/nli-deberta-v3-xsmall/config.json
+          curl --fail --retry 4 --retry-all-errors -L "$NLI/added_tokens.json" -o models/v2/Xenova/nli-deberta-v3-xsmall/added_tokens.json
+          curl --fail --retry 4 --retry-all-errors -L "$NLI/special_tokens_map.json" -o models/v2/Xenova/nli-deberta-v3-xsmall/special_tokens_map.json
+
+      - name: Verify frozen artifacts before evaluation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+
+          expected = {
+              "/tmp/truthlens-v2-artifacts/scifact/claims_dev.jsonl": "86f0435d08fdb65d1aa41d1472684f57e6e71930626497bdf4d7a9ec1a632217",
+              "/tmp/truthlens-v2-artifacts/scifact/corpus.jsonl": "b8d6c89624cb2ed74dee8938effc4f5d8bd2086887880af8110d64be4ceade62",
+              "models/v2/Xenova/all-MiniLM-L6-v2/onnx/model_quantized.onnx": "afdb6f1a0e45b715d0bb9b11772f032c399babd23bfc31fed1c170afc848bdb1",
+              "models/v2/Xenova/all-MiniLM-L6-v2/tokenizer.json": "da0e79933b9ed51798a3ae27893d3c5fa4a201126cef75586296df9b4d2c62a0",
+              "models/v2/Xenova/all-MiniLM-L6-v2/tokenizer_config.json": "9261e7d79b44c8195c1cada2b453e55b00aeb81e907a6664974b4d7776172ab3",
+              "models/v2/Xenova/all-MiniLM-L6-v2/config.json": "7135149f7cffa1a573466c6e4d8423ed73b62fd2332c575bf738a0d033f70df7",
+              "models/v2/Xenova/all-MiniLM-L6-v2/vocab.txt": "07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3",
+              "models/v2/Xenova/all-MiniLM-L6-v2/special_tokens_map.json": "b6d346be366a7d1d48332dbc9fdf3bf8960b5d879522b7799ddba59e76237ee3",
+              "models/v2/Xenova/nli-deberta-v3-xsmall/onnx/model_quantized.onnx": "3fac2500c45c75af42c7711de0d1b93d59577456100208be0dc1f9e8811946b6",
+              "models/v2/Xenova/nli-deberta-v3-xsmall/tokenizer.json": "a86f883318afa11c8c10466f1bf4efaeb6ded28a52cbe57217a8fa0d0a2a87df",
+              "models/v2/Xenova/nli-deberta-v3-xsmall/tokenizer_config.json": "d8d3bb123b99317634d5ee3d1d2d8b2ddb01510a0654687fc2639a5347a7291f",
+              "models/v2/Xenova/nli-deberta-v3-xsmall/config.json": "ec0bd14cc28640326474399cd61d38ccd52b64900228799d0f81debda8c4bc53",
+              "models/v2/Xenova/nli-deberta-v3-xsmall/added_tokens.json": "dc046d04c9b0ada7ae6f1dc89c465801799acdf0c9a6aab8c15a1b2d5ca4e91f",
+              "models/v2/Xenova/nli-deberta-v3-xsmall/special_tokens_map.json": "311de3f4eed9d76a43bf0d71f10e62e086ca65ccce9f15d5da0d2098bf519ecc",
+          }
+
+          def sha256(p):
+              h = hashlib.sha256()
+              with open(p, "rb") as f:
+                  for chunk in iter(lambda: f.read(1024*1024), b""):
+                      h.update(chunk)
+              return h.hexdigest()
+
+          for path, want in expected.items():
+              got = sha256(path)
+              assert got == want, (path, got, want)
+
+          claims_path = Path("/tmp/truthlens-v2-artifacts/scifact/claims_dev.jsonl")
+          corpus_path = Path("/tmp/truthlens-v2-artifacts/scifact/corpus.jsonl")
+          claims = [json.loads(x) for x in claims_path.read_text().splitlines() if x.strip()]
+          corpus = [json.loads(x) for x in corpus_path.read_text().splitlines() if x.strip()]
+
+          evaluator_gold = 0
+          for claim in claims:
+              evidence = claim.get("evidence", {})
+              evaluator_gold += sum(len(rationales) for rationales in evidence.values())
+              evaluator_gold += sum(
+                  1 for cited_id in claim.get("cited_doc_ids", [])
+                  if str(cited_id) not in evidence
+              )
+
+          assert len(claims) == 300, len(claims)
+          assert len(corpus) == 5183, len(corpus)
+          assert evaluator_gold == 469, evaluator_gold
+
+          print("Artifact verification: PASS")
+          print("claims=300")
+          print("corpus=5183")
+          print("evaluator-compatible gold passages=469")
+          PY
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Import exact SciFact bundle
+        run: |
+          npm run external:v2-data:offline -- --source=/tmp/truthlens-v2-artifacts/scifact
+
+      - name: Verify sealed model stack
+        env:
+          TRUTHLENS_V2_MODEL_MODE: pretrained
+        run: npm run test:v2-models
+
+      - name: Run frozen raw evaluation
+        env:
+          TRUTHLENS_V2_MODEL_MODE: pretrained
+        run: |
+          mkdir -p artifacts/v2-review
+          npm run eval:v2-external -- \
+            --evidence-presentation=raw \
+            --output=artifacts/v2-review/external-scifact-xsmall-raw.json \
+            2>&1 | tee artifacts/v2-review/raw-evaluation.log
+
+      - name: Run frozen enriched evaluation
+        env:
+          TRUTHLENS_V2_MODEL_MODE: pretrained
+        run: |
+          npm run eval:v2-external -- \
+            --evidence-presentation=enriched \
+            --output=artifacts/v2-review/external-scifact-xsmall-enriched.json \
+            2>&1 | tee artifacts/v2-review/enriched-evaluation.log
+
+      - name: Produce exact raw-versus-enriched delta report
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          raw = json.loads(Path("artifacts/v2-review/external-scifact-xsmall-raw.json").read_text())
+          enr = json.loads(Path("artifacts/v2-review/external-scifact-xsmall-enriched.json").read_text())
+
+          keys = [
+              ("metrics","accuracy"),
+              ("metrics","macro_f1"),
+              ("metrics","nli_accuracy"),
+              ("metrics","nli_f1"),
+              ("metrics","evidence_recall_at_5"),
+              ("metrics","evidence_precision_at_5"),
+              ("metrics","high_confidence_precision"),
+              ("metrics","high_confidence_coverage"),
+              ("metrics","coverage"),
+              ("metrics","abstention"),
+              ("metrics","ece"),
+          ]
+
+          lines = ["TRUTHLENS V2.4 RAW vs ENRICHED — EXACT DELTAS", ""]
+          for section, key in keys:
+              rv = raw[section][key]
+              ev = enr[section][key]
+              lines.append(f"{key}: raw={rv!r} enriched={ev!r} delta={ev-rv:+.12f}")
+
+          lines.append("")
+          lines.append(f"raw_nli_gold_passages={raw['metrics']['nli_gold_passages']}")
+          lines.append(f"enriched_nli_gold_passages={enr['metrics']['nli_gold_passages']}")
+          lines.append(f"raw_runtime_seconds={raw['resources']['total_runtime_seconds']}")
+          lines.append(f"enriched_runtime_seconds={enr['resources']['total_runtime_seconds']}")
+          Path("artifacts/v2-review/raw_vs_enriched_delta.txt").write_text("\n".join(lines) + "\n")
+          print("\n".join(lines))
+          PY
+
+      - name: Upload frozen evaluation results
+        uses: actions/upload-artifact@v4
+        with:
+          name: truthlens-v2.4-scifact-evaluation
+          path: artifacts/v2-review
+          if-no-files-found: error
+          retention-days: 7
