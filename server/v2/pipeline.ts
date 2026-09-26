@@ -28,6 +28,7 @@ import { sanitiseUntrustedEvidence } from '../verification/evidenceEngine';
 export interface V2PipelineOptions {
   corpus?: CorpusSource;
   nliAdapter?: NliAdapter;
+  nliConcurrency?: number;
   retrieval?: HybridRetrievalOptions;
   thresholds?: DecisionThresholds;
   enableFullTextEnrichment?: boolean;
@@ -57,6 +58,28 @@ function lookupPrior(claimText: string): RawPriorInput {
 function resolveNliAdapter(explicit?: NliAdapter): NliAdapter {
   if (explicit) return explicit;
   return createConfiguredNliAdapter() ?? defaultNliAdapter;
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T) => Promise<R>
+): Promise<R[]> {
+  if (items.length === 0) return [];
+  const results = new Array<R>(items.length);
+  let cursor = 0;
+
+  async function worker(): Promise<void> {
+    while (true) {
+      const index = cursor++;
+      if (index >= items.length) return;
+      results[index] = await mapper(items[index]);
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(Math.max(1, concurrency), items.length) }, () => worker());
+  await Promise.all(workers);
+  return results;
 }
 
 export async function verifyClaimV2(claimText: string, options?: V2PipelineOptions): Promise<V2VerificationResult> {
@@ -127,14 +150,16 @@ export async function verifyClaimV2(claimText: string, options?: V2PipelineOptio
 
   const reranked = rerankEvidence(candidates);
 
-  const classified: ClassifiedEvidence[] = await Promise.all(
-    reranked.map(async r => {
+  const classified: ClassifiedEvidence[] = await mapWithConcurrency(
+    reranked,
+    options?.nliConcurrency ?? (nliAdapter.modelName === defaultNliAdapter.modelName ? reranked.length : 4),
+    async r => {
       const passage = passageFor(r);
       const nli = await nliAdapter.classify(claim, passage, r.publishedAt || undefined);
       const safeTitle = sanitiseUntrustedEvidence(r.title || '', 240).text;
       const safePublisher = sanitiseUntrustedEvidence(r.publisher || 'Unknown source', 120).text;
       return { ...r, title: safeTitle, publisher: safePublisher, passage, nli };
-    })
+    }
   );
 
   const prior = options?.priorOverride ?? lookupPrior(text);
