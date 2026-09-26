@@ -177,8 +177,11 @@ export const InputSection: React.FC<InputSectionProps> = ({
   // Helpers to compute content-source from a live-news item/fallback state
   const rssBodyText = (item: NewsArticle): string =>
     (item.content || item.summary || item.description || '').trim();
-  const isSubstantiveRssDescription = (text: string): boolean => {
-    // A substantive description is >= 40 words; otherwise treat as headline-only
+  const isSubstantiveRssDescription = (text: string, item?: NewsArticle): boolean => {
+    // The server labels every feed item at the source (rssProvider.labelFeedContent).
+    // Trust that label when it is present so the UI and the API can never disagree;
+    // fall back to the same >= 40 word rule for older payloads.
+    if (item?.content_source) return item.content_source === 'RSS_SUMMARY_ONLY';
     const words = text.split(/\s+/).filter(Boolean);
     return words.length >= 40;
   };
@@ -196,7 +199,7 @@ export const InputSection: React.FC<InputSectionProps> = ({
     // label RSS_SUMMARY_ONLY vs HEADLINE_ONLY.
     if (!item.url || !item.url.trim()) {
       const rssText = rssBodyText(item);
-      const substantive = isSubstantiveRssDescription(rssText);
+      const substantive = isSubstantiveRssDescription(rssText, item);
       const fallbackContent = substantive ? `${item.title}\n\n${rssText}` : item.title;
       const warnings: string[] = [];
       let contentSource: ContentSource;
@@ -267,7 +270,7 @@ export const InputSection: React.FC<InputSectionProps> = ({
 
       // Graceful degradation: use RSS description (data contract) — never fabricate body text.
       const rssText = rssBodyText(item);
-      const substantive = isSubstantiveRssDescription(rssText);
+      const substantive = isSubstantiveRssDescription(rssText, item);
 
       let contentSource: ContentSource;
       let warnings: string[] = [];

@@ -4,6 +4,31 @@ import { FetchNewsOptions, NewsFeedConfig, NewsProvider } from './types';
 import { normalizeUrl } from '../security/urlValidator';
 
 // Legitimate, high-reputation public news RSS feeds
+/**
+ * Minimum word count for a feed description to be treated as usable prose.
+ * Mirrors the client-side threshold in src/components/InputSection.tsx so the
+ * server and the UI can never disagree about what an item actually contains.
+ */
+export const SUBSTANTIVE_RSS_WORD_COUNT = 40;
+
+/**
+ * Labels a feed item by what the feed actually provided. A headline is never
+ * presented as an article body.
+ */
+export function labelFeedContent(bodyText: string): {
+  content_source: 'RSS_SUMMARY_ONLY' | 'HEADLINE_ONLY';
+  is_headline_only: boolean;
+  word_count: number;
+} {
+  const words = (bodyText || '').trim().split(/\s+/).filter(Boolean);
+  const substantive = words.length >= SUBSTANTIVE_RSS_WORD_COUNT;
+  return {
+    content_source: substantive ? 'RSS_SUMMARY_ONLY' : 'HEADLINE_ONLY',
+    is_headline_only: !substantive,
+    word_count: words.length
+  };
+}
+
 export const DEFAULT_RSS_FEEDS: NewsFeedConfig[] = [
   {
     name: 'NPR News',
@@ -213,7 +238,8 @@ export class RSSNewsProvider implements NewsProvider {
             sourceName: feedConfig.name,
             publishedAt: publishedIso,
             imageUrl: imageUrl || undefined,
-            category: itemCategory
+            category: itemCategory,
+            ...labelFeedContent(desc)
           });
         }
       });
@@ -250,7 +276,8 @@ export class RSSNewsProvider implements NewsProvider {
             url: link,
             sourceName: feedConfig.name,
             publishedAt: publishedIso,
-            category: itemCategory
+            category: itemCategory,
+            ...labelFeedContent(desc)
           });
         }
       });
