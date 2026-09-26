@@ -8,6 +8,9 @@ name: Production Smoke Test
 # Runs after a push to main (giving Render time to deploy) and on demand.
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       base_url:
@@ -34,11 +37,14 @@ jobs:
 
       - run: npm ci
 
+      - name: Allow the deployment to roll out
+        run: sleep 150
+
       - name: Wake the deployment (free tier cold start)
         env:
           BASE_URL: ${{ github.event.inputs.base_url || 'https://truthlens-ai-dvpf.onrender.com' }}
         run: |
-          for i in $(seq 1 20); do
+          for i in $(seq 1 30); do
             code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 60 "$BASE_URL/api/health" || true)
             echo "attempt $i -> $code"
             [ "$code" = "200" ] && exit 0
