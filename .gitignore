@@ -20,3 +20,8 @@ artifacts/production_backups/
 # V2.1 sealed pretrained model files (~110MB) — provisioned via
 # `npm run download:v2-models`, hash-verified against server/v2/ml/modelManifest.ts
 models/
+
+# External benchmark inputs and generated review artifacts are provisioned
+# out-of-band and hash-verified; only protocols/results summaries are tracked.
+data/external/
+artifacts/v2-review/

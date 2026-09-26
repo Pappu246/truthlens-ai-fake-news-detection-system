@@ -36,6 +36,9 @@ export interface V2PipelineOptions {
    * warning (does not block the decision — the decision policy already
    * abstains on weak evidence). */
   minCandidatesExpectedWarning?: number;
+  /** Optional honest dataset/context note for an injected evaluation corpus.
+   * The default text is retained for the original 56-fixture harness. */
+  evaluationDatasetNote?: string;
 }
 
 function passageFor(candidate: RetrievedCandidate): string {
@@ -72,18 +75,23 @@ export async function verifyClaimV2(claimText: string, options?: V2PipelineOptio
   const nliAdapter = options?.nliAdapter ?? resolveDefaultNliAdapter();
   const embeddingModel = options?.retrieval?.embeddingModel ?? resolveDefaultEmbeddingModel();
   const retrievalOptions: HybridRetrievalOptions = { ...options?.retrieval, embeddingModel };
-  const adapterInfo = describeActiveAdapters();
-
-  const limitations: string[] = [
-    'This is the TruthLens V2 RESEARCH STACK (V2.1 pretrained-adapter upgrade). It is not the production verdict pipeline.',
-    adapterInfo.description,
-    'The evaluation fixture set is a small, manually curated development set, not a world-level benchmark.'
-  ];
-
   const modelsInfo = {
     embedding: { name: embeddingModel.name, version: embeddingModel.version, dimensions: embeddingModel.dimensions },
     nli: { name: nliAdapter.modelName, version: nliAdapter.modelVersion }
   };
+  const hasInjectedModel = Boolean(options?.nliAdapter || options?.retrieval?.embeddingModel);
+  const adapterDescription = hasInjectedModel
+    ? `Explicitly injected research/evaluation adapters active: embeddings=${modelsInfo.embedding.name} ` +
+      `(${modelsInfo.embedding.version}); NLI=${modelsInfo.nli.name} (${modelsInfo.nli.version}). ` +
+      'These identities come from the actual injected adapters, not the default model resolver.'
+    : describeActiveAdapters().description;
+
+  const limitations: string[] = [
+    'This is the TruthLens V2 RESEARCH STACK (V2.1 pretrained-adapter upgrade). It is not the production verdict pipeline.',
+    adapterDescription,
+    options?.evaluationDatasetNote ??
+      'The evaluation fixture set is a small, manually curated development set, not a world-level benchmark.'
+  ];
 
   if (!text || text.split(/\s+/).filter(Boolean).length < 4) {
     const claim: ExtractedClaim = buildClaim(text || ' ');
