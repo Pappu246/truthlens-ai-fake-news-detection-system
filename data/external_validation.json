@@ -1,15 +1,16 @@
 {
   "status": "COMPLETED",
-  "evaluated_at": "2026-09-08T13:18:43.733683Z",
+  "evaluated_at": "2026-09-26T06:05:00.733889Z",
   "dataset_name": "LIAR Benchmark (PolitiFact)",
   "file_used": "test.tsv",
-  "production_model": "Linear SVM (Calibrated)",
-  "source_training_dataset": "data/news.csv (36 benchmark articles)",
-  "training_sample_count": 36,
-  "runtime_feature_space": "2,910 TF-IDF features",
+  "production_model": "Linear SVM (Calibrated) (v3.0.0-isot)",
+  "source_training_dataset": "data/True.csv & data/Fake.csv \u2014 ISOT BENCHMARK DATASET",
+  "training_sample_count": 38656,
+  "runtime_feature_space": "8,000 TF-IDF features (is_demo=False)",
+  "is_demo": false,
   "model_weights_modified": false,
-  "tf_idf_source": "Fitted on training set (2,910 terms, saved_model_artifacts.json)",
-  "offline_artifact_note": "backend/models/vectorizer.joblib (8,000 features) is an offline Python artifact and is NOT loaded by the production Node runtime.",
+  "tf_idf_source": "Fitted on training set (8,000 terms, saved_model_artifacts.json)",
+  "offline_artifact_note": "backend/models/vectorizer.joblib (Python artifact) corresponds to the same vocabulary used by the Node.js runtime artifact saved_model_artifacts.json.",
   "evaluation_type": "Out-of-domain external validation",
   "total_test_samples": 1267,
   "valid_text_samples": 1267,
@@ -58,38 +59,38 @@
     }
   ],
   "metrics": {
-    "accuracy": 0.5367,
-    "precision": 0.4684,
-    "recall": 0.5425,
-    "f1_score": 0.5027,
-    "macro_f1": 0.5345,
-    "balanced_accuracy": 0.5374,
+    "accuracy": 0.4329,
+    "precision": 0.4299,
+    "recall": 0.9619,
+    "f1_score": 0.5942,
+    "macro_f1": 0.3265,
+    "balanced_accuracy": 0.4965,
     "fake_class": {
       "label": "FAKE (1)",
-      "precision": 0.4684,
-      "recall": 0.5425,
-      "f1_score": 0.5027
+      "precision": 0.4299,
+      "recall": 0.9619,
+      "f1_score": 0.5942
     },
     "real_class": {
       "label": "REAL (0)",
-      "precision": 0.6051,
-      "recall": 0.5323,
-      "f1_score": 0.5664
+      "precision": 0.5185,
+      "recall": 0.0312,
+      "f1_score": 0.0588
     }
   },
   "confusion_matrix": {
-    "true_positive": 185,
-    "true_negative": 239,
-    "false_positive": 210,
-    "false_negative": 156,
+    "true_positive": 328,
+    "true_negative": 14,
+    "false_positive": 435,
+    "false_negative": 13,
     "matrix": [
       [
-        239,
-        210
+        14,
+        435
       ],
       [
-        156,
-        185
+        13,
+        328
       ]
     ],
     "labels": [
@@ -151,13 +152,13 @@
   "domain_shift_explanation": {
     "summary": "External validation measures how the production runtime model generalizes to a completely different dataset, genre, and text structure.",
     "production_model_characteristics": [
-      "Production Runtime Model: Linear SVM (Calibrated) with 2,910 TF-IDF features loaded from saved_model_artifacts.json",
-      "Training baseline: data/news.csv (36 benchmark articles across science, politics, and health)",
+      "Production Runtime Model: Linear SVM (Calibrated) (v3.0.0-isot) with 8,000 TF-IDF features loaded from saved_model_artifacts.json",
+      "Training corpus: data/True.csv & data/Fake.csv \u2014 ISOT BENCHMARK DATASET (N\u224838,656)",
       "Full article contexts with structured journalistic or sensationalist reporting patterns"
     ],
     "isot_characteristics": [
-      "Production Runtime Model: Linear SVM (Calibrated) with 2,910 TF-IDF features loaded from saved_model_artifacts.json",
-      "Training baseline: data/news.csv (36 benchmark articles across science, politics, and health)",
+      "Production Runtime Model: Linear SVM (Calibrated) (v3.0.0-isot) with 8,000 TF-IDF features loaded from saved_model_artifacts.json",
+      "Training corpus: data/True.csv & data/Fake.csv \u2014 ISOT BENCHMARK DATASET (N\u224838,656)",
       "Full article contexts with structured journalistic or sensationalist reporting patterns"
     ],
     "liar_characteristics": [
@@ -166,7 +167,7 @@
       "Sparse n-gram overlap with full-length news article vocabulary",
       "Fine-grained veracity continuum rather than clean binary article labeling"
     ],
-    "conclusion": "Lower performance on LIAR reflects substantial domain shift and structural differences (isolated short claim without article context vs. full news article), rather than an algorithmic flaw in the production model."
+    "conclusion": "Lower performance on LIAR reflects substantial domain shift and structural differences (isolated short claim without article context vs. full news article), rather than an algorithmic flaw in the production model. The ISOT-trained classifier detects linguistic patterns characteristic of full news articles and is not a substitute for fact-checking short isolated claims."
   },
   "sample_predictions": [
     {
@@ -174,22 +175,22 @@
       "statement": "Building a wall on the U.S.-Mexico border will take literally years.",
       "original_liar_label": "true",
       "mapped_binary_label": "REAL",
-      "predicted_label": "REAL",
-      "fake_probability": 0.4956,
-      "real_probability": 0.5044,
-      "confidence": 50.4,
-      "is_correct": true
+      "predicted_label": "FAKE",
+      "fake_probability": 0.9819,
+      "real_probability": 0.0181,
+      "confidence": 98.2,
+      "is_correct": false
     },
     {
       "id": "11685.json",
       "statement": "Wisconsin is on pace to double the number of layoffs this year.",
       "original_liar_label": "false",
       "mapped_binary_label": "FAKE",
-      "predicted_label": "REAL",
-      "fake_probability": 0.4364,
-      "real_probability": 0.5636,
-      "confidence": 56.4,
-      "is_correct": false
+      "predicted_label": "FAKE",
+      "fake_probability": 0.9546,
+      "real_probability": 0.0454,
+      "confidence": 95.5,
+      "is_correct": true
     },
     {
       "id": "11096.json",
@@ -197,9 +198,9 @@
       "original_liar_label": "false",
       "mapped_binary_label": "FAKE",
       "predicted_label": "FAKE",
-      "fake_probability": 0.5477,
-      "real_probability": 0.4523,
-      "confidence": 54.8,
+      "fake_probability": 0.9993,
+      "real_probability": 0.0007,
+      "confidence": 99.9,
       "is_correct": true
     },
     {
@@ -207,33 +208,33 @@
       "statement": "When asked by a reporter whether hes at the center of a criminal scheme to violate campaign laws, Gov. Scott Walker nodded yes.",
       "original_liar_label": "pants-fire",
       "mapped_binary_label": "FAKE",
-      "predicted_label": "REAL",
-      "fake_probability": 0.4232,
-      "real_probability": 0.5768,
-      "confidence": 57.7,
-      "is_correct": false
+      "predicted_label": "FAKE",
+      "fake_probability": 0.9999,
+      "real_probability": 0.0001,
+      "confidence": 100.0,
+      "is_correct": true
     },
     {
       "id": "5962.json",
       "statement": "Over the past five years the federal government has paid out $601 million in retirement and disability benefits to deceased former federal employees.",
       "original_liar_label": "true",
       "mapped_binary_label": "REAL",
-      "predicted_label": "REAL",
-      "fake_probability": 0.4946,
-      "real_probability": 0.5054,
-      "confidence": 50.5,
-      "is_correct": true
+      "predicted_label": "FAKE",
+      "fake_probability": 0.9974,
+      "real_probability": 0.0026,
+      "confidence": 99.7,
+      "is_correct": false
     },
     {
       "id": "7070.json",
       "statement": "Says that Tennessee law requires that schools receive half of proceeds -- $31 million per year -- from a half-cent increase in the Shelby County sales tax.",
       "original_liar_label": "true",
       "mapped_binary_label": "REAL",
-      "predicted_label": "REAL",
-      "fake_probability": 0.4955,
-      "real_probability": 0.5045,
-      "confidence": 50.4,
-      "is_correct": true
+      "predicted_label": "FAKE",
+      "fake_probability": 0.5758,
+      "real_probability": 0.4242,
+      "confidence": 57.6,
+      "is_correct": false
     },
     {
       "id": "12849.json",
@@ -241,9 +242,9 @@
       "original_liar_label": "true",
       "mapped_binary_label": "REAL",
       "predicted_label": "FAKE",
-      "fake_probability": 0.5004,
-      "real_probability": 0.4996,
-      "confidence": 50.0,
+      "fake_probability": 0.9882,
+      "real_probability": 0.0118,
+      "confidence": 98.8,
       "is_correct": false
     },
     {
@@ -252,9 +253,9 @@
       "original_liar_label": "pants-fire",
       "mapped_binary_label": "FAKE",
       "predicted_label": "FAKE",
-      "fake_probability": 0.5477,
-      "real_probability": 0.4523,
-      "confidence": 54.8,
+      "fake_probability": 0.9976,
+      "real_probability": 0.0024,
+      "confidence": 99.8,
       "is_correct": true
     },
     {
@@ -262,22 +263,22 @@
       "statement": "Says 57 percent of federal spending goes to the military and just 1 percent goes to food and agriculture, including food stamps.",
       "original_liar_label": "false",
       "mapped_binary_label": "FAKE",
-      "predicted_label": "REAL",
-      "fake_probability": 0.4312,
-      "real_probability": 0.5688,
-      "confidence": 56.9,
-      "is_correct": false
+      "predicted_label": "FAKE",
+      "fake_probability": 0.9986,
+      "real_probability": 0.0014,
+      "confidence": 99.9,
+      "is_correct": true
     },
     {
       "id": "4888.json",
       "statement": "Says the unemployment rate for college graduates is 4.4 percent and over 10 percent for noncollege-educated.",
       "original_liar_label": "true",
       "mapped_binary_label": "REAL",
-      "predicted_label": "REAL",
-      "fake_probability": 0.3242,
-      "real_probability": 0.6758,
-      "confidence": 67.6,
-      "is_correct": true
+      "predicted_label": "FAKE",
+      "fake_probability": 0.8771,
+      "real_probability": 0.1229,
+      "confidence": 87.7,
+      "is_correct": false
     },
     {
       "id": "3331.json",
@@ -285,9 +286,9 @@
       "original_liar_label": "pants-fire",
       "mapped_binary_label": "FAKE",
       "predicted_label": "FAKE",
-      "fake_probability": 0.5457,
-      "real_probability": 0.4543,
-      "confidence": 54.6,
+      "fake_probability": 0.9991,
+      "real_probability": 0.0009,
+      "confidence": 99.9,
       "is_correct": true
     },
     {
@@ -295,33 +296,33 @@
       "statement": "Each year, 18,000 people die in America because they don't have health care.",
       "original_liar_label": "true",
       "mapped_binary_label": "REAL",
-      "predicted_label": "REAL",
-      "fake_probability": 0.4693,
-      "real_probability": 0.5307,
-      "confidence": 53.1,
-      "is_correct": true
+      "predicted_label": "FAKE",
+      "fake_probability": 0.9999,
+      "real_probability": 0.0001,
+      "confidence": 100.0,
+      "is_correct": false
     },
     {
       "id": "1328.json",
       "statement": "Ronald Reagan faced an even worse recession than the current one.",
       "original_liar_label": "false",
       "mapped_binary_label": "FAKE",
-      "predicted_label": "REAL",
-      "fake_probability": 0.4317,
-      "real_probability": 0.5683,
-      "confidence": 56.8,
-      "is_correct": false
+      "predicted_label": "FAKE",
+      "fake_probability": 0.9941,
+      "real_probability": 0.0059,
+      "confidence": 99.4,
+      "is_correct": true
     },
     {
       "id": "12169.json",
       "statement": "There have not been any public safety issues in cities that allow transgender people to use the bathroom of the gender they identify as.",
       "original_liar_label": "mostly-true",
       "mapped_binary_label": "REAL",
-      "predicted_label": "REAL",
-      "fake_probability": 0.4929,
-      "real_probability": 0.5071,
-      "confidence": 50.7,
-      "is_correct": true
+      "predicted_label": "FAKE",
+      "fake_probability": 0.9157,
+      "real_probability": 0.0843,
+      "confidence": 91.6,
+      "is_correct": false
     },
     {
       "id": "12996.json",
@@ -329,9 +330,9 @@
       "original_liar_label": "pants-fire",
       "mapped_binary_label": "FAKE",
       "predicted_label": "FAKE",
-      "fake_probability": 0.5004,
-      "real_probability": 0.4996,
-      "confidence": 50.0,
+      "fake_probability": 0.9773,
+      "real_probability": 0.0227,
+      "confidence": 97.7,
       "is_correct": true
     },
     {
@@ -340,9 +341,9 @@
       "original_liar_label": "mostly-true",
       "mapped_binary_label": "REAL",
       "predicted_label": "FAKE",
-      "fake_probability": 0.5782,
-      "real_probability": 0.4218,
-      "confidence": 57.8,
+      "fake_probability": 0.9923,
+      "real_probability": 0.0077,
+      "confidence": 99.2,
       "is_correct": false
     },
     {
@@ -351,9 +352,9 @@
       "original_liar_label": "false",
       "mapped_binary_label": "FAKE",
       "predicted_label": "FAKE",
-      "fake_probability": 0.5004,
-      "real_probability": 0.4996,
-      "confidence": 50.0,
+      "fake_probability": 0.9999,
+      "real_probability": 0.0001,
+      "confidence": 100.0,
       "is_correct": true
     },
     {
@@ -362,9 +363,9 @@
       "original_liar_label": "true",
       "mapped_binary_label": "REAL",
       "predicted_label": "FAKE",
-      "fake_probability": 0.5435,
-      "real_probability": 0.4565,
-      "confidence": 54.4,
+      "fake_probability": 0.9999,
+      "real_probability": 0.0001,
+      "confidence": 100.0,
       "is_correct": false
     },
     {
@@ -373,9 +374,9 @@
       "original_liar_label": "true",
       "mapped_binary_label": "REAL",
       "predicted_label": "FAKE",
-      "fake_probability": 0.5099,
-      "real_probability": 0.4901,
-      "confidence": 51.0,
+      "fake_probability": 0.9954,
+      "real_probability": 0.0046,
+      "confidence": 99.5,
       "is_correct": false
     },
     {
@@ -384,9 +385,9 @@
       "original_liar_label": "mostly-true",
       "mapped_binary_label": "REAL",
       "predicted_label": "FAKE",
-      "fake_probability": 0.569,
-      "real_probability": 0.431,
-      "confidence": 56.9,
+      "fake_probability": 0.9917,
+      "real_probability": 0.0083,
+      "confidence": 99.2,
       "is_correct": false
     },
     {
@@ -394,11 +395,11 @@
       "statement": "Its been since 1888 that a Senate of a different party than the president in the White House confirmed a Supreme Court nominee.",
       "original_liar_label": "false",
       "mapped_binary_label": "FAKE",
-      "predicted_label": "REAL",
-      "fake_probability": 0.4057,
-      "real_probability": 0.5943,
-      "confidence": 59.4,
-      "is_correct": false
+      "predicted_label": "FAKE",
+      "fake_probability": 0.8533,
+      "real_probability": 0.1467,
+      "confidence": 85.3,
+      "is_correct": true
     },
     {
       "id": "9800.json",
@@ -406,9 +407,9 @@
       "original_liar_label": "false",
       "mapped_binary_label": "FAKE",
       "predicted_label": "FAKE",
-      "fake_probability": 0.5004,
-      "real_probability": 0.4996,
-      "confidence": 50.0,
+      "fake_probability": 0.9984,
+      "real_probability": 0.0016,
+      "confidence": 99.8,
       "is_correct": true
     },
     {
@@ -416,11 +417,11 @@
       "statement": "The United States has a low voter turnout rate.",
       "original_liar_label": "true",
       "mapped_binary_label": "REAL",
-      "predicted_label": "REAL",
-      "fake_probability": 0.3903,
-      "real_probability": 0.6097,
-      "confidence": 61.0,
-      "is_correct": true
+      "predicted_label": "FAKE",
+      "fake_probability": 0.9448,
+      "real_probability": 0.0552,
+      "confidence": 94.5,
+      "is_correct": false
     },
     {
       "id": "10055.json",
@@ -428,9 +429,9 @@
       "original_liar_label": "mostly-true",
       "mapped_binary_label": "REAL",
       "predicted_label": "FAKE",
-      "fake_probability": 0.5033,
-      "real_probability": 0.4967,
-      "confidence": 50.3,
+      "fake_probability": 0.9971,
+      "real_probability": 0.0029,
+      "confidence": 99.7,
       "is_correct": false
     },
     {
@@ -439,9 +440,9 @@
       "original_liar_label": "true",
       "mapped_binary_label": "REAL",
       "predicted_label": "FAKE",
-      "fake_probability": 0.5427,
-      "real_probability": 0.4573,
-      "confidence": 54.3,
+      "fake_probability": 0.9961,
+      "real_probability": 0.0039,
+      "confidence": 99.6,
       "is_correct": false
     },
     {
@@ -449,11 +450,11 @@
       "statement": "Texas families have kept more than $10 billion in their family budgets since we successfully fought to restore Texas sales tax deduction a decade ago.",
       "original_liar_label": "true",
       "mapped_binary_label": "REAL",
-      "predicted_label": "FAKE",
-      "fake_probability": 0.5286,
-      "real_probability": 0.4714,
-      "confidence": 52.9,
-      "is_correct": false
+      "predicted_label": "REAL",
+      "fake_probability": 0.4879,
+      "real_probability": 0.5121,
+      "confidence": 51.2,
+      "is_correct": true
     },
     {
       "id": "13251.json",
@@ -461,9 +462,9 @@
       "original_liar_label": "pants-fire",
       "mapped_binary_label": "FAKE",
       "predicted_label": "FAKE",
-      "fake_probability": 0.5773,
-      "real_probability": 0.4227,
-      "confidence": 57.7,
+      "fake_probability": 0.9997,
+      "real_probability": 0.0003,
+      "confidence": 100.0,
       "is_correct": true
     },
     {
@@ -471,33 +472,33 @@
       "statement": "In 1993, Newt Gingrich first advocated for the individual mandate in health care. And as recently as May of this year, he was still advocating for it.",
       "original_liar_label": "mostly-true",
       "mapped_binary_label": "REAL",
-      "predicted_label": "REAL",
-      "fake_probability": 0.4082,
-      "real_probability": 0.5918,
-      "confidence": 59.2,
-      "is_correct": true
+      "predicted_label": "FAKE",
+      "fake_probability": 0.9999,
+      "real_probability": 0.0001,
+      "confidence": 100.0,
+      "is_correct": false
     },
     {
       "id": "8841.json",
       "statement": "The federal minimum wage is worth about 20 percent less than it was when Ronald Reagan gave his first address to a joint session of Congress.",
       "original_liar_label": "mostly-true",
       "mapped_binary_label": "REAL",
-      "predicted_label": "REAL",
-      "fake_probability": 0.3394,
-      "real_probability": 0.6606,
-      "confidence": 66.1,
-      "is_correct": true
+      "predicted_label": "FAKE",
+      "fake_probability": 0.992,
+      "real_probability": 0.008,
+      "confidence": 99.2,
+      "is_correct": false
     },
     {
       "id": "6313.json",
       "statement": "A proposed tax to fund transportation projects would spend $90,000 to take a single vehicle off the road during the morning and afternoon commute.",
       "original_liar_label": "false",
       "mapped_binary_label": "FAKE",
-      "predicted_label": "REAL",
-      "fake_probability": 0.4823,
-      "real_probability": 0.5177,
-      "confidence": 51.8,
-      "is_correct": false
+      "predicted_label": "FAKE",
+      "fake_probability": 0.9996,
+      "real_probability": 0.0004,
+      "confidence": 100.0,
+      "is_correct": true
     }
   ]
 }
