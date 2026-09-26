@@ -262,6 +262,22 @@ export interface NewsArticle {
   publishedAt?: string;
   imageUrl?: string;
   category?: string;
+  /**
+   * What the feed actually gave us for this item, labelled at the source so
+   * that every consumer -- not just the browser -- sees the truth about the
+   * content it is holding.
+   *
+   *   RSS_SUMMARY_ONLY : a substantive (>= 40 word) feed description
+   *   HEADLINE_ONLY    : title only, or a description too thin to analyse
+   *
+   * A feed item is NEVER labelled FULL_ARTICLE_EXTRACTED here: that label
+   * belongs to the extraction step, after the article body has actually been
+   * fetched from the publisher.
+   */
+  content_source?: 'RSS_SUMMARY_ONLY' | 'HEADLINE_ONLY';
+  is_headline_only?: boolean;
+  /** Word count of the feed body text (description/summary/content), not the article. */
+  word_count?: number;
 }
 
 export interface NewsFeedResponse {
