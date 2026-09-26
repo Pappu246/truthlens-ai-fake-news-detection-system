@@ -23,9 +23,10 @@
  * attribution in (1). The adapter therefore uses a documented TWO-PASS
  * HYPOTHESIS SELECTION policy (see `classify`), applied identically to
  * every claim: pass A decides only on a majority contradiction/entailment
- * of the claim as stated (the explicit refutation/confirmation pattern);
- * otherwise, when the claim embeds attribution, pass B decides from the
- * content proposition. Both passes are 100% pretrained-model output — the
+ * of the claim as stated (the explicit refutation/confirmation pattern) —
+ * i.e. when entailment>=0.5 or contradiction>=0.5; otherwise (NO DIRECTIONAL
+ * MAJORITY, which includes a confident NEUTRAL), when the claim embeds
+ * attribution, pass B decides from the content proposition. Both passes are 100% pretrained-model output — the
  * policy only CHOOSES the hypothesis framing, never the label.
  *
  * RELATEDNESS GATE: MNLI cross-encoders assume the (premise, hypothesis)
@@ -58,7 +59,8 @@
  *
  * The returned 4-class score distribution is a renormalised
  * [entailment, contradiction, neutral, uncertainty=(1-maxP)] distribution
- * that always sums to 1; `label` is always argmax of `scores` and
+ * that sums to EXACTLY 1.000 after largest-remainder rounding to three
+ * decimals (see `roundDistributionTo3dp`); `label` is always argmax of `scores` and
  * `confidence` is always `scores[label]` (schema invariants exercised by
  * scripts/v2ModelTests.ts).
  */
@@ -153,19 +155,85 @@ export function mapModelProbsToNliScores(
   const maxModelProb = Math.max(pe, pc, pn);
   const uncertainty = Math.max(0, 1 - maxModelProb);
   const total = 1 + uncertainty; // (pe+pc+pn) + uncertainty
-  const raw4: Array<[NliLabel, number]> = [
-    ['SUPPORTS', pe / total],
-    ['REFUTES', pc / total],
-    ['NEUTRAL', pn / total],
-    ['UNCLEAR', uncertainty / total]
-  ];
+  const exact: number[] = [pe / total, pc / total, pn / total, uncertainty / total];
+  const rounded = roundDistributionTo3dp(exact);
   const scores: NliScoreDistribution = {
-    supports: Math.round(raw4[0][1] * 1000) / 1000,
-    refutes: Math.round(raw4[1][1] * 1000) / 1000,
-    neutral: Math.round(raw4[2][1] * 1000) / 1000,
-    unclear: Math.round(raw4[3][1] * 1000) / 1000
+    supports: rounded[0],
+    refutes: rounded[1],
+    neutral: rounded[2],
+    unclear: rounded[3]
   };
   return { scores, maxModelProb };
+}
+
+/**
+ * Rounds a probability distribution to three decimals so that the REPORTED
+ * vector still sums to exactly 1.000 (largest-remainder / Hare quota method).
+ *
+ * Research-integrity fix (V2.1 review, MEDIUM finding): each component used
+ * to be rounded independently, so 38/96 reviewed fixture vectors summed to
+ * 0.999 or 1.001 while the module documented an exact-sum invariant. The
+ * invariant is now enforced in code instead of being asserted in prose.
+ *
+ * Guarantees (exercised by scripts/v2CandidateModelTests.ts):
+ *   1. the four rounded values sum to exactly 1.000 (in 1/1000 integer units);
+ *   2. every rounded value is within 0.001 of its exact value, except for the
+ *      at most two components touched by a near-tie argmax repair, which stay
+ *      within 0.0015;
+ *   3. the argmax of the rounded vector is the argmax of the EXACT vector,
+ *      with the same first-index tie-break — i.e. no label can change as a
+ *      side effect of display rounding.
+ * This is presentation-level rounding only: no threshold, weight or decision
+ * rule is touched.
+ */
+export function roundDistributionTo3dp(exact: number[]): number[] {
+  const SCALE = 1000;
+  const scaled = exact.map(v => v * SCALE);
+  const floors = scaled.map(v => Math.floor(v));
+  let residual = SCALE - floors.reduce((a, b) => a + b, 0);
+
+  // Exact argmax (first index wins ties) — must survive rounding.
+  let exactArgmax = 0;
+  for (let i = 1; i < exact.length; i++) if (exact[i] > exact[exactArgmax]) exactArgmax = i;
+
+  const order = scaled
+    .map((v, i) => ({ i, remainder: v - floors[i] }))
+    .sort((a, b) => (b.remainder - a.remainder) || (a.i - b.i));
+
+  const result = floors.slice();
+  for (const { i } of order) {
+    if (residual <= 0) break;
+    result[i] += 1;
+    residual -= 1;
+  }
+  // Residual can only be in [0, n); the loop above always clears it because
+  // sum(floors) > SCALE - n. Defensive guard for non-normalised inputs:
+  let guard = 0;
+  while (residual > 0 && guard++ < exact.length * 2) {
+    result[exactArgmax] += 1;
+    residual -= 1;
+  }
+  while (residual < 0 && guard++ < exact.length * 2) {
+    const donor = result.findIndex((v, i) => v > 0 && i !== exactArgmax);
+    result[donor >= 0 ? donor : exactArgmax] -= 1;
+    residual += 1;
+  }
+
+  // Largest-remainder rounding can, for near-ties, hand the displayed maximum
+  // to a different class than the exact distribution's argmax. Repair that
+  // (and only that) by moving a single 1/1000 unit, so the reported label can
+  // never be an artefact of display rounding.
+  const roundedArgmax = (values: number[]): number => {
+    let best = 0;
+    for (let i = 1; i < values.length; i++) if (values[i] > values[best]) best = i;
+    return best;
+  };
+  if (roundedArgmax(result) !== exactArgmax) {
+    const displaced = roundedArgmax(result);
+    result[displaced] -= 1;
+    result[exactArgmax] += 1;
+  }
+  return result.map(v => v / SCALE);
 }
 
 export class PretrainedNliAdapter implements NliAdapter {
@@ -248,6 +316,10 @@ export class PretrainedNliAdapter implements NliAdapter {
     let basisPasses = '';
     let decidedBy = 'passA:claim-as-stated';
 
+    const passAMaxClass = (['entailment', 'contradiction', 'neutral'] as const)
+      .reduce((best, key) => (passA.probs[key] > passA.probs[best] ? key : best), 'entailment' as
+        'entailment' | 'contradiction' | 'neutral');
+
     const aDirectionalLabel: NliLabel | null =
       passA.probs.entailment >= 0.5 ? 'SUPPORTS'
       : passA.probs.contradiction >= 0.5 ? 'REFUTES'
@@ -260,10 +332,15 @@ export class PretrainedNliAdapter implements NliAdapter {
       winner = passB;
       decidedBy = 'passB:content-proposition';
       basisPasses =
-        `passA (hypothesis=claim-as-stated) undecided (maxP=${passA.maxModelProb.toFixed(3)}<0.5, no majority); ` +
+        'passA (hypothesis=claim-as-stated) produced NO DIRECTIONAL MAJORITY ' +
+        `(entailment=${passA.probs.entailment.toFixed(3)}, contradiction=${passA.probs.contradiction.toFixed(3)}, ` +
+        `both <0.5; maxP=${passA.maxModelProb.toFixed(3)} on ${passAMaxClass}); ` +
         'falling through to passB (hypothesis=content proposition, attribution stripped)';
     } else {
-      basisPasses = `passA (hypothesis=claim-as-stated) undecided (maxP=${passA.maxModelProb.toFixed(3)}<0.5); ` +
+      basisPasses =
+        'passA (hypothesis=claim-as-stated) produced NO DIRECTIONAL MAJORITY ' +
+        `(entailment=${passA.probs.entailment.toFixed(3)}, contradiction=${passA.probs.contradiction.toFixed(3)}, ` +
+        `both <0.5; maxP=${passA.maxModelProb.toFixed(3)} on ${passAMaxClass}); ` +
         'claim carries no attribution clause, so no second pass is applicable';
     }
 
@@ -287,8 +364,9 @@ export class PretrainedNliAdapter implements NliAdapter {
     const probKeys = Object.keys(LABEL_FOR_PROB_KEY).map(k => `${k}=${(winner.probs[k] as number).toFixed(3)}`);
     const basis =
       `cross-encoder MNLI probabilities (${probKeys.join(', ')}) over premise=evidence passage; ` +
-      `${basisPasses}; winner=${decidedBy}; maxP=${winner.maxModelProb.toFixed(3)}; UNCLEAR emitted only when no ` +
-      `class has majority support (maxP<0.5); renormalised 4-way distribution sums to 1.0; ` +
+      `${basisPasses}; winner=${decidedBy}; maxP=${winner.maxModelProb.toFixed(3)}; UNCLEAR is emitted only when ` +
+      `the winning pass has no majority class (its maxP<0.5); renormalised 4-way distribution sums to exactly 1.000 ` +
+      'after largest-remainder rounding to three decimals; ' +
       'decision by argmax of model probabilities only — no lexical rules involved.';
 
     return {

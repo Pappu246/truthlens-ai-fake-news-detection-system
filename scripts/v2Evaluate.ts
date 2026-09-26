@@ -16,6 +16,7 @@
 import fs from 'fs';
 import path from 'path';
 import { verifyClaimV2 } from '../server/v2/pipeline';
+import { DEFAULT_FROZEN_EVALUATION_INSTANT } from '../server/v2/clock';
 import { FixtureCorpusSource } from '../server/v2/retrieval/corpusSource';
 import { RawDocument } from '../server/v2/types';
 import {
@@ -57,6 +58,16 @@ interface FixtureFile {
   fixtures: Fixture[];
 }
 
+/**
+ * RESEARCH-INTEGRITY FIX (V2.1 review): the rerank freshness signal and the
+ * fixture `retrievedAt` stamp used wall-clock time, so this harness was only
+ * bit-reproducible on the day it was run. Both are now pinned to one frozen
+ * instant. Thresholds, weights, the freshness formula, the fixtures and the
+ * gold labels are UNCHANGED.
+ */
+const FROZEN_EVALUATION_NOW = DEFAULT_FROZEN_EVALUATION_INSTANT;
+const FROZEN_EVALUATION_NOW_MS = Date.parse(FROZEN_EVALUATION_NOW);
+
 function isRelevantDoc(doc: FixtureCorpusDoc): boolean {
   return !/^unrelated/i.test(doc.title);
 }
@@ -70,7 +81,7 @@ function toRawDocuments(fixture: Fixture): RawDocument[] {
     contentType: d.contentType,
     publisher: d.publisher,
     publishedAt: d.publishedAt,
-    retrievedAt: new Date().toISOString(),
+    retrievedAt: FROZEN_EVALUATION_NOW,
     retrievalMethod: 'fixture_corpus(offline_deterministic)'
   }));
 }
@@ -113,7 +124,8 @@ async function main() {
     const corpus = new FixtureCorpusSource(toRawDocuments(fixture));
     const result = await verifyClaimV2(fixture.claim, {
       corpus,
-      minCandidatesExpectedWarning: 0
+      minCandidatesExpectedWarning: 0,
+      nowMs: FROZEN_EVALUATION_NOW_MS
     });
 
     const predictedVerdict = result.provenance.final_verdict;
@@ -220,6 +232,7 @@ async function main() {
     abstention_rate: abstRate,
     calibration_ece: calibration.expectedCalibrationError,
     generated_at: new Date().toISOString(),
+    frozen_evaluation_clock: FROZEN_EVALUATION_NOW,
     note: resolvedMode === 'pretrained'
       ? 'V2.1 pretrained-adapter run (real ONNX models, offline). Development/evaluation harness, not a world-level benchmark.'
       : 'V2 baseline run (fixture research adapters). Development/evaluation harness, not a world-level benchmark.'
