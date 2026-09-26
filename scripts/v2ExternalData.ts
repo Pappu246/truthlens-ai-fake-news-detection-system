@@ -9,20 +9,80 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
+const MIRROR_REPO = 'vidi-deshp12/scifact-claim-verification';
 const MIRROR_COMMIT = '051b5245aa9d4b98c1302920cc5e4958b9e30ef9';
-const MIRROR_ROOT = `https://raw.githubusercontent.com/vidi-deshp12/scifact-claim-verification/${MIRROR_COMMIT}/data`;
+const MIRROR_ROOT = `https://raw.githubusercontent.com/${MIRROR_REPO}/${MIRROR_COMMIT}/data`;
 const TARGET_DIR = path.join(process.cwd(), 'data', 'external', 'scifact');
 
+/**
+ * Both transports resolve the SAME pinned commit; `gitBlobSha1` is the
+ * content-addressed git object id of the file AT that commit, so the
+ * api.github.com fallback (used where raw.githubusercontent.com is not in
+ * the egress allowlist) cannot return different bytes. Acceptance is still
+ * gated on the frozen SHA-256 below — the benchmark data itself is
+ * unchanged, only the way it is fetched.
+ */
 const FILES = [
   {
     name: 'claims_dev.jsonl',
-    sha256: '86f0435d08fdb65d1aa41d1472684f57e6e71930626497bdf4d7a9ec1a632217'
+    sha256: '86f0435d08fdb65d1aa41d1472684f57e6e71930626497bdf4d7a9ec1a632217',
+    gitBlobSha1: '220759d53746a31bf1de4a6197450f831b8c8147'
   },
   {
     name: 'corpus.jsonl',
-    sha256: 'b8d6c89624cb2ed74dee8938effc4f5d8bd2086887880af8110d64be4ceade62'
+    sha256: 'b8d6c89624cb2ed74dee8938effc4f5d8bd2086887880af8110d64be4ceade62',
+    gitBlobSha1: '231d05808c1006cf3794741061d22b61de3d60a4'
   }
 ] as const;
+
+function githubHeaders(): Record<string, string> {
+  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+  return {
+    Accept: 'application/vnd.github.raw',
+    'User-Agent': 'truthlens-v2-external-evaluation',
+    ...(token ? { Authorization: `Bearer ${token}` } : {})
+  };
+}
+
+async function fetchPinned(file: (typeof FILES)[number]): Promise<Buffer> {
+  const attempts: Array<{ label: string; run: () => Promise<Buffer> }> = [
+    {
+      label: `${MIRROR_ROOT}/${file.name}`,
+      run: async () => {
+        const response = await fetch(`${MIRROR_ROOT}/${file.name}`, {
+          redirect: 'follow',
+          signal: AbortSignal.timeout(180_000),
+          headers: { 'User-Agent': 'truthlens-v2-external-evaluation' }
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status} ${response.statusText}`);
+        return Buffer.from(await response.arrayBuffer());
+      }
+    },
+    {
+      label: `api.github.com git blob ${file.gitBlobSha1} (${MIRROR_REPO}@${MIRROR_COMMIT.slice(0, 7)})`,
+      run: async () => {
+        const response = await fetch(`https://api.github.com/repos/${MIRROR_REPO}/git/blobs/${file.gitBlobSha1}`, {
+          headers: githubHeaders(),
+          signal: AbortSignal.timeout(180_000)
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status} ${response.statusText}`);
+        return Buffer.from(await response.arrayBuffer());
+      }
+    }
+  ];
+
+  let lastError = 'no transport configured';
+  for (const attempt of attempts) {
+    try {
+      console.log(`  fetching ${attempt.label}`);
+      return await attempt.run();
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+      console.log(`    unreachable/failed (${lastError})`);
+    }
+  }
+  throw new Error(`Could not fetch ${file.name} from any pinned transport. Last error: ${lastError}`);
+}
 
 function hash(data: Buffer): string {
   return crypto.createHash('sha256').update(data).digest('hex');
@@ -48,15 +108,7 @@ async function main(): Promise<void> {
       );
     }
 
-    const url = `${MIRROR_ROOT}/${file.name}`;
-    console.log(`  fetching ${url}`);
-    const response = await fetch(url, {
-      redirect: 'follow',
-      signal: AbortSignal.timeout(180_000),
-      headers: { 'User-Agent': 'truthlens-v2-external-evaluation' }
-    });
-    if (!response.ok) throw new Error(`HTTP ${response.status} ${response.statusText} for ${url}`);
-    const data = Buffer.from(await response.arrayBuffer());
+    const data = await fetchPinned(file);
     const digest = hash(data);
     if (digest !== file.sha256) {
       throw new Error(`${file.name}: SHA-256=${digest}, expected frozen ${file.sha256}; file rejected.`);

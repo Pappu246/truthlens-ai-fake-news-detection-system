@@ -6,6 +6,7 @@
  * publisher/domain, publication date, retrieval timestamp, retrieval
  * method), NLI model/version metadata, and the full decision rule trace.
  */
+import { resolveNowMs } from './clock';
 import { ExpandedQuerySet, ClassifiedEvidence, VerdictDecision, ProvenanceRecord, ProvenanceEvidenceRecord } from './types';
 
 export const PIPELINE_VERSION = 'truthlens-v2.1-pretrained-adapters-0.2.0';
@@ -49,7 +50,10 @@ export function buildProvenance(
   decision: VerdictDecision,
   retrievalSummary: { channelsUsed: string[]; totalRetrievedBeforeDedup: number; totalAfterDedup: number },
   limitations: string[],
-  models?: ProvenanceRecord['models']
+  models?: ProvenanceRecord['models'],
+  /** Epoch milliseconds for `generated_at`; defaults to the shared V2 clock
+   * (frozen for evaluation runs, wall clock in live use). */
+  generatedAtMs?: number
 ): ProvenanceRecord {
   const counts = {
     supports: evidence.filter(e => e.nli.label === 'SUPPORTS').length,
@@ -82,7 +86,7 @@ export function buildProvenance(
       total_candidates_after_dedup: retrievalSummary.totalAfterDedup,
       total_evidence_used_in_decision: evidence.length
     },
-    generated_at: new Date().toISOString(),
+    generated_at: new Date(resolveNowMs(generatedAtMs)).toISOString(),
     limitations
   };
 }

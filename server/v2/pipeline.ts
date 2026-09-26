@@ -20,6 +20,7 @@ import { rerankEvidence } from './rerank/reranker';
 import { NliAdapter } from './nli/nliAdapter';
 import { decideVerdict, RawPriorInput, DecisionThresholds, DEFAULT_DECISION_THRESHOLDS } from './decision/decisionPolicy';
 import { describeActiveAdapters, resolveDefaultEmbeddingModel, resolveDefaultNliAdapter } from './ml/modelResolution';
+import { describeClock, isClockFrozen, resolveNowMs } from './clock';
 import { buildProvenance } from './provenance';
 import { ClassifiedEvidence, ProvenanceRecord, RetrievedCandidate, V2VerificationResult } from './types';
 import { sanitiseUntrustedEvidence } from '../verification/evidenceEngine';
@@ -39,6 +40,12 @@ export interface V2PipelineOptions {
   /** Optional honest dataset/context note for an injected evaluation corpus.
    * The default text is retained for the original 56-fixture harness. */
   evaluationDatasetNote?: string;
+  /** Freezes the time-dependent freshness signal (and provenance
+   * `generated_at`) at this epoch-millisecond instant. Research-integrity
+   * fix: offline evaluation must not depend on the day it is executed.
+   * When omitted, the shared V2 clock is used (TRUTHLENS_V2_FROZEN_NOW when
+   * set, otherwise Date.now()). Thresholds/weights/policy are unchanged. */
+  nowMs?: number;
 }
 
 function passageFor(candidate: RetrievedCandidate): string {
@@ -64,6 +71,8 @@ export async function verifyClaimV2(claimText: string, options?: V2PipelineOptio
   const text = (claimText || '').trim();
   const corpus = options?.corpus ?? new LiveEvidenceProviderCorpusSource();
   const thresholds = options?.thresholds ?? DEFAULT_DECISION_THRESHOLDS;
+  const nowMs = resolveNowMs(options?.nowMs);
+  const clockFrozen = isClockFrozen(options?.nowMs);
 
   // ---- V2.1 adapter resolution -------------------------------------------
   // Explicitly injected adapters (tests, experiments) win; otherwise the
@@ -92,6 +101,11 @@ export async function verifyClaimV2(claimText: string, options?: V2PipelineOptio
     options?.evaluationDatasetNote ??
       'The evaluation fixture set is a small, manually curated development set, not a world-level benchmark.'
   ];
+  if (clockFrozen) {
+    limitations.push(
+      `Time-dependent signals (evidence freshness, provenance timestamp) ran against a ${describeClock(options?.nowMs)}.`
+    );
+  }
 
   if (!text || text.split(/\s+/).filter(Boolean).length < 4) {
     const claim: ExtractedClaim = buildClaim(text || ' ');
@@ -115,7 +129,7 @@ export async function verifyClaimV2(claimText: string, options?: V2PipelineOptio
     };
     limitations.push('The input was rejected by the input guard before any retrieval or model adapter actually ran.');
     const provenance = buildProvenance(text, queries, [], decision,
-      { channelsUsed: [], totalRetrievedBeforeDedup: 0, totalAfterDedup: 0 }, limitations);
+      { channelsUsed: [], totalRetrievedBeforeDedup: 0, totalAfterDedup: 0 }, limitations, undefined, nowMs);
     return { available: false, claim: text, provenance };
   }
 
@@ -130,7 +144,7 @@ export async function verifyClaimV2(claimText: string, options?: V2PipelineOptio
     candidates = enrichment.candidates;
   }
 
-  const reranked = rerankEvidence(candidates);
+  const reranked = rerankEvidence(candidates, { nowMs });
 
   const classified: ClassifiedEvidence[] = reranked.map(r => {
     const passage = passageFor(r);
@@ -165,7 +179,8 @@ export async function verifyClaimV2(claimText: string, options?: V2PipelineOptio
       totalAfterDedup: candidates.length
     },
     limitations,
-    modelsInfo
+    modelsInfo,
+    nowMs
   );
 
   return { available: classified.length > 0, claim: text, provenance };
