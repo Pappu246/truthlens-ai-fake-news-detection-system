@@ -33,6 +33,19 @@ TruthLens AI analyzes news text and returns one of three backend verdicts:
 
 The production inference path is implemented in TypeScript. The core model is a calibrated Linear SVM using TF-IDF features with 1-2 ngrams and sublinear term frequency. Probabilities are calibrated with Platt sigmoid scaling.
 
+The system is composed of **three independent components that are never merged into a single accuracy number**:
+
+| Component | Corpus | Task | Endpoint | Held-out result |
+|---|---|---|---|---|
+| Article model | ISOT | full-article REAL / FAKE | `/api/analyze` | see `/api/models/metrics` |
+| Claim model | LIAR | short-claim TRUE / FALSE | `/api/claim/predict` | 0.6272 acc / 0.6153 macro-F1 (n=802, text-only) |
+| Evidence engine | live retrieval | SUPPORT / CONTRADICT / UNCLEAR | `/api/evidence/verify` | per-request, no stored score |
+
+They measure different things on different data. `/api/models/metrics` reports them
+under separate `article_model`, `claim_model` and `benchmarks` keys for exactly that
+reason. See [docs/CLAIM_MODEL.md](docs/CLAIM_MODEL.md) and
+[docs/EVIDENCE_ENGINE.md](docs/EVIDENCE_ENGINE.md).
+
 The server also supports URL article extraction, RSS news ingestion, claim extraction, evidence search, article verification, model diagnostics, dataset validation, and SQLite-backed history.
 
 The repository also contains a Python ML/research pipeline under `backend/`. That code is retained for offline training, evaluation, and research work. It is not the production API.
@@ -73,10 +86,11 @@ TruthLens runs as a single Node/Express service in production. The browser uses 
 flowchart LR
     F[React / Vite frontend] --> S[Node / Express server<br/>server.ts]
 
-    S --> M[ML engine<br/>TF-IDF + calibrated Linear SVM]
+    S --> M[Article model<br/>ISOT TF-IDF + calibrated Linear SVM]
+    S --> C[Claim model<br/>LIAR TF-IDF + calibrated Linear SVM]
     S --> X[Article extractor<br/>URL validation + safe fetch]
     S --> N[Live news service<br/>RSS / Atom]
-    S --> V[Claim verification<br/>claim extraction + evidence]
+    S --> V[Evidence engine<br/>search / relevance / stance]
     S --> H[(SQLite history)]
 
     X --> W[Target article website]
@@ -91,6 +105,8 @@ The main production components are:
 - `server/mlEngine.ts`: model loading, training, vectorization, calibrated probability calculation, guards, thresholds, and verdict selection.
 - `server/extraction/articleExtractor.ts`: article extraction after URL security checks and safe fetching.
 - `server/news/newsService.ts`: live RSS/Atom acquisition.
+- `server/claimModel.ts`: the dedicated LIAR claim model (separate artifact, separate metrics, exact Python parity).
+- `server/verification/evidenceEngine.ts`: claim -> search -> relevance -> stance -> verification signal, over the existing verification modules.
 - `server/verification/`: claim extraction, evidence lookup, and verification logic.
 - `server/sqliteHistory.ts`: persistent analysis and verification history.
 
@@ -241,13 +257,32 @@ Build the production bundle:
 npm run build
 ```
 
-Run the Node regression suites:
+Run every suite:
 
-```npx tsx scripts/regressionVerdictTests.ts
-npx tsx scripts/test_pipeline.ts
+```bash
+npm run test:all
 ```
 
-The first suite covers the verdict contract, label-swap behavior, and model-artifact integrity. The second exercises the ML pipeline.
+Individually:
+
+| Command | Coverage |
+|---|---|
+| `npm run test:contracts` | live-news / URL data contract + claim, metrics-separation and evidence HTTP contracts (78) |
+| `npm run test:vercel-sim` | serverless runtime simulation |
+| `npm run test:verdicts` | verdict regression (26) |
+| `npm run test:claim` | claim model contract + artifact integrity (79) |
+| `npm run test:claim-parity` | Python/Node parity over all 802 TEST rows, both variants |
+| `npm run test:evidence` | evidence pipeline + prompt-injection defences (53) |
+| `npm run test:artifacts` | model artifact lifecycle (12) |
+| `npm run test:ssrf` | SSRF protection (8) |
+| `npm run test:production -- <url>` | smoke test against a live deployment |
+
+Retrain the claim model (writes the artifact, parity fixtures and report):
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install scikit-learn numpy scipy
+.venv/bin/python scripts/train_liar_claim.py
+```
 
 The repository also contains an offline Python test suite:
 
@@ -297,7 +332,19 @@ For the academic report, model metrics should be taken from the repository's gen
 
 TruthLens is a text-classification and verification-support system. A model probability is not proof that a real-world claim is true or false.
 
-The production classifier evaluates linguistic patterns learned from its training data. Source provenance and verification services provide additional context, but the current ML response explicitly reports evidence verification as unavailable when the required external search/index configuration is not present.
+The production classifier evaluates linguistic patterns learned from its training data.
+
+The claim model is a genuinely weak-signal system: 0.6272 accuracy on the held-out LIAR
+TEST split against a 0.5736 majority-class baseline. That is a real but modest signal, and
+the API reports it as a prior rather than a verdict. Reported LIAR accuracies in the
+mid-70s generally come from the dataset's speaker credit-history columns, which include the
+verdict of the statement they accompany; that leak is worth about 14 accuracy points and is
+removed here. See [docs/CLAIM_MODEL.md](docs/CLAIM_MODEL.md#4-the-credit-history-leak--why-liar--76-is-not-a-real-result).
+
+The evidence engine performs live retrieval. When retrieval fails or is unavailable it
+returns `SEARCH_UNAVAILABLE` or `INSUFFICIENT_EVIDENCE` with zero citations, never a
+fabricated verification result. Retrieved evidence is treated as untrusted data and cannot
+alter a verdict.
 
 The repository therefore treats uncertainty as a valid output rather than forcing every input into a binary real/fake result.
 
