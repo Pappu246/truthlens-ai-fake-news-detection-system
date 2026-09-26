@@ -14,7 +14,15 @@
     "lint": "tsc --noEmit",
     "test:contracts": "tsx scripts/contractTests.ts",
     "test:vercel-sim": "tsx scripts/vercel-sim.ts",
-    "test:verdicts": "tsx scripts/regressionVerdictTests.ts"
+    "test:verdicts": "tsx scripts/regressionVerdictTests.ts",
+    "train:claim": "python3 scripts/train_liar_claim.py",
+    "test:claim": "tsx scripts/claimModelTests.ts",
+    "test:claim-parity": "tsx scripts/claimParity.ts",
+    "test:evidence": "tsx scripts/evidenceTests.ts",
+    "test:artifacts": "tsx scripts/test_artifact_lifecycle.ts",
+    "test:ssrf": "tsx scripts/ssrfTests.ts",
+    "test:all": "npm run lint && npm run test:contracts && npm run test:vercel-sim && npm run test:verdicts && npm run test:claim && npm run test:claim-parity && npm run test:evidence && npm run test:artifacts && npm run test:ssrf",
+    "test:production": "tsx scripts/productionSmokeTest.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

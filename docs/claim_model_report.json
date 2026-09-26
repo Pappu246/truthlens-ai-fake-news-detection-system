@@ -1,0 +1,201 @@
+{
+  "model_version": "1.1.0-liar-claim",
+  "generated_at": "2026-09-26T11:02:27.112881+00:00",
+  "git_sha": "729dd11067ff249aec901d9ee74b1bb412f378ae",
+  "dataset": {
+    "name": "LIAR (Wang, 2017)",
+    "task": "binary claim veracity",
+    "label_mapping": {
+      "1": "TRUE (true, mostly-true)",
+      "0": "FALSE (false, pants-fire)"
+    },
+    "excluded_labels": [
+      "half-true",
+      "barely-true"
+    ],
+    "exclusion_rationale": "half-true and barely-true are ordinal middle classes; collapsing them into either pole injects label noise, so they are excluded from all splits.",
+    "split_policy": "TRAIN: binary filter -> intra-split statement de-duplication -> removal of statements that also occur in VALID or TEST. VALID and TEST: binary filter only; no row is ever removed from a held-out split.",
+    "counts": {
+      "train": 6471,
+      "valid": 799,
+      "test": 802
+    },
+    "train_duplicates_removed": 9,
+    "train_leakage_rows_removed": 9,
+    "fingerprint_sha256": "6284c6ee52aff70bcb4bb9844fdca211a3130cec585a3f9c2dfea696a204755a"
+  },
+  "protocol": {
+    "selection": "LinearSVC C grid searched on VALID macro-F1 only",
+    "calibration": "Platt sigmoid fitted on the disjoint VALID split",
+    "threshold": 0.5,
+    "test_usage": "read once, after selection and calibration were frozen",
+    "forbidden": [
+      "training on test",
+      "tuning on test",
+      "dropping test rows",
+      "rewriting labels",
+      "threshold tuning for score inflation"
+    ]
+  },
+  "results": {
+    "text_only": {
+      "valid": {
+        "n": 799,
+        "threshold": 0.5,
+        "accuracy": 0.6695869837296621,
+        "precision": 0.6788990825688074,
+        "recall": 0.7047619047619048,
+        "f1": 0.6915887850467289,
+        "macro_f1": 0.6678968183993752,
+        "roc_auc": 0.7316245759517528,
+        "pr_auc": 0.73666307239981,
+        "brier": 0.20906624228758494,
+        "confusion_matrix": [
+          [
+            239,
+            140
+          ],
+          [
+            124,
+            296
+          ]
+        ],
+        "confusion_matrix_layout": "[[TN, FP], [FN, TP]] with 1 = TRUE claim"
+      },
+      "test": {
+        "n": 802,
+        "threshold": 0.5,
+        "accuracy": 0.6271820448877805,
+        "precision": 0.6666666666666666,
+        "recall": 0.7,
+        "f1": 0.6829268292682927,
+        "macro_f1": 0.6152909486734808,
+        "roc_auc": 0.6797482837528603,
+        "pr_auc": 0.7275337851692831,
+        "brier": 0.22331911071781643,
+        "confusion_matrix": [
+          [
+            181,
+            161
+          ],
+          [
+            138,
+            322
+          ]
+        ],
+        "confusion_matrix_layout": "[[TN, FP], [FN, TP]] with 1 = TRUE claim"
+      },
+      "selected_C": 0.05
+    },
+    "text_meta": {
+      "valid": {
+        "n": 799,
+        "threshold": 0.5,
+        "accuracy": 0.6933667083854819,
+        "precision": 0.6948775055679287,
+        "recall": 0.7428571428571429,
+        "f1": 0.7180667433831991,
+        "macro_f1": 0.6909949629124501,
+        "roc_auc": 0.7486807387862797,
+        "pr_auc": 0.7408766400190562,
+        "brier": 0.20174477827347662,
+        "confusion_matrix": [
+          [
+            242,
+            137
+          ],
+          [
+            108,
+            312
+          ]
+        ],
+        "confusion_matrix_layout": "[[TN, FP], [FN, TP]] with 1 = TRUE claim"
+      },
+      "test": {
+        "n": 802,
+        "threshold": 0.5,
+        "accuracy": 0.6583541147132169,
+        "precision": 0.691358024691358,
+        "recall": 0.7304347826086957,
+        "f1": 0.7103594080338267,
+        "macro_f1": 0.6469730170868222,
+        "roc_auc": 0.718440122044241,
+        "pr_auc": 0.7558421586426146,
+        "brier": 0.20870783410938934,
+        "confusion_matrix": [
+          [
+            192,
+            150
+          ],
+          [
+            124,
+            336
+          ]
+        ],
+        "confusion_matrix_layout": "[[TN, FP], [FN, TP]] with 1 = TRUE claim"
+      },
+      "selected_C": 0.25
+    },
+    "text_meta_raw_credit_DIAGNOSTIC_ONLY": {
+      "valid": {
+        "n": 799,
+        "threshold": 0.5,
+        "accuracy": 0.785982478097622,
+        "precision": 0.7848970251716247,
+        "recall": 0.8166666666666667,
+        "f1": 0.8004667444574096,
+        "macro_f1": 0.7848487568440894,
+        "roc_auc": 0.8813607237090086,
+        "pr_auc": 0.897521291076622,
+        "brier": 0.14142532521695392,
+        "confusion_matrix": [
+          [
+            285,
+            94
+          ],
+          [
+            77,
+            343
+          ]
+        ],
+        "confusion_matrix_layout": "[[TN, FP], [FN, TP]] with 1 = TRUE claim"
+      },
+      "test": {
+        "n": 802,
+        "threshold": 0.5,
+        "accuracy": 0.800498753117207,
+        "precision": 0.8333333333333334,
+        "recall": 0.8152173913043478,
+        "f1": 0.8241758241758241,
+        "macro_f1": 0.7968141368717737,
+        "roc_auc": 0.873881261123824,
+        "pr_auc": 0.9036044468317334,
+        "brier": 0.14307540654054524,
+        "confusion_matrix": [
+          [
+            267,
+            75
+          ],
+          [
+            85,
+            375
+          ]
+        ],
+        "confusion_matrix_layout": "[[TN, FP], [FN, TP]] with 1 = TRUE claim"
+      },
+      "selected_C": 0.1,
+      "why_not_served": "Trained with the LIAR speaker credit-history columns exactly as shipped. Those columns already contain the current statement's own verdict, so the target label is present in the features. A metadata-only model with these raw counts and no text at all reaches ~0.76 accuracy, which is where inflated 'LIAR ~76%' figures come from. This variant is trained only to quantify that leak. It is never exported to the runtime artifact and never served."
+    }
+  },
+  "leakage_audit": {
+    "finding": "LIAR's five credit-history count columns include the verdict of the statement they accompany. Left untouched they leak the label.",
+    "mitigation": "The statement's own contribution is subtracted before the features are built.",
+    "measured_effect_on_test_accuracy": 0.1421,
+    "metadata_only_probe": "see docs/CLAIM_MODEL.md"
+  },
+  "known_limitations": [
+    "LIAR speaker credit-history counts aggregate a speaker's record across the whole corpus. The current statement's own contribution is subtracted, but statements by the same speaker in other splits still inform the counts. text_meta numbers must be read as metadata-conditioned, not as text-understanding performance.",
+    "half-true and barely-true claims are out of scope for this binary model.",
+    "LIAR is US political fact-checking from 2007-2016; performance on other domains or later periods is not established by these numbers."
+  ]
+}
