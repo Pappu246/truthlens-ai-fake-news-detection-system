@@ -111,6 +111,13 @@ point; it is not reachable over HTTP.
 Live retrieval is verified against a deployment with
 `npm run test:production -- <base-url>`.
 
+## Verified in production
+
+`Production Smoke Test` run against `https://truthlens-ai-dvpf.onrender.com`
+(2026-09-26) retrieved **10 real sources** from the live news index for the
+claim *"The United States unemployment rate fell below four percent in 2023"*,
+with every citation carrying a real URL, domain and retrieval timestamp.
+
 ## Limitations
 
 1. Relation is inferred from headlines and short snippets, not full-article
