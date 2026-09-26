@@ -139,5 +139,5 @@ The workflow covered health, article and claim metrics, claim prediction with an
 
 - **New README PR:** [#24](https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/pull/24)
 - **PR state at audit completion:** Open, documentation-only follow-up from the fixed Arena session branch; not merged in this audit.
-- **PR head:** `7fe2afe`
-- **PR checks:** Green on the documentation content; the final audit-status line above is the only change since the preceding green check run.
+- **PR head:** latest pushed documentation commit on the [PR #24 branch](https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/pull/24)
+- **PR checks:** Green at audit completion for type-check/build, ISOT pipeline tests, real-ISOT validation, benchmark, and Vercel checks.
