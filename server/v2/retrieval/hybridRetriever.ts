@@ -73,7 +73,7 @@ export async function hybridRetrieve(
     const searchable = docs.map(d => ({ id: d.id, text: docText(d) }));
 
     const lexicalHits = bm25Search(query, searchable, perQueryTopK);
-    const denseHits = denseSearch(query, searchable, embeddingModel, perQueryTopK);
+    const denseHits = await denseSearch(query, searchable, embeddingModel, perQueryTopK);
 
     if (lexicalHits.length > 0) channelsUsed.add('LEXICAL_BM25');
     if (denseHits.length > 0) channelsUsed.add('DENSE_EMBEDDING');
