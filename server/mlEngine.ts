@@ -1519,11 +1519,16 @@ export class TruthLensMLEngine {
     const realSamples = datasetInfo.real_samples;
     const fakeSamples = datasetInfo.fake_samples;
 
+    const bestModelName = this.metrics.best_model?.name || "Linear SVM (Calibrated)";
+    const modelVersion = this.metrics.model_version || "unknown";
     return {
       status: "operational",
-      model_type: "Linear SVM (Calibrated)",
-      model_version: "2.2.0",
-      model_architecture: "CalibratedClassifierCV(LinearSVC) with Platt Scaling (Sigmoid)",
+      model_type: bestModelName,
+      model_name: bestModelName,
+      model_version: modelVersion,
+      model_architecture: bestModelName.toLowerCase().includes("svm")
+        ? "CalibratedClassifierCV(LinearSVC) with Platt Scaling (Sigmoid)"
+        : "Logistic Regression (L2 regularized, sklearn)",
       is_demo: this.metrics.is_demo,
       dataset_status: this.metrics.dataset_status,
       demo_badge_label: this.metrics.demo_badge_label,
