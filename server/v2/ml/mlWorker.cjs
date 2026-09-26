@@ -32,7 +32,7 @@ let respBytes = null;
 let transformers = null;
 let extractorPromise = null;
 let nliPromise = null;
-let config = null; // { modelDir, embModelId, nliModelId }
+let config = null; // { modelDir, embModelId, nliModelId, embDtype, nliDtype }
 
 function failHard(message) {
   // Cannot reply over the protocol (no request in flight): crash loudly.
@@ -60,7 +60,7 @@ async function getExtractor() {
   if (!extractorPromise) {
     extractorPromise = (async () => {
       const mod = await loadTransformers(config.modelDir);
-      return mod.pipeline('feature-extraction', config.embModelId, { dtype: 'q8' });
+      return mod.pipeline('feature-extraction', config.embModelId, { dtype: config.embDtype });
     })();
   }
   return extractorPromise;
@@ -71,8 +71,8 @@ async function getNli() {
     nliPromise = (async () => {
       const mod = await loadTransformers(config.modelDir);
       const [tokenizer, model] = await Promise.all([
-        mod.AutoTokenizer.from_pretrained(config.nliModelId, { dtype: 'q8' }),
-        mod.AutoModelForSequenceClassification.from_pretrained(config.nliModelId, { dtype: 'q8' })
+        mod.AutoTokenizer.from_pretrained(config.nliModelId),
+        mod.AutoModelForSequenceClassification.from_pretrained(config.nliModelId, { dtype: config.nliDtype })
       ]);
       return { tokenizer, model };
     })();
@@ -106,7 +106,11 @@ async function classify(body) {
   const sum = exps.reduce((a, b) => a + b, 0) || 1;
   /** @type {Record<string, number>} */
   const probs = {};
-  raw.forEach((v, i) => { probs[id2label[i]] = exps[i] / sum; });
+  raw.forEach((v, i) => {
+    const label = String(id2label[i] ?? '').trim().toLowerCase();
+    if (!label) throw new Error(`NLI config is missing id2label[${i}]`);
+    probs[label] = exps[i] / sum;
+  });
   return { probs, id2label };
 }
 
@@ -177,7 +181,13 @@ parentPort.on('message', msg => {
       ctrl = new Int32Array(msg.ctrl);
       reqBytes = new Uint8Array(msg.req);
       respBytes = new Uint8Array(msg.resp);
-      config = { modelDir: msg.modelDir, embModelId: msg.embModelId, nliModelId: msg.nliModelId };
+      config = {
+        modelDir: msg.modelDir,
+        embModelId: msg.embModelId,
+        nliModelId: msg.nliModelId,
+        embDtype: msg.embDtype || 'q8',
+        nliDtype: msg.nliDtype || 'q8'
+      };
       if (!config.modelDir || !config.embModelId || !config.nliModelId) {
         failHard('init message missing modelDir/embModelId/nliModelId');
         return;
