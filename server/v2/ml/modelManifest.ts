@@ -222,3 +222,255 @@ export async function verifyModelHashes(modelDir: string, manifest: ModelManifes
 }
 
 export const ALL_MODEL_MANIFESTS: ModelManifestEntry[] = [EMBEDDING_MODEL_MANIFEST, NLI_MODEL_MANIFEST];
+
+/* ==========================================================================
+ * V2.2 — OPTIONAL EXPERIMENTAL NLI CANDIDATES (evaluation only)
+ * ==========================================================================
+ * Everything below is ADDITIVE. It does not appear in ALL_MODEL_MANIFESTS,
+ * the default resolver never reads it, and no entry here can become the
+ * production/default adapter through any code path in this repository:
+ * `resolveDefaultNliAdapter()` continues to return the sealed
+ * `Xenova/nli-deberta-v3-xsmall` adapter.
+ *
+ * Each candidate is a CONTENT-SEALED provisioning record:
+ *   - canonical model id + the upstream base model it was exported from,
+ *   - the pinned upstream revision (Hugging Face commit) when it is KNOWN,
+ *   - per-file byte size + SHA-256, plus the git blob SHA-1 of the pinned
+ *     mirror commit the bytes were fetched from,
+ *   - `sealState` — 'sealed' (bytes are pinned and verifiable) or
+ *     'unsealed'  (identity is pinned, bytes are NOT yet attested here).
+ *
+ * FAIL-CLOSED CONTRACT: an 'unsealed' candidate cannot be provisioned or
+ * loaded. Downloading, resolving, or evaluating it throws
+ * `ModelUnavailableError`. Seals are never inferred, guessed, or filled in
+ * from an unverified source, and an incomplete/size-mismatched local copy is
+ * rejected rather than used. This is what keeps "we evaluated model X" a
+ * checkable statement about exact bytes.
+ */
+
+export type CandidateSealState = 'sealed' | 'unsealed';
+
+export interface ExperimentalNliCandidate {
+  kind: 'nli';
+  /** Local/Transformers.js model id (also the on-disk directory name). */
+  id: string;
+  /** Upstream model the ONNX port was exported from. */
+  baseModel: string;
+  /** Pinned upstream revision (HF commit sha) — null when not yet attested. */
+  revision: string | null;
+  quantization: 'int8-dynamic(q8)-onnx' | 'fp32-onnx';
+  /** Content seal: `<dtype>@<first8 of the ONNX sha256>`; null when unsealed. */
+  versionSeal: string | null;
+  sealState: CandidateSealState;
+  /** Purpose/notes recorded in the evaluation report. */
+  purpose: string;
+  /** Sealed files (empty when `sealState === 'unsealed'`). */
+  files: ModelFileSeal[];
+  /** Pinned source(s) the sealed bytes were fetched from. */
+  sources: ModelMirrorSource[];
+  /** Why an unsealed candidate is unsealed (provisioning blocker), if any. */
+  unsealedReason?: string;
+  /** Expected id2label class names (validated at load time, never assumed). */
+  expectedLabels: string[];
+}
+
+/**
+ * CANDIDATE UNDER EVALUATION (V2.2): the MNLI+FEVER+ANLI DeBERTa-v3-base
+ * cross-encoder recommended as the next evidence-only experiment by
+ * docs/V2_1_RESEARCH_REVIEW.md §7.
+ *
+ * Identity is pinned; the BYTES ARE NOT SEALED HERE because no verified copy
+ * of the ONNX export was obtainable from any host reachable by this
+ * environment (see docs/V2_2_MODEL_COMPARISON.md §2 for the full attempt
+ * log). Recording a plausible-looking sha256/revision without having the
+ * bytes would be a fabricated attestation, so the entry stays 'unsealed' and
+ * every code path that would load it fails closed.
+ *
+ * To complete provisioning from a network-enabled environment:
+ *   1. obtain the files listed in `EXPECTED_CANDIDATE_FILES` for this id;
+ *   2. run `npm run seal:v2-candidate -- --model=<id> --dir=<path>` to print
+ *      the seal block (sizes + SHA-256 + revision);
+ *   3. paste it here, flip `sealState` to 'sealed', then
+ *      `npm run download:v2-candidate -- --model=<id>` and
+ *      `npm run test:v2-candidate`.
+ */
+export const DEBERTA_V3_BASE_MNLI_FEVER_ANLI_CANDIDATE: ExperimentalNliCandidate = {
+  kind: 'nli',
+  id: 'Xenova/DeBERTa-v3-base-mnli-fever-anli',
+  baseModel: 'MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli',
+  revision: null,
+  quantization: 'int8-dynamic(q8)-onnx',
+  versionSeal: null,
+  sealState: 'unsealed',
+  purpose:
+    'V2.2 evaluation candidate: MNLI+FEVER+ANLI training is the evidence-verification ' +
+    'task-fit hypothesis raised by the V2.1 review; evaluated on SciFact (not a FEVER-family ' +
+    'benchmark) through the unchanged V2.1 pipeline. Evaluation only — never a default.',
+  files: [],
+  sources: [
+    {
+      type: 'huggingface-resolve',
+      note: 'Canonical upstream ONNX port (Xenova). Unreachable from this environment (huggingface.co is not in the egress allowlist).',
+      urlTemplate: 'https://huggingface.co/Xenova/DeBERTa-v3-base-mnli-fever-anli/resolve/main/{file}'
+    }
+  ],
+  unsealedReason:
+    'No content-sealed copy of Xenova/DeBERTa-v3-base-mnli-fever-anli was obtainable: huggingface.co and every ' +
+    'tested mirror host are outside this environment\'s egress allowlist, and an exhaustive GitHub code/repo ' +
+    'search found no repository vendoring these ONNX weights (the q8 export is ~185 MB, above GitHub\'s 100 MB ' +
+    'non-LFS blob limit, and no LFS mirror exists). Bytes therefore cannot be hashed, pinned, or run here.',
+  expectedLabels: ['entailment', 'neutral', 'contradiction']
+};
+
+/**
+ * Comparison-only DistilBERT MNLI model already used by the V2.1 external
+ * report. Moved into this registry so every experimental model shares ONE
+ * sealed provisioning path; the byte seals are unchanged.
+ */
+export const DISTILBERT_MNLI_CANDIDATE: ExperimentalNliCandidate = {
+  kind: 'nli',
+  id: 'Xenova/distilbert-base-uncased-mnli',
+  baseModel: 'typeform/distilbert-base-uncased-mnli',
+  revision: null,
+  quantization: 'int8-dynamic(q8)-onnx',
+  versionSeal: 'q8@5b7e374d',
+  sealState: 'sealed',
+  purpose: 'V2.1 comparison-only generic MNLI baseline (recorded in docs/V2_1_RESEARCH_REVIEW.md §4).',
+  files: [
+    { path: 'config.json', bytes: 753, sha256: '7d897374b56613fb8579c623dd89bbc01ab9795612b3d1d546cd5658232a5c7a', gitBlobSha1: '8c9d46fe6cf23ab39dd6fbad2e4d0640397c4faa' },
+    { path: 'onnx/model_quantized.onnx', bytes: 67581975, sha256: '5b7e374d8d1e44149fafa498efe80166f740914b3e53bcfa6115fb3ecaca0945', gitBlobSha1: '63946d67f70fe7c975b801ee5d5e23cd27492db6' },
+    { path: 'tokenizer.json', bytes: 711396, sha256: 'd241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab90f9267a1f9e5c66', gitBlobSha1: '688882a79f44442ddc1f60d70334a7ff5df0fb47' },
+    { path: 'tokenizer_config.json', bytes: 372, sha256: '2bbf2ea55c232406706144b907ca020cd7528a78e3e4741115be3b3566542b0b', gitBlobSha1: '1ccca247a6bf76cfc977ce13c570f541c984ca94' }
+  ],
+  sources: [
+    {
+      type: 'github-git-blob',
+      note: 'Pinned mirror used by the V2.1 external comparison run.',
+      repo: 'ramcsamal/MLNodeJSParser',
+      commit: 'b8f11993a2bcb4412fe7328a613e0ddb3c12f214',
+      pathPrefix: 'models/Xenova/distilbert-base-uncased-mnli'
+    }
+  ],
+  expectedLabels: ['entailment', 'neutral', 'contradiction']
+};
+
+export const EXPERIMENTAL_NLI_CANDIDATES: ExperimentalNliCandidate[] = [
+  DEBERTA_V3_BASE_MNLI_FEVER_ANLI_CANDIDATE,
+  DISTILBERT_MNLI_CANDIDATE
+];
+
+/** Files a Transformers.js NLI candidate must provide to run offline. */
+export const EXPECTED_CANDIDATE_FILES = [
+  'config.json',
+  'tokenizer.json',
+  'tokenizer_config.json',
+  'onnx/model_quantized.onnx'
+] as const;
+
+export function findExperimentalCandidate(id: string): ExperimentalNliCandidate | undefined {
+  return EXPERIMENTAL_NLI_CANDIDATES.find(candidate => candidate.id === id);
+}
+
+/** True when `id` is a sealed, provisionable experimental candidate. */
+export function isSealedCandidate(id: string): boolean {
+  return findExperimentalCandidate(id)?.sealState === 'sealed';
+}
+
+export interface CandidateReadiness {
+  ok: boolean;
+  candidate: ExperimentalNliCandidate;
+  root: string;
+  /** Reasons the candidate cannot be used right now (empty when ok). */
+  problems: string[];
+}
+
+/**
+ * Fail-closed readiness check for an experimental candidate: the seal must
+ * exist in the registry AND every sealed file must be present with the exact
+ * sealed byte size. Hash verification is a separate, explicit step
+ * (`verifyCandidateHashes`) because it is IO-heavy.
+ */
+export function candidateReadiness(
+  id: string,
+  modelDir: string = getV2ModelDir()
+): CandidateReadiness {
+  const candidate = findExperimentalCandidate(id);
+  if (!candidate) {
+    throw new ModelUnavailableError(
+      `'${id}' is not a registered TruthLens V2 experimental NLI candidate. ` +
+      `Registered: ${EXPERIMENTAL_NLI_CANDIDATES.map(c => c.id).join(', ')}. ` +
+      'Add a sealed entry to EXPERIMENTAL_NLI_CANDIDATES before evaluating a new model.'
+    );
+  }
+  const root = path.join(modelDir, candidate.id);
+  const problems: string[] = [];
+
+  if (candidate.sealState !== 'sealed' || candidate.files.length === 0) {
+    problems.push(
+      `candidate '${candidate.id}' is registered but UNSEALED — no byte seals are recorded, so its weights ` +
+      'cannot be attested. ' + (candidate.unsealedReason ?? 'No reason recorded.')
+    );
+    return { ok: false, candidate, root, problems };
+  }
+
+  const sealedPaths = new Set(candidate.files.map(file => file.path));
+  for (const required of EXPECTED_CANDIDATE_FILES) {
+    if (!sealedPaths.has(required)) {
+      problems.push(`seal is incomplete: required file '${required}' has no recorded size/SHA-256.`);
+    }
+  }
+  for (const file of candidate.files) {
+    const full = path.join(root, file.path);
+    try {
+      const size = fs.statSync(full).size;
+      if (size !== file.bytes) {
+        problems.push(`${file.path}: ${size} bytes on disk, sealed size is ${file.bytes} (corrupt or tampered).`);
+      }
+    } catch {
+      problems.push(`${file.path}: missing under ${root}.`);
+    }
+  }
+  return { ok: problems.length === 0, candidate, root, problems };
+}
+
+/** Full SHA-256 verification of a sealed candidate's local files. */
+export function verifyCandidateHashes(
+  id: string,
+  modelDir: string = getV2ModelDir()
+): { ok: boolean; mismatches: string[] } {
+  const candidate = findExperimentalCandidate(id);
+  if (!candidate || candidate.sealState !== 'sealed') {
+    return { ok: false, mismatches: [`'${id}' is not a sealed experimental candidate; refusing to verify.`] };
+  }
+  const root = path.join(modelDir, candidate.id);
+  const mismatches: string[] = [];
+  for (const file of candidate.files) {
+    const full = path.join(root, file.path);
+    try {
+      const sha = crypto.createHash('sha256').update(fs.readFileSync(full)).digest('hex');
+      if (sha !== file.sha256) mismatches.push(`${file.path}: sha256 ${sha} != sealed ${file.sha256}`);
+    } catch (err: any) {
+      mismatches.push(`${file.path}: unreadable (${err?.message || err})`);
+    }
+  }
+  return { ok: mismatches.length === 0, mismatches };
+}
+
+/**
+ * Throws unless `id` is a registered, sealed candidate whose local files are
+ * complete and correctly sized. The single enforcement point used by the
+ * candidate downloader, the candidate adapter resolver, and the external
+ * evaluation harness.
+ */
+export function assertCandidateUsable(id: string, modelDir: string = getV2ModelDir()): ExperimentalNliCandidate {
+  const readiness = candidateReadiness(id, modelDir);
+  if (!readiness.ok) {
+    throw new ModelUnavailableError(
+      `Experimental NLI candidate '${id}' is NOT usable (fail-closed):\n` +
+      readiness.problems.map(problem => `  - ${problem}`).join('\n') + '\n' +
+      `  -> Provision it with \`npm run download:v2-candidate -- --model=${id}\` (requires a sealed registry entry), ` +
+      'or record seals first with `npm run seal:v2-candidate`. No unsealed or partial model is ever loaded.'
+    );
+  }
+  return readiness.candidate;
+}

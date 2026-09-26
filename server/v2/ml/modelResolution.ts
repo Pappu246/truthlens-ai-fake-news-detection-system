@@ -136,3 +136,62 @@ export function _resetModelResolutionCacheForTests(): void {
   cachedEmbeddingModel = null;
   cachedNliAdapter = null;
 }
+
+/* ==========================================================================
+ * V2.2 — EXPLICIT EXPERIMENTAL CANDIDATE RESOLUTION (evaluation only)
+ * ==========================================================================
+ * Model selection stays EXPLICIT and goes through this one interface. The
+ * default resolver above is untouched: `resolveDefaultNliAdapter()` still
+ * returns the sealed xsmall adapter, and nothing calls the function below
+ * unless a caller names a candidate id on purpose (an evaluation harness
+ * flag). The returned object is an ordinary `NliAdapter` — the interface
+ * itself is unchanged — so the rest of the V2.1 pipeline cannot tell the
+ * difference, which is exactly what makes the comparison valid.
+ */
+import { MlWorkerClient } from './mlWorkerClient';
+import {
+  ExperimentalNliCandidate,
+  assertCandidateUsable,
+  findExperimentalCandidate
+} from './modelManifest';
+
+export interface CandidateAdapterResolution {
+  adapter: NliAdapter;
+  candidate: ExperimentalNliCandidate;
+  client: MlWorkerClient;
+}
+
+/**
+ * Resolves an experimental NLI adapter by candidate id, fail-closed.
+ *
+ * Throws `ModelUnavailableError` when the id is unknown, unsealed, or the
+ * local files are missing/wrong-sized — it never falls back to the default
+ * model, because a silent fallback would mean reporting xsmall numbers under
+ * a candidate's name.
+ */
+export function resolveExperimentalNliAdapter(
+  id: string,
+  options?: { modelDir?: string; embeddingModel?: EmbeddingModel; client?: MlWorkerClient }
+): CandidateAdapterResolution {
+  const modelDir = options?.modelDir ?? getV2ModelDir();
+  const candidate = assertCandidateUsable(id, modelDir);
+  const client = options?.client ?? new MlWorkerClient({ modelDir, nliModelId: candidate.id, nliDtype: 'q8' });
+  const embeddingModel = options?.embeddingModel ?? new TransformerEmbeddingModel(client);
+  const adapter = new PretrainedNliAdapter({
+    client,
+    embeddingModel,
+    modelName: candidate.id,
+    modelVersion: candidate.versionSeal ?? 'unsealed'
+  });
+  return { adapter, candidate, client };
+}
+
+/** Registry-aware description used by evaluation reports. */
+export function describeCandidate(id: string): string {
+  const candidate = findExperimentalCandidate(id);
+  if (!candidate) return `${id} (not a registered experimental candidate)`;
+  return (
+    `${candidate.id} [base=${candidate.baseModel}, revision=${candidate.revision ?? 'UNPINNED'}, ` +
+    `${candidate.quantization}, seal=${candidate.versionSeal ?? 'NONE (' + candidate.sealState + ')'}]`
+  );
+}

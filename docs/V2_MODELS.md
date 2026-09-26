@@ -196,3 +196,51 @@ and report the delta against `data/v2/eval_results.json` (V2.1) and
 `data/v2/eval_results_v2_baseline.json` (V2 heuristic) — with per-passage
 gold NLI labels added to the fixture generator so NLI quality is measured
 directly rather than only through verdicts.
+
+---
+
+## V2.2 — optional experimental NLI candidates (evaluation only)
+
+`server/v2/ml/modelManifest.ts` now also carries
+`EXPERIMENTAL_NLI_CANDIDATES`: an **additive, evaluation-only** registry of
+NLI models that may be swapped in behind the unchanged `NliAdapter`
+interface for benchmark runs. It is deliberately *not* part of
+`ALL_MODEL_MANIFESTS`, and `resolveDefaultNliAdapter()` continues to return
+the sealed `Xenova/nli-deberta-v3-xsmall` adapter — registering a candidate
+can never change the default model (asserted by `npm run test:v2-candidate`).
+
+Each entry pins id, base model, upstream revision (or explicit `null`),
+quantization, the content seal `q8@<first8 sha256>`, per-file
+`{bytes, sha256, gitBlobSha1}`, pinned mirror sources, and a `sealState`
+of `sealed` or `unsealed`.
+
+**Fail-closed contract.** An unsealed entry, an unknown id, a missing file,
+a wrong-sized file, or (on explicit verification) a wrong-content file all
+raise `ModelUnavailableError`. Nothing unverified is downloaded, loaded or
+evaluated, and there is never a silent fallback to the default model.
+
+| Command | Purpose |
+|---|---|
+| `npm run download:v2-candidate -- --list` | show the registry, seal states and blockers |
+| `npm run download:v2-candidate -- --model=<id>` | sealed, hash-verified, idempotent provisioning |
+| `npm run seal:v2-candidate -- --model=<id> --dir=<path> [--revision=<sha>]` | compute the seal block from bytes on disk (never writes the manifest) |
+| `npm run test:v2-candidate` | registry, fail-closed and research-integrity regression tests |
+| `npm run eval:v2-external -- --nli-model-id=<id>` | run the frozen SciFact protocol with that candidate |
+
+Current entries:
+
+* `Xenova/distilbert-base-uncased-mnli` — **sealed**, comparison-only MNLI
+  baseline (seals migrated here from the old ad-hoc script).
+* `Xenova/DeBERTa-v3-base-mnli-fever-anli` — **unsealed**: identity is pinned,
+  bytes are not obtainable in the CI/sandbox environment, so it fails closed.
+  See `docs/V2_2_MODEL_COMPARISON.md` for the provisioning attempt log and the
+  exact steps to complete the seal.
+
+### Frozen evaluation clock
+
+`server/v2/clock.ts` provides the single injectable clock used by the
+freshness rerank signal and provenance timestamps. `verifyClaimV2()` accepts
+`nowMs`; `TRUTHLENS_V2_FROZEN_NOW` (ISO-8601 or epoch ms) freezes it
+process-wide; live callers still get `Date.now()`. Both evaluation harnesses
+pin it to `2026-09-26T00:00:00.000Z`, so benchmark runs no longer drift with
+the date on which they are executed.
