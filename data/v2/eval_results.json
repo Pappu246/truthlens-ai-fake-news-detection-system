@@ -60,7 +60,8 @@
     "nTotal": 56
   },
   "abstention_rate": 0.875,
-  "calibration_ece": 0.3526071428571429,
-  "generated_at": "2026-09-26T17:20:28.470Z",
+  "calibration_ece": 0.3525892857142858,
+  "generated_at": "2026-09-26T20:51:56.275Z",
+  "frozen_evaluation_clock": "2026-09-26T00:00:00.000Z",
   "note": "V2.1 pretrained-adapter run (real ONNX models, offline). Development/evaluation harness, not a world-level benchmark."
 }

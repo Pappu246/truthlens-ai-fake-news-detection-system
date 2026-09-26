@@ -12,12 +12,16 @@
  *                    from `server/verification/evidenceAnalyzer.ts` — no
  *                    second source-tier taxonomy is introduced.
  *   - freshness    : recency of publication relative to "now" (a stale wire
- *                    story about a fast-moving topic is weaker evidence)
+ *                    story about a fast-moving topic is weaker evidence).
+ *                    "now" comes from the injectable V2 clock (server/v2/clock.ts)
+ *                    so offline evaluation runs can freeze it and stay
+ *                    byte-reproducible; live callers still get Date.now().
  *   - independence : penalises duplicate/syndicated sources so that ten
  *                    outlets republishing one wire story do not count as ten
  *                    independent confirmations
  */
 import { determineSourceType } from '../../verification/evidenceAnalyzer';
+import { resolveNowMs } from '../clock';
 import { RetrievedCandidate, RerankedEvidence, RerankSignals } from '../types';
 
 const WEIGHTS = {
@@ -49,11 +53,11 @@ function registrableDomain(url: string): string {
   }
 }
 
-function freshnessScore(publishedAt: string | null | undefined): number {
+function freshnessScore(publishedAt: string | null | undefined, nowMs: number): number {
   if (!publishedAt) return 0.5; // unknown date: neutral, not penalised nor rewarded
   const published = new Date(publishedAt).getTime();
   if (Number.isNaN(published)) return 0.5;
-  const ageDays = Math.max(0, (Date.now() - published) / (1000 * 60 * 60 * 24));
+  const ageDays = Math.max(0, (nowMs - published) / (1000 * 60 * 60 * 24));
   // Half-life style decay: ~1.0 for same-day, ~0.5 at 180 days, floor 0.15.
   const decayed = Math.exp(-ageDays / 180);
   return Math.max(0.15, Math.min(1, decayed));
@@ -65,7 +69,15 @@ function freshnessScore(publishedAt: string | null | undefined): number {
  * independence signal — and therefore their overall rerank score and
  * downstream vote weight — is reduced.
  */
-export function rerankEvidence(candidates: RetrievedCandidate[]): RerankedEvidence[] {
+export interface RerankOptions {
+  /** Epoch milliseconds used as "now" by the freshness signal. Defaults to
+   * the shared V2 clock (frozen when TRUTHLENS_V2_FROZEN_NOW is set, wall
+   * clock otherwise). The freshness FORMULA and all weights are unchanged. */
+  nowMs?: number;
+}
+
+export function rerankEvidence(candidates: RetrievedCandidate[], options?: RerankOptions): RerankedEvidence[] {
+  const nowMs = resolveNowMs(options?.nowMs);
   const seenDomains = new Map<string, number>(); // domain -> occurrences seen so far
   const wireSeen = { count: 0 };
 
@@ -91,7 +103,7 @@ export function rerankEvidence(candidates: RetrievedCandidate[]): RerankedEviden
       lexical: c.lexicalScore,
       semantic: c.denseScore,
       sourceQuality: SOURCE_QUALITY_SCORE[sourceType] ?? 0.3,
-      freshness: freshnessScore(c.publishedAt),
+      freshness: freshnessScore(c.publishedAt, nowMs),
       independence
     };
 

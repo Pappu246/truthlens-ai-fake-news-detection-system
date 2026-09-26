@@ -23,7 +23,14 @@ import { TransformerEmbeddingModel } from '../server/v2/retrieval/transformerEmb
 import type { EmbeddingModel } from '../server/v2/retrieval/embeddings';
 import type { RawDocument } from '../server/v2/types';
 import { MlWorkerClient } from '../server/v2/ml/mlWorkerClient';
-import { getV2ModelDir, NLI_MODEL_NAME, NLI_MODEL_VERSION } from '../server/v2/ml/modelManifest';
+import {
+  assertCandidateUsable,
+  findExperimentalCandidate,
+  getV2ModelDir,
+  verifyCandidateHashes,
+  NLI_MODEL_NAME,
+  NLI_MODEL_VERSION
+} from '../server/v2/ml/modelManifest';
 import { PretrainedNliAdapter } from '../server/v2/nli/pretrainedNliAdapter';
 
 const DATASET_NOTE =
@@ -34,6 +41,16 @@ const RETRIEVAL_CANDIDATES_PER_QUERY = 25;
 const EVIDENCE_K = 5;
 const HC_THRESHOLD = 0.75;
 const FIXED_RETRIEVED_AT = '2026-09-26T00:00:00.000Z';
+/**
+ * RESEARCH-INTEGRITY FIX (V2.1 review, MEDIUM finding "evaluation freshness
+ * is wall-clock dependent"): the rerank freshness signal used Date.now(), so
+ * scores drifted with the day the benchmark was executed. Every V2.2
+ * evaluation run pins the clock to the same instant as the frozen
+ * `retrievedAt` stamp, making runs comparable across dates. Thresholds,
+ * weights, the freshness formula and the decision policy are UNCHANGED.
+ */
+const FROZEN_EVALUATION_NOW = FIXED_RETRIEVED_AT;
+const FROZEN_EVALUATION_NOW_MS = Date.parse(FROZEN_EVALUATION_NOW);
 
 type SciFactEvidenceLabel = 'SUPPORT' | 'CONTRADICT';
 type NliGold = 'SUPPORTS' | 'REFUTES' | 'NEUTRAL';
@@ -222,6 +239,28 @@ async function main(): Promise<void> {
       missing.map(file => `  - ${file}`).join('\n')
     );
   }
+  // Any NLI model other than the sealed V2.1 default must be a REGISTERED,
+  // SEALED experimental candidate whose local bytes verify — fail closed, so
+  // a run can never report numbers for weights nobody can identify.
+  const registryCandidate = findExperimentalCandidate(nliModelId);
+  if (nliModelId !== NLI_MODEL_NAME) {
+    if (!registryCandidate) {
+      throw new Error(
+        `NLI model '${nliModelId}' is not the sealed default and is not a registered experimental candidate ` +
+        '(server/v2/ml/modelManifest.ts -> EXPERIMENTAL_NLI_CANDIDATES). Register and seal it first; ' +
+        'unidentifiable weights are never evaluated.'
+      );
+    }
+    assertCandidateUsable(nliModelId, modelDir);
+    const candidateHashes = verifyCandidateHashes(nliModelId, modelDir);
+    if (!candidateHashes.ok) {
+      throw new Error(
+        `Candidate '${nliModelId}' failed SHA-256 seal verification; refusing to evaluate:\n` +
+        candidateHashes.mismatches.map(mismatch => `  - ${mismatch}`).join('\n')
+      );
+    }
+  }
+
   const nliVersion = arg('nli-version') ||
     (nliModelId === NLI_MODEL_NAME && nliDtype === 'q8' ? NLI_MODEL_VERSION : `${nliDtype}@${sha256Prefix(nliOnnx)}`);
 
@@ -248,6 +287,7 @@ async function main(): Promise<void> {
   console.log(`Claims: ${claims.length}/${allClaims.length}; corpus documents: ${corpus.length}`);
   console.log(`NLI candidate: ${nliModelId} (${nliVersion}, dtype=${nliDtype})`);
   console.log('Decision thresholds: UNCHANGED defaults. No fixture tuning.');
+  console.log(`Frozen evaluation clock: ${FROZEN_EVALUATION_NOW} (freshness signal is date-independent)`);
   console.log('='.repeat(78));
 
   const startedAt = new Date().toISOString();
@@ -335,7 +375,8 @@ async function main(): Promise<void> {
       retrieval: { embeddingModel },
       priorOverride: { available: false, probabilityTrue: null, label: null, modelVersion: null },
       minCandidatesExpectedWarning: 0,
-      evaluationDatasetNote: DATASET_NOTE
+      evaluationDatasetNote: DATASET_NOTE,
+      nowMs: FROZEN_EVALUATION_NOW_MS
     });
     const predicted = result.provenance.final_verdict;
     const correct = predicted === gold.verdict;
@@ -426,6 +467,12 @@ async function main(): Promise<void> {
     },
     frozen_policy: {
       decision_thresholds: 'DEFAULT_DECISION_THRESHOLDS (unchanged)',
+      frozen_evaluation_clock: FROZEN_EVALUATION_NOW,
+      research_integrity_fixes: [
+        'freshness/provenance clock frozen (no Date.now() dependence in scored signals)',
+        'NLI 4-way score vectors sum to exactly 1.000 (largest-remainder rounding)',
+        'NLI basis text states "no directional majority" instead of an impossible maxP<0.5 condition'
+      ],
       lexical_candidates_per_expanded_query: RETRIEVAL_CANDIDATES_PER_QUERY,
       evidence_k: EVIDENCE_K,
       high_confidence_threshold: HC_THRESHOLD,
@@ -433,7 +480,20 @@ async function main(): Promise<void> {
       prior: 'disabled/unavailable so the LIAR prior cannot affect external calibration'
     },
     model: {
-      nli: { id: nliModelId, version: nliVersion, dtype: nliDtype, onnx_sha256: sha256File(nliOnnx) },
+      nli: {
+        id: nliModelId,
+        version: nliVersion,
+        dtype: nliDtype,
+        onnx_sha256: sha256File(nliOnnx),
+        registry: registryCandidate
+          ? {
+              base_model: registryCandidate.baseModel,
+              revision: registryCandidate.revision,
+              seal_state: registryCandidate.sealState,
+              version_seal: registryCandidate.versionSeal
+            }
+          : { base_model: 'cross-encoder/nli-deberta-v3-xsmall', revision: null, seal_state: 'sealed-default', version_seal: NLI_MODEL_VERSION }
+      },
       embedding: { id: embeddingModel.name, version: embeddingModel.version, dimensions: embeddingModel.dimensions },
       id2label: meta.nliId2Label,
       runtime: '@huggingface/transformers@3.7.6 + onnxruntime-node@1.21.0 (Node, CPU)'
