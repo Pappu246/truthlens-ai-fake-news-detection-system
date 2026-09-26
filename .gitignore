@@ -16,3 +16,7 @@ data/sql-wasm.wasm
 # Phase 9 generated candidate/production evidence (kept out of Git)
 artifacts/models/
 artifacts/production_backups/
+
+# V2.1 sealed pretrained model files (~110MB) — provisioned via
+# `npm run download:v2-models`, hash-verified against server/v2/ml/modelManifest.ts
+models/

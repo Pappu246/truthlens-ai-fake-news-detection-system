@@ -8,7 +8,7 @@
  */
 import { ExpandedQuerySet, ClassifiedEvidence, VerdictDecision, ProvenanceRecord, ProvenanceEvidenceRecord } from './types';
 
-export const PIPELINE_VERSION = 'truthlens-v2-vertical-slice-0.1.0';
+export const PIPELINE_VERSION = 'truthlens-v2.1-pretrained-adapters-0.2.0';
 
 function domainOf(url: string): string {
   try {
@@ -48,7 +48,8 @@ export function buildProvenance(
   evidence: ClassifiedEvidence[],
   decision: VerdictDecision,
   retrievalSummary: { channelsUsed: string[]; totalRetrievedBeforeDedup: number; totalAfterDedup: number },
-  limitations: string[]
+  limitations: string[],
+  models?: ProvenanceRecord['models']
 ): ProvenanceRecord {
   const counts = {
     supports: evidence.filter(e => e.nli.label === 'SUPPORTS').length,
@@ -69,6 +70,7 @@ export function buildProvenance(
     abstained: decision.abstained,
     abstention_reason: decision.abstentionReason,
     evidence: evidence.map(toEvidenceRecord),
+    models,
     evidence_counts: counts,
     source_diversity: { independent_domains: independentDomains, duplicate_clusters: duplicateClusters },
     prior_signal: decision.prior,
