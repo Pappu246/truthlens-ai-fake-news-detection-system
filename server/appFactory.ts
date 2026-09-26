@@ -9,8 +9,10 @@ import fs from 'fs';
 import { mlEngine } from './mlEngine';
 import { validateDataset, validateDatasetContent } from './dataValidation';
 import { verifyClaim, verifyArticleContent } from './verification/evidenceService';
-import { extractClaims } from './verification/claimExtractor';
+import { extractClaims, extractPrimaryClaim } from './verification/claimExtractor';
 import { evidenceProvider } from './verification/evidenceProvider';
+import { evidenceEngine } from './verification/evidenceEngine';
+import { claimModel, ClaimModelUnavailableError, ClaimSpeakerMetadata } from './claimModel';
 import { sqliteHistory } from './sqliteHistory';
 import { getExternalValidationReport } from './externalValidation';
 import { validateUrlSecurity, safeFetchHtml, normalizeUrl } from './security/urlValidator';
@@ -70,17 +72,105 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
   // 1. Health Endpoint
   app.get('/api/health', (req, res) => {
     const modelTrained = mlEngine.isModelTrained();
+    const claimReady = claimModel.isReady();
     res.json({
       status: modelTrained ? 'ok' : 'degraded',
       service: 'TruthLens ML Engine',
       model: 'Linear SVM (Calibrated)',
       model_trained: modelTrained,
+      // The article model and the claim model are separate systems and are
+      // reported separately. They are never combined into one number.
+      components: {
+        article_model: {
+          role: 'article_model',
+          dataset: 'ISOT',
+          ready: modelTrained,
+          status: modelTrained ? 'READY' : 'DEGRADED'
+        },
+        claim_model: {
+          role: 'claim_model',
+          dataset: 'LIAR',
+          ready: claimReady,
+          status: claimReady ? 'READY' : 'UNAVAILABLE',
+          model_version: claimReady ? claimModel.getArtifact().model_version : null,
+          error: claimReady ? null : claimModel.getLoadError()
+        },
+        evidence_engine: {
+          role: 'evidence_engine',
+          ready: true,
+          status: 'READY',
+          note: 'Retrieval health is reported per request; it depends on outbound network access.'
+        }
+      },
       uptime_seconds: Math.round(process.uptime())
     });
   });
 
+  // 1b. Dedicated CLAIM MODEL endpoints (LIAR specialist, separate from the
+  //     ISOT article model -- the two are never merged into one metric).
+  app.post('/api/claim/predict', (req, res) => {
+    try {
+      const claimText = (req.body?.claim || req.body?.text || req.body?.statement || '').toString();
+      if (!claimText.trim()) {
+        return res.status(400).json({ error: 'A claim text is required.', field: 'claim' });
+      }
+      const rawMeta = req.body?.metadata || req.body?.speaker_metadata;
+      const metadata: ClaimSpeakerMetadata | undefined = rawMeta && typeof rawMeta === 'object'
+        ? {
+            speaker: rawMeta.speaker,
+            party: rawMeta.party,
+            credit_history: rawMeta.credit_history || rawMeta.creditHistory
+          }
+        : undefined;
+      const prediction = claimModel.predict(claimText, metadata);
+      res.json(prediction);
+    } catch (err: any) {
+      if (err instanceof ClaimModelUnavailableError) {
+        return res.status(503).json({
+          error: 'Claim model artifact is not available in this runtime.',
+          code: err.code,
+          detail: err.message
+        });
+      }
+      console.error('[API /api/claim/predict error]', err.message);
+      res.status(400).json({ error: err.message || 'Claim prediction failed.' });
+    }
+  });
+
+  app.get('/api/claim/metrics', (req, res) => {
+    try {
+      res.json(claimModel.getMetrics());
+    } catch (err: any) {
+      res.status(503).json({
+        status: 'UNAVAILABLE',
+        model_role: 'claim_model',
+        error: 'Claim model artifact is not available in this runtime.',
+        detail: err.message
+      });
+    }
+  });
+
+  // 1c. Evidence Engine: CLAIM -> SEARCH -> RELEVANCE -> SUPPORT/CONTRADICT
+  //     -> VERIFICATION SIGNAL -> FINAL INTERPRETATION
+  app.post('/api/evidence/verify', extractRateLimiter, async (req, res) => {
+    try {
+      const claimText = (req.body?.claim || req.body?.text || req.body?.statement || '').toString();
+      if (!claimText.trim()) {
+        return res.status(400).json({ error: 'A claim text is required.', field: 'claim' });
+      }
+      const report = await evidenceEngine.verifyClaim(claimText, {
+        timeBudgetMs: Number(req.body?.time_budget_ms) || 12000,
+        enabled: req.body?.enabled !== false
+      });
+      res.json(report);
+    } catch (err: any) {
+      console.error('[API /api/evidence/verify error]', err.message);
+      res.status(500).json({ error: err.message || 'Evidence verification failed.' });
+    }
+  });
+
   // 2. Core News Analysis Endpoint (Text)
-  app.post('/api/analyze', (req, res) => {
+  app.post('/api/analyze', async (req, res) => {
     try {
       const text = req.body.text || req.body.raw_text || '';
       const sourceUrl = req.body.source_url || '';
@@ -99,6 +189,43 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
         isHeadlineOnly: req.body.is_headline_only,
         contentSource: req.body.content_source
       });
+
+      // ---- claim_model block -------------------------------------------
+      // A dedicated LIAR claim prediction for the article's primary claim.
+      // Reported alongside, never merged with, the ISOT article verdict.
+      let claimBlock: any;
+      try {
+        const primary = extractPrimaryClaim(text);
+        const primaryText = primary?.has_claim ? (primary.detected_claim || '').trim() : '';
+        claimBlock = primaryText
+          ? {
+              status: 'AVAILABLE',
+              source: 'primary claim extracted from the submitted text',
+              ...claimModel.predict(primaryText)
+            }
+          : {
+              status: 'NOT_APPLICABLE',
+              reason: 'No checkable standalone claim could be extracted from this text, so the ' +
+                      'claim model was not run. A claim-level score is withheld rather than guessed.'
+            };
+      } catch (err: any) {
+        claimBlock = {
+          status: err instanceof ClaimModelUnavailableError ? 'UNAVAILABLE' : 'NOT_APPLICABLE',
+          reason: err.message
+        };
+      }
+      result.claim_model = claimBlock;
+
+      // ---- evidence engine ------------------------------------------------
+      // Opt-out via include_evidence:false. When retrieval fails the engine
+      // returns SEARCH_UNAVAILABLE / INSUFFICIENT_EVIDENCE -- never a verdict.
+      const includeEvidence = req.body.include_evidence !== false;
+      const evidenceClaim = (claimBlock?.claim_text || text || '').toString();
+      result.evidence_verification = await evidenceEngine.verifyClaim(evidenceClaim, {
+        enabled: includeEvidence,
+        timeBudgetMs: Number(req.body.evidence_time_budget_ms) || 10000
+      });
+
       res.json(result);
     } catch (err: any) {
       console.error('[API /api/analyze error]', err.message);
@@ -255,8 +382,48 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
   // 4. Model Metrics & Evaluation Comparison
   const handleMetrics = (req: express.Request, res: express.Response) => {
     try {
-      const metrics = mlEngine.getMetrics();
-      res.json(metrics);
+      const articleMetrics = mlEngine.getMetrics();
+
+      let claimMetrics: any;
+      try {
+        claimMetrics = claimModel.getMetrics();
+      } catch (err: any) {
+        claimMetrics = {
+          status: 'UNAVAILABLE',
+          model_role: 'claim_model',
+          error: 'Claim model artifact is not available in this runtime.',
+          detail: err.message
+        };
+      }
+
+      // The two models are reported under separate keys and are NEVER averaged
+      // or blended. They solve different tasks on different corpora, so a
+      // single combined accuracy number would be misleading.
+      res.json({
+        ...articleMetrics,
+        article_model: {
+          role: 'article_model',
+          task: 'full-article real/fake classification',
+          dataset: 'ISOT',
+          model_name: articleMetrics?.best_model?.name || 'Linear SVM (Calibrated)',
+          model_version: articleMetrics?.model_version,
+          metrics: articleMetrics?.best_model?.metrics || null,
+          thresholds: articleMetrics?.thresholds || null,
+          dataset_info: articleMetrics?.dataset_info || null
+        },
+        claim_model: claimMetrics,
+        benchmarks: {
+          external_validation: getExternalValidationReport() || { status: 'NOT AVAILABLE' },
+          note: 'Benchmarks are reported per model. The ISOT article score and the LIAR claim score ' +
+                'measure different tasks and must not be combined into a single headline number.'
+        },
+        separation_policy: {
+          article_model: 'ISOT calibrated Linear SVM',
+          claim_model: 'LIAR specialist (calibrated Linear SVM)',
+          evidence_engine: 'external retrieval-based support/contradiction signal',
+          rule: 'Never merged into one accuracy figure.'
+        }
+      });
     } catch (err: any) {
       res.status(500).json({ detail: err.message });
     }

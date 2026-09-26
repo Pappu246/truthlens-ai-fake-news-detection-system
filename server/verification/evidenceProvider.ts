@@ -19,6 +19,22 @@ export interface EvidenceSearchOptions {
   timeoutMs?: number;
 }
 
+/**
+ * Per-provider retrieval outcome. This exists so the evidence engine can tell
+ * the difference between "we searched and found nothing" and "the search
+ * backend was unreachable". Those two cases must never produce the same
+ * verification status.
+ */
+export interface RetrievalDiagnostic {
+  provider: string;
+  query: string;
+  attemptedAt: string;
+  ok: boolean;
+  httpStatus?: number;
+  resultCount: number;
+  error?: string;
+}
+
 export class EvidenceProvider {
   private timeoutMs: number;
 
@@ -43,9 +59,15 @@ export class EvidenceProvider {
    * Searches live web news and knowledge indexes for authentic sources.
    * Real sources only. Absolutely zero fabricated results.
    */
-  public async search(query: string, claim: ExtractedClaim): Promise<EvidenceItem[]> {
+  public async search(
+    query: string,
+    claim: ExtractedClaim,
+    diagnostics?: RetrievalDiagnostic[]
+  ): Promise<EvidenceItem[]> {
     const results: EvidenceItem[] = [];
     const seenUrls = new Set<string>();
+    const record = (d: RetrievalDiagnostic) => { if (diagnostics) diagnostics.push(d); };
+    let newsCount = 0;
 
     // 1. Search Google News RSS live index
     try {
@@ -57,6 +79,11 @@ export class EvidenceProvider {
         signal: AbortSignal.timeout(this.timeoutMs)
       });
 
+      if (!res.ok) {
+        record({ provider: 'google_news_rss', query, attemptedAt: new Date().toISOString(),
+                 ok: false, httpStatus: res.status, resultCount: 0,
+                 error: `HTTP ${res.status}` });
+      }
       if (res.ok) {
         const text = await res.text();
         const items = text.match(/<item>[\s\S]*?<\/item>/g) || [];
@@ -108,9 +135,14 @@ export class EvidenceProvider {
             });
           }
         }
+        newsCount = results.length;
+        record({ provider: 'google_news_rss', query, attemptedAt: new Date().toISOString(),
+                 ok: true, httpStatus: res.status, resultCount: newsCount });
       }
     } catch (err: any) {
       console.warn(`[EvidenceProvider] News RSS search failed for query "${query}":`, err.message);
+      record({ provider: 'google_news_rss', query, attemptedAt: new Date().toISOString(),
+               ok: false, resultCount: 0, error: err.message || 'network error' });
     }
 
     // 2. If claim is Science / Historical / Statistics or if news hits were low, check Wikipedia
@@ -124,6 +156,10 @@ export class EvidenceProvider {
           signal: AbortSignal.timeout(this.timeoutMs)
         });
 
+        if (!res.ok) {
+          record({ provider: 'wikipedia_search', query, attemptedAt: new Date().toISOString(),
+                   ok: false, httpStatus: res.status, resultCount: 0, error: `HTTP ${res.status}` });
+        }
         if (res.ok) {
           const data = await res.json();
           const searchHits = data.query?.search || [];
@@ -156,9 +192,13 @@ export class EvidenceProvider {
               });
             }
           }
+          record({ provider: 'wikipedia_search', query, attemptedAt: new Date().toISOString(),
+                   ok: true, httpStatus: res.status, resultCount: results.length - newsCount });
         }
       } catch (err: any) {
         console.warn(`[EvidenceProvider] Wikipedia search failed for query "${query}":`, err.message);
+        record({ provider: 'wikipedia_search', query, attemptedAt: new Date().toISOString(),
+                 ok: false, resultCount: 0, error: err.message || 'network error' });
       }
     }
 
@@ -184,7 +224,10 @@ export class EvidenceProvider {
   /**
    * Gathers evidence across all generated search queries for a claim.
    */
-  public async searchEvidenceForClaim(claim: ExtractedClaim): Promise<EvidenceItem[]> {
+  public async searchEvidenceForClaim(
+    claim: ExtractedClaim,
+    diagnostics?: RetrievalDiagnostic[]
+  ): Promise<EvidenceItem[]> {
     const allEvidence: EvidenceItem[] = [];
     const seenUrls = new Set<string>();
 
@@ -193,7 +236,7 @@ export class EvidenceProvider {
       : [claim.normalizedText];
 
     for (const q of queriesToRun) {
-      const items = await this.search(q, claim);
+      const items = await this.search(q, claim, diagnostics);
       for (const item of items) {
         if (!seenUrls.has(item.sourceUrl)) {
           seenUrls.add(item.sourceUrl);
