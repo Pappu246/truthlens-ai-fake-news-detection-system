@@ -175,8 +175,9 @@ async function main(): Promise<void> {
       2
     );
 
+    const vector = await model.embed('semantic test');
     check('remote embedding returns ranked search results', results.length === 2);
-    check('remote embedding produces a normalised model vector dimension', model.dimensions === 0);
+    check('remote embedding returns a numeric vector', vector.length === 4 && vector.every(Number.isFinite));
     check('dense search scores are normalised', results.every(item => item.score >= 0 && item.score <= 1));
   }
 
