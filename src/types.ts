@@ -170,6 +170,7 @@ export interface ModelComparisonData {
   total_samples: number;
   training_samples: number;
   test_samples: number;
+  vocabulary_size?: number;
   best_model: string;
   selection_metric: string;
   last_trained: string;
@@ -178,6 +179,7 @@ export interface ModelComparisonData {
   evaluation_status: string;
   demo_badge_label: string;
   limitation?: string;
+  dataset_info?: any;
   raw_counts_before_cleaning?: {
     real_articles: number;
     fake_articles: number;
