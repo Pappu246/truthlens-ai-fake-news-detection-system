@@ -27,7 +27,8 @@
     "test:v2-route": "tsx scripts/v2RouteTests.ts",
     "eval:v2": "tsx scripts/v2Evaluate.ts",
     "generate:v2-fixtures": "tsx scripts/generate_v2_eval_fixtures.ts",
-    "test:all-with-v2": "npm run test:all && npm run test:v2 && npm run test:v2-route"
+    "test:all-with-v2": "npm run test:all && npm run test:v2 && npm run test:v2-route && npm run test:v2-quality",
+    "test:v2-quality": "tsx scripts/v2ModelQualityTests.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
