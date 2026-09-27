@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - assistant/v2.5-contradiction-aware
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
