@@ -13,10 +13,252 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout V2.5 research branch
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      - run: npm ci --ignore-scripts
-      - run: npm run test:v2_5
+
+      - name: Download exact frozen SciFact and model artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/truthlens-v25
+          mkdir -p /tmp/truthlens-v25/scifact
+          mkdir -p models/v2/Xenova/all-MiniLM-L6-v2/onnx
+          mkdir -p models/v2/Xenova/nli-deberta-v3-xsmall/onnx
+
+          curl --fail --retry 4 --retry-all-errors -L "https://raw.githubusercontent.com/vidi-deshp12/scifact-claim-verification/051b5245aa9d4b98c1302920cc5e4958b9e30ef9/data/claims_dev.jsonl" -o /tmp/truthlens-v25/scifact/claims_dev.jsonl
+          curl --fail --retry 4 --retry-all-errors -L "https://raw.githubusercontent.com/vidi-deshp12/scifact-claim-verification/051b5245aa9d4b98c1302920cc5e4958b9e30ef9/data/corpus.jsonl" -o /tmp/truthlens-v25/scifact/corpus.jsonl
+
+          MINI="https://raw.githubusercontent.com/Sagesheep/NarrativeEngine-P/463cdd7853954fb904e8bddf863001ae61726796/mobile/public/models/Xenova/all-MiniLM-L6-v2"
+          curl --fail --retry 4 --retry-all-errors -L "$MINI/onnx/model_quantized.onnx" -o models/v2/Xenova/all-MiniLM-L6-v2/onnx/model_quantized.onnx
+          curl --fail --retry 4 --retry-all-errors -L "$MINI/tokenizer.json" -o models/v2/Xenova/all-MiniLM-L6-v2/tokenizer.json
+          curl --fail --retry 4 --retry-all-errors -L "$MINI/tokenizer_config.json" -o models/v2/Xenova/all-MiniLM-L6-v2/tokenizer_config.json
+          curl --fail --retry 4 --retry-all-errors -L "$MINI/config.json" -o models/v2/Xenova/all-MiniLM-L6-v2/config.json
+          curl --fail --retry 4 --retry-all-errors -L "$MINI/vocab.txt" -o models/v2/Xenova/all-MiniLM-L6-v2/vocab.txt
+          curl --fail --retry 4 --retry-all-errors -L "$MINI/special_tokens_map.json" -o models/v2/Xenova/all-MiniLM-L6-v2/special_tokens_map.json
+
+          NLI="https://raw.githubusercontent.com/ElicoftZ/CotoLyrics-alpha/487f0c6d1b2ec41ef8e7c1c2266515a2caeb9738/models/Xenova/nli-deberta-v3-xsmall"
+          curl --fail --retry 4 --retry-all-errors -L "$NLI/onnx/model_quantized.onnx" -o models/v2/Xenova/nli-deberta-v3-xsmall/onnx/model_quantized.onnx
+          curl --fail --retry 4 --retry-all-errors -L "$NLI/tokenizer.json" -o models/v2/Xenova/nli-deberta-v3-xsmall/tokenizer.json
+          curl --fail --retry 4 --retry-all-errors -L "$NLI/tokenizer_config.json" -o models/v2/Xenova/nli-deberta-v3-xsmall/tokenizer_config.json
+          curl --fail --retry 4 --retry-all-errors -L "$NLI/config.json" -o models/v2/Xenova/nli-deberta-v3-xsmall/config.json
+          curl --fail --retry 4 --retry-all-errors -L "$NLI/added_tokens.json" -o models/v2/Xenova/nli-deberta-v3-xsmall/added_tokens.json
+          curl --fail --retry 4 --retry-all-errors -L "$NLI/special_tokens_map.json" -o models/v2/Xenova/nli-deberta-v3-xsmall/special_tokens_map.json
+
+      - name: Verify frozen hashes and counts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+
+          expected = {
+              "/tmp/truthlens-v25/scifact/claims_dev.jsonl": "86f0435d08fdb65d1aa41d1472684f57e6e71930626497bdf4d7a9ec1a632217",
+              "/tmp/truthlens-v25/scifact/corpus.jsonl": "b8d6c89624cb2ed74dee8938effc4f5d8bd2086887880af8110d64be4ceade62",
+              "models/v2/Xenova/all-MiniLM-L6-v2/onnx/model_quantized.onnx": "afdb6f1a0e45b715d0bb9b11772f032c399babd23bfc31fed1c170afc848bdb1",
+              "models/v2/Xenova/all-MiniLM-L6-v2/tokenizer.json": "da0e79933b9ed51798a3ae27893d3c5fa4a201126cef75586296df9b4d2c62a0",
+              "models/v2/Xenova/all-MiniLM-L6-v2/tokenizer_config.json": "9261e7d79b44c8195c1cada2b453e55b00aeb81e907a6664974b4d7776172ab3",
+              "models/v2/Xenova/all-MiniLM-L6-v2/config.json": "7135149f7cffa1a573466c6e4d8423ed73b62fd2332c575bf738a0d033f70df7",
+              "models/v2/all-MiniLM-L6-v2/vocab.txt": "07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3",
+              "models/v2/Xenova/all-MiniLM-L6-v2/special_tokens_map.json": "b6d346be366a7d1d48332dbc9fdf3bf8960b5d879522b7799ddba59e76237ee3",
+              "models/v2/Xenova/nli-deberta-v3-xsmall/onnx/model_quantized.onnx": "3fac2500c45c75af42c7711de0d1b93d59577456100208be0dc1f9e8811946b6",
+              "models/v2/Xenova/nli-deberta-v3-xsmall/tokenizer.json": "a86f883318afa11c8c10466f1bf4efaeb6ded28a52cbe57217a8fa0d0a2a87df",
+              "models/v2/Xenova/nli-deberta-v3-xsmall/tokenizer_config.json": "d8d3bb123b99317634d5ee3d1d2d8b2ddb01510a0654687fc2639a5347a7291f",
+              "models/v2/Xenova/nli-deberta-v3-xsmall/config.json": "ec0bd14cc28640326474399cd61d38ccd52b64900228799d0f81debda8c4bc53",
+              "models/v2/Xenova/nli-deberta-v3-xsmall/added_tokens.json": "dc046d04c9b0ada7ae6f1dc89c465801799acdf0c9a6aab8c15a1b2d5ca4e91f",
+              "models/v2/Xenova/nli-deberta-v3-xsmall/special_tokens_map.json": "311de3f4eed9d76a43bf0d71f10e62e086ca65ccce9f15d5da0d2098bf519ecc",
+          }
+
+          def sha256(p):
+              h = hashlib.sha256()
+              with open(p, "rb") as f:
+                  for chunk in iter(lambda: f.read(1024*1024), b""):
+                      h.update(chunk)
+              return h.hexdigest()
+
+          for p, want in expected.items():
+              got = sha256(p)
+              assert got == want, (p, got, want)
+
+          claims = [json.loads(x) for x in Path("/tmp/truthlens-v25/scifact/claims_dev.jsonl").read_text().splitlines() if x.strip()]
+          corpus = [json.loads(x) for x in Path("/tmp/truthlens-v25/scifact/corpus.jsonl").read_text().splitlines() if x.strip()]
+          gold = 0
+          for c in claims:
+              ev = c.get("evidence", {})
+              gold += sum(len(rs) for rs in ev.values())
+              gold += sum(1 for cited_id in c.get("cited_doc_ids", []) if str(cited_id) not in ev)
+          assert len(claims) == 300
+          assert len(corpus) == 5183
+          assert gold == 469
+          print("Frozen artifact verification: PASS")
+          PY
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Import exact SciFact bundle
+        run: npm run external:v2-data:offline -- --source=/tmp/truthlens-v25/scifact
+
+      - name: Validate sealed model stack
+        env:
+          TRUTHLENS_V2_MODEL_MODE: pretrained
+        run: npm run test:v2-models
+
+      - name: Validate V2.5 adjudicator
+        run: npm run test:v2_5
+
+      - name: Run frozen raw baseline on V2.5 branch
+        env:
+          TRUTHLENS_V2_MODEL_MODE: pretrained
+        run: |
+          mkdir -p artifacts/v2_5
+          npm run eval:v2-external --             --evidence-presentation=raw             --output=artifacts/v2_5/external-scifact-xsmall-raw.json             2>&1 | tee artifacts/v2_5/raw-evaluation.log
+
+      - name: Run frozen V2.5 adjudicated evaluation
+        env:
+          TRUTHLENS_V2_MODEL_MODE: pretrained
+        run: |
+          mkdir -p artifacts/v2_5
+          mkdir -p .tmp-v2_5
+          cat > .tmp-v2_5/runExternalV25.ts <<'TS'
+          import { PretrainedNliAdapter } from '../server/v2/nli/pretrainedNliAdapter';
+          import { adjudicateContradictionAware } from '../server/v2_5/contradictionAwareAdjudicator';
+
+          const rawClassify = PretrainedNliAdapter.prototype.classify;
+
+          PretrainedNliAdapter.prototype.classify = function(
+            claim,
+            passage,
+            publishedAt
+          ) {
+            const self = this;
+            const base = {
+              modelName: self.modelName,
+              modelVersion: self.modelVersion,
+              classify: (c, p, d) => rawClassify.call(self, c, p, d)
+            };
+            const result = adjudicateContradictionAware(base, claim, passage, publishedAt);
+            return {
+              ...result.original_nli,
+              label: result.label,
+              confidence: result.confidence,
+              basis: result.original_nli.basis + '; V2.5 ' + result.adjudication_reason
+            };
+          };
+
+          await import('../scripts/v2ExternalEvaluate.ts');
+          TS
+
+          npx tsx .tmp-v2_5/runExternalV25.ts             --evidence-presentation=raw             --output=artifacts/v2_5/external-scifact-xsmall-v2_5.json             2>&1 | tee artifacts/v2_5/v2_5-evaluation.log
+
+      - name: Produce V2.4 raw versus V2.5 delta and error analysis
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          raw = json.loads(Path("artifacts/v2_5/external-scifact-xsmall-raw.json").read_text())
+          v25 = json.loads(Path("artifacts/v2_5/external-scifact-xsmall-v2_5.json").read_text())
+
+          keys = [
+              ("accuracy","metrics"),
+              ("macro_f1","metrics"),
+              ("nli_accuracy","metrics"),
+              ("nli_f1","metrics"),
+              ("evidence_recall_at_5","metrics"),
+              ("evidence_precision_at_5","metrics"),
+              ("high_confidence_precision","metrics"),
+              ("high_confidence_coverage","metrics"),
+              ("coverage","metrics"),
+              ("abstention","metrics"),
+              ("ece","metrics"),
+          ]
+
+          lines = ["TRUTHLENS V2.5 — FROZEN RAW BASELINE VS CONTRADICTION-AWARE", ""]
+          for key, section in keys:
+              rv = raw[section][key]
+              vv = v25[section][key]
+              lines.append(f"{key}: raw={rv!r} v2.5={vv!r} delta={vv-rv:+.12f}")
+
+          lines += [
+              "",
+              "Per-final-verdict class deltas:",
+          ]
+          rclass = {x["label"]: x for x in raw["metrics"]["final_per_class"]}
+          vclass = {x["label"]: x for x in v25["metrics"]["final_per_class"]}
+          for label in ["VERIFIED","REFUTED","INSUFFICIENT_EVIDENCE"]:
+              lines.append(
+                  f"{label}: recall raw={rclass[label]['recall']!r} v2.5={vclass[label]['recall']!r} "
+                  f"delta={vclass[label]['recall']-rclass[label]['recall']:+.12f}"
+              )
+
+          nclass = {x["label"]: x for x in raw["metrics"]["nli_per_class"]}
+          nvclass = {x["label"]: x for x in v25["metrics"]["nli_per_class"]}
+          lines += ["", "Per-NLI-label recall deltas:"]
+          for label in ["SUPPORTS","REFUTES","NEUTRAL"]:
+              lines.append(
+                  f"{label}: recall raw={nclass[label]['recall']!r} v2.5={nvclass[label]['recall']!r} "
+                  f"delta={nvclass[label]['recall']-nclass[label]['recall']:+.12f}"
+              )
+
+          final_counts = {
+              "recovered_missed_contradiction": 0,
+              "preserved_neutrality": 0,
+              "false_contradiction": 0,
+              "support_converted_to_contradiction": 0,
+              "neutral_converted_to_contradiction": 0,
+              "improved_abstention": 0,
+              "unwanted_overconfidence": 0,
+          }
+
+          raw_claims = {x["claim_id"]: x for x in raw["per_claim"]}
+          v25_claims = {x["claim_id"]: x for x in v25["per_claim"]}
+
+          for cid, b in raw_claims.items():
+              a = v25_claims[cid]
+              rp = b["predicted_verdict"]
+              vp = a["predicted_verdict"]
+              gold = a["gold_verdict"]
+              if rp == vp:
+                  if rp == "INSUFFICIENT_EVIDENCE":
+                      final_counts["preserved_neutrality"] += 1
+                  continue
+              if vp == "REFUTED" and gold == "REFUTED" and rp != "REFUTED":
+                  final_counts["recovered_missed_contradiction"] += 1
+              if vp == "REFUTED" and gold != "REFUTED":
+                  final_counts["false_contradiction"] += 1
+              if rp == "VERIFIED" and vp == "REFUTED":
+                  final_counts["support_converted_to_contradiction"] += 1
+              if rp == "INSUFFICIENT_EVIDENCE" and vp == "REFUTED":
+                  final_counts["neutral_converted_to_contradiction"] += 1
+              if b.get("abstained") and not a.get("abstained"):
+                  final_counts["improved_abstention"] += 1
+              if a.get("confidence", 0) >= 0.75 and not a.get("correct", False):
+                  final_counts["unwanted_overconfidence"] += 1
+
+          lines += ["", "Final-verdict transition/error counts:"]
+          lines += [f"{k}: {v}" for k, v in final_counts.items()]
+
+          Path("artifacts/v2_5/v2_4_raw_vs_v2_5.txt").write_text("\n".join(lines) + "\n")
+          print("\n".join(lines))
+          Path("artifacts/v2_5/v2_4_raw_vs_v2_5.json").write_text(json.dumps({
+              "baseline_raw": raw["metrics"],
+              "v2_5": v25["metrics"],
+              "final_transition_error_counts": final_counts
+          }, indent=2) + "\n")
+          PY
+
+      - name: Upload V2.5 evaluation results
+        uses: actions/upload-artifact@v4
+        with:
+          name: truthlens-v2.5-contradiction-aware-evaluation
+          path: artifacts/v2_5
+          if-no-files-found: error
+          retention-days: 7
