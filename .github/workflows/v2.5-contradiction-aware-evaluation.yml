@@ -1,0 +1,22 @@
+name: V2.5 Contradiction-Aware External Evaluation
+
+on:
+  push:
+    branches:
+      - assistant/v2.5-contradiction-aware
+
+permissions:
+  contents: read
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run test:v2_5
