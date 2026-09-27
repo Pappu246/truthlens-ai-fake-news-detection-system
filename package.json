@@ -26,11 +26,13 @@
     "test:ssrf": "tsx scripts/ssrfTests.ts",
     "test:all": "npm run lint && npm run test:contracts && npm run test:vercel-sim && npm run test:verdicts && npm run test:claim && npm run test:claim-parity && npm run test:evidence && npm run test:artifacts && npm run test:ssrf",
     "test:production": "tsx scripts/productionSmokeTest.ts",
-    "test:v2": "tsx scripts/v2PipelineTests.ts && tsx scripts/v2EvidenceReasoningTests.ts", "test:v2-reasoning": "tsx scripts/v2EvidenceReasoningTests.ts",
+    "test:v2": "tsx scripts/v2PipelineTests.ts && tsx scripts/v2EvidenceReasoningTests.ts",
+    "test:v2-reasoning": "tsx scripts/v2EvidenceReasoningTests.ts",
     "test:v2-route": "tsx scripts/v2RouteTests.ts",
     "test:v2-models": "tsx scripts/v2ModelTests.ts",
     "eval:v2": "tsx scripts/v2Evaluate.ts",
-    "external:v2-data": "tsx scripts/v2ExternalData.ts", "external:v2-data:offline": "tsx scripts/v2ProvisionSciFactOffline.ts",
+    "external:v2-data": "tsx scripts/v2ExternalData.ts",
+    "external:v2-data:offline": "tsx scripts/v2ProvisionSciFactOffline.ts",
     "eval:v2-external": "tsx scripts/v2ExternalEvaluate.ts",
     "download:v2-eval-model": "tsx scripts/v2DownloadEvaluationModel.ts",
     "download:v2-candidate": "tsx scripts/v2DownloadCandidateModel.ts",
@@ -38,7 +40,8 @@
     "test:v2-candidate": "tsx scripts/v2CandidateModelTests.ts",
     "download:v2-models": "tsx scripts/v2DownloadModels.ts",
     "generate:v2-fixtures": "tsx scripts/generate_v2_eval_fixtures.ts",
-    "test:all-with-v2": "npm run test:all && npm run test:v2 && npm run test:v2-route"
+    "test:all-with-v2": "npm run test:all && npm run test:v2 && npm run test:v2-route",
+    "test:v2_5": "tsx scripts/v2_5AdjudicatorTests.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
