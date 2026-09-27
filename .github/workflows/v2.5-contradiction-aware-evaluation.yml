@@ -65,7 +65,7 @@ jobs:
               "models/v2/Xenova/all-MiniLM-L6-v2/tokenizer.json": "da0e79933b9ed51798a3ae27893d3c5fa4a201126cef75586296df9b4d2c62a0",
               "models/v2/Xenova/all-MiniLM-L6-v2/tokenizer_config.json": "9261e7d79b44c8195c1cada2b453e55b00aeb81e907a6664974b4d7776172ab3",
               "models/v2/Xenova/all-MiniLM-L6-v2/config.json": "7135149f7cffa1a573466c6e4d8423ed73b62fd2332c575bf738a0d033f70df7",
-              "models/v2/all-MiniLM-L6-v2/vocab.txt": "07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3",
+              "models/v2/Xenova/all-MiniLM-L6-v2/vocab.txt": "07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3",
               "models/v2/Xenova/all-MiniLM-L6-v2/special_tokens_map.json": "b6d346be366a7d1d48332dbc9fdf3bf8960b5d879522b7799ddba59e76237ee3",
               "models/v2/Xenova/nli-deberta-v3-xsmall/onnx/model_quantized.onnx": "3fac2500c45c75af42c7711de0d1b93d59577456100208be0dc1f9e8811946b6",
               "models/v2/Xenova/nli-deberta-v3-xsmall/tokenizer.json": "a86f883318afa11c8c10466f1bf4efaeb6ded28a52cbe57217a8fa0d0a2a87df",
