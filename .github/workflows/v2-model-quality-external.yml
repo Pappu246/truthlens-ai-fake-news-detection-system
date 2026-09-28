@@ -40,6 +40,73 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  harness-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout V2 research branch
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Download exact frozen SciFact inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/truthlens-model-quality
+          mkdir -p /tmp/truthlens-model-quality/scifact
+          BASE="https://raw.githubusercontent.com/vidi-deshp12/scifact-claim-verification/051b5245aa9d4b98c1302920cc5e4958b9e30ef9/data"
+          curl --fail --retry 4 --retry-all-errors -L "$BASE/claims_dev.jsonl" -o /tmp/truthlens-model-quality/scifact/claims_dev.jsonl
+          curl --fail --retry 4 --retry-all-errors -L "$BASE/corpus.jsonl" -o /tmp/truthlens-model-quality/scifact/corpus.jsonl
+
+      - name: Verify exact SciFact hashes and counts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+
+          expected = {
+              "/tmp/truthlens-model-quality/scifact/claims_dev.jsonl": "86f0435d08fdb65d1aa41d1472684f57e6e71930626497bdf4d7a9ec1a632217",
+              "/tmp/truthlens-model-quality/scifact/corpus.jsonl": "b8d6c89624cb2ed74dee8938effc4f5d8bd2086887880af8110d64be4ceade62",
+          }
+
+          for path, want in expected.items():
+              digest = hashlib.sha256(Path(path).read_bytes()).hexdigest()
+              assert digest == want, (path, digest, want)
+
+          claims = [json.loads(line) for line in Path("/tmp/truthlens-model-quality/scifact/claims_dev.jsonl").read_text().splitlines() if line.strip()]
+          corpus = [json.loads(line) for line in Path("/tmp/truthlens-model-quality/scifact/corpus.jsonl").read_text().splitlines() if line.strip()]
+          assert len(claims) == 300
+          assert len(corpus) == 5183
+          print("SciFact verification: PASS")
+          PY
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Run token-free external harness smoke test
+        run: |
+          mkdir -p artifacts/v2-model-quality
+          npm run test:v2-model-quality-external-smoke -- \
+            --data-dir=/tmp/truthlens-model-quality/scifact \
+            --max-claims=3 \
+            --output=artifacts/v2-model-quality/external-harness-smoke.json \
+            2>&1 | tee artifacts/v2-model-quality/harness-smoke.log
+
+      - name: Upload harness smoke artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: truthlens-v2-model-quality-harness-smoke
+          path: artifacts/v2-model-quality
+          if-no-files-found: error
+          retention-days: 7
+
   evaluate:
     needs: preflight
     if: needs.preflight.outputs.has_token == 'true'
@@ -108,17 +175,20 @@ jobs:
           retention-days: 7
 
   summarize:
-    needs: [preflight, evaluate]
+    needs: [preflight, harness-smoke, evaluate]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Report evaluation disposition
         shell: bash
         run: |
-          if [ "${{ needs.preflight.outputs.has_token }}" = "true" ] && [ "${{ needs.evaluate.result }}" = "success" ]; then
+          if [ "${{ needs.harness-smoke.result }}" != "success" ]; then
+            echo "Token-free external evaluation harness smoke test failed."
+            exit 1
+          elif [ "${{ needs.preflight.outputs.has_token }}" = "true" ] && [ "${{ needs.evaluate.result }}" = "success" ]; then
             echo "External model-quality evaluation completed successfully."
           elif [ "${{ needs.preflight.outputs.has_token }}" = "false" ]; then
-            echo "HF_TOKEN is not configured; external model-quality evaluation was skipped."
+            echo "Token-free harness smoke test passed; HF_TOKEN is not configured, so pretrained-model evaluation was skipped."
           else
             echo "External model-quality evaluation did not complete successfully."
             exit 1
