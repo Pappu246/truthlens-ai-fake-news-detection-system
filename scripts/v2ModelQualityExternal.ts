@@ -16,11 +16,8 @@ import path from 'path';
 import { buildClaim } from '../server/v2/queryExpansion';
 import { defaultNliAdapter } from '../server/v2/nli/heuristicNliAdapter';
 import { HuggingFaceNliAdapter } from '../server/v2/nli/huggingFaceNliAdapter';
-import {
-  cosineSimilarity,
-  defaultEmbeddingModel,
-  HuggingFaceEmbeddingModel
-} from '../server/v2/retrieval/embeddings';
+import { cosineSimilarity, defaultEmbeddingModel } from '../server/v2/retrieval/embeddings';
+import { HuggingFaceEmbeddingModel } from '../server/v2/retrieval/huggingFaceEmbeddingModel';
 
 type NliGold = 'SUPPORTS' | 'REFUTES' | 'NEUTRAL';
 
