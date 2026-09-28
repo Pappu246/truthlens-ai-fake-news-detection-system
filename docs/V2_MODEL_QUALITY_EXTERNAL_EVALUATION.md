@@ -53,6 +53,15 @@ The workflow verifies the frozen dataset hashes before evaluation. Remote evalua
 
 The GitHub Actions workflow also runs a token-free smoke test before the optional remote evaluation. It verifies the frozen SciFact hashes/counts, exercises the Hugging Face NLI and embedding adapter request/response contracts with mocked transport, and uploads a small smoke artifact. This confirms the evaluation harness itself is executable even when `HF_TOKEN` is unavailable. The smoke result is **not** a pretrained-model quality result and must not be reported as one.
 
+## Token-free sealed pretrained evaluation
+
+The research branch also provisions a byte-sealed local pretrained stack from pinned GitHub mirrors, without hosted Hugging Face inference:
+
+- NLI: `Xenova/nli-deberta-v3-xsmall`, q8, version `q8@3fac2500`.
+- Embeddings: `Xenova/all-MiniLM-L6-v2`, q8, version `q8@afdb6f1a`.
+
+The workflow downloads these exact files, verifies their SHA-256 seals, installs the local Transformers.js/ONNX runtime, and evaluates the 300-claim SciFact dev split locally. This path does not require `HF_TOKEN`. The hosted Hugging Face comparison remains optional.
+
 ## Production safety
 
 This evaluation:
