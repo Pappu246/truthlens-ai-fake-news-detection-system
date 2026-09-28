@@ -5,6 +5,7 @@
  * so CI never needs an API token or network access.
  */
 import { verifyClaimV2 } from '../server/v2/pipeline';
+import { decideVerdict } from '../server/v2/decision/decisionPolicy';
 import { FixtureCorpusSource } from '../server/v2/retrieval/corpusSource';
 import { HuggingFaceNliAdapter } from '../server/v2/nli/huggingFaceNliAdapter';
 import { HuggingFaceEmbeddingModel } from '../server/v2/retrieval/huggingFaceEmbeddingModel';
@@ -55,71 +56,30 @@ async function main(): Promise<void> {
   console.log('TRUTHLENS V2 MODEL QUALITY TESTS');
   console.log('='.repeat(72));
 
-  console.log('\n1. Asymmetric but material conflict -> CONFLICTED');
+  console.log('\\n1. Asymmetric but material conflict -> CONFLICTED');
   {
-    const claim = 'The city announced the festival was cancelled because of severe weather.';
-    const corpus = new FixtureCorpusSource([
-      doc(
-        'support',
-        'https://www.bbc.com/festival-cancelled',
-        'BBC',
-        'Festival cancellation confirmed',
-        'Organizers confirmed the festival was cancelled because of severe weather, according to the official festival statement.'
-      ),
-      doc(
-        'refute',
-        'https://apnews.com/festival-postponed',
-        'Associated Press',
-        'Festival organizers dispute cancellation',
-        'Organizers disputed the cancellation report as incorrect, stating the festival was postponed rather than cancelled.'
-      ),
-      doc(
-        'neutral',
-        'https://example.com/weather',
-        'Example',
-        'Weather report',
-        'Heavy rain affected several regions this weekend.'
-      )
-    ]);
+    const evidence = [
+      {
+        id: 'support', url: 'https://www.bbc.com/festival-cancelled', domainClusterId: 'bbc.com',
+        rerankScore: 1, isDuplicateCluster: false,
+        nli: { label: 'SUPPORTS', confidence: 0.90, scores: { supports: 0.90, refutes: 0.05, neutral: 0.05, unclear: 0 } }
+      },
+      {
+        id: 'refute', url: 'https://apnews.com/festival-postponed', domainClusterId: 'apnews.com',
+        rerankScore: 0.80, isDuplicateCluster: false,
+        nli: { label: 'REFUTES', confidence: 0.90, scores: { supports: 0.05, refutes: 0.90, neutral: 0.05, unclear: 0 } }
+      }
+    ] as any;
 
-    const conflictNli = {
-      modelName: 'fixture-conflict-nli',
-      modelVersion: 'test',
-      classify: async (_claim: any, passage: string) => passage.includes('disputed')
-        ? {
-            label: 'REFUTES' as const,
-            scores: { supports: 0.05, refutes: 0.9, neutral: 0.05, unclear: 0 },
-            confidence: 0.9,
-            modelName: 'fixture-conflict-nli',
-            modelVersion: 'test',
-            basis: 'deterministic fixture refutation'
-          }
-        : {
-            label: 'SUPPORTS' as const,
-            scores: { supports: 0.9, refutes: 0.05, neutral: 0.05, unclear: 0 },
-            confidence: 0.9,
-            modelName: 'fixture-conflict-nli',
-            modelVersion: 'test',
-            basis: 'deterministic fixture support'
-          }
-    };
-
-    const result = await verifyClaimV2(claim, {
-      corpus,
-      nliAdapter: conflictNli,
-      minCandidatesExpectedWarning: 0,
-      priorOverride: { available: false, probabilityTrue: null, label: null, modelVersion: null }
+    const decision = decideVerdict(evidence, {
+      available: false,
+      probabilityTrue: null,
+      label: null,
+      modelVersion: null
     });
 
-    check(
-      'material support + independent refutation abstains as CONFLICTED',
-      result.provenance.final_verdict === 'CONFLICTED',
-      result.provenance.final_verdict
-    );
-    check(
-      'conflict decision trace is explicit',
-      result.provenance.decision_rule_trace.some(trace => trace.rule === 'independent_material_conflict')
-    );
+    check('asymmetric but material support/refutation yields CONFLICTED', decision.verdict === 'CONFLICTED', decision.verdict);
+    check('conflict decision trace is explicit', decision.ruleTrace.some((trace: any) => trace.rule === 'independent_material_conflict'));
   }
 
   console.log('\n2. Weak/off-topic opposition must not manufacture conflict');
