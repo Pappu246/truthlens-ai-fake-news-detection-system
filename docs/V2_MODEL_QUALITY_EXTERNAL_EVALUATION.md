@@ -49,6 +49,10 @@ GitHub Actions workflow:
 
 The workflow verifies the frozen dataset hashes before evaluation. Remote evaluation requires the repository secret `HF_TOKEN`. No token value is logged.
 
+## Token-free harness validation
+
+The GitHub Actions workflow also runs a token-free smoke test before the optional remote evaluation. It verifies the frozen SciFact hashes/counts, exercises the Hugging Face NLI and embedding adapter request/response contracts with mocked transport, and uploads a small smoke artifact. This confirms the evaluation harness itself is executable even when `HF_TOKEN` is unavailable. The smoke result is **not** a pretrained-model quality result and must not be reported as one.
+
 ## Production safety
 
 This evaluation:
