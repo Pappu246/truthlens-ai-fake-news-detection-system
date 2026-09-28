@@ -30,7 +30,9 @@
     "test:all-with-v2": "npm run test:all && npm run test:v2 && npm run test:v2-route && npm run test:v2-quality",
     "test:v2-quality": "tsx scripts/v2ModelQualityTests.ts",
     "eval:v2-model-quality-external": "tsx scripts/v2ModelQualityExternal.ts",
-    "test:v2-model-quality-external-smoke": "tsx scripts/v2ModelQualityExternalSmoke.ts"
+    "test:v2-model-quality-external-smoke": "tsx scripts/v2ModelQualityExternalSmoke.ts",
+    "eval:v2-model-quality-local": "tsx scripts/v2ModelQualityLocal.ts",
+    "download:v2-models": "tsx scripts/v2DownloadModels.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
