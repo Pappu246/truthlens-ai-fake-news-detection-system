@@ -5,22 +5,22 @@
 ## Current production boundary
 
 - Production `main`: `32db8230547658b7d5d2a615599526d88c22fce9`
-- Current V2 research branch head: `441bf4168ccd45de9c84b458748539eef26c9e03`
+- Current V2 research branch head: `4af36a73506ddbe33e78f6505af73a7938810907`
 - PR #26 remains open and research-only.
 - No research branch has been merged or deployed to production.
 
 ## Final validation checkpoint
 
-- CI #124: **SUCCESS**.
-- Phase 2 Real ISOT Data Validation #91: **SUCCESS**.
-- Phase 2 ISOT Pipeline Tests #95: **SUCCESS**.
-- Phase 7 Real ISOT Benchmark #80: **SUCCESS**.
-- V2 Model Quality External Evaluation #89: **SUCCESS**.
-- V2 SciFact End-to-End Benchmark #13: **SUCCESS**.
-- SciFact artifact: `truthlens-v2-scifact-end-to-end`, artifact ID `10992077824`.
-- Artifact SHA-256: `2a3d025cdae1aa3d4342b3a44cbdbb2e2dd73fe0c30869d76c0ade88a053f2de`.
+- CI #127: **SUCCESS**.
+- Phase 2 Real ISOT Data Validation #94: **SUCCESS**.
+- Phase 2 ISOT Pipeline Tests #98: **SUCCESS**.
+- Phase 7 Real ISOT Benchmark #83: **SUCCESS**.
+- V2 Model Quality External Evaluation #96: **SUCCESS**.
+- V2 SciFact End-to-End Benchmark #16: **SUCCESS**.
+- SciFact artifact: `truthlens-v2-scifact-end-to-end`, artifact ID `10998862059`.
+- Artifact SHA-256: `6146fa5258fab79610e341fab5a6bdc74d6ecc3c3c9ed1632b3a2fa0061cf0de`.
 - Frozen SciFact inputs: **300 dev claims / 5,183 corpus documents**; exact dataset hashes verified.
-- No duplicate SciFact run was created while #13 was active.
+- No duplicate SciFact run was created while the active benchmark was running.
 
 ## Exact SciFact end-to-end result
 
@@ -33,8 +33,8 @@ Protocol configuration:
 
 - Candidate pool: **100**
 - Final pipeline evidence set: **8**
-- Gold-evidence Recall@5: **0.6808510638297872**
 - Open candidate recall: **0.5366666666666666**
+- Gold-evidence Recall@5: **0.6808510638297872**
 
 Benchmark directional evaluator:
 
@@ -44,7 +44,7 @@ Benchmark directional evaluator:
 - CONTRADICT: precision **0.267516**, recall **0.656250**, F1 **0.380090**, support **64**
 - NOT_ENOUGH_INFO: precision **0.435115**, recall **0.508929**, F1 **0.469136**, support **112**
 
-Production-policy view (reported separately because SciFact's one-gold-paper evidence structure does not satisfy the production two-independent-source policy):
+Production-policy view:
 
 - Mapped accuracy: **0.37333333333333335**
 - Mapped macro-F1: **0.1812297734627832**
@@ -53,38 +53,30 @@ Production-policy view (reported separately because SciFact's one-gold-paper evi
 - Non-abstain accuracy: **0**
 - Conflicted rate: **0.0033333333333333335**
 
-### Interpretation
-
-This is a reproducible external end-to-end measurement, not a claim of world-leading performance and not a production-accuracy estimate. The retrieval stage is materially limiting: open candidate recall is **53.67%**, while gold-evidence Recall@5 is **68.09%** among evaluator-compatible gold evidence. The directional decision layer also remains weak at **37.0% accuracy / 0.3419 macro-F1**.
-
 The production-policy view intentionally abstains on all 300 SciFact claims because the benchmark's single-paper evidence convention does not satisfy the production requirement for two independent sources. This is a dataset/policy mismatch, not a reason to relax production policy.
 
-No production threshold, source rule, abstention rule, model artifact, or deployment was changed.
+## Interpretation
 
-## Component-level pretrained comparison
+The latest benchmark reproduces the prior measured result exactly on the frozen SciFact inputs. This confirms reproducibility of the current research stack but also confirms that the end-to-end system is not yet strong enough for production promotion.
 
-The completed local model-quality evaluation remains:
+The main research bottleneck remains retrieval/reranking:
 
-| Metric | Heuristic | Local pretrained | Delta |
-|---|---:|---:|---:|
-| NLI accuracy | 0.307036 | 0.524520 | +0.217484 |
-| NLI macro-F1 | 0.205958 | 0.536936 | +0.330978 |
-| NLI ECE-10 | 0.141591 | 0.309079 | +0.167488 |
-| Mean embedding margin | 0.039649 | 0.551816 | +0.512167 |
-| Positive embedding-margin rate | 0.654255 | 1.000000 | +0.345745 |
+1. Open candidate recall: **53.67%**
+2. Gold-evidence Recall@5: **68.09%**
+3. Directional accuracy: **37.0%**
+4. Directional macro-F1: **0.3419**
 
-The pretrained NLI improves component accuracy/F1 but worsens ECE on this evaluation. These are component-level results and must not be substituted for end-to-end verdict accuracy.
-
-Machine-readable component result: `data/v2/local_model_quality_results.json`.
+The component-level pretrained comparison still shows better NLI accuracy/F1 than the heuristic adapter, while calibration remains worse; component metrics must not be substituted for end-to-end verdict performance.
 
 ## Remaining research work
 
-The mandatory end-to-end evaluation checkpoint is complete. The results do **not** justify production promotion.
+The mandatory end-to-end evaluation checkpoint is complete. There is no validation blocker for this checkpoint.
 
 Recommended next research iteration:
 
 1. Improve candidate retrieval recall before further decision-policy tuning.
-2. Evaluate a stronger dense retrieval / reranking setup on the same frozen SciFact inputs.
-3. Revisit confidence calibration using an independently labelled calibration split.
-4. Preserve the two-independent-source production policy; do not tune production around SciFact's single-paper convention.
+2. Evaluate stronger dense retrieval and reranking on the same frozen SciFact inputs.
+3. Revisit confidence calibration on an independently labelled calibration split.
+4. Preserve the two-independent-source production policy.
+5. Do not merge PR #26 or deploy the research branch based on these results.
 
