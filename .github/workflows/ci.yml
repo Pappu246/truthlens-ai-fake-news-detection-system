@@ -59,3 +59,12 @@ jobs:
 
       - name: SSRF tests
         run: npm run test:ssrf
+
+      - name: V2 pipeline tests
+        run: npm run test:v2
+
+      - name: V2 route tests
+        run: npm run test:v2-route
+
+      - name: V2 model-quality tests
+        run: npm run test:v2-quality
