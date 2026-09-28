@@ -118,6 +118,10 @@ async function classify(body) {
   const { logits } = await model(inputs);
   const raw = Array.from(logits.data);
   const id2label = model.config.id2label;
+  return softmaxNliLogits(raw, id2label);
+}
+
+function softmaxNliLogits(raw, id2label) {
   const m = Math.max(...raw);
   const exps = raw.map(v => Math.exp(v - m));
   const sum = exps.reduce((a, b) => a + b, 0) || 1;
@@ -131,7 +135,36 @@ async function classify(body) {
   return { probs, id2label };
 }
 
-const OPS = { embed, embedBatch, classify };
+async function classifyBatch(body) {
+  const pairs = Array.isArray(body.pairs) ? body.pairs : [];
+  if (pairs.length === 0) return { outputs: [] };
+  const { tokenizer, model } = await getNli();
+  const premises = pairs.map(pair => String(pair.premise || ''));
+  const hypotheses = pairs.map(pair => String(pair.hypothesis || ''));
+  const maxTokens = Math.max(...pairs.map(pair => Number(pair.maxTokens || 384)));
+  const inputs = await tokenizer(premises, {
+    text_pair: hypotheses,
+    truncation: true,
+    padding: true,
+    max_length: maxTokens
+  });
+  const { logits } = await model(inputs);
+  const raw = Array.from(logits.data);
+  const id2label = model.config.id2label;
+  const numLabels = Array.isArray(logits.dims) && logits.dims.length >= 2
+    ? Number(logits.dims[logits.dims.length - 1])
+    : Object.keys(id2label).length;
+  if (!numLabels || raw.length !== pairs.length * numLabels) {
+    throw new Error(`Unexpected NLI batch logits shape: dims=${JSON.stringify(logits.dims)}, values=${raw.length}, pairs=${pairs.length}`);
+  }
+  const outputs = [];
+  for (let i = 0; i < pairs.length; i++) {
+    outputs.push(softmaxNliLogits(raw.slice(i * numLabels, (i + 1) * numLabels), id2label));
+  }
+  return { outputs };
+}
+
+const OPS = { embed, embedBatch, classify, classifyBatch };
 
 async function meta() {
   const nliCfg = readConfigFromDisk(config.nliModelId);
