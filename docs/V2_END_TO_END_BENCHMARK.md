@@ -2,6 +2,8 @@
 
 **Status:** research/evaluation only. Production remains frozen.
 
+**Execution note:** the benchmark uses one shared BM25 index per full-corpus run and batched local embedding inference to keep the complete 300-claim evaluation tractable on CPU.
+
 ## What this benchmark measures
 
 This is the first external end-to-end measurement of the actual V2 research pipeline on a non-synthetic corpus:
