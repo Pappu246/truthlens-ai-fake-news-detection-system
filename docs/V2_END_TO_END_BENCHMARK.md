@@ -2,7 +2,7 @@
 
 **Status:** research/evaluation only. Production remains frozen.
 
-**Execution note:** the benchmark uses one shared BM25 index per full-corpus run and batched local embedding inference to keep the complete 300-claim evaluation tractable on CPU.
+**Execution note:** the benchmark uses one shared BM25 index per full-corpus run, batched local embedding inference, and batched pretrained NLI inference to keep the complete 300-claim evaluation tractable on CPU.
 
 ## What this benchmark measures
 
