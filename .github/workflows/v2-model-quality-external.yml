@@ -1,0 +1,125 @@
+name: V2 Model Quality External Evaluation
+
+on:
+  push:
+    branches:
+      - research/truthlens-v2-model-quality
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    outputs:
+      has_token: ${{ steps.token.outputs.has_token }}
+    steps:
+      - id: token
+        shell: bash
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/v2-model-quality
+          if [ -n "${HF_TOKEN:-}" ]; then
+            echo "has_token=true" >> "$GITHUB_OUTPUT"
+            printf 'HF_TOKEN is configured; remote evaluation will run.\n' > artifacts/v2-model-quality/preflight.txt
+          else
+            echo "has_token=false" >> "$GITHUB_OUTPUT"
+            printf 'HF_TOKEN is not configured; remote model-quality evaluation was not executed.\n' > artifacts/v2-model-quality/preflight.txt
+          fi
+      - name: Upload preflight status
+        uses: actions/upload-artifact@v4
+        with:
+          name: truthlens-v2-model-quality-preflight
+          path: artifacts/v2-model-quality/preflight.txt
+          if-no-files-found: error
+          retention-days: 7
+
+  evaluate:
+    needs: preflight
+    if: needs.preflight.outputs.has_token == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+    steps:
+      - name: Checkout V2 research branch
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Download exact frozen SciFact inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/truthlens-model-quality
+          mkdir -p /tmp/truthlens-model-quality/scifact
+          BASE="https://raw.githubusercontent.com/vidi-deshp12/scifact-claim-verification/051b5245aa9d4b98c1302920cc5e4958b9e30ef9/data"
+          curl --fail --retry 4 --retry-all-errors -L "$BASE/claims_dev.jsonl" -o /tmp/truthlens-model-quality/scifact/claims_dev.jsonl
+          curl --fail --retry 4 --retry-all-errors -L "$BASE/corpus.jsonl" -o /tmp/truthlens-model-quality/scifact/corpus.jsonl
+
+      - name: Verify exact SciFact hashes and counts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+
+          expected = {
+              "/tmp/truthlens-model-quality/scifact/claims_dev.jsonl": "86f0435d08fdb65d1aa41d1472684f57e6e71930626497bdf4d7a9ec1a632217",
+              "/tmp/truthlens-model-quality/scifact/corpus.jsonl": "b8d6c89624cb2ed74dee8938effc4f5d8bd2086887880af8110d64be4ceade62",
+          }
+
+          for path, want in expected.items():
+              digest = hashlib.sha256(Path(path).read_bytes()).hexdigest()
+              assert digest == want, (path, digest, want)
+
+          claims = [json.loads(line) for line in Path("/tmp/truthlens-model-quality/scifact/claims_dev.jsonl").read_text().splitlines() if line.strip()]
+          corpus = [json.loads(line) for line in Path("/tmp/truthlens-model-quality/scifact/corpus.jsonl").read_text().splitlines() if line.strip()]
+          assert len(claims) == 300
+          assert len(corpus) == 5183
+          print("SciFact verification: PASS")
+          PY
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Run external model-quality comparison
+        run: |
+          mkdir -p artifacts/v2-model-quality
+          npm run eval:v2-model-quality-external --             --data-dir=/tmp/truthlens-model-quality/scifact             --output=artifacts/v2-model-quality/external-model-quality.json             2>&1 | tee artifacts/v2-model-quality/evaluation.log
+
+      - name: Upload evaluation results
+        uses: actions/upload-artifact@v4
+        with:
+          name: truthlens-v2-model-quality-external
+          path: artifacts/v2-model-quality
+          if-no-files-found: error
+          retention-days: 7
+
+  summarize:
+    needs: [preflight, evaluate]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report evaluation disposition
+        shell: bash
+        run: |
+          if [ "${{ needs.preflight.outputs.has_token }}" = "true" ] && [ "${{ needs.evaluate.result }}" = "success" ]; then
+            echo "External model-quality evaluation completed successfully."
+          elif [ "${{ needs.preflight.outputs.has_token }}" = "false" ]; then
+            echo "HF_TOKEN is not configured; external model-quality evaluation was skipped."
+          else
+            echo "External model-quality evaluation did not complete successfully."
+            exit 1
+          fi
