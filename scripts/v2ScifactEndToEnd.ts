@@ -165,7 +165,7 @@ async function main(): Promise<void> {
       const result = await verifyClaimV2(claim.claim, {
         corpus: source,
         nliAdapter,
-        nliConcurrency: 4,
+        nliConcurrency: 8,
         retrieval: {
           embeddingModel,
           perQueryTopK: 15,
