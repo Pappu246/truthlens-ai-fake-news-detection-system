@@ -204,6 +204,22 @@ export class MlWorkerClient {
     return result.vectors;
   }
 
+  /** Batch NLI inference through the same synchronous worker facade. */
+  public classifyBatch(
+    pairs: Array<{ premise: string; hypothesis: string; maxTokens?: number }>
+  ): Array<{ probs: Record<string, number>; id2label: Record<string, string> }> {
+    if (pairs.length === 0) return [];
+    const result = this.call<{
+      outputs: Array<{ probs: Record<string, number>; id2label: Record<string, string> }>
+    }>('classifyBatch', { pairs });
+    if (!Array.isArray(result.outputs) || result.outputs.length !== pairs.length) {
+      throw new ModelInferenceError(
+        `ML worker classifyBatch returned ${Array.isArray(result.outputs) ? result.outputs.length : 'non-array'} outputs for ${pairs.length} inputs.`
+      );
+    }
+    return result.outputs;
+  }
+
   /** Metadata about the local models (read from their on-disk config.json files). */
   public meta(): MlWorkerMeta {
     if (!this.metaCache) this.metaCache = this.call<MlWorkerMeta>('meta', {});
