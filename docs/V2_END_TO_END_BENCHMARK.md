@@ -22,7 +22,7 @@ https://github.com/allenai/scifact
 
 ## Method
 
-1. The benchmark source indexes the **entire 5,183-document corpus** with BM25.
+1. The benchmark source indexes the **entire 5,183-document corpus** with BM25 once and reuses that index across all claims.
 2. For each claim, the normal V2 query expansion runs.
 3. The source returns the top 100 open-retrieval candidates for each expanded query.
 4. The unchanged V2 pipeline then runs its normal hybrid BM25+dense retrieval, reranking and NLI layers over that candidate pool.

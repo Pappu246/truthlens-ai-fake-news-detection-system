@@ -62,6 +62,10 @@ export class SciFactOpenCorpusSource implements CorpusSource {
     return results;
   }
 
+  public resetCandidateIds(): void {
+    this.candidateIdsSeen.clear();
+  }
+
   public getCandidateIds(): string[] {
     return Array.from(this.candidateIdsSeen);
   }

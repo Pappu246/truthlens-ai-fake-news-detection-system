@@ -137,6 +137,9 @@ async function main(): Promise<void> {
 
   const embeddingModel = new TransformerEmbeddingModel();
   const nliAdapter = new PretrainedNliAdapter({ embeddingModel });
+  // Build the 5,183-document BM25 index once and reuse it across all 300 claims.
+  // The candidate-id accumulator is reset per claim so recall remains claim-local.
+  const source = new SciFactOpenCorpusSource(corpus, topCandidates);
 
   const goldPredictions: string[] = [];
   const benchmarkPredictions: string[] = [];
@@ -155,10 +158,10 @@ async function main(): Promise<void> {
   try {
     for (let i = 0; i < claims.length; i++) {
       const claim = claims[i];
+      source.resetCandidateIds();
       const gold = goldLabel(claim);
       goldPredictions.push(gold);
 
-      const source = new SciFactOpenCorpusSource(corpus, topCandidates);
       const result = await verifyClaimV2(claim.claim, {
         corpus: source,
         nliAdapter,
