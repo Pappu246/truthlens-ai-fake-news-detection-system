@@ -1,38 +1,69 @@
 # TruthLens V2 Research Handoff
 
-**Status:** Research/evaluation complete for the token-free pretrained path. Production remains frozen.
+**Status:** End-to-end SciFact research checkpoint complete. Production remains frozen.
 
 ## Current production boundary
 
 - Production `main`: `32db8230547658b7d5d2a615599526d88c22fce9`
-- Current V2 research branch: `3a92b32c6640c733723352fd0bb84b72baa2ca22`
+- Current V2 research branch head: `441bf4168ccd45de9c84b458748539eef26c9e03`
 - PR #26 remains open and research-only.
-- PR #27 remains open/draft and research-only.
 - No research branch has been merged or deployed to production.
 
-## Final validation
+## Final validation checkpoint
 
-- CI #109 on the current head: **SUCCESS**.
-- Phase 2 Real ISOT Data Validation #76: **SUCCESS**.
-- Phase 2 ISOT Pipeline Tests #80: **SUCCESS**.
-- Phase 7 Real ISOT Benchmark #65: **SUCCESS**.
-- V2 Model Quality External Evaluation #54: **SUCCESS**.
-- Token-free harness smoke: **PASS**.
-- Frozen SciFact inputs: **300 claims / 5,183 corpus documents**; exact SHA-256 verified.
-- No repository `HF_TOKEN` secret is configured; hosted Hugging Face inference remains optional.
+- CI #124: **SUCCESS**.
+- Phase 2 Real ISOT Data Validation #91: **SUCCESS**.
+- Phase 2 ISOT Pipeline Tests #95: **SUCCESS**.
+- Phase 7 Real ISOT Benchmark #80: **SUCCESS**.
+- V2 Model Quality External Evaluation #89: **SUCCESS**.
+- V2 SciFact End-to-End Benchmark #13: **SUCCESS**.
+- SciFact artifact: `truthlens-v2-scifact-end-to-end`, artifact ID `10992077824`.
+- Artifact SHA-256: `2a3d025cdae1aa3d4342b3a44cbdbb2e2dd73fe0c30869d76c0ade88a053f2de`.
+- Frozen SciFact inputs: **300 dev claims / 5,183 corpus documents**; exact dataset hashes verified.
+- No duplicate SciFact run was created while #13 was active.
 
-## Completed local pretrained evaluation
+## Exact SciFact end-to-end result
 
-The primary pretrained-model comparison no longer requires a hosted-provider token.
+Research models:
 
-Sealed models used:
+- NLI: `Xenova/nli-deberta-v3-xsmall` — `q8@3fac2500`
+- Embedding: `Xenova/all-MiniLM-L6-v2` — `q8@afdb6f1a`
 
-- `Xenova/nli-deberta-v3-xsmall` — `q8@3fac2500`
-- `Xenova/all-MiniLM-L6-v2` — `q8@afdb6f1a`
+Protocol configuration:
 
-The evaluation covered all 300 SciFact dev claims and 469 evaluator-compatible NLI passages.
+- Candidate pool: **100**
+- Final pipeline evidence set: **8**
+- Gold-evidence Recall@5: **0.6808510638297872**
+- Open candidate recall: **0.5366666666666666**
 
-Measured component-level results:
+Benchmark directional evaluator:
+
+- Accuracy: **0.3700000000000000**
+- Macro-F1: **0.3418989628139955**
+- SUPPORT: precision **1.000000**, recall **0.096774**, F1 **0.176471**, support **124**
+- CONTRADICT: precision **0.267516**, recall **0.656250**, F1 **0.380090**, support **64**
+- NOT_ENOUGH_INFO: precision **0.435115**, recall **0.508929**, F1 **0.469136**, support **112**
+
+Production-policy view (reported separately because SciFact's one-gold-paper evidence structure does not satisfy the production two-independent-source policy):
+
+- Mapped accuracy: **0.37333333333333335**
+- Mapped macro-F1: **0.1812297734627832**
+- Abstention rate: **1.0**
+- Non-abstain coverage: **0**
+- Non-abstain accuracy: **0**
+- Conflicted rate: **0.0033333333333333335**
+
+### Interpretation
+
+This is a reproducible external end-to-end measurement, not a claim of world-leading performance and not a production-accuracy estimate. The retrieval stage is materially limiting: open candidate recall is **53.67%**, while gold-evidence Recall@5 is **68.09%** among evaluator-compatible gold evidence. The directional decision layer also remains weak at **37.0% accuracy / 0.3419 macro-F1**.
+
+The production-policy view intentionally abstains on all 300 SciFact claims because the benchmark's single-paper evidence convention does not satisfy the production requirement for two independent sources. This is a dataset/policy mismatch, not a reason to relax production policy.
+
+No production threshold, source rule, abstention rule, model artifact, or deployment was changed.
+
+## Component-level pretrained comparison
+
+The completed local model-quality evaluation remains:
 
 | Metric | Heuristic | Local pretrained | Delta |
 |---|---:|---:|---:|
@@ -42,14 +73,18 @@ Measured component-level results:
 | Mean embedding margin | 0.039649 | 0.551816 | +0.512167 |
 | Positive embedding-margin rate | 0.654255 | 1.000000 | +0.345745 |
 
-The NLI gains are component-level model-quality evidence. The ECE result is worse for the pretrained path on this evaluation, so no calibration-improvement claim is made. The embedding result is a semantic-separation diagnostic, not exhaustive retrieval Recall@K. Final TruthLens verdict accuracy is intentionally not reported from this SciFact protocol because of the mismatch between SciFact's one-gold-paper structure and the V2 two-independent-source decision policy.
+The pretrained NLI improves component accuracy/F1 but worsens ECE on this evaluation. These are component-level results and must not be substituted for end-to-end verdict accuracy.
 
-Machine-readable result: `data/v2/local_model_quality_results.json`.
+Machine-readable component result: `data/v2/local_model_quality_results.json`.
 
-## V2.5 disposition
+## Remaining research work
 
-The separately frozen V2.5 contradiction-aware evaluation remains research-only. Its experiment did not demonstrate the intended contradiction-recovery objective and is not promoted into production.
+The mandatory end-to-end evaluation checkpoint is complete. The results do **not** justify production promotion.
 
-## Production safety conclusion
+Recommended next research iteration:
 
-The research stack is additive. The existing production article/claim/evidence systems, production thresholds, source policy, abstention behavior, and deployed model artifacts are unchanged by this research branch.
+1. Improve candidate retrieval recall before further decision-policy tuning.
+2. Evaluate a stronger dense retrieval / reranking setup on the same frozen SciFact inputs.
+3. Revisit confidence calibration using an independently labelled calibration split.
+4. Preserve the two-independent-source production policy; do not tune production around SciFact's single-paper convention.
+
