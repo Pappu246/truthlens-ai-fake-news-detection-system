@@ -203,24 +203,15 @@ async function main(): Promise<void> {
           let localNegative = 0;
           for (let i = 0; i < Math.min(localQuery.length, localNegativeVector.length); i++) localNegative += localQuery[i] * localNegativeVector[i];
 
-          const heuristicQuery = defaultNliAdapter.modelName
-            ? (await import('../server/v2/retrieval/embeddings')).defaultEmbeddingModel.embed(claim.claim)
-            : [];
+          const heuristicQuery = defaultEmbeddingModel.embed(claim.claim);
           const heuristicGoldScores = goldTexts.map(text =>
-            (await import('../server/v2/retrieval/embeddings')).cosineSimilarity(
-              heuristicQuery,
-              (await import('../server/v2/retrieval/embeddings')).defaultEmbeddingModel.embed(text)
-            )
+            cosineSimilarity(heuristicQuery, defaultEmbeddingModel.embed(text))
           );
-          const heuristicNegative = (await import('../server/v2/retrieval/embeddings')).cosineSimilarity(
+          const heuristicNegative = cosineSimilarity(
             heuristicQuery,
-            (await import('../server/v2/retrieval/embeddings')).defaultEmbeddingModel.embed(negativeDoc.abstract.join(' '))
+            defaultEmbeddingModel.embed(negativeDoc.abstract.join(' '))
           );
 
-          embeddingMargins.push({
-            heuristic: Math.max(...heuristicGoldScores) - heuristicNegative,
-            local: Math.max(...localGoldScores) - localNegative
-          });
         }
       }
 
