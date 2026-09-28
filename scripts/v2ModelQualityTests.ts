@@ -137,7 +137,7 @@ async function main(): Promise<void> {
         labels: ['supports the claim', 'refutes the claim', 'does not determine the claim'],
         scores: [0.88, 0.08, 0.04]
       }), { status: 200, headers: { 'Content-Type': 'application/json' } });
-    }) as Response;
+    });
 
     const adapter = new HuggingFaceNliAdapter({
       token: 'test-token',
@@ -175,7 +175,7 @@ async function main(): Promise<void> {
         status: 200,
         headers: { 'Content-Type': 'application/json' }
       });
-    }) as Response;
+    });
 
     const model = new HuggingFaceEmbeddingModel({
       token: 'test-token',
