@@ -11,7 +11,7 @@ TruthLens AI is a TypeScript/Node.js system for news-analysis assistance. It com
 
 ## Verified release snapshot
 
-The current application source of truth is `main` at commit [`7e570a5`](https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/commit/7e570a56288da85f2a90acb8d0c1dd051bd142ab). The post-merge production smoke workflow completed successfully with **55/55 checks passed** against the Render deployment on 2026-09-26 UTC: [workflow run](https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/actions/runs/36241411149).
+The current application source of truth is `main` at commit [`32db823`](https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/commit/32db8230547658b7d5d2a615599526d88c22fce9). The post-merge production smoke workflow completed successfully with **55/55 checks passed** against the Render deployment on 2026-09-26 UTC: [workflow run](https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/actions/runs/36241411149).
 
 Article and claim measurements below are separate benchmarks. They must not be added, averaged, or presented as one overall accuracy.
 
@@ -243,7 +243,7 @@ The deployed demo is [truthlens-ai-dvpf.onrender.com](https://truthlens-ai-dvpf.
 4. Evidence relation is inferred from retrieved headlines/snippets, not full-article entailment. `SUPPORTED` is corroboration, not proof.
 5. RSS summaries are not full article bodies. Headline-only items are withheld as `NEEDS_MORE_CONTEXT`.
 6. Live retrieval depends on outbound network access; unavailable retrieval is reported explicitly.
-7. `npm audit` currently reports two moderate advisories in the `qs` dependency path used by Express. These require separate dependency maintenance.
+7. Dependency advisory status is environment- and lockfile-dependent; re-run `npm audit` after dependency changes rather than relying on a historical audit snapshot.
 
 ## Repository layout
 
