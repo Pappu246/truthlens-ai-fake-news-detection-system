@@ -22,7 +22,7 @@ import { defaultNliAdapter } from './nli/heuristicNliAdapter';
 import { createConfiguredNliAdapter } from './nli/huggingFaceNliAdapter';
 import { decideVerdict, RawPriorInput, DecisionThresholds, DEFAULT_DECISION_THRESHOLDS } from './decision/decisionPolicy';
 import { buildProvenance } from './provenance';
-import { ClassifiedEvidence, ProvenanceRecord, RetrievedCandidate, V2VerificationResult } from './types';
+import { ClassifiedEvidence, NliClassification, ProvenanceRecord, RetrievedCandidate, V2VerificationResult } from './types';
 import { sanitiseUntrustedEvidence } from '../verification/evidenceEngine';
 
 export interface V2PipelineOptions {
