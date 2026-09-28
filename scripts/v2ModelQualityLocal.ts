@@ -15,6 +15,7 @@ import fs from 'fs';
 import path from 'path';
 import { buildClaim } from '../server/v2/queryExpansion';
 import { defaultNliAdapter } from '../server/v2/nli/heuristicNliAdapter';
+import { defaultEmbeddingModel, cosineSimilarity } from '../server/v2/retrieval/embeddings';
 import { PretrainedNliAdapter } from '../server/v2/nli/pretrainedNliAdapter';
 import { TransformerEmbeddingModel } from '../server/v2/retrieval/transformerEmbeddingModel';
 import { disposeMlWorker } from '../server/v2/ml/mlWorkerClient';
@@ -254,7 +255,7 @@ async function main(): Promise<void> {
         heuristic_nli: defaultNliAdapter.modelName,
         local_pretrained_nli: localNli.modelName,
         local_pretrained_nli_version: localNli.modelVersion,
-        heuristic_embedding: (await import('../server/v2/retrieval/embeddings')).defaultEmbeddingModel.name,
+        heuristic_embedding: defaultEmbeddingModel.name,
         local_pretrained_embedding: localEmbedding.name,
         local_pretrained_embedding_version: localEmbedding.version
       },
