@@ -1,13 +1,14 @@
 name: V2 SciFact End-to-End Benchmark
 
 on:
-  push:
-    branches:
-      - research/truthlens-v2-model-quality
   pull_request:
     branches:
       - main
   workflow_dispatch:
+
+concurrency:
+  group: truthlens-v2-scifact-${{ github.event.pull_request.number || github.ref_name }}
+  cancel-in-progress: true
 
 permissions:
   contents: read

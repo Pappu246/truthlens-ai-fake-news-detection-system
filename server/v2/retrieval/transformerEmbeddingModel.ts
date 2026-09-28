@@ -40,18 +40,33 @@ export class TransformerEmbeddingModel implements EmbeddingModel {
     const input = (text || '').trim();
     if (!input) return new Array(this.dimensions).fill(0);
     const res = this.client.call<{ vector: number[] }>('embed', { text: input });
-    const vec = res.vector;
-    if (!Array.isArray(vec) || vec.length !== this.dimensions) {
+    return this.normalizeVector(res.vector);
+  }
+
+  public embedBatch(texts: string[]): number[][] {
+    if (texts.length === 0) return [];
+    const normalizedInputs = texts.map(text => (text || '').trim());
+    const res = this.client.embedBatch(normalizedInputs);
+    if (!Array.isArray(res) || res.length !== texts.length) {
       throw new Error(
-        `TransformerEmbeddingModel: worker returned an embedding of length ${Array.isArray(vec) ? vec.length : 'non-array'}, ` +
+        `TransformerEmbeddingModel: worker returned ${Array.isArray(res) ? res.length : 'non-array'} vectors for ${texts.length} inputs.`
+      );
+    }
+    return res.map(vector => this.normalizeVector(vector));
+  }
+
+  private normalizeVector(vector: number[]): number[] {
+    if (!Array.isArray(vector) || vector.length !== this.dimensions) {
+      throw new Error(
+        `TransformerEmbeddingModel: worker returned an embedding of length ${Array.isArray(vector) ? vector.length : 'non-array'}, ` +
         `expected ${this.dimensions} (${this.name}).`
       );
     }
     // Defensive re-normalisation (pipeline already returns L2-normalised
     // vectors; downstream cosineSimilarity assumes unit vectors).
     let normSq = 0;
-    for (const v of vec) normSq += v * v;
+    for (const v of vector) normSq += v * v;
     const norm = Math.sqrt(normSq) || 1;
-    return vec.map(v => v / norm);
+    return vector.map(v => v / norm);
   }
 }

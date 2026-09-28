@@ -91,6 +91,23 @@ async function embed(body) {
   return { vector: Array.from(out.data) };
 }
 
+async function embedBatch(body) {
+  const texts = Array.isArray(body.texts) ? body.texts.map(text => String(text || '')) : [];
+  if (texts.length === 0) return { vectors: [] };
+  const extractor = await getExtractor();
+  const out = await extractor(texts, { pooling: 'mean', normalize: true });
+  const dims = Array.isArray(out.dims) ? out.dims : [];
+  const dimension = dims.length === 2 ? Number(dims[1]) : Math.floor(out.data.length / texts.length);
+  if (!dimension || dimension * texts.length !== out.data.length) {
+    throw new Error(`Unexpected embedding batch shape: dims=${JSON.stringify(dims)}, values=${out.data.length}, texts=${texts.length}`);
+  }
+  const vectors = [];
+  for (let i = 0; i < texts.length; i++) {
+    vectors.push(Array.from(out.data.slice(i * dimension, (i + 1) * dimension)));
+  }
+  return { vectors };
+}
+
 async function classify(body) {
   const { tokenizer, model } = await getNli();
   const inputs = await tokenizer(String(body.premise || ''), {
@@ -114,7 +131,7 @@ async function classify(body) {
   return { probs, id2label };
 }
 
-const OPS = { embed, classify };
+const OPS = { embed, embedBatch, classify };
 
 async function meta() {
   const nliCfg = readConfigFromDisk(config.nliModelId);

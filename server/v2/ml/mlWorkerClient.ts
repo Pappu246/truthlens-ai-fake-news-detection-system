@@ -188,6 +188,22 @@ export class MlWorkerClient {
     return parsed.result as T;
   }
 
+  /**
+   * Batch embedding inference through the same synchronous worker facade.
+   * This is used by dense retrieval so a candidate pool becomes one model
+   * invocation instead of one worker round-trip per document.
+   */
+  public embedBatch(texts: string[]): number[][] {
+    if (texts.length === 0) return [];
+    const result = this.call<{ vectors: number[][] }>('embedBatch', { texts });
+    if (!Array.isArray(result.vectors) || result.vectors.length !== texts.length) {
+      throw new ModelInferenceError(
+        `ML worker embedBatch returned ${Array.isArray(result.vectors) ? result.vectors.length : 'non-array'} vectors for ${texts.length} inputs.`
+      );
+    }
+    return result.vectors;
+  }
+
   /** Metadata about the local models (read from their on-disk config.json files). */
   public meta(): MlWorkerMeta {
     if (!this.metaCache) this.metaCache = this.call<MlWorkerMeta>('meta', {});
