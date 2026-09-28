@@ -92,6 +92,7 @@ jobs:
 
       - name: Run token-free external harness smoke test
         run: |
+          set -euo pipefail
           mkdir -p artifacts/v2-model-quality
           npm run test:v2-model-quality-external-smoke -- \
             --data-dir=/tmp/truthlens-model-quality/scifact \
@@ -166,6 +167,7 @@ jobs:
         env:
           TRUTHLENS_V2_ML_CALL_TIMEOUT_MS: 180000
         run: |
+          set -euo pipefail
           mkdir -p artifacts/v2-model-quality
           npm run eval:v2-model-quality-local -- \
             --data-dir=/tmp/truthlens-model-quality/scifact \
@@ -236,6 +238,7 @@ jobs:
 
       - name: Run external model-quality comparison
         run: |
+          set -euo pipefail
           mkdir -p artifacts/v2-model-quality
           npm run eval:v2-model-quality-external --             --data-dir=/tmp/truthlens-model-quality/scifact             --output=artifacts/v2-model-quality/external-model-quality.json             2>&1 | tee artifacts/v2-model-quality/evaluation.log
 
