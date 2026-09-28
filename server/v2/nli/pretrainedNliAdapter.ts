@@ -255,17 +255,25 @@ export class PretrainedNliAdapter implements NliAdapter {
     this.embeddingModel = options?.embeddingModel ?? new TransformerEmbeddingModel(this.client);
   }
 
+  private embedSync(text: string): number[] {
+    const value = this.embeddingModel.embed(text);
+    if (value instanceof Promise) {
+      throw new Error('PretrainedNliAdapter requires a synchronous embedding model.');
+    }
+    return value;
+  }
+
   /** Relatedness of (claim, passage) via the pretrained bi-encoder. */
   private relatedness(claimText: string, premise: string): number {
     let claimVec: number[];
     if (this.lastClaimText === claimText && this.lastClaimVector) {
       claimVec = this.lastClaimVector;
     } else {
-      claimVec = this.embeddingModel.embed(claimText);
+      claimVec = this.embedSync(claimText);
       this.lastClaimText = claimText;
       this.lastClaimVector = claimVec;
     }
-    const passageVec = this.embeddingModel.embed(premise);
+    const passageVec = this.embedSync(premise);
     let dot = 0;
     const len = Math.min(claimVec.length, passageVec.length);
     for (let i = 0; i < len; i++) dot += claimVec[i] * passageVec[i];
