@@ -150,17 +150,39 @@ export async function verifyClaimV2(claimText: string, options?: V2PipelineOptio
 
   const reranked = rerankEvidence(candidates);
 
-  const classified: ClassifiedEvidence[] = await mapWithConcurrency(
-    reranked,
-    options?.nliConcurrency ?? (nliAdapter.modelName === defaultNliAdapter.modelName ? reranked.length : 4),
-    async r => {
-      const passage = passageFor(r);
-      const nli = await nliAdapter.classify(claim, passage, r.publishedAt || undefined);
-      const safeTitle = sanitiseUntrustedEvidence(r.title || '', 240).text;
-      const safePublisher = sanitiseUntrustedEvidence(r.publisher || 'Unknown source', 120).text;
-      return { ...r, title: safeTitle, publisher: safePublisher, passage, nli };
+  const batchCapableNli = nliAdapter as NliAdapter & {
+    classifyBatch?: (claim: ExtractedClaim, passages: string[]) => NliClassification[] | Promise<NliClassification[]>;
+  };
+  let classified: ClassifiedEvidence[];
+  if (typeof batchCapableNli.classifyBatch === 'function' && reranked.length > 1) {
+    const batchSize = Math.max(1, Math.min(options?.nliConcurrency ?? 8, reranked.length));
+    const classifiedChunks: ClassifiedEvidence[][] = [];
+    for (let start = 0; start < reranked.length; start += batchSize) {
+      const chunk = reranked.slice(start, start + batchSize);
+      const passages = chunk.map(passageFor);
+      const nliResults = await batchCapableNli.classifyBatch(claim, passages);
+      classifiedChunks.push(chunk.map((r, index) => {
+        const passage = passages[index];
+        const nli = nliResults[index];
+        const safeTitle = sanitiseUntrustedEvidence(r.title || '', 240).text;
+        const safePublisher = sanitiseUntrustedEvidence(r.publisher || 'Unknown source', 120).text;
+        return { ...r, title: safeTitle, publisher: safePublisher, passage, nli };
+      }));
     }
-  );
+    classified = classifiedChunks.flat();
+  } else {
+    classified = await mapWithConcurrency(
+      reranked,
+      options?.nliConcurrency ?? (nliAdapter.modelName === defaultNliAdapter.modelName ? reranked.length : 4),
+      async r => {
+        const passage = passageFor(r);
+        const nli = await nliAdapter.classify(claim, passage, r.publishedAt || undefined);
+        const safeTitle = sanitiseUntrustedEvidence(r.title || '', 240).text;
+        const safePublisher = sanitiseUntrustedEvidence(r.publisher || 'Unknown source', 120).text;
+        return { ...r, title: safeTitle, publisher: safePublisher, passage, nli };
+      }
+    );
+  }
 
   const prior = options?.priorOverride ?? lookupPrior(text);
   const decision = decideVerdict(classified, prior, thresholds);
