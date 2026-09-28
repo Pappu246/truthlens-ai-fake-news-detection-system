@@ -280,6 +280,111 @@ export class PretrainedNliAdapter implements NliAdapter {
     return Math.max(-1, Math.min(1, dot)); // both vectors L2-normalised
   }
 
+  private classifyOneResult(
+    winner: { probs: Record<string, number>; scores: NliScoreDistribution; maxModelProb: number },
+    basisPasses: string,
+    decidedBy: string
+  ): NliClassification {
+    const scores = winner.scores;
+    const entries: Array<[NliLabel, number]> = [
+      ['SUPPORTS', scores.supports],
+      ['REFUTES', scores.refutes],
+      ['NEUTRAL', scores.neutral],
+      ['UNCLEAR', scores.unclear]
+    ];
+    let label: NliLabel = 'UNCLEAR';
+    let best = -1;
+    for (const [l, s] of entries) {
+      if (s > best) { best = s; label = l; }
+    }
+    const confidence = scores[label.toLowerCase() as keyof NliScoreDistribution];
+    const probKeys = Object.keys(LABEL_FOR_PROB_KEY).map(k => `${k}=${(winner.probs[k] as number).toFixed(3)}`);
+    const basis =
+      `cross-encoder MNLI probabilities (${probKeys.join(', ')}) over premise=evidence passage; ` +
+      `${basisPasses}; winner=${decidedBy}; maxP=${winner.maxModelProb.toFixed(3)}; UNCLEAR is emitted only when ` +
+      `the winning pass has no majority class (its maxP<0.5); renormalised 4-way distribution sums to exactly 1.000 ` +
+      'after largest-remainder rounding to three decimals; decision by argmax of model probabilities only — no lexical rules involved.';
+    return {
+      label,
+      scores,
+      confidence,
+      modelName: this.modelName,
+      modelVersion: this.modelVersion,
+      basis
+    };
+  }
+
+  /**
+   * Batched variant used by large research evaluations. It preserves exactly
+   * the same hypothesis-selection, relatedness gate, probability mapping and
+   * output contract as classify(), but reduces worker/model round-trips.
+   */
+  public classifyBatch(claim: ExtractedClaim, passages: string[]): NliClassification[] {
+    if (passages.length === 0) return [];
+    const fullClaimText = (claim.normalizedText || '').trim().replace(/\\s+/g, ' ');
+    const conditionings = passages.map(passage => conditionHypothesis(fullClaimText));
+    const relatednessValues = passages.map(passage => this.relatedness(fullClaimText, (passage || '').trim()));
+    const results: Array<NliClassification | null> = new Array(passages.length).fill(null);
+    const directionalInputs: Array<{ index: number; premise: string; hypothesis: string }> = [];
+    for (let i = 0; i < passages.length; i++) {
+      if (relatednessValues[i] < this.relatednessFloor) {
+        results[i] = {
+          label: 'NEUTRAL',
+          scores: { supports: 0.005, refutes: 0.005, neutral: 0.98, unclear: 0.01 },
+          confidence: 0.98,
+          modelName: this.modelName,
+          modelVersion: this.modelVersion,
+          basis:
+            `relatedness gate: pretrained bi-encoder cosine=${relatednessValues[i].toFixed(3)} < floor=${this.relatednessFloor} -> passage is off-topic for this claim; ` +
+            'cross-encoder NLI not consulted (MNLI models are only valid on topically related pairs). Label=NEUTRAL indicates irrelevance, not a fact-check outcome.'
+        };
+      } else {
+        directionalInputs.push({ index: i, premise: (passage || '').trim(), hypothesis: fullClaimText });
+      }
+    }
+    if (!directionalInputs.length) return results as NliClassification[];
+    const passA = this.client.classifyBatch(directionalInputs.map(item => ({
+      premise: item.premise,
+      hypothesis: item.hypothesis,
+      maxTokens: this.maxPairTokens
+    })));
+    const fallbackInputs: Array<{ index: number; premise: string; hypothesis: string; passA: { probs: Record<string, number>; scores: NliScoreDistribution; maxModelProb: number } }> = [];
+    for (let i = 0; i < directionalInputs.length; i++) {
+      const item = directionalInputs[i];
+      const raw = passA[i];
+      const mapped = mapModelProbsToNliScores(raw.probs);
+      const directional = raw.probs.entailment >= 0.5 || raw.probs.contradiction >= 0.5;
+      const mode = conditionings[item.index].mode;
+      if (directional || mode !== 'attribution_stripped') {
+        const label = raw.probs.entailment >= 0.5 ? 'SUPPORTS' : raw.probs.contradiction >= 0.5 ? 'REFUTES' : null;
+        if (label) {
+          const basis = `passA (hypothesis=claim-as-stated) directional (${label})`;
+          results[item.index] = this.classifyOneResult(mapped, basis, 'passA:claim-as-stated');
+        } else {
+          results[item.index] = this.classifyOneResult(
+            mapped,
+            `passA (hypothesis=claim-as-stated) produced NO DIRECTIONAL MAJORITY (entailment=${raw.probs.entailment.toFixed(3)}, contradiction=${raw.probs.contradiction.toFixed(3)}, both <0.5); claim carries no attribution clause, so no second pass is applicable`,
+            'passA:claim-as-stated'
+          );
+        }
+      } else {
+        fallbackInputs.push({ index: item.index, premise: item.premise, hypothesis: conditionings[item.index].hypothesis, passA: mapped });
+      }
+    }
+    if (fallbackInputs.length) {
+      const passB = this.client.classifyBatch(fallbackInputs.map(item => ({ premise: item.premise, hypothesis: item.hypothesis, maxTokens: this.maxPairTokens })));
+      for (let i = 0; i < fallbackInputs.length; i++) {
+        const item = fallbackInputs[i];
+        const raw = passB[i];
+        const mapped = mapModelProbsToNliScores(raw.probs);
+        const basis =
+          `passA (hypothesis=claim-as-stated) produced NO DIRECTIONAL MAJORITY (entailment=${item.passA.probs.entailment.toFixed(3)}, contradiction=${item.passA.probs.contradiction.toFixed(3)}, both <0.5); fall through to passB (hypothesis=content proposition, attribution stripped)`;
+        results[item.index] = this.classifyOneResult(mapped, basis, 'passB:content-proposition');
+      }
+    }
+    return results as NliClassification[];
+  }
+
   /** Single cross-encoder run over one hypothesis framing. */
   private runOnce(premise: string, hypothesis: string): { probs: Record<string, number>; scores: NliScoreDistribution; maxModelProb: number } {
     const { probs } = this.client.call<{ probs: Record<string, number> }>('classify', {
