@@ -180,7 +180,7 @@ async function main(): Promise<void> {
       }
 
       for (const item of passages) {
-        const heuristic = defaultNliAdapter.classify(builtClaim, item.text);
+        const heuristic = await Promise.resolve(defaultNliAdapter.classify(builtClaim, item.text));
         const local = localNliAdapter.classify(builtClaim, item.text);
         goldLabels.push(item.gold);
         heuristicPredictions.push(heuristic.label);
