@@ -5,14 +5,14 @@
 ## Run identity
 
 - Workflow: **V2 SciFact End-to-End Benchmark**
-- Run: **#13**
-- Run ID: `36460570960`
+- Latest authoritative run: **#16**
+- Run ID: `36473822898`
 - Branch: `research/truthlens-v2-model-quality`
-- Evaluated commit: `441bf4168ccd45de9c84b458748539eef26c9e03`
+- Evaluated commit: `4af36a73506ddbe33e78f6505af73a7938810907`
 - Artifact: `truthlens-v2-scifact-end-to-end`
-- Artifact ID: `10992077824`
-- Artifact SHA-256: `2a3d025cdae1aa3d4342b3a44cbdbb2e2dd73fe0c30869d76c0ade88a053f2de`
-- Generated: **2026-09-28T19:33:09.073Z**
+- Artifact ID: `10998862059`
+- Artifact SHA-256: `6146fa5258fab79610e341fab5a6bdc74d6ecc3c3c9ed1632b3a2fa0061cf0de`
+- Generated: **2026-09-28T21:23:56.362Z**
 
 ## Frozen evaluation inputs
 
@@ -61,20 +61,20 @@ SciFact uses a one-gold-paper evidence convention, while TruthLens production re
 
 The 100% abstention rate is expected under the unchanged production-source policy and should not be interpreted as a model-quality score.
 
-## What the result says
+## Interpretation
 
-The full retrieval → reranking → NLI pipeline is now measured on a frozen, real external dataset rather than synthetic fixtures. The main bottleneck is retrieval: only **53.67%** of claims have an evaluator-compatible candidate-pool hit, and gold-evidence Recall@5 is **68.09%**. End-to-end directional performance is correspondingly limited at **37.0% accuracy** and **0.3419 macro-F1**.
+Run #16 reproduces the same measured end-to-end result as the previous authoritative SciFact run, confirming deterministic behavior on the frozen inputs and sealed model artifacts. Retrieval remains the dominant disclosed bottleneck: open candidate recall is **53.67%** and gold-evidence Recall@5 is **68.09%**. Directional performance remains **37.0% accuracy** and **0.3419 macro-F1**.
 
-The earlier component-level local pretrained evaluation showed a substantial NLI improvement over the heuristic adapter, but that improvement does not translate into strong end-to-end verdict performance on this run. Future research should therefore prioritize retrieval/reranking recall and calibration before any production consideration.
+The benchmark is a reproducible external measurement, **not** evidence of world-leading performance and **not** a production-accuracy estimate. The result does not justify production promotion.
 
 ## Research safety
 
-- PR #26 was **not merged**.
+- PR #26 is **open and not merged**.
 - Production `main` was **not modified** by this benchmark.
 - No research deployment was performed.
 - Production thresholds, source requirements, abstention rules, and production model artifacts were not changed.
-- No benchmark number has been combined with the production ISOT/LIAR metrics.
+- No benchmark number has been combined with production ISOT/LIAR metrics.
 
 ## Reproduction
 
-The workflow freezes the SciFact inputs by SHA-256, verifies counts, installs the local pretrained runtime, verifies the sealed research models, runs the complete benchmark, and uploads the JSON/log artifact. The artifact above is the authoritative result for Run #13.
+The workflow freezes the SciFact inputs by SHA-256, verifies counts, installs the local pretrained runtime, verifies the sealed research models, runs the complete benchmark, and uploads the JSON/log artifact. The artifact above is the authoritative result for Run #16.
