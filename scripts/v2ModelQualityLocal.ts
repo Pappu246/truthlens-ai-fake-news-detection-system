@@ -212,6 +212,10 @@ async function main(): Promise<void> {
             defaultEmbeddingModel.embed(negativeDoc.abstract.join(' '))
           );
 
+          embeddingMargins.push({
+            heuristic: Math.max(...heuristicGoldScores) - heuristicNegative,
+            local: Math.max(...localGoldScores) - localNegative
+          });
         }
       }
 
