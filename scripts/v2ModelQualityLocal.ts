@@ -84,6 +84,14 @@ function metricReport(predictions: string[], gold: string[], labels: string[]) {
   return { accuracy, macroF1, perClass };
 }
 
+function embedSync(model: typeof defaultEmbeddingModel, text: string): number[] {
+  const value = model.embed(text);
+  if (value instanceof Promise) {
+    throw new Error('Local model-quality diagnostic requires synchronous deterministic embeddings.');
+  }
+  return value;
+}
+
 function ece(samples: Array<{ correct: boolean; confidence: number }>): number {
   if (!samples.length) return 0;
   const bins = Array.from({ length: 10 }, () => ({ n: 0, confidence: 0, accuracy: 0 }));
@@ -134,7 +142,7 @@ async function main(): Promise<void> {
   const docsById = new Map(corpus.map(doc => [String(doc.doc_id), doc]));
 
   const localEmbedding = new TransformerEmbeddingModel();
-  const localNli = new PretrainedNliAdapter({ embeddingModel: localEmbedding });
+  const localNliAdapter = new PretrainedNliAdapter({ embeddingModel: localEmbedding });
 
   const goldLabels: string[] = [];
   const heuristicPredictions: string[] = [];
@@ -173,7 +181,7 @@ async function main(): Promise<void> {
 
       for (const item of passages) {
         const heuristic = defaultNliAdapter.classify(builtClaim, item.text);
-        const local = localNli.classify(builtClaim, item.text);
+        const local = localNliAdapter.classify(builtClaim, item.text);
         goldLabels.push(item.gold);
         heuristicPredictions.push(heuristic.label);
         localPredictions.push(local.label);
@@ -203,13 +211,13 @@ async function main(): Promise<void> {
           let localNegative = 0;
           for (let i = 0; i < Math.min(localQuery.length, localNegativeVector.length); i++) localNegative += localQuery[i] * localNegativeVector[i];
 
-          const heuristicQuery = defaultEmbeddingModel.embed(claim.claim);
+          const heuristicQuery = embedSync(defaultEmbeddingModel, claim.claim);
           const heuristicGoldScores = goldTexts.map(text =>
-            cosineSimilarity(heuristicQuery, defaultEmbeddingModel.embed(text))
+            cosineSimilarity(heuristicQuery, embedSync(defaultEmbeddingModel, text))
           );
           const heuristicNegative = cosineSimilarity(
             heuristicQuery,
-            defaultEmbeddingModel.embed(negativeDoc.abstract.join(' '))
+            embedSync(defaultEmbeddingModel, negativeDoc.abstract.join(' '))
           );
 
           embeddingMargins.push({
@@ -225,7 +233,7 @@ async function main(): Promise<void> {
     }
 
     const heuristicNli = metricReport(heuristicPredictions, goldLabels, ['SUPPORTS', 'REFUTES', 'NEUTRAL']);
-    const localNli = metricReport(localPredictions, goldLabels, ['SUPPORTS', 'REFUTES', 'NEUTRAL']);
+    const localNliMetrics = metricReport(localPredictions, goldLabels, ['SUPPORTS', 'REFUTES', 'NEUTRAL']);
     const heuristicEce = ece(heuristicCalibration);
     const localEce = ece(localCalibration);
 
@@ -248,8 +256,8 @@ async function main(): Promise<void> {
       },
       models: {
         heuristic_nli: defaultNliAdapter.modelName,
-        local_pretrained_nli: localNli.modelName,
-        local_pretrained_nli_version: localNli.modelVersion,
+        local_pretrained_nli: localNliAdapter.modelName,
+        local_pretrained_nli_version: localNliAdapter.modelVersion,
         heuristic_embedding: defaultEmbeddingModel.name,
         local_pretrained_embedding: localEmbedding.name,
         local_pretrained_embedding_version: localEmbedding.version
@@ -257,9 +265,9 @@ async function main(): Promise<void> {
       nli: {
         passages: goldLabels.length,
         heuristic: heuristicNli,
-        local_pretrained: localNli,
-        delta_accuracy: localNli.accuracy - heuristicNli.accuracy,
-        delta_macro_f1: localNli.macroF1 - heuristicNli.macroF1,
+        local_pretrained: localNliMetrics,
+        delta_accuracy: localNliMetrics.accuracy - heuristicNli.accuracy,
+        delta_macro_f1: localNliMetrics.macroF1 - heuristicNli.macroF1,
         heuristic_ece: heuristicEce,
         local_pretrained_ece: localEce,
         delta_ece: localEce - heuristicEce
