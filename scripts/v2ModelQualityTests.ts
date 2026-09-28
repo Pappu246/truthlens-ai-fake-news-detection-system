@@ -82,8 +82,31 @@ async function main(): Promise<void> {
       )
     ]);
 
+    const conflictNli = {
+      modelName: 'fixture-conflict-nli',
+      modelVersion: 'test',
+      classify: async (_claim: any, passage: string) => passage.includes('disputed')
+        ? {
+            label: 'REFUTES' as const,
+            scores: { supports: 0.05, refutes: 0.9, neutral: 0.05, unclear: 0 },
+            confidence: 0.9,
+            modelName: 'fixture-conflict-nli',
+            modelVersion: 'test',
+            basis: 'deterministic fixture refutation'
+          }
+        : {
+            label: 'SUPPORTS' as const,
+            scores: { supports: 0.9, refutes: 0.05, neutral: 0.05, unclear: 0 },
+            confidence: 0.9,
+            modelName: 'fixture-conflict-nli',
+            modelVersion: 'test',
+            basis: 'deterministic fixture support'
+          }
+    };
+
     const result = await verifyClaimV2(claim, {
       corpus,
+      nliAdapter: conflictNli,
       minCandidatesExpectedWarning: 0,
       priorOverride: { available: false, probabilityTrue: null, label: null, modelVersion: null }
     });
@@ -162,8 +185,12 @@ async function main(): Promise<void> {
   console.log('\n4. Hugging Face embedding adapter contract works without network');
   {
     let embeddingRequestInputs: unknown = null;
+    let firstBatchInputCount = 0;
     const fakeFetch: typeof fetch = (async (_url, init) => {
       const body = JSON.parse(String(init?.body ?? '{}')) as { inputs?: unknown };
+      if (firstBatchInputCount === 0 && Array.isArray(body.inputs)) {
+        firstBatchInputCount = body.inputs.length;
+      }
       embeddingRequestInputs = body.inputs;
       const count = Array.isArray(body.inputs) ? body.inputs.length : 1;
       const vectors = Array.from({ length: count }, (_value, index) => {
@@ -194,7 +221,7 @@ async function main(): Promise<void> {
 
     const vector = await model.embed('semantic test');
     check('remote embedding returns ranked search results', results.length === 2);
-    check('remote embedding batches query + documents in one request', Array.isArray(embeddingRequestInputs) && embeddingRequestInputs.length === 3);
+    check('remote embedding batches query + documents in one request', firstBatchInputCount === 3);
     check('remote embedding returns a numeric vector', vector.length === 4 && vector.every(Number.isFinite));
     check('dense search scores are normalised', results.every(item => item.score >= 0 && item.score <= 1));
   }
