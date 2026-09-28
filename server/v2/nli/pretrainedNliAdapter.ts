@@ -315,7 +315,7 @@ export class PretrainedNliAdapter implements NliAdapter {
   }
 
   /**
-   * Batched variant used by large research evaluations. It preserves exactly
+   * Batched variant used by large research evaluations. It preserves the single-item adapter contract and exactly
    * the same hypothesis-selection, relatedness gate, probability mapping and
    * output contract as classify(), but reduces worker/model round-trips.
    */
