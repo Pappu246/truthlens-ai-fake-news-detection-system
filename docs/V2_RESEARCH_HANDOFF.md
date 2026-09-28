@@ -31,14 +31,16 @@ The external harness smoke test validates the frozen evaluation inputs and exerc
 
 The frozen external V2.5 evaluation completed successfully but remains research-only. The measured run showed higher final accuracy but lower macro-F1, NLI quality, coverage, and directional recall, with increased abstention. It is therefore preserved as an experiment rather than promoted into production.
 
-## Remaining external dependency
+## Hosted-provider comparison
 
-The only unexecuted research measurement is the real Hugging Face pretrained-model comparison:
+The original hosted Hugging Face comparison remains optional and requires a GitHub Actions repository secret named `HF_TOKEN`. It is not needed for the primary pretrained-model evaluation anymore.
 
-- `facebook/bart-large-mnli`
-- `BAAI/bge-small-en-v1.5`
+A token-free local evaluation path now uses the already sealed pretrained research models:
 
-This requires a GitHub Actions repository secret named `HF_TOKEN`. The token must never be committed or pasted into source code.
+- `Xenova/nli-deberta-v3-xsmall` q8@3fac2500
+- `Xenova/all-MiniLM-L6-v2` q8@afdb6f1a
+
+The workflow provisions those exact model bytes from pinned GitHub mirrors, verifies their SHA-256 seals, and evaluates all 300 SciFact dev claims locally.
 
 ## Production safety conclusion
 
