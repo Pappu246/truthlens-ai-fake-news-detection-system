@@ -69,7 +69,8 @@ async function main(): Promise<void> {
   if (corpus.length !== 5183) throw new Error(`Expected 5183 corpus documents, got ${corpus.length}`);
 
   const maxClaims = Math.max(1, Math.min(Number(arg('max-claims') || 3), allClaims.length));
-  const claims = allClaims.slice(0, maxClaims);
+  const claims = allClaims.filter(claim => Object.keys(claim.evidence || {}).length > 0).slice(0, maxClaims);
+  if (claims.length < maxClaims) throw new Error(`Could only select ${claims.length} claims with gold evidence for smoke validation.`);
   const docsById = new Map(corpus.map(doc => [String(doc.doc_id), doc]));
 
   let nliCalls = 0;
