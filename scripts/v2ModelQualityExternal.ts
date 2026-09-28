@@ -114,7 +114,7 @@ async function main(): Promise<void> {
   const maxClaims = Number(arg('max-claims') || allClaims.length);
   const claims = allClaims.slice(0, maxClaims);
 
-  const remoteNli = new HuggingFaceNliAdapter({ token });
+  const remoteNliAdapter = new HuggingFaceNliAdapter({ token });
   const remoteEmbedding = new HuggingFaceEmbeddingModel({ token });
 
   const passageGold: NliGold[] = [];
@@ -154,7 +154,7 @@ async function main(): Promise<void> {
 
     for (const item of passages) {
       const heuristic = await Promise.resolve(defaultNliAdapter.classify(builtClaim, item.text));
-      const remote = await withRetry(() => remoteNli.classify(builtClaim, item.text));
+      const remote = await withRetry(() => remoteNliAdapter.classify(builtClaim, item.text));
       passageGold.push(item.gold);
       heuristicPredictions.push(heuristic.label);
       remotePredictions.push(remote.label);
@@ -185,9 +185,9 @@ async function main(): Promise<void> {
 
         const heuristicTexts = [claim.claim, ...goldTexts, negativeDoc.abstract.join(' ')]
           .map(text => defaultEmbeddingModel.embed(text));
-        const heuristicQuery = heuristicTexts[0];
-        const heuristicGoldScores = heuristicTexts.slice(1, -1).map(v => cosineSimilarity(heuristicQuery, v));
-        const heuristicNegative = cosineSimilarity(heuristicQuery, heuristicTexts[heuristicTexts.length - 1]);
+        const heuristicQuery = heuristicTexts[0] as number[];
+        const heuristicGoldScores = heuristicTexts.slice(1, -1).map(v => cosineSimilarity(heuristicQuery, v as number[]));
+        const heuristicNegative = cosineSimilarity(heuristicQuery, heuristicTexts[heuristicTexts.length - 1] as number[]);
         const heuristicMargin = Math.max(...heuristicGoldScores) - heuristicNegative;
 
         embeddingMargins.push({
@@ -204,7 +204,7 @@ async function main(): Promise<void> {
   }
 
   const heuristicNli = metricReport(heuristicPredictions, passageGold, ['SUPPORTS', 'REFUTES', 'NEUTRAL']);
-  const remoteNli = metricReport(remotePredictions, passageGold, ['SUPPORTS', 'REFUTES', 'NEUTRAL']);
+  const remoteNliMetrics = metricReport(remotePredictions, passageGold, ['SUPPORTS', 'REFUTES', 'NEUTRAL']);
 
   function ece(samples: Array<{ correct: boolean; confidence: number }>): number {
     const bins = Array.from({ length: 5 }, () => ({ n: 0, confidence: 0, accuracy: 0 }));
@@ -248,16 +248,16 @@ async function main(): Promise<void> {
     },
     models: {
       heuristic_nli: defaultNliAdapter.modelName,
-      remote_nli: remoteNli.modelName,
+      remote_nli: remoteNliAdapter.modelName,
       heuristic_embedding: defaultEmbeddingModel.name,
       remote_embedding: remoteEmbedding.name
     },
     nli: {
       passages: passageGold.length,
       heuristic: heuristicNli,
-      remote: remoteNli,
-      delta_accuracy: remoteNli.accuracy - heuristicNli.accuracy,
-      delta_macro_f1: remoteNli.macroF1 - heuristicNli.macroF1,
+      remote: remoteNliMetrics,
+      delta_accuracy: remoteNliMetrics.accuracy - heuristicNli.accuracy,
+      delta_macro_f1: remoteNliMetrics.macroF1 - heuristicNli.macroF1,
       heuristic_ece: heuristicEce,
       remote_ece: remoteEce,
       delta_ece: remoteEce - heuristicEce
