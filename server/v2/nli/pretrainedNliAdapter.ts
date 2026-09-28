@@ -362,7 +362,7 @@ export class PretrainedNliAdapter implements NliAdapter {
           results[item.index] = this.classifyOneResult({ probs: raw.probs, scores: mapped.scores, maxModelProb: mapped.maxModelProb }, basis, 'passA:claim-as-stated');
         } else {
           results[item.index] = this.classifyOneResult(
-            mapped,
+            { probs: raw.probs, scores: mapped.scores, maxModelProb: mapped.maxModelProb },
             `passA (hypothesis=claim-as-stated) produced NO DIRECTIONAL MAJORITY (entailment=${raw.probs.entailment.toFixed(3)}, contradiction=${raw.probs.contradiction.toFixed(3)}, both <0.5); claim carries no attribution clause, so no second pass is applicable`,
             'passA:claim-as-stated'
           );
