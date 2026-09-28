@@ -40,7 +40,7 @@ A token-free local evaluation path now uses the already sealed pretrained resear
 - `Xenova/nli-deberta-v3-xsmall` q8@3fac2500
 - `Xenova/all-MiniLM-L6-v2` q8@afdb6f1a
 
-The workflow provisions those exact model bytes from pinned GitHub mirrors, verifies their SHA-256 seals, and evaluates all 300 SciFact dev claims locally.
+The workflow provisions those exact model bytes from pinned GitHub mirrors, verifies their SHA-256 seals, and evaluates all 300 SciFact dev claims locally. This removes the previously identified HF-token blocker for the primary pretrained-model evaluation.
 
 ## Production safety conclusion
 
