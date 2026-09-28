@@ -29,7 +29,8 @@
     "generate:v2-fixtures": "tsx scripts/generate_v2_eval_fixtures.ts",
     "test:all-with-v2": "npm run test:all && npm run test:v2 && npm run test:v2-route && npm run test:v2-quality",
     "test:v2-quality": "tsx scripts/v2ModelQualityTests.ts",
-    "eval:v2-model-quality-external": "tsx scripts/v2ModelQualityExternal.ts"
+    "eval:v2-model-quality-external": "tsx scripts/v2ModelQualityExternal.ts",
+    "test:v2-model-quality-external-smoke": "tsx scripts/v2ModelQualityExternalSmoke.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
