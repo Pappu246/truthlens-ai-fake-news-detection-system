@@ -32,7 +32,8 @@
     "eval:v2-model-quality-external": "tsx scripts/v2ModelQualityExternal.ts",
     "test:v2-model-quality-external-smoke": "tsx scripts/v2ModelQualityExternalSmoke.ts",
     "eval:v2-model-quality-local": "tsx scripts/v2ModelQualityLocal.ts",
-    "download:v2-models": "tsx scripts/v2DownloadModels.ts"
+    "download:v2-models": "tsx scripts/v2DownloadModels.ts",
+    "eval:v2-scifact-e2e": "tsx scripts/v2ScifactEndToEnd.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
