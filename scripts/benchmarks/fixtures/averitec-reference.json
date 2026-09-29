@@ -1,0 +1,21 @@
+[
+  {
+    "claim":"The Earth orbits the Sun.",
+    "label":"Supported",
+    "justification":"The Earth orbits the Sun.",
+    "questions":[
+      {
+        "question":"Does the Earth orbit the Sun?",
+        "answers":[
+          {
+            "answer":"Yes, the Earth orbits the Sun.",
+            "answer_type":"Extractive",
+            "source_url":"https://example.com/reference"
+          }
+        ]
+      }
+    ],
+    "claim_types":["Scientific"],
+    "fact_checking_strategies":["Direct evidence"]
+  }
+]
