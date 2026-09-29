@@ -11,7 +11,7 @@ TruthLens AI is a TypeScript/Node.js system for news-analysis assistance. It com
 
 ## Verified release snapshot
 
-The current application source of truth is `main` at commit [`7e570a5`](https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/commit/7e570a56288da85f2a90acb8d0c1dd051bd142ab). The post-merge production smoke workflow completed successfully with **55/55 checks passed** against the Render deployment on 2026-09-26 UTC: [workflow run](https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/actions/runs/36241411149).
+The current application source of truth is `main` at commit [`32db823`](https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/commit/32db8230547658b7d5d2a615599526d88c22fce9). The post-merge production smoke workflow completed successfully with **55/55 checks passed** against the Render deployment on 2026-09-26 UTC: [workflow run](https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/actions/runs/36241411149).
 
 Article and claim measurements below are separate benchmarks. They must not be added, averaged, or presented as one overall accuracy.
 
@@ -24,6 +24,8 @@ Article and claim measurements below are separate benchmarks. They must not be a
 | Evidence engine | Live retrieval and support/contradiction analysis | `/api/evidence/verify` | Per-request signal; no stored accuracy number |
 
 The API exposes separate `article_model`, `claim_model`, and `benchmarks` blocks from `/api/models/metrics`. The models solve different tasks on different corpora.
+
+> **Research stack note:** `server/v2/**` and `POST /api/v2/evidence/verify` are an additive, experimental TruthLens V2 evidence-grounded verification research stack — a first vertical slice, not a production component and not part of the verified release snapshot above. See [`docs/V2_ARCHITECTURE.md`](docs/V2_ARCHITECTURE.md), [`docs/V2_BENCHMARK_PROTOCOL.md`](docs/V2_BENCHMARK_PROTOCOL.md), and [`docs/V2_KNOWN_LIMITATIONS.md`](docs/V2_KNOWN_LIMITATIONS.md).
 
 ## Article model
 
@@ -241,7 +243,7 @@ The deployed demo is [truthlens-ai-dvpf.onrender.com](https://truthlens-ai-dvpf.
 4. Evidence relation is inferred from retrieved headlines/snippets, not full-article entailment. `SUPPORTED` is corroboration, not proof.
 5. RSS summaries are not full article bodies. Headline-only items are withheld as `NEEDS_MORE_CONTEXT`.
 6. Live retrieval depends on outbound network access; unavailable retrieval is reported explicitly.
-7. `npm audit` currently reports two moderate advisories in the `qs` dependency path used by Express. These require separate dependency maintenance.
+7. Dependency advisory status is environment- and lockfile-dependent; re-run `npm audit` after dependency changes rather than relying on a historical audit snapshot.
 
 ## Repository layout
 
@@ -257,3 +259,24 @@ render.yaml                 Render deployment definition
 ```
 
 See [docs/FINAL_REPORT.md](docs/FINAL_REPORT.md) for the complete final release audit, including PR #23 promotion, exact benchmark values, security results, deployment verification, and known limitations.
+
+## TruthLens V2 Research
+
+The research branch `research/truthlens-v2-model-quality` contains an evidence-grounded verification pipeline:
+
+`claim -> query expansion -> hybrid retrieval -> reranking -> pretrained NLI -> aggregation/abstention -> provenance`
+
+Research documentation:
+- [V2 Architecture](docs/V2_ARCHITECTURE.md)
+- [V2 Benchmark Protocol](docs/V2_BENCHMARK_PROTOCOL.md)
+- [V2 Model Card](docs/V2_MODEL_CARD.md)
+- [V2 Reproducibility Protocol](docs/V2_REPRODUCIBILITY.md)
+- [V2 Threat Model](docs/V2_THREAT_MODEL.md)
+- [V2 Evaluation Matrix](docs/V2_EVALUATION_MATRIX.md)
+- [V2 Known Limitations](docs/V2_KNOWN_LIMITATIONS.md)
+
+### Research integrity
+
+Benchmark results are reported with frozen-input hashes, exact commit/workflow provenance, explicit abstention semantics, and documented limitations. Research-branch measurements are not production accuracy claims.
+
+Production `main` remains a separate release boundary and is not changed by the V2 research branch.

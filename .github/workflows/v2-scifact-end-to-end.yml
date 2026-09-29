@@ -1,0 +1,96 @@
+# Research gate rerun: corrected workflow schema
+name: V2 SciFact End-to-End Benchmark
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'server/v2/**'
+      - 'scripts/v2*.ts'
+      - 'data/v2/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/v2-*.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: truthlens-v2-scifact-${{ github.event.pull_request.number || github.ref_name }}-${{ github.sha }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  scifact-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - name: Checkout research branch
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Download exact frozen SciFact dev data
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/truthlens-scifact
+          mkdir -p /tmp/truthlens-scifact/scifact
+          BASE="https://raw.githubusercontent.com/vidi-deshp12/scifact-claim-verification/051b5245aa9d4b98c1302920cc5e4958b9e30ef9/data"
+          curl --fail --retry 4 --retry-all-errors -L "$BASE/claims_dev.jsonl" -o /tmp/truthlens-scifact/scifact/claims_dev.jsonl
+          curl --fail --retry 4 --retry-all-errors -L "$BASE/corpus.jsonl" -o /tmp/truthlens-scifact/scifact/corpus.jsonl
+
+      - name: Verify exact dataset hashes and counts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+
+          expected = {
+              "/tmp/truthlens-scifact/scifact/claims_dev.jsonl": "86f0435d08fdb65d1aa41d1472684f57e6e71930626497bdf4d7a9ec1a632217",
+              "/tmp/truthlens-scifact/scifact/corpus.jsonl": "b8d6c89624cb2ed74dee8938effc4f5d8bd2086887880af8110d64be4ceade62",
+          }
+          for path, want in expected.items():
+              got = hashlib.sha256(Path(path).read_bytes()).hexdigest()
+              assert got == want, (path, got, want)
+
+          claims = [json.loads(x) for x in Path("/tmp/truthlens-scifact/scifact/claims_dev.jsonl").read_text().splitlines() if x.strip()]
+          corpus = [json.loads(x) for x in Path("/tmp/truthlens-scifact/scifact/corpus.jsonl").read_text().splitlines() if x.strip()]
+          assert len(claims) == 300
+          assert len(corpus) == 5183
+          print("SciFact frozen inputs: PASS")
+          PY
+
+      - name: Install project dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Install local pretrained runtime
+        run: npm install --no-save @huggingface/transformers@3.7.6 onnxruntime-node@1.21.0
+
+      - name: Download and verify sealed research models
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run download:v2-models
+
+      - name: Run end-to-end SciFact benchmark
+        env:
+          TRUTHLENS_V2_ML_CALL_TIMEOUT_MS: 180000
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/v2-scifact-e2e
+          npm run eval:v2-scifact-e2e --             --data-dir=/tmp/truthlens-scifact/scifact             --max-claims=300             --candidate-k=100             --dense-k=300             --final-k=8             --output=artifacts/v2-scifact-e2e/scifact-end-to-end.json             2>&1 | tee artifacts/v2-scifact-e2e/scifact-end-to-end.log
+
+      - name: Upload benchmark artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: truthlens-v2-scifact-end-to-end
+          path: artifacts/v2-scifact-e2e
+          if-no-files-found: error
+          retention-days: 30
