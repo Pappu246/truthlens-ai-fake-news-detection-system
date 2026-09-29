@@ -170,6 +170,7 @@ def make_candidates(claims_path, db_path, output, top_pages, per_page_elements, 
                         "retrievalMethod": "feverous_sqlite_fts5",
                         "feverous_page": page_id,
                         "feverous_element_id": element_id,
+                        "feverous_id": page_id + "_" + element_id,
                         "feverous_type": kind
                     })
 
