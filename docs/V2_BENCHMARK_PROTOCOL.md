@@ -2,7 +2,7 @@
 
 ## Completed SciFact checkpoint
 
-The authoritative frozen SciFact end-to-end result is recorded in `docs/V2_SCIFACT_E2E_RESULTS.md`. Run #13 evaluated 300 SciFact dev claims over 5,183 corpus documents with the sealed local pretrained models. Directional accuracy was 0.3700000000000000 and macro-F1 was 0.3418989628139955. Retrieval recall is the primary disclosed bottleneck. These are research measurements only and do not alter production policy.
+The authoritative frozen SciFact end-to-end result is recorded in `docs/V2_SCIFACT_E2E_RESULTS.md`. Run #17 evaluated 300 SciFact dev claims over 5,183 corpus documents with the sealed local pretrained models. Directional accuracy was 0.3700000000000000 and macro-F1 was 0.3418989628139955. Open candidate recall was 0.5366666666666666 and gold-evidence Recall@5 was 0.6808510638297872, confirming retrieval/reranking as the primary disclosed bottleneck. These are research measurements only and do not alter production policy.
 
 > This is a **development/evaluation protocol for the first vertical slice**,
 > not a world-level benchmark, and it is never used to claim a global
