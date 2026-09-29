@@ -12,6 +12,10 @@ on:
       - '.github/workflows/v3-phase2-e2e-pilot.yml'
   workflow_dispatch:
 
+concurrency:
+  group: truthlens-phase2-pilot-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
