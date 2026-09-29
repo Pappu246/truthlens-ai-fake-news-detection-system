@@ -11,8 +11,6 @@
   "required_dataset_fields": [
     "name",
     "version_or_split",
-    "claims_sha256",
-    "corpus_sha256",
     "evaluation_count"
   ],
   "required_provenance_fields": [
@@ -22,7 +20,8 @@
   ],
   "rules": {
     "claims_sha256_must_be_64_hex": true,
-    "corpus_sha256_must_be_64_hex": true,
+    "corpus_sha256_must_be_64_hex_when_present": true,
+    "authoritative_checksum_or_immutable_revision_required": true,
     "configuration_sha256_must_be_64_hex": true,
     "metric_values_must_be_numbers": true,
     "benchmark_id_must_exist_in_registry": true,
