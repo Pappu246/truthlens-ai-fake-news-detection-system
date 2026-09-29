@@ -47,7 +47,13 @@ export function buildProvenance(
   queries: ExpandedQuerySet,
   evidence: ClassifiedEvidence[],
   decision: VerdictDecision,
-  retrievalSummary: { channelsUsed: string[]; totalRetrievedBeforeDedup: number; totalAfterDedup: number },
+  retrievalSummary: {
+    channelsUsed: string[];
+    totalRetrievedBeforeDedup: number;
+    totalAfterDedup: number;
+    temporalCutoff?: string | null;
+    temporalCandidatesExcluded?: number;
+  },
   limitations: string[]
 ): ProvenanceRecord {
   const counts = {
@@ -78,7 +84,9 @@ export function buildProvenance(
       channels_used: retrievalSummary.channelsUsed as any,
       total_candidates_retrieved: retrievalSummary.totalRetrievedBeforeDedup,
       total_candidates_after_dedup: retrievalSummary.totalAfterDedup,
-      total_evidence_used_in_decision: evidence.length
+      total_evidence_used_in_decision: evidence.length,
+      temporal_cutoff: retrievalSummary.temporalCutoff ?? null,
+      temporal_candidates_excluded: retrievalSummary.temporalCandidatesExcluded ?? 0
     },
     generated_at: new Date().toISOString(),
     limitations
