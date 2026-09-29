@@ -140,15 +140,18 @@ async function main() {
     interpretation: 'This file is a TruthLens adapter artifact. Run the official FEVER scorer on scorer_input for the shared-task strict score and evidence metrics.'
   };
 
-  const out = path.resolve(arg('output') || 'artifacts/v3/fever/fever-truthlens-adapter.json');
+  const out = path.resolve(arg('output') || 'artifacts/v3/fever/truthlens-adapter-report.json');
+  const predictionsOut = path.resolve(arg('predictions-output') || 'artifacts/v3/fever/truthlens-predictions.json');
   fs.mkdirSync(path.dirname(out), { recursive: true });
   fs.writeFileSync(out, JSON.stringify(report, null, 2) + '\n');
+  fs.writeFileSync(predictionsOut, JSON.stringify(predictions, null, 2) + '\n');
   console.log(JSON.stringify({
     benchmark_id: report.benchmark_id,
     evaluation_count: selected.length,
     label_accuracy: report.metrics.label_accuracy,
     open_candidate_recall: report.metrics.open_candidate_recall,
-    output: out
+    report_output: out,
+    predictions_output: predictionsOut
   }, null, 2));
 }
 
