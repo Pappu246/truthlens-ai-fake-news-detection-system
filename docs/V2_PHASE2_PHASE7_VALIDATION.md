@@ -8,13 +8,13 @@ The research branch has separately completed current Phase 2 and Phase 7 validat
 
 ## Phase 2 — real ISOT data validation
 
-Latest completed validation run: **#126** — SUCCESS.
+Latest completed validation run: **#157** — SUCCESS.
 
 The workflow verified the official Phase 2 dataset assets, executed the real-data preparation pipeline, and uploaded the measured preparation/split artifacts.
 
 ## Phase 7 — leakage-aware ISOT benchmark
 
-Latest completed benchmark run: **#115** — SUCCESS.
+Latest completed benchmark run: **#146** — SUCCESS.
 
 The benchmark uses near-duplicate-aware grouping and a separate temporal test while leaving the production model artifact unchanged.
 
@@ -29,10 +29,10 @@ The latest measured ISOT results remain controlled dataset benchmarks, not claim
 
 ## Latest completed artifact record — Phase 2
 
-Workflow run: **#144**  
-Run ID: `36594824989`  
-Validated commit: `067cc9ddb2630e3a31a3feefde1f4c6d2a0d252f`  
-Artifact SHA-256: `38fcc26960396d2020a8f67d2fca26469e8a6c467004840426ce5baf82697c2e`
+Workflow run: **#157**  
+Run ID: `36597318281`  
+Validated commit: `ba7631ebf4e3f1d6917d8fd04ab167ad50130b2f`  
+Artifact SHA-256: `b1059307465f721e2a5dfe8e9c0b7e9cf3e64cc57609d959574c6f3b03b7faf8`
 
 The preparation artifact records:
 - 44,898 raw rows (23,481 fake / 21,417 real)
@@ -47,10 +47,10 @@ The Reuters dateline rate is a material shortcut risk and is explicitly measured
 
 ## Latest completed artifact record — Phase 7
 
-Workflow run: **#132**  
-Run ID: `36593170779`  
-Validated commit: `cc8f93f6e87934f56e05171959878145493a78b9`  
-Artifact SHA-256: `62ef477d5851dba1acc3e76f6f47ad270123aba63f3212abea5cbb1421182c88`
+Workflow run: **#146**  
+Run ID: `36597318432`  
+Validated commit: `ba7631ebf4e3f1d6917d8fd04ab167ad50130b2f`  
+Artifact SHA-256: `0ed6d6a57a06c64901b92859fbf792a422f1719823fa5ba2d221688e1e92e8cb`
 
 The leakage-aware benchmark reported, on its held-out test split:
 
