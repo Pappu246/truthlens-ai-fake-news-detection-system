@@ -1,9 +1,6 @@
 name: V2 Model Quality External Evaluation
 
 on:
-  push:
-    branches:
-      - research/truthlens-v2-model-quality
   pull_request:
     branches:
       - main
