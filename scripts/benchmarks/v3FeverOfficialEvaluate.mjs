@@ -32,7 +32,18 @@ async function main() {
     const scorerRun = await runPython(tmp, "run.py");
     const out = path.resolve(arg("output") || "artifacts/v3/fever/official-scorer-run.json");
     await fs.mkdir(path.dirname(out), { recursive: true });
-    await fs.writeFile(out, JSON.stringify({ benchmark_id: "fever", protocol_version: "truthlens-v3-benchmark-protocol-v1", scorer_revision: "4801615100fbf6327f8e99b5dbaefe5dd890e869", predictions, actual, scorer_stdout: scorerRun.stdout, scorer_stderr: scorerRun.stderr, generated_at: new Date().toISOString() }, null, 2) + "\n");
+    const metrics = JSON.parse(scorerRun.stdout.trim());
+    await fs.writeFile(out, JSON.stringify({
+      benchmark_id: "fever",
+      protocol_version: "truthlens-v3-benchmark-protocol-v1",
+      scorer_revision: "4801615100fbf6327f8e99b5dbaefe5dd890e869",
+      predictions,
+      actual,
+      metrics,
+      scorer_stdout: scorerRun.stdout,
+      scorer_stderr: scorerRun.stderr,
+      generated_at: new Date().toISOString()
+    }, null, 2) + "\n");
   } finally { await fs.rm(tmp, { recursive: true, force: true }); }
 }
 main().catch((error) => { console.error(error?.stack || error); process.exit(1); });
