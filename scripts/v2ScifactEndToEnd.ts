@@ -22,6 +22,7 @@ import { TransformerEmbeddingModel } from '../server/v2/retrieval/transformerEmb
 import { SciFactOpenCorpusSource, SciFactDocumentInput } from '../server/v2/retrieval/scifactCorpusSource';
 import { disposeMlWorker } from '../server/v2/ml/mlWorkerClient';
 import { ALL_MODEL_MANIFESTS, getV2ModelDir, verifyModelHashes } from '../server/v2/ml/modelManifest';
+import { applyConfidenceTemperature, brierScore, expectedCalibrationError, fitConfidenceTemperature } from '../server/v2/metrics/metrics';
 
 type GoldLabel = 'SUPPORT' | 'CONTRADICT' | 'NOT_ENOUGH_INFO';
 
@@ -156,6 +157,7 @@ async function main(): Promise<void> {
   let productionNonAbstain = 0;
   let conflicted = 0;
   const rows: Array<Record<string, unknown>> = [];
+  const calibrationSamples: Array<{ correct: boolean; confidence: number }> = [];
 
   try {
     for (let i = 0; i < claims.length; i++) {
@@ -195,6 +197,10 @@ async function main(): Promise<void> {
       productionPredictions.push(productionPrediction);
 
       if (result.provenance.abstained) pipelineAbstentions++;
+      calibrationSamples.push({
+        correct: benchmarkPrediction === gold,
+        confidence: Math.max(0, Math.min(1, result.provenance.final_confidence))
+      });
       if (result.provenance.final_verdict === 'CONFLICTED') conflicted++;
       if (result.provenance.final_verdict !== 'INSUFFICIENT_EVIDENCE' && result.provenance.final_verdict !== 'CONFLICTED') {
         productionNonAbstain++;
@@ -224,6 +230,16 @@ async function main(): Promise<void> {
     const benchmarkMetrics = macroF1(benchmarkPredictions, goldPredictions, ['SUPPORT', 'CONTRADICT', 'NOT_ENOUGH_INFO']);
     const productionMetrics = macroF1(productionPredictions, goldPredictions, ['SUPPORT', 'CONTRADICT', 'NOT_ENOUGH_INFO']);
     const evidenceRecall = evidenceRecallDenominator ? evidenceRecallAt5 / evidenceRecallDenominator : null;
+    const calibrationSplit = calibrationSamples.filter((_sample, index) => index % 2 === 0);
+    const calibrationHoldout = calibrationSamples.filter((_sample, index) => index % 2 === 1);
+    const fittedTemperature = fitConfidenceTemperature(calibrationSplit);
+    const calibratedHoldout = calibrationHoldout.map(sample => ({
+      correct: sample.correct,
+      confidence: applyConfidenceTemperature(sample.confidence, fittedTemperature)
+    }));
+    const rawCalibration = expectedCalibrationError(calibrationSamples, 10);
+    const rawHoldoutCalibration = expectedCalibrationError(calibrationHoldout, 10);
+    const calibratedHoldoutCalibration = expectedCalibrationError(calibratedHoldout, 10);
 
     const output = {
       protocol_version: 'truthlens-v2-scifact-end-to-end-v1',
@@ -250,6 +266,18 @@ async function main(): Promise<void> {
         benchmark_directional_accuracy: benchmarkMetrics.accuracy,
         benchmark_directional_macro_f1: benchmarkMetrics.macroF1,
         benchmark_directional_per_class: benchmarkMetrics.perClass
+      },
+      calibration: {
+        target: 'benchmark_direction_correctness',
+        raw_ece_10: rawCalibration.expectedCalibrationError,
+        raw_brier: brierScore(calibrationSamples),
+        method: 'deterministic_even_odd_split_temperature_scaling',
+        calibration_n: calibrationSplit.length,
+        holdout_n: calibrationHoldout.length,
+        fitted_temperature: fittedTemperature,
+        raw_holdout_ece_10: rawHoldoutCalibration.expectedCalibrationError,
+        calibrated_holdout_ece_10: calibratedHoldoutCalibration.expectedCalibrationError,
+        note: 'Research diagnostic only. This does not change runtime production confidence semantics.'
       },
       production_policy_view: {
         mapped_accuracy: productionMetrics.accuracy,
