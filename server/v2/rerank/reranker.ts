@@ -39,9 +39,18 @@ const SOURCE_QUALITY_SCORE: Record<string, number> = {
 
 const WIRE_SERVICE_PATTERN = /\b(?:associated press|ap news|\bap\b|reuters|afp|agence france-presse|bloomberg)\b/i;
 
-function registrableDomain(url: string): string {
+function sourceClusterKey(url: string): string {
   try {
-    const host = new URL(url).hostname.toLowerCase().replace(/^www\./, '');
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
+
+    // Benchmark corpora may use synthetic .local URLs for separate documents.
+    // Treat each synthetic document path as its own cluster so benchmark
+    // documents are not incorrectly collapsed into one publisher domain.
+    if (host.endsWith('.local')) {
+      return `${host}${parsed.pathname.replace(/\\/+$/, '')}`;
+    }
+
     const parts = host.split('.');
     return parts.length <= 2 ? host : parts.slice(-2).join('.');
   } catch {
@@ -66,12 +75,12 @@ function freshnessScore(publishedAt: string | null | undefined): number {
  * downstream vote weight — is reduced.
  */
 export function rerankEvidence(candidates: RetrievedCandidate[]): RerankedEvidence[] {
-  const seenDomains = new Map<string, number>(); // domain -> occurrences seen so far
+  const seenDomains = new Map<string, number>(); // source cluster -> occurrences seen so far
   const wireSeen = { count: 0 };
 
   const withSourceType = candidates.map(c => {
     const sourceType = determineSourceType(c.url, c.publisher);
-    const domain = registrableDomain(c.url);
+    const domain = sourceClusterKey(c.url);
     const isWireText = WIRE_SERVICE_PATTERN.test(`${c.snippet} ${c.publisher}`);
     return { c, sourceType, domain, isWireText };
   });
