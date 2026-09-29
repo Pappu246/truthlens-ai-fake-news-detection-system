@@ -44,9 +44,9 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install evaluator dependencies
-        run: python -m pip install --upgrade pip numpy scipy scikit-learn nltk
+        run: python -m pip install --upgrade pip numpy scipy scikit-learn nltk leven
       - name: Prepare NLTK meteor data
-        run: python -m nltk.downloader wordnet omw-1.4
+        run: python -m nltk.downloader punkt punkt_tab wordnet omw-1.4
       - name: Run official AVeriTeC evaluator smoke
         run: |
           set -euo pipefail
