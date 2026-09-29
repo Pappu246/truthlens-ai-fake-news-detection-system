@@ -258,6 +258,36 @@ async function main(): Promise<void> {
     check('provenance is JSON-serializable', (() => { try { JSON.stringify(p); return true; } catch { return false; } })());
   }
 
+  // ------------------------------------------------------ 17. TEMPORAL EVIDENCE INTEGRITY
+  section('17. Evidence published after the claim date is excluded from directional reasoning');
+  {
+    const claimDate = '2024-03-15T00:00:00Z';
+    const corpus = new FixtureCorpusSource([
+      d({
+        url: 'https://www.reuters.com/before',
+        publisher: 'Reuters',
+        snippet: 'Officials confirmed the unemployment figure before the claim date.',
+        publishedAt: '2024-03-10T00:00:00Z'
+      }),
+      d({
+        url: 'https://www.bbc.com/after',
+        publisher: 'BBC',
+        snippet: 'Officials confirmed the same figure after the claim date.',
+        publishedAt: '2024-03-20T00:00:00Z'
+      })
+    ]);
+    const result = await verifyClaimV2(CLAIM, {
+      corpus,
+      claimDate,
+      enforceTemporalEvidence: true,
+      minCandidatesExpectedWarning: 0
+    });
+    check('post-claim evidence is excluded', result.provenance.retrieval_summary.temporal_candidates_excluded === 1);
+    check('temporal cutoff is recorded in provenance', result.provenance.retrieval_summary.temporal_cutoff === '2024-03-15T00:00:00.000Z');
+    check('future evidence cannot vote toward the verdict', !result.provenance.evidence.some(e => e.url.includes('/after')));
+    check('pre-claim evidence remains eligible', result.provenance.evidence.some(e => e.url.includes('/before')));
+  }
+
   // ------------------------------------------------------ 16. OPEN DENSE RETRIEVAL
   section('16. Full-corpus dense retrieval contributes candidates outside lexical BM25 hits');
   {
