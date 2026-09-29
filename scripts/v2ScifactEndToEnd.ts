@@ -137,9 +137,16 @@ async function main(): Promise<void> {
 
   const embeddingModel = new TransformerEmbeddingModel();
   const nliAdapter = new PretrainedNliAdapter({ embeddingModel });
-  // Build the 5,183-document BM25 index once and reuse it across all 300 claims.
+  // Build the 5,183-document BM25 index once and lazily build a sealed local
+  // dense index once; both are reused across the full claim set.
   // The candidate-id accumulator is reset per claim so recall remains claim-local.
-  const source = new SciFactOpenCorpusSource(corpus, topCandidates);
+  const source = new SciFactOpenCorpusSource(corpus, {
+    topK: topCandidates,
+    denseEmbeddingModel: embeddingModel,
+    denseTopK: topCandidates,
+    enableDenseRetrieval: true,
+    denseBatchSize: 32
+  });
 
   const goldPredictions: string[] = [];
   const benchmarkPredictions: string[] = [];
