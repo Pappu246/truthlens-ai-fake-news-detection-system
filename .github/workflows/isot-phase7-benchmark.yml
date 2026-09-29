@@ -7,12 +7,18 @@ on:
   pull_request:
     branches:
       - main
+    paths:
+      - 'scripts/isot_data_pipeline.py'
+      - 'scripts/benchmark_isot.py'
+      - '.github/workflows/isot-phase7-benchmark.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  benchmark:
+
   benchmark:
     runs-on: ubuntu-latest
     timeout-minutes: 45
