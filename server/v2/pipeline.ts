@@ -34,6 +34,10 @@ export interface V2PipelineOptions {
   enableFullTextEnrichment?: boolean;
   priorOverride?: RawPriorInput;
   minCandidatesExpectedWarning?: number;
+  /** Optional publication-date cutoff for research evidence integrity. */
+  claimDate?: string | null;
+  /** Exclude evidence published after claimDate when true (default when valid date supplied). */
+  enforceTemporalEvidence?: boolean;
 }
 
 function passageFor(candidate: RetrievedCandidate): string {
@@ -131,7 +135,7 @@ export async function verifyClaimV2(claimText: string, options?: V2PipelineOptio
       queries,
       [],
       decision,
-      { channelsUsed: [], totalRetrievedBeforeDedup: 0, totalAfterDedup: 0 },
+      { channelsUsed: [], totalRetrievedBeforeDedup: 0, totalAfterDedup: 0, temporalCutoff: null, temporalCandidatesExcluded: 0 },
       limitations
     );
     return { available: false, claim: text, provenance };
@@ -146,6 +150,25 @@ export async function verifyClaimV2(claimText: string, options?: V2PipelineOptio
   if (options?.enableFullTextEnrichment) {
     const enrichment = await enrichWithFullText(candidates);
     candidates = enrichment.candidates;
+  }
+
+  const temporalCutoff = options?.claimDate ? new Date(options.claimDate).getTime() : NaN;
+  const enforceTemporal = options?.enforceTemporalEvidence !== false && Number.isFinite(temporalCutoff);
+  let temporalCandidatesExcluded = 0;
+  if (enforceTemporal) {
+    const beforeTemporal = candidates.length;
+    candidates = candidates.filter(candidate => {
+      if (!candidate.publishedAt) return true;
+      const published = new Date(candidate.publishedAt).getTime();
+      if (!Number.isFinite(published)) return true;
+      return published <= temporalCutoff;
+    });
+    temporalCandidatesExcluded = beforeTemporal - candidates.length;
+    if (temporalCandidatesExcluded > 0) {
+      limitations.push(`Excluded ${temporalCandidatesExcluded} evidence candidate(s) published after the claim date ${new Date(temporalCutoff).toISOString().slice(0, 10)}.`);
+    }
+  } else if (options?.claimDate && !Number.isFinite(temporalCutoff)) {
+    limitations.push('A claim date was supplied but could not be parsed; temporal evidence filtering was not applied.');
   }
 
   const reranked = rerankEvidence(candidates);
@@ -203,7 +226,9 @@ export async function verifyClaimV2(claimText: string, options?: V2PipelineOptio
     {
       channelsUsed: retrieval.channelsUsed,
       totalRetrievedBeforeDedup: retrieval.totalRetrievedBeforeDedup,
-      totalAfterDedup: candidates.length
+      totalAfterDedup: candidates.length,
+      temporalCutoff: enforceTemporal ? new Date(temporalCutoff).toISOString() : null,
+      temporalCandidatesExcluded
     },
     limitations
   );
