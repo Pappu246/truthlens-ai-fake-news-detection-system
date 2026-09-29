@@ -8,7 +8,7 @@ This is a research-branch status record. Production behavior is unchanged and th
 
 - Research head before this document: `6e052a3c944002c80f89654ca4c0043c5630ed16`
 - Production baseline remains on the separate production branch.
-- Latest CI/type-check/build run on the research head: **success**.
+- Latest CI/type-check/build run on the research code head: **success**; the current docs-only head also has a passing CI gate.
 - Phase 2 ISOT pipeline tests: **success**.
 - Phase 2 real ISOT data validation: **success**.
 - Phase 7 real ISOT benchmark: **success**.
@@ -67,13 +67,13 @@ The result is a component-quality evaluation, not final TruthLens verdict accura
 
 ## Current validation still running
 
-The full open-corpus SciFact end-to-end benchmark is running against the frozen 300-claim / 5,183-document setup with the sealed local pretrained models. Its result must be recorded separately once the run completes.
+The full open-corpus SciFact end-to-end benchmark is currently **Run #57**, executing against the frozen 300-claim / 5,183-document setup with sealed local pretrained models. Its result must be recorded separately once the run completes.
 
 No production threshold, decision policy, source policy, abstention rule, or production model should be changed solely from the component-quality result above.
 
 ## Remaining research gates
 
-1. Complete the full SciFact end-to-end benchmark.
+1. Complete the current Run #57 full SciFact end-to-end benchmark.
 2. Record its exact artifact/result and dataset/model hashes.
 3. Run the final research-branch regression/CI gate after documentation/result updates.
 4. Review retrieval Recall@K, NLI quality, verdict metrics, abstention and calibration together.
