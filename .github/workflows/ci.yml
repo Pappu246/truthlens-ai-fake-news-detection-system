@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - "ml-upgrade-*"
+      - "research/truthlens-v2-model-quality"
   pull_request:
     branches:
       - main
