@@ -1,109 +1,68 @@
-# TruthLens V2 — Evaluation Protocol (Phase 9 / Phase 12)
+# TruthLens V2 — Evaluation Protocol
 
-## Completed SciFact checkpoint
+## Completed external SciFact checkpoint
 
-The authoritative frozen SciFact end-to-end result is recorded in `docs/V2_SCIFACT_E2E_RESULTS.md`. Run #17 evaluated 300 SciFact dev claims over 5,183 corpus documents with the sealed local pretrained models. Directional accuracy was 0.3700000000000000 and macro-F1 was 0.3418989628139955. Open candidate recall was 0.5366666666666666 and gold-evidence Recall@5 was 0.6808510638297872, confirming retrieval/reranking as the primary disclosed bottleneck. These are research measurements only and do not alter production policy.
+The authoritative completed full-corpus SciFact result is recorded in `docs/V2_SCIFACT_E2E_RESULTS.md`. The latest completed benchmark before the current rerun is **Run #19** (300 SciFact dev claims / 5,183 corpus documents) with:
 
-> This is a **development/evaluation protocol for the first vertical slice**,
-> not a world-level benchmark, and it is never used to claim a global
-> accuracy figure. See `docs/V2_KNOWN_LIMITATIONS.md` for why the numbers
-> below should be read as "pipeline correctness on a small, self-consistent
-> fixture set", not "real-world semantic accuracy."
+- Directional accuracy: **0.370000**
+- Directional macro-F1: **0.341899**
+- Open candidate recall: **0.536667**
+- Gold-evidence Recall@5: **0.680851**
 
-## Dataset
+These are research measurements only and do not alter production policy.
 
-* File: `data/v2/eval_fixtures.json`
-* Generator (fully reproducible): `scripts/generate_v2_eval_fixtures.ts`
-  (`npm run generate:v2-fixtures`)
-* 56 claims across 8 categories: politics, science, technology, finance,
-  health, climate, history, current events (7 each).
-* Each fixture: `id`, `domain`, `claim`, `gold_verdict`
-  (`VERIFIED`/`REFUTED`/`INSUFFICIENT_EVIDENCE`/`CONFLICTED`),
-  `gold_evidence_reference` (`{url, title, publisher}` or `null` when no
-  single reference URL applies), `evidence_explanation`, and a small
-  `corpus` of 1-3 documents (clearly synthetic, not scraped real articles)
-  that the pipeline retrieves over via `FixtureCorpusSource`.
-* Verdict distribution: 17 VERIFIED, 15 REFUTED, 16 INSUFFICIENT_EVIDENCE,
-  8 CONFLICTED.
+## Development fixture protocol
 
-## Running the evaluation
+The deterministic fixture evaluation remains useful for regression engineering:
 
-```
-npm run eval:v2
-```
+- File: `data/v2/eval_fixtures.json`
+- Generator: `scripts/generate_v2_eval_fixtures.ts`
+- 56 claims across eight categories
+- Offline, synthetic corpus designed for deterministic regression
 
-Runs `server/v2/pipeline.ts#verifyClaimV2()` once per fixture, entirely
-offline (no network call — the corpus source is the fixture's own
-documents), and writes `data/v2/eval_results.json`.
+The fixture suite must not be presented as real-world accuracy.
 
-## Metrics reported (Phase 9)
+## Current full-corpus research configuration
 
-1. **Verdict accuracy + macro-F1 + per-class precision/recall/F1** across the
-   4-way verdict space (`multiClassAccuracyF1`).
-2. **Evidence Recall@5** — computed ONLY over the 32/56 fixtures that carry a
-   single `gold_evidence_reference` URL (VERIFIED/REFUTED fixtures). The
-   remaining 24 (INSUFFICIENT_EVIDENCE/CONFLICTED) fixtures do not have one
-   "correct" URL by construction and are excluded from this specific metric
-   — the harness prints exactly how many fixtures were excluded and why,
-   rather than silently scoring them.
-3. **Evidence precision** — fraction of evidence items that were given a
-   voting label (SUPPORTS/REFUTES) and came from an on-topic document, vs.
-   an intentionally off-topic distractor document. Measures whether
-   classification correctly avoids putting words in an irrelevant source's
-   mouth.
-4. **High-confidence precision + coverage together, always** — see
-   `highConfidencePrecisionWithCoverage()`. Coverage is always printed next
-   to precision; there is no code path that reports one without the other.
-5. **Abstention rate** — fraction of fixtures where the pipeline returned
-   `INSUFFICIENT_EVIDENCE` or `CONFLICTED`.
-6. **Calibration (Expected Calibration Error)** — 5 equal-width confidence
-   bins comparing average stated confidence to actual accuracy in that bin.
-7. **NLI accuracy/F1** is exercised directly in `scripts/v2PipelineTests.ts`
-   scenario-by-scenario (fixture-level SUPPORTS/REFUTES/NEUTRAL/UNCLEAR
-   assertions) rather than aggregated numerically here, since the dev fixture
-   set does not carry per-passage gold NLI labels (only claim-level gold
-   verdicts) — adding those is listed as a natural extension, not silently
-   assumed.
+The current research branch evaluates the complete SciFact corpus through:
 
-## Results snapshot (this vertical slice, `data/v2/eval_results.json`)
+`claim -> shared claim extraction -> diversified query expansion -> BM25 + dense retrieval -> RRF -> reranking -> pretrained NLI -> research decision`
 
-| Metric | Value |
-|---|---|
-| Verdict accuracy | 83.9% (47/56) |
-| Verdict macro-F1 | 0.734 |
-| VERIFIED precision / recall | 1.00 / 0.94 |
-| REFUTED precision / recall | 1.00 / 0.93 |
-| INSUFFICIENT_EVIDENCE precision / recall | 0.64 / 1.00 |
-| CONFLICTED precision / recall | 1.00 / 0.13 |
-| Evidence Recall@5 | 100% (n=32 gold-referenced fixtures) |
-| Evidence precision | 100% (TP=78, FP=0) |
-| High-confidence (≥0.75) precision | 100% |
-| High-confidence coverage | 48.2% (27/56) |
-| Abstention rate | 46.4% |
-| Calibration ECE | 0.394 |
+Current configuration:
 
-**Read this honestly, not triumphantly:** `CONFLICTED` recall is weak
-(0.13) — the heuristic NLI adapter struggles to land two independent
-passages confidently on opposite sides, which is exactly the failure mode
-documented in `docs/V2_KNOWN_LIMITATIONS.md`. `INSUFFICIENT_EVIDENCE`
-precision (0.64) means the system abstains somewhat more often than the
-gold label strictly requires — an acceptable, disclosed bias for a system
-whose design goal is to prefer abstention over a wrong directional verdict.
-Nothing here is used to claim 99% accuracy, and nothing here is claimed to
-generalise beyond this fixture set.
+- Candidate pool K: **100**
+- Dense retrieval K: **300**
+- Final evidence K: **8**
+- Local NLI: `Xenova/nli-deberta-v3-xsmall`, q8@3fac2500
+- Local embedding: `Xenova/all-MiniLM-L6-v2`, q8@afdb6f1a
 
-## Regenerating / extending
+The current-head end-to-end rerun is executing against the frozen 300-claim / 5,183-document SciFact inputs. Its result is not reported until a complete artifact is produced.
 
-* `npm run generate:v2-fixtures` regenerates `data/v2/eval_fixtures.json`
-  deterministically from `scripts/generate_v2_eval_fixtures.ts`.
-* `npm run eval:v2` re-runs the evaluation and overwrites
-  `data/v2/eval_results.json`.
-* `npm run test:v2` runs the 15 required deterministic pipeline scenarios
-  (`scripts/v2PipelineTests.ts`) — strong support, strong refute, neutral,
-  unclear, conflicting, multiple independent agreeing sources, duplicate
-  sources, stale evidence, insufficient evidence, malicious/injected
-  content, SSRF attempts, provenance completeness, abstention behaviour, and
-  LIAR-model disagreement.
-* `npm run test:v2-route` boots the real Express app and exercises the new
-  `POST /api/v2/evidence/verify` endpoint and the additive `/api/health`
-  field, without asserting network-dependent retrieval outcomes.
+## Metrics
+
+The full-corpus benchmark reports:
+
+1. Open candidate recall.
+2. Gold evidence Recall@5 after reranking.
+3. Directional accuracy and macro-F1 for SUPPORT / CONTRADICT / NOT_ENOUGH_INFO.
+4. A separate production-policy view containing abstention, CONFLICTED rate, non-abstain coverage and mapped diagnostics.
+
+The production-policy view is not treated as standard SciFact task accuracy because TruthLens production requires two independent directional sources.
+
+## Research integrity
+
+- Gold evidence is never injected into the open candidate pool.
+- Dataset SHA-256 values are verified before evaluation.
+- Sealed local model bytes are verified before evaluation.
+- Canceled/incomplete runs are never recorded as benchmark results.
+- Production thresholds, source requirements, abstention rules and production model artifacts are unchanged.
+- Component model-quality metrics are never substituted for end-to-end verdict accuracy.
+
+## Regeneration
+
+- `npm run generate:v2-fixtures`
+- `npm run eval:v2`
+- `npm run test:v2`
+- `npm run test:v2-route`
+
+See `docs/V2_SCIFACT_E2E_RESULTS.md`, `docs/V2_KNOWN_LIMITATIONS.md`, and `docs/V2_END_TO_END_BENCHMARK.md` for the latest completed baseline and current-head evaluation status.
