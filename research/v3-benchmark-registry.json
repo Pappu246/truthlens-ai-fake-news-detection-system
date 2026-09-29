@@ -35,7 +35,7 @@
       "primary_metrics": ["fever_score", "label_accuracy", "evidence_precision", "evidence_recall", "evidence_f1"],
       "dataset_source": "https://fever.ai/dataset/fever.html",
       "protocol_source": "https://fever.ai/2018/task.html",
-      "scorer_source": "https://github.com/sheffieldnlp/fever-scorer",
+      "scorer_source": "https://github.com/sheffieldnlp/fever-scorer @ 4801615100fbf6327f8e99b5dbaefe5dd890e869",
       "claims_sha256": null,
       "corpus_sha256": null,
       "implementation": "scripts/benchmarks/v3FeverEvaluate.ts + scripts/benchmarks/v3FeverOfficialEvaluate.mjs",
@@ -74,6 +74,7 @@
       "claims_sha256": null,
       "corpus_sha256": null,
       "implementation": "scripts/benchmarks/v3FeverousOfficialEvaluate.mjs",
+      "scorer_revision": "Raldir/FEVEROUS @ 32b68ce4e33c53f34ae2e6d88b51cd073ab85ab6",
       "dataset_release": "Zenodo 10.5281/zenodo.4911508 v1",
       "published_checksums": {"dev.jsonl": {"algorithm": "md5", "value": "56150713a60ecf3ea0f32f42561e1082"}, "feverous-wiki-pages-db.zip": {"algorithm": "md5", "value": "b01271df477efdfca99441c7dc6fe859"}},
       "notes": "Official evaluator wrapper is wired. TruthLens structured evidence generation remains a separate adapter gate; dataset release and hashes must be pinned before scoring."
