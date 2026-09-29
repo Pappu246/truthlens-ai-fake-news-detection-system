@@ -17,6 +17,8 @@
 | Security boundary | SSRF + dependency + production isolation | Gated |
 | Production safety | Independent production policy boundary | Preserved |
 
+| Temporal evidence integrity | Claim-date cutoff + provenance + regression test | Implemented in research V2 |
+
 ## Publication rule
 
 No result is promoted into a headline accuracy claim unless the exact dataset, split, workflow run, commit, and evaluation protocol are documented.
