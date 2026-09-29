@@ -1,0 +1,61 @@
+name: V3 Benchmark Adapter Smoke
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'scripts/benchmarks/**'
+      - 'research/v3-benchmark-*.json'
+      - 'research/v3-openweb-holdout-schema.json'
+      - 'package.json'
+      - '.github/workflows/v3-benchmark-adapter-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fever-official-scorer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run official FEVER scorer smoke
+        run: |
+          set -euo pipefail
+          node scripts/benchmarks/v3FeverOfficialEvaluate.mjs             --predictions="$GITHUB_WORKSPACE/scripts/benchmarks/fixtures/fever-predictions.json"             --actual="$GITHUB_WORKSPACE/scripts/benchmarks/fixtures/fever-actual.jsonl"             --output="$GITHUB_WORKSPACE/artifacts/v3/fever/official-scorer-run.json"
+
+  averitec-official-scorer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install evaluator dependencies
+        run: python -m pip install --upgrade pip numpy scipy scikit-learn nltk
+      - name: Prepare NLTK meteor data
+        run: python -m nltk.downloader wordnet omw-1.4
+      - name: Run official AVeriTeC evaluator smoke
+        run: |
+          set -euo pipefail
+          node scripts/benchmarks/v3AveritecOfficialEvaluate.mjs             --predictions="$GITHUB_WORKSPACE/scripts/benchmarks/fixtures/averitec-predictions.json"             --references="$GITHUB_WORKSPACE/scripts/benchmarks/fixtures/averitec-reference.json"             --output="$GITHUB_WORKSPACE/artifacts/v3/averitec/official-scorer-run.json"
+
+  feverous-adapter:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate FEVEROUS adapter syntax
+        run: node --check scripts/benchmarks/v3FeverousOfficialEvaluate.mjs
