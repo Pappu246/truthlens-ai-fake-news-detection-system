@@ -83,3 +83,6 @@ jobs:
 
       - name: V3 benchmark adapter syntax
         run: npm run test:v3-benchmark-adapters
+
+      - name: V3 open-web sealer syntax
+        run: npm run test:v3-openweb-sealer
