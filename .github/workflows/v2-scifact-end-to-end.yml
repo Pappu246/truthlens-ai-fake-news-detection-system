@@ -1,6 +1,9 @@
 name: V2 SciFact End-to-End Benchmark
 
 on:
+  push:
+    branches:
+      - research/truthlens-v2-model-quality
   pull_request:
     branches:
       - main
