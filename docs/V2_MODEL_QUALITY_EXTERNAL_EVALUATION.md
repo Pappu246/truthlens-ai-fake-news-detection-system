@@ -8,21 +8,22 @@ Measure pretrained component quality independently from the final TruthLens deci
 
 ## Frozen SciFact inputs
 
-- 300 claims
-- 5,183 corpus documents
+- Claims: 300
+- Corpus documents: 5,183
 - Claims SHA-256: `86f0435d08fdb65d1aa41d1472684f57e6e71930626497bdf4d7a9ec1a632217`
 - Corpus SHA-256: `b8d6c89624cb2ed74dee8938effc4f5d8bd2086887880af8110d64be4ceade62`
 
-## Current sealed local evaluation
+## Latest completed sealed local evaluation
 
-Latest completed sealed local evaluation: **workflow run #162**, head `6e052a3c944002c80f89654ca4c0043c5630ed16`.
+Workflow run **#195 — SUCCESS**  
+Head: `4c0581e199f86c278d7b8ce08d3639adeba41c2f`
 
 Models:
 
 - NLI: `Xenova/nli-deberta-v3-xsmall`, q8@3fac2500
 - Embeddings: `Xenova/all-MiniLM-L6-v2`, q8@afdb6f1a
 
-The completed artifact evaluated all 300 claims and 469 evaluator-compatible NLI passages.
+The artifact evaluated all 300 claims and 469 evaluator-compatible NLI passages.
 
 | Component | Heuristic | Local pretrained | Delta |
 |---|---:|---:|---:|
@@ -32,15 +33,15 @@ The completed artifact evaluated all 300 claims and 469 evaluator-compatible NLI
 | Mean embedding margin | 0.039649 | **0.551816** | +0.512167 |
 | Positive embedding-margin rate | 0.654255 | **1.000000** | +0.345745 |
 
-Interpretation: pretrained NLI materially improves component classification quality, but calibration is worse in this evaluation. These are component metrics only and do not establish final TruthLens verdict accuracy.
+Interpretation: the pretrained NLI improves component classification quality on this frozen evaluation, while calibration is worse than the heuristic comparator. These are component metrics only and do not establish final TruthLens verdict accuracy.
 
 ## Hosted Hugging Face path
 
-The optional hosted adapter remains a separate path using Hugging Face Inference Providers. It is not required for the sealed local evaluation and must not be conflated with it.
+The optional hosted adapter remains separate. In the current run, the sealed local pretrained evaluation succeeded; the hosted HF comparison is not required for that local result and should not be conflated with it.
 
-## Token-free harness
+## Security note
 
-The workflow includes a token-free smoke test that validates the evaluator contracts and frozen inputs. A green smoke test is not a pretrained-model quality result.
+The main CI audit reports **0 vulnerabilities** for the committed project dependencies. The model-quality workflow installs `@huggingface/transformers` and `onnxruntime-node` as temporary `--no-save` evaluation dependencies; that temporary install emitted two high-severity audit findings on the runner and did not modify `package.json` or the lockfile. Those evaluation-only findings are not production dependency findings.
 
 ## Production safety
 

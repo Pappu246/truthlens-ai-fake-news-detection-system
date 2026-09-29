@@ -2,88 +2,92 @@
 
 ## Scope
 
-This is a research-branch status record. Production behavior is unchanged and the V2 work remains isolated from the production verdict contract.
+This is a research-branch status record. Production `main` remains frozen at the verified production baseline. V2 research work is not being treated as a production migration.
 
 ## Verified repository state
 
-- Current research head: `ba7631ebf4e3f1d6917d8fd04ab167ad50130b2f`
-- Production baseline remains on the separate production branch.
-- Latest CI/type-check/build run on the research code head: **success**; the current docs-only head also has a passing CI gate.
-- Phase 2 ISOT pipeline tests: **success**.
-- Phase 2 real ISOT data validation: **success**.
-- Phase 7 real ISOT benchmark: **success** on run #146; its artifact is recorded below.
+- Current research head: `4c0581e199f86c278d7b8ce08d3639adeba41c2f`
+- Production `main`: `32db8230547658b7d5d2a615599526d88c22fce9`
+- PR #26: open, not merged, mergeable, research-only.
+- CI #248 on the current head: **SUCCESS**.
+- Phase 2 ISOT pipeline tests #162: **SUCCESS**.
+- Phase 2 real ISOT validation #158: **SUCCESS**.
+- Phase 7 real ISOT benchmark #147: **SUCCESS**.
+- V2 model-quality evaluation #195: **SUCCESS**.
+- V2 SciFact end-to-end #91: **IN PROGRESS**; no final artifact/result is claimed yet.
+
+## Production boundary
+
+The production branch has not moved. The research branch does modify the shared `server/appFactory.ts`, but only additively: it exposes an experimental `POST /api/v2/evidence/verify` route and a V2 health component. The existing production article/claim/evidence verdict paths and production model artifact are not replaced or retuned by this change. V2 route regression tests explicitly verify the existing production `/api/evidence/verify` route remains present.
 
 ## Real ISOT benchmark
 
-The benchmark used 44,898 rows from the ISOT dataset and a leakage-safe group-aware split.
+The current-head Phase 7 benchmark used 44,898 rows with a leakage-safe group-aware split.
 
-Data preparation checks reported:
+Data preparation checks:
 
 - Exact duplicate extra rows: 5,795
 - Near-duplicate groups: 5,401
-- Articles in near-duplicate groups: 12,133
-- Cross-label near-duplicate groups requiring review: 2
+- Articles involved in near-duplicate groups: 12,133
+- Cross-label near-duplicate groups: 2
 - Near-duplicate groups crossing train/validation/test splits: **0**
+- Strict Reuters-dateline matches: 18,618
+- Unparseable dates excluded from temporal split: 10
 
-Benchmark results:
+Current Phase 7 run #147 reported:
 
 | Model | Variant | Validation F1 | Test F1 | Temporal F1 |
 |---|---|---:|---:|---:|
 | Logistic regression | raw | 0.987810 | 0.989831 | 0.993817 |
-| Calibrated linear SVM | raw | 0.993997 | 0.993902 | 0.998107 |
+| Calibrated linear SVM | raw | 0.993997 | 0.994048 | 0.998107 |
 | Logistic regression | Reuters-dateline mitigated | 0.987952 | 0.989831 | 0.993873 |
-| Calibrated linear SVM | Reuters-dateline mitigated | 0.993997 | 0.994048 | 0.998107 |
+| Calibrated linear SVM | Reuters-dateline mitigated | 0.993853 | 0.994048 | 0.998107 |
 
-These are **dataset/model benchmark measurements**, not claims of real-world fake-news detection accuracy. The benchmark script explicitly leaves the production model artifact unchanged.
+These are controlled dataset/model measurements, not universal real-world fake-news accuracy.
 
 ## Local pretrained V2 model-quality evaluation
 
-The sealed local evaluation processed 300 SciFact development claims over 5,183 corpus documents.
+The sealed local evaluation in run #195 processed 300 SciFact development claims and 469 evaluator-compatible evidence passages.
 
 Models:
 
-- NLI: `Xenova/nli-deberta-v3-xsmall`
-- Embeddings: `Xenova/all-MiniLM-L6-v2`
+- NLI: `Xenova/nli-deberta-v3-xsmall`, q8@3fac2500
+- Embeddings: `Xenova/all-MiniLM-L6-v2`, q8@afdb6f1a
 
-NLI component measurements:
+| Component | Heuristic | Local pretrained | Delta |
+|---|---:|---:|---:|
+| NLI accuracy | 0.307036 | **0.524520** | +0.217484 |
+| NLI macro-F1 | 0.205958 | **0.536936** | +0.330978 |
+| NLI ECE-10 | 0.141591 | 0.309079 | +0.167488 |
+| Mean embedding margin | 0.039649 | **0.551816** | +0.512167 |
+| Positive embedding-margin rate | 0.654255 | **1.000000** | +0.345745 |
 
-- Heuristic accuracy: 0.307036
-- Local pretrained accuracy: 0.524520
-- Heuristic macro-F1: 0.205958
-- Local pretrained macro-F1: 0.536936
-- Accuracy delta: +0.217484
-- Macro-F1 delta: +0.330978
+Calibration is not claimed improved. These are component metrics only, not final TruthLens verdict accuracy.
 
-Embedding diagnostic:
+## Current validation
 
-- 188 comparisons
-- Heuristic mean margin: 0.039649
-- Local pretrained mean margin: 0.551816
-- Positive-margin rate: 0.654255 → 1.000000
+The current authoritative end-to-end gate is SciFact run #91:
 
-Calibration was **not** declared improved: local pretrained ECE was 0.309079 versus 0.141591 for the heuristic component in this evaluation.
+- Frozen SciFact dev claims: 300
+- Frozen corpus documents: 5,183
+- Candidate K: 100
+- Final evidence K: 8
+- Sealed local pretrained NLI/embedding models
+- Dataset and model seal checks: passed
+- Benchmark execution: still running
+- Artifact: **not yet produced**
 
-The result is a component-quality evaluation, not final TruthLens verdict accuracy.
+An older SciFact run #90 on the immediately preceding documentation head is also still marked in progress. Neither incomplete run is treated as a result.
 
-## Current validation still running
+## Remaining gates
 
-The only long-running research validation still active on the current research head is:
+1. Complete SciFact run #91 and verify its machine-readable artifact, dataset hashes, model seals, and metrics.
+2. If documentation/result state changes after that artifact, run one final CI/documentation consistency gate.
+3. Review retrieval Recall@K, NLI quality, directional verdict metrics, abstention, source-independence behavior, and calibration together.
+4. Keep production migration/deployment separate from research measurements.
 
-- Full open-corpus SciFact end-to-end benchmark **Run #90**, frozen 300 claims / 5,183 documents, with sealed local pretrained models. Setup, dataset-hash verification, dependencies, runtime installation, and model-seal verification have passed; the benchmark step is still running and has not produced a final artifact.
+## Limitations
 
-Phase 2, Phase 7, CI, and the external model-quality evaluation are completed successfully on the current research head. No SciFact result is published until the complete artifact exists.
+ISOT, LIAR, and SciFact measure different tasks and must not be combined into one headline accuracy number. High ISOT F1 is dataset-specific. SciFact is also a research benchmark and its one-gold-paper convention does not by itself satisfy the production two-independent-source policy.
 
-## Remaining research gates
-
-1. Complete the current Run #90 full SciFact end-to-end benchmark.
-2. Record its exact artifact/result and dataset/model hashes.
-3. Run the final research-branch regression/CI gate after documentation/result updates.
-4. Review retrieval Recall@K, NLI quality, verdict metrics, abstention and calibration together.
-5. Keep any production migration decision separate from research measurements.
-
-## Important limitations
-
-The ISOT benchmark is a controlled dataset benchmark. Its high F1 values must not be presented as universal real-world TruthLens accuracy.
-
-The SciFact fixture benchmark and component evaluation are also research measurements. Retrieval quality, source independence, temporal reasoning, calibration, claim scope and real-world web evidence remain separate concerns.
-
+No world-leading or universal real-world accuracy claim is justified by the current evidence.
