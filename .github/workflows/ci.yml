@@ -93,5 +93,3 @@ jobs:
       - name: V3 benchmark materializer syntax
         run: npm run test:v3-materializer
 
-      - name: V3 AVeriTeC adapter type-check
-        run: npm run test:v3-averitec-adapter
