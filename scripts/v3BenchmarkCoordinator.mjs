@@ -11,6 +11,30 @@ function arg(name) {
   return hit ? hit.slice(name.length + 3) : undefined;
 }
 
+function sha256File(file) {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash('sha256');
+    const stream = fs.createReadStream(file);
+    stream.on('data', (chunk) => hash.update(chunk));
+    stream.on('error', reject);
+    stream.on('end', () => resolve(hash.digest('hex')));
+  });
+}
+
+async function findFirst(root, predicate) {
+  const entries = await fs.promises.readdir(root, { withFileTypes: true });
+  for (const entry of entries) {
+    const full = path.join(root, entry.name);
+    if (entry.isDirectory()) {
+      const found = await findFirst(full, predicate);
+      if (found) return found;
+    } else if (predicate(entry.name, full)) {
+      return full;
+    }
+  }
+  return null;
+}
+
 function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     console.log("$ " + [command, ...args].join(" "));
@@ -47,9 +71,16 @@ async function runFever() {
   const root = path.join(ROOT, "artifacts", "v3", "fever");
   await run("node", ["scripts/benchmarks/v3MaterializeAssets.mjs", "--benchmark=fever", "--with-corpus"]);
   await run("unzip", ["-q", path.join(root, "wiki-pages.zip"), "-d", path.join(root, "wiki-pages")]);
+  const feverShard = await findFirst(path.join(root, "wiki-pages"), (name) => /^wiki-.*\\.jsonl$/.test(name));
+  if (!feverShard) throw new Error("FEVER wiki shard not found after extraction");
+  const feverWikiDir = path.dirname(feverShard);
+  const feverManifest = JSON.parse(fs.readFileSync(path.join(root, "asset-manifest.json"), "utf8"));
+  const feverClaimsSha = feverManifest.files.find((f) => f.name === "shared_task_dev.jsonl")?.sha256;
+  const feverCorpusSha = feverManifest.files.find((f) => f.name === "wiki-pages.zip")?.sha256;
+  const configSha = crypto.createHash("sha256").update(fs.readFileSync(path.join(ROOT, "research", "v3-benchmark-registry.json"))).digest("hex");
   await run("python3", [
     "scripts/benchmarks/v3FeverPrepareCandidates.py",
-    "--wiki-dir=" + path.join(root, "wiki-pages"),
+    "--wiki-dir=" + feverWikiDir,
     "--claims=" + path.join(root, "shared_task_dev.jsonl"),
     "--db=" + path.join(root, "fever-sentences.sqlite"),
     "--output=" + path.join(root, "candidates.jsonl"),
@@ -60,9 +91,9 @@ async function runFever() {
     "--input=" + path.join(root, "candidates.jsonl"),
     "--output=" + path.join(root, "truthlens-adapter-report.json"),
     "--predictions-output=" + path.join(root, "truthlens-predictions.json"),
-    "--claims-sha256=" + process.env.TRUTHLENS_FEVER_CLAIMS_SHA256,
-    "--corpus-sha256=" + process.env.TRUTHLENS_FEVER_CORPUS_SHA256,
-    "--config-sha256=" + process.env.TRUTHLENS_BENCHMARK_CONFIG_SHA256
+    "--claims-sha256=" + feverClaimsSha,
+    "--corpus-sha256=" + feverCorpusSha,
+    "--config-sha256=" + configSha
   ]);
   await run("node", [
     "scripts/benchmarks/v3FeverOfficialEvaluate.mjs",
@@ -92,7 +123,8 @@ async function runFeverous() {
   const root = path.join(ROOT, "artifacts", "v3", "feverous");
   await run("node", ["scripts/benchmarks/v3MaterializeAssets.mjs", "--benchmark=feverous", "--with-corpus"]);
   await run("unzip", ["-q", path.join(root, "feverous-wiki-pages-db.zip"), "-d", path.join(root, "wiki-db")]);
-  const dbPath = path.join(root, "wiki-db", "feverous_wiki_pages.db");
+  const dbPath = await findFirst(path.join(root, "wiki-db"), (name) => name.endsWith(".db"));
+  if (!dbPath) throw new Error("FEVEROUS SQLite database not found after extraction");
   await run("python3", [
     "scripts/benchmarks/v3FeverousPrepareCandidates.py",
     "--db=" + dbPath,
