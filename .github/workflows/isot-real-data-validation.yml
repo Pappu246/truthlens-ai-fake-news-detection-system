@@ -7,9 +7,13 @@ on:
   pull_request:
     branches:
       - main
-  workflow_dispatch:
+    paths:
+      - 'scripts/isot_data_pipeline.py'
+      - '.github/workflows/isot-real-data-validation.yml'
 
 jobs:
+  validate-real-isot:
+
   validate-real-isot:
     runs-on: ubuntu-latest
     timeout-minutes: 30
