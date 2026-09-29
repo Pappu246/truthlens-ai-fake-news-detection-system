@@ -323,7 +323,42 @@ export class PretrainedNliAdapter implements NliAdapter {
     if (passages.length === 0) return [];
     const fullClaimText = (claim.normalizedText || '').trim().replace(/\\s+/g, ' ');
     const conditioning = conditionHypothesis(fullClaimText);
-    const relatednessValues = passages.map(passage => this.relatedness(fullClaimText, (passage || '').trim()));
+
+    // Batch the relatedness embeddings so a research batch performs one worker
+    // round-trip for all passages instead of one synchronous worker call per passage.
+    let claimVector: number[];
+    if (this.lastClaimText === fullClaimText && this.lastClaimVector) {
+      claimVector = this.lastClaimVector;
+    } else {
+      claimVector = this.embedSync(fullClaimText);
+      this.lastClaimText = fullClaimText;
+      this.lastClaimVector = claimVector;
+    }
+
+    const passageTexts = passages.map(passage => (passage || '').trim());
+    const batchEmbedder = this.embeddingModel as EmbeddingModel & {
+      embedBatch?: (texts: string[]) => number[][] | Promise<number[][]>;
+    };
+    let passageVectors: number[][];
+    if (typeof batchEmbedder.embedBatch === 'function') {
+      const encoded = batchEmbedder.embedBatch(passageTexts);
+      if (encoded instanceof Promise) {
+        throw new Error('PretrainedNliAdapter requires a synchronous embedding model.');
+      }
+      if (encoded.length !== passageTexts.length) {
+        throw new Error(`PretrainedNliAdapter: embedding batch returned ${encoded.length} vectors for ${passageTexts.length} passages.`);
+      }
+      passageVectors = encoded;
+    } else {
+      passageVectors = passageTexts.map(passage => this.embedSync(passage));
+    }
+
+    const relatednessValues = passageVectors.map(passageVector => {
+      let dot = 0;
+      const len = Math.min(claimVector.length, passageVector.length);
+      for (let i = 0; i < len; i++) dot += claimVector[i] * passageVector[i];
+      return Math.max(-1, Math.min(1, dot));
+    });
     const results: Array<NliClassification | null> = new Array(passages.length).fill(null);
     const directionalInputs: Array<{ index: number; premise: string; hypothesis: string }> = [];
     for (let i = 0; i < passages.length; i++) {
