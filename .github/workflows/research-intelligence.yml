@@ -34,7 +34,7 @@ jobs:
       - name: Upload research intelligence artifact
         uses: actions/upload-artifact@v4
         with:
-          name: truthlens-research-intelligence-\${{ github.run_number }}
+          name: truthlens-research-intelligence-${{ github.run_number }}
           path: research-intelligence-output/
           if-no-files-found: error
           retention-days: 30
