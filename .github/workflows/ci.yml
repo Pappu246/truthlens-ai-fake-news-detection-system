@@ -80,3 +80,6 @@ jobs:
 
       - name: V3 benchmark protocol preflight
         run: npm run test:v3-benchmark-preflight
+
+      - name: V3 benchmark adapter syntax
+        run: npm run test:v3-benchmark-adapters
