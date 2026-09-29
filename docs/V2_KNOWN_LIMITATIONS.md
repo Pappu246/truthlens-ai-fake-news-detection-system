@@ -1,54 +1,75 @@
 # TruthLens V2 — Known Limitations & Model Quality Notes
 
-This document keeps the remaining limitations explicit. The V2 stack now has optional pretrained inference adapters, but deterministic offline adapters remain the CI-safe default.
+This document separates completed engineering work from unresolved scientific limitations. Production remains frozen.
 
-## 1. Pretrained embeddings are optional, not the offline default
+## 1. Deterministic CI embeddings are not semantic embeddings
 
-`server/v2/retrieval/embeddings.ts` still provides `HashingNgramEmbeddingModel` for deterministic, dependency-free CI. It is not a pretrained semantic encoder and cannot reliably capture synonym-level meaning.
+`server/v2/retrieval/embeddings.ts` retains a deterministic hashing-ngram implementation for offline CI. It is useful for reproducibility but cannot capture synonym-level semantics reliably.
 
-An optional Hugging Face feature-extraction adapter is now available in `server/v2/retrieval/huggingFaceEmbeddingModel.ts`. Enable it with `TRUTHLENS_ENABLE_REMOTE_EMBEDDINGS=true` and `HF_TOKEN`. The model can be overridden with `TRUTHLENS_EMBEDDING_MODEL`.
+The research branch also supports pretrained dense embeddings through the sealed Transformers.js/ONNX path and the optional hosted Hugging Face adapter. The full-corpus SciFact pipeline uses the sealed local pretrained embedding model.
 
-Because remote inference depends on external service availability and rate limits, CI and offline evaluations continue to use the hashing adapter unless explicitly configured otherwise.
+## 2. Pretrained NLI is available and benchmarked, but end-to-end quality is still the gate
 
-## 2. Pretrained NLI is available, but the default fallback remains heuristic
+The research branch has a real pretrained pairwise NLI path using `Xenova/nli-deberta-v3-xsmall`. A completed component evaluation over SciFact reported:
 
-`server/v2/nli/heuristicNliAdapter.ts` remains the deterministic fallback.
+- NLI accuracy: **0.524520** vs **0.307036** heuristic
+- NLI macro-F1: **0.536936** vs **0.205958** heuristic
+- ECE-10: pretrained **0.309079** vs heuristic **0.141591**
 
-`server/v2/nli/huggingFaceNliAdapter.ts` adds an opt-in pretrained zero-shot NLI path using Hugging Face Inference Providers. The default model is `facebook/bart-large-mnli`.
+So pretrained NLI materially improves component classification quality, but its calibration is worse in this comparison. Component scores must not be substituted for end-to-end verification quality.
 
-This is a material upgrade over cue-word classification, but it is not the same as a dedicated pairwise cross-encoder invocation. The next model-quality step should benchmark a managed or local pairwise NLI model such as a DeBERTa-style cross-encoder against the same held-out claims.
+## 3. End-to-end retrieval remains the dominant disclosed bottleneck
 
-## 3. Conflict detection is stronger, but still rule-based
+The latest completed full-corpus end-to-end benchmark (Run #19) measured:
 
-The decision policy now looks for independent material evidence on both sides and no longer requires near-perfect symmetry. This is intended to reduce the previously weak `CONFLICTED` recall.
+- Open candidate recall: **53.67%**
+- Gold-evidence Recall@5: **68.09%**
+- Directional accuracy: **37.00%**
+- Directional macro-F1: **0.341899**
 
-However, conflict resolution is still a deterministic aggregation policy, not a learned discourse-reasoning model. Temporal disagreement, source hierarchy, claim scope, and multi-hop dependencies can still create difficult edge cases.
+The current branch adds dense retrieval, preserves diversified extractor queries, and improves source-independence handling, but a complete current-head 300-claim rerun has not yet produced an artifact. Therefore no improvement is claimed.
 
-## 4. The evaluation fixture set is small and synthetic
+## 4. Source independence is still policy-sensitive
 
-`data/v2/eval_fixtures.json` contains 56 manually authored fixtures across eight domains. The corpus text is synthetic and intentionally deterministic. The set is useful for regression and engineering comparisons, but it is not a world-level benchmark and should not be treated as evidence of general real-world accuracy.
+Real web domains continue to be clustered by registrable domain to avoid counting the same publisher as independent evidence. Synthetic `.local/document/<id>` benchmark URLs are treated per document so the benchmark does not collapse the entire corpus into one source cluster.
 
-## 5. Live retrieval remains network-dependent
+This is a benchmark-specific accommodation; production source independence remains unchanged.
 
-`LiveEvidenceProviderCorpusSource` wraps the existing production evidence provider. Network-restricted environments can return zero candidates, in which case the pipeline abstains rather than inventing evidence.
+## 5. Conflict resolution remains rule-based
 
-## 6. Confidence calibration is still a separate research problem
+The decision policy uses independent material evidence from both sides and records a deterministic conflict trace. It is not a learned discourse-reasoning model.
 
-The evaluation harness now reports raw ECE, Brier score, and a held-out temperature-scaling analysis. Runtime confidence is deliberately not recalibrated from the same development fixtures.
+Temporal disagreement, source hierarchy, claim scope, and multi-hop dependencies can still create difficult cases.
 
-Before changing production confidence semantics, fit and version a calibration artifact on an independently labelled calibration set and evaluate it on a separate holdout.
+## 6. Confidence calibration is diagnostic, not productionized
 
-## 7. Full-text enrichment is still opt-in
+The research benchmark now records raw ECE/Brier and a held-out temperature-scaling diagnostic. Runtime production confidence is deliberately not changed.
 
-Full-text extraction is implemented but disabled by default. This keeps the first research slice deterministic and limits network/SSRF exposure.
+Before any production confidence update, a versioned calibration artifact must be fitted on an independently labelled calibration set and evaluated on a separate holdout.
 
-## 8. Multimodal, multilingual and continual-learning capabilities are not part of this milestone
+## 7. Evidence completeness is limited
 
-These remain out of scope for the current V2 research slice.
+The production evidence engine still relies on provider retrieval and short evidence excerpts. Full-text enrichment exists but remains opt-in in V2 to keep the first research slice deterministic and reduce network/SSRF exposure.
 
-## Current recommended research path
+## 8. External benchmark scope remains narrow
 
-1. Benchmark the optional pretrained embedding + NLI adapters on an external, held-out real-world dataset.
-2. Replace the zero-shot NLI bridge with a dedicated pairwise cross-encoder adapter if the benchmark shows a measurable gain.
-3. Fit a versioned confidence calibrator on a separate calibration split.
-4. Only then consider changing the production evidence engine or merging V2 behavior into it.
+SciFact is a scientific evidence benchmark, not a current-news or political-fact-checking benchmark. The LIAR and ISOT measurements are separate tasks and must never be combined with SciFact or each other.
+
+## 9. Research workflow reliability is separate from model quality
+
+Long-running 300-claim GitHub Actions jobs have experienced cancellations before artifact publication. This is treated as an evaluation-infrastructure issue, not as a successful/failed model result. The heavy workflows now:
+
+- avoid duplicate push+PR execution;
+- ignore docs-only changes;
+- do not auto-cancel active runs;
+- use extended timeouts;
+- rerun canceled jobs without changing research code.
+
+## What remains before any production proposal
+
+1. Complete a current-head 300-claim SciFact run and compare it against Run #19.
+2. If end-to-end quality remains weak, improve retrieval recall/reranking before changing decision policy.
+3. Establish an independently labelled calibration split and versioned calibrator.
+4. Evaluate broader real-world external datasets appropriate to TruthLens' actual production use case.
+5. Preserve the two-independent-source production rule unless independently justified by new evidence.
+6. Do not merge or deploy PR #26 solely from component-level model improvements.
