@@ -6,12 +6,12 @@ This is a research-branch status record. Production behavior is unchanged and th
 
 ## Verified repository state
 
-- Current research head: `cc91c8a2847b2ce993b80297ca5166cf49268601`
+- Current research head: `ba7631ebf4e3f1d6917d8fd04ab167ad50130b2f`
 - Production baseline remains on the separate production branch.
 - Latest CI/type-check/build run on the research code head: **success**; the current docs-only head also has a passing CI gate.
 - Phase 2 ISOT pipeline tests: **success**.
 - Phase 2 real ISOT data validation: **success**.
-- Phase 7 real ISOT benchmark: **in progress** on run #130; no final result is published yet.
+- Phase 7 real ISOT benchmark: **success** on run #146; its artifact is recorded below.
 
 ## Real ISOT benchmark
 
@@ -67,16 +67,15 @@ The result is a component-quality evaluation, not final TruthLens verdict accura
 
 ## Current validation still running
 
-Two long-running research validations are currently active on the current research head:
+The only long-running research validation still active on the current research head is:
 
-- Full open-corpus SciFact end-to-end benchmark **Run #57**, frozen 300 claims / 5,183 documents, with sealed local pretrained models. Setup, dataset-hash verification, dependencies, runtime installation, and model-seal verification have passed; the benchmark step is still running and has not produced a final artifact.
-- Phase 7 real ISOT benchmark **Run #130**, using the leakage-aware ISOT preparation path. Dataset download/verification and split preparation have passed; the benchmark step is still running and has not produced a final artifact.
+- Full open-corpus SciFact end-to-end benchmark **Run #90**, frozen 300 claims / 5,183 documents, with sealed local pretrained models. Setup, dataset-hash verification, dependencies, runtime installation, and model-seal verification have passed; the benchmark step is still running and has not produced a final artifact.
 
-No result is published until the complete artifact exists.
+Phase 2, Phase 7, CI, and the external model-quality evaluation are completed successfully on the current research head. No SciFact result is published until the complete artifact exists.
 
 ## Remaining research gates
 
-1. Complete the current Run #57 full SciFact end-to-end benchmark.
+1. Complete the current Run #90 full SciFact end-to-end benchmark.
 2. Record its exact artifact/result and dataset/model hashes.
 3. Run the final research-branch regression/CI gate after documentation/result updates.
 4. Review retrieval Recall@K, NLI quality, verdict metrics, abstention and calibration together.
