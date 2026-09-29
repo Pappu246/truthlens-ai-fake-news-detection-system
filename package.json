@@ -36,7 +36,8 @@
     "eval:v2-scifact-e2e": "tsx scripts/v2ScifactEndToEnd.ts",
     "test:v3-benchmark-preflight": "node scripts/v3BenchmarkPreflight.mjs",
     "test:v3-benchmark-adapters": "node scripts/benchmarks/v3BenchmarkAdapterSyntax.mjs",
-    "test:v3-openweb-sealer": "node --check scripts/v3SealOpenWebHoldout.mjs"
+    "test:v3-openweb-sealer": "node --check scripts/v3SealOpenWebHoldout.mjs",
+    "test:v3-phase-gate": "node scripts/v3PhaseGate.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
