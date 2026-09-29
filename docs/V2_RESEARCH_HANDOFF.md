@@ -5,7 +5,7 @@
 ## Current production boundary
 
 - Production `main`: `32db8230547658b7d5d2a615599526d88c22fce9`
-- Current V2 research branch head: `0832f9be1ac38987c222e3bd54054a1fd5a15eba`
+- Current V2 research branch head: `7fb806110f9160bc60af6ca72b12db07badc6dc1`
 - PR #26 remains open and research-only.
 - No research branch has been merged or deployed to production.
 
