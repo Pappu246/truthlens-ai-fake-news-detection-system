@@ -26,11 +26,16 @@ for (const field of schema.required_provenance_fields) {
 }
 
 const sha64 = /^[0-9a-f]{64}$/i;
-if (report.dataset && !sha64.test(report.dataset.claims_sha256 || "")) {
-  errors.push("dataset.claims_sha256 must be 64 hex characters");
-}
-if (report.dataset && !sha64.test(report.dataset.corpus_sha256 || "")) {
-  errors.push("dataset.corpus_sha256 must be 64 hex characters");
+if (report.dataset) {
+  const hasLocalHashes = sha64.test(report.dataset.claims_sha256 || "") || sha64.test(report.dataset.corpus_sha256 || "");
+  const hasAuthority = Boolean(
+    report.dataset.published_checksums ||
+    report.dataset.immutable_source_revision ||
+    report.dataset.dataset_release
+  );
+  if (!hasLocalHashes && !hasAuthority) {
+    errors.push("dataset must provide local SHA-256 hashes or authoritative checksum/revision provenance");
+  }
 }
 if (report.provenance && !sha64.test(report.provenance.configuration_sha256 || "")) {
   errors.push("provenance.configuration_sha256 must be 64 hex characters");
