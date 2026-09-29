@@ -37,7 +37,9 @@
     "test:v3-benchmark-preflight": "node scripts/v3BenchmarkPreflight.mjs",
     "test:v3-benchmark-adapters": "node scripts/benchmarks/v3BenchmarkAdapterSyntax.mjs",
     "test:v3-openweb-sealer": "node --check scripts/v3SealOpenWebHoldout.mjs",
-    "test:v3-phase-gate": "node scripts/v3PhaseGate.mjs"
+    "test:v3-phase-gate": "node scripts/v3PhaseGate.mjs",
+    "test:v3-materializer": "node --check scripts/benchmarks/v3MaterializeAssets.mjs",
+    "test:v3-averitec-adapter": "tsx --no-warnings --type-check scripts/benchmarks/v3AveritecTruthLensEvaluate.ts --help"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
