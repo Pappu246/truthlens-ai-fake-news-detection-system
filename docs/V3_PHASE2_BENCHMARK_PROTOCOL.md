@@ -55,7 +55,7 @@ Authoritative sources:
 - https://github.com/MichSchli/AVeriTeC
 - https://fever.ai/2025/task.html
 
-TruthLens Phase 2 status: protocol-locked; exact release/hash pinning and adapter still required.
+TruthLens Phase 2 status: protocol and end-to-end open-web adapter are wired; the official evaluator and immutable source revision are pinned. Full dev execution remains a gate.
 
 ### FEVEROUS
 
@@ -106,3 +106,6 @@ The FEVER adapter uses an open-retrieval FTS5 index over the official Wikipedia 
 AVeriTeC's official evaluator is invoked from the upstream `eval.py`; its reference format includes claims, labels, question-answer evidence, dates and source URLs. The adapter does not reuse gold source URLs as retrieval candidates; end-to-end open-web retrieval remains a separate integration gate. citeturn151523view0
 
 FEVEROUS requires a separate structured-evidence representation because its benchmark evaluates text and table-cell evidence. Its official repository documents local evaluation via `evaluate.py` and the required prediction fields. citeturn880879search1
+
+
+AVeriTeC protocol note: the pinned dataset repository does not bundle a fixed evidence corpus; its README describes evidence sourced from the web. Therefore the TruthLens adapter intentionally uses its live evidence provider for this benchmark rather than pretending a local fixed-corpus evaluation is apples-to-apples.
