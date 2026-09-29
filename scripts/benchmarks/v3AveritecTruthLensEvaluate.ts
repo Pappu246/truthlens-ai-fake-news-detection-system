@@ -59,7 +59,7 @@ async function main() {
       retrieval: { perQueryTopK: 20, finalTopK: 8 },
       enableFullTextEnrichment: false,
       minCandidatesExpectedWarning: 0,
-      claimDate: row.claim_date ?? null,
+      claimDate: row.claim_date ?? (row.date as string | null | undefined) ?? (row.claimDate as string | null | undefined) ?? null,
       enforceTemporalEvidence: true,
       priorOverride: {
         available: false,
