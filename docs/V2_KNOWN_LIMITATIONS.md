@@ -67,9 +67,10 @@ Long-running 300-claim GitHub Actions jobs have experienced cancellations before
 
 ## What remains before any production proposal
 
-1. Complete a current-head 300-claim SciFact run and compare it against Run #19.
-2. If end-to-end quality remains weak, improve retrieval recall/reranking before changing decision policy.
-3. Establish an independently labelled calibration split and versioned calibrator.
-4. Evaluate broader real-world external datasets appropriate to TruthLens' actual production use case.
-5. Preserve the two-independent-source production rule unless independently justified by new evidence.
-6. Do not merge or deploy PR #26 solely from component-level model improvements.
+1. Complete current-head SciFact Run #57 and compare it against the frozen Run #19 baseline.
+2. Complete current-head Phase 7 ISOT Run #130 and keep its dataset/model task separate from SciFact.
+3. If end-to-end quality remains weak, improve retrieval recall/reranking before changing decision policy.
+4. Establish an independently labelled calibration split and versioned calibrator.
+5. Evaluate broader external datasets appropriate to TruthLens' actual production use case.
+6. Preserve the two-independent-source production rule unless independently justified by new evidence.
+7. Do not merge or deploy PR #26 solely from component-level model improvements or a single benchmark.
