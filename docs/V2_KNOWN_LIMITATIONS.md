@@ -20,14 +20,14 @@ So pretrained NLI materially improves component classification quality, but its 
 
 ## 3. End-to-end retrieval remains the dominant disclosed bottleneck
 
-The latest completed full-corpus end-to-end benchmark (Run #19) measured:
+The latest completed full-corpus end-to-end benchmark remains Run #19 and measured:
 
 - Open candidate recall: **53.67%**
 - Gold-evidence Recall@5: **68.09%**
 - Directional accuracy: **37.00%**
 - Directional macro-F1: **0.341899**
 
-The current branch adds dense retrieval, preserves diversified extractor queries, and improves source-independence handling, but a complete current-head 300-claim rerun has not yet produced an artifact. Therefore no improvement is claimed.
+The current branch adds dense retrieval, preserves diversified extractor queries, improves source-independence handling, and enforces temporal evidence integrity. Current-head SciFact Run #90 is still executing and has not produced an artifact, so no improvement over Run #19 is claimed.
 
 ## 4. Source independence is still policy-sensitive
 
