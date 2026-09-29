@@ -5,7 +5,7 @@
 ## Current production boundary
 
 - Production `main`: `32db8230547658b7d5d2a615599526d88c22fce9`
-- Current V2 research branch head: `f0545eb695bf0015820064ddcc58e43fce1b3346`
+- Current V2 research branch head: `f40440d8caf58126f215fce2aa1e7c843934538b`
 - PR #26 remains open and research-only.
 - No research branch has been merged or deployed to production.
 
@@ -16,9 +16,9 @@
 - Phase 2 ISOT Pipeline Tests #99: **SUCCESS**.
 - Phase 7 Real ISOT Benchmark #84: **SUCCESS**.
 - V2 Model Quality External Evaluation #99: **SUCCESS**.
-- V2 SciFact End-to-End Benchmark #17: **SUCCESS**.
-- SciFact artifact: `truthlens-v2-scifact-end-to-end`, artifact ID `11003489903`.
-- Artifact SHA-256: `55f4a7f9fcd658fdb3e3a66d86c99418ac6696fa2b9a0a98cc16404b5527341c`.
+- V2 SciFact End-to-End Benchmark #19: **SUCCESS**.
+- SciFact artifact: `truthlens-v2-scifact-end-to-end`, artifact ID `11012755708`.
+- Artifact SHA-256: `29322f9630fd693b658bf3c108b2621c487d1d8c3ee178b90f6090cbd1a3d38c`.
 - Frozen SciFact inputs: **300 dev claims / 5,183 corpus documents**; exact dataset hashes verified.
 - No duplicate SciFact run was created while the active benchmark was running.
 
