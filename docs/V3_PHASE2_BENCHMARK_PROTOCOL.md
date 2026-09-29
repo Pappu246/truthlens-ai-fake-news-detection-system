@@ -87,3 +87,22 @@ The registry and preflight are fail-closed so an executable benchmark cannot run
 ## No SOTA claim
 
 Phase 2 establishes measurement infrastructure. Any claim such as "best", "SOTA", or "world-leading accuracy" remains blocked until Phase 7 independently compares the measured results against current published/official results.
+
+
+## Adapter implementation status
+
+As of the current Phase 2 research branch:
+
+| Benchmark | TruthLens adapter | Official scorer wrapper | Data/hash pin | Phase status |
+|---|---|---|---|---|
+| SciFact | Yes — existing full-corpus evaluator | Native benchmark evaluator | Yes | Baseline verified |
+| FEVER | Yes — open-retrieval candidate preparation + TruthLens evaluator | Yes | **Not yet pinned for the current asset package** | In progress |
+| AVeriTeC | Protocol/prediction adapter | Yes — upstream `eval.py` | **Not yet pinned for current release** | In progress |
+| FEVEROUS | Official evaluator adapter | Yes — upstream `evaluate.py` | **Not yet pinned; structured TruthLens prediction adapter remains** | In progress |
+| External open-web | Not yet a scored TruthLens benchmark | N/A | **Sealed independent holdout still required** | Remaining gate |
+
+The FEVER adapter uses an open-retrieval FTS5 index over the official Wikipedia shard corpus. Gold evidence is never injected into the candidate pool. Its output is intentionally compatible with the official FEVER scorer, which defines strict evidence-aware scoring in addition to label accuracy and evidence precision/recall/F1. citeturn449019search0
+
+AVeriTeC's official evaluator is invoked from the upstream `eval.py`; its reference format includes claims, labels, question-answer evidence, dates and source URLs. The adapter does not reuse gold source URLs as retrieval candidates; end-to-end open-web retrieval remains a separate integration gate. citeturn151523view0
+
+FEVEROUS requires a separate structured-evidence representation because its benchmark evaluates text and table-cell evidence. Its official repository documents local evaluation via `evaluate.py` and the required prediction fields. citeturn880879search1
