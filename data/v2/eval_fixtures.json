@@ -1,0 +1,1634 @@
+{
+  "schema_version": 1,
+  "dataset_name": "truthlens_v2_dev_eval_fixtures",
+  "dataset_type": "DEVELOPMENT_EVALUATION_SET_NOT_A_BENCHMARK",
+  "description": "Small, manually authored development/evaluation set for validating the TruthLens V2 first vertical slice end-to-end. NOT a world-level benchmark. NOT used to claim any global accuracy figure. Each fixture carries its own small synthetic evidence corpus (clearly not real scraped articles) so the full pipeline can be run deterministically offline.",
+  "generated_at": "2026-09-01T00:00:00.000Z",
+  "total_fixtures": 56,
+  "domains": [
+    "politics",
+    "science",
+    "technology",
+    "finance",
+    "health",
+    "climate",
+    "history",
+    "current_events"
+  ],
+  "gold_verdict_distribution": {
+    "VERIFIED": 17,
+    "REFUTED": 15,
+    "INSUFFICIENT_EVIDENCE": 16,
+    "CONFLICTED": 8
+  },
+  "fixtures": [
+    {
+      "id": "politics-001",
+      "idHint": "politics-001",
+      "domain": "politics",
+      "claim": "The national election authority confirmed voter turnout reached 62 percent in the general election.",
+      "gold_verdict": "VERIFIED",
+      "gold_evidence_reference": {
+        "url": "https://www.reuters.com/politics/turnout-62-percent",
+        "title": "Election authority confirms 62% turnout",
+        "publisher": "Reuters"
+      },
+      "evidence_explanation": "Two independent major-news outlets report the election authority officially confirmed 62% turnout, with no contradicting reports.",
+      "corpus": [
+        {
+          "id": "d1",
+          "contentType": "SUMMARY",
+          "url": "https://www.reuters.com/politics/turnout-62-percent",
+          "title": "Election authority confirms 62% turnout",
+          "snippet": "The national election authority confirmed voter turnout reached 62 percent in the general election, according to official data released Monday.",
+          "publisher": "Reuters",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        },
+        {
+          "id": "d2",
+          "contentType": "SUMMARY",
+          "url": "https://apnews.com/article/election-turnout-62",
+          "title": "Turnout hits 62% in general election",
+          "snippet": "Officials confirmed voter turnout of 62 percent, corroborating earlier estimates from the electoral commission.",
+          "publisher": "Associated Press",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "politics-002",
+      "idHint": "politics-002",
+      "domain": "politics",
+      "claim": "The prime minister announced a new cabinet reshuffle effective next month.",
+      "gold_verdict": "VERIFIED",
+      "gold_evidence_reference": {
+        "url": "https://www.bbc.com/news/cabinet-reshuffle-announced",
+        "title": "PM confirms cabinet reshuffle",
+        "publisher": "BBC"
+      },
+      "evidence_explanation": "Two independent outlets confirm the official announcement of the reshuffle.",
+      "corpus": [
+        {
+          "id": "d3",
+          "contentType": "SUMMARY",
+          "url": "https://www.bbc.com/news/cabinet-reshuffle-announced",
+          "title": "PM confirms cabinet reshuffle",
+          "snippet": "The prime minister confirmed a cabinet reshuffle will take effect next month, according to an official statement from the government.",
+          "publisher": "BBC",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        },
+        {
+          "id": "d4",
+          "contentType": "SUMMARY",
+          "url": "https://www.theguardian.com/politics/reshuffle-confirmed",
+          "title": "Cabinet reshuffle confirmed by No.10",
+          "snippet": "Downing Street confirmed the reshuffle, verifying earlier reports of ministerial changes next month.",
+          "publisher": "The Guardian",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "politics-003",
+      "idHint": "politics-003",
+      "domain": "politics",
+      "claim": "A viral post claims the finance minister resigned overnight amid a corruption scandal.",
+      "gold_verdict": "REFUTED",
+      "gold_evidence_reference": {
+        "url": "https://www.reuters.com/politics/minister-resignation-denied",
+        "title": "Finance ministry denies resignation reports",
+        "publisher": "Reuters"
+      },
+      "evidence_explanation": "Two independent outlets report the finance ministry explicitly denied and debunked the resignation claim.",
+      "corpus": [
+        {
+          "id": "d5",
+          "contentType": "SUMMARY",
+          "url": "https://www.reuters.com/politics/minister-resignation-denied",
+          "title": "Finance ministry denies resignation reports",
+          "snippet": "The finance ministry denied the claim that the minister resigned overnight, calling the viral post false and debunked.",
+          "publisher": "Reuters",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        },
+        {
+          "id": "d6",
+          "contentType": "SUMMARY",
+          "url": "https://apnews.com/article/minister-denies-resignation",
+          "title": "Minister denies resignation rumor",
+          "snippet": "Officials confirmed the resignation report is false; the minister remains in office, the ministry said, refuting the corruption scandal claim.",
+          "publisher": "Associated Press",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "politics-004",
+      "idHint": "politics-004",
+      "domain": "politics",
+      "claim": "A newly leaked memo shows the interior ministry plans to ban a major opposition party next week.",
+      "gold_verdict": "INSUFFICIENT_EVIDENCE",
+      "gold_evidence_reference": null,
+      "evidence_explanation": "No independent reporting was retrieved that addresses this specific unverified leak.",
+      "corpus": [
+        {
+          "id": "d7",
+          "contentType": "HEADLINE_ONLY",
+          "url": "https://www.example-blog.net/random-politics-commentary",
+          "title": "Political commentary roundup",
+          "snippet": "Various pundits discussed upcoming budget negotiations and unrelated municipal elections this week.",
+          "publisher": "Example Blog",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "politics-005",
+      "idHint": "politics-005",
+      "domain": "politics",
+      "claim": "Independent observers report the opposition candidate won the mayoral race by a narrow margin.",
+      "gold_verdict": "CONFLICTED",
+      "gold_evidence_reference": null,
+      "evidence_explanation": "One independent outlet confirms the win while another independent outlet reports the incumbent contests and disputes the count, so the sources conflict.",
+      "corpus": [
+        {
+          "id": "d8",
+          "contentType": "SUMMARY",
+          "url": "https://www.npr.org/mayoral-race-opposition-wins",
+          "title": "Opposition candidate confirmed winner of mayoral race",
+          "snippet": "Independent election observers confirmed the opposition candidate won the mayoral race by a narrow margin, according to official data from the counting station.",
+          "publisher": "NPR",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        },
+        {
+          "id": "d9",
+          "contentType": "SUMMARY",
+          "url": "https://www.aljazeera.com/mayoral-race-disputed",
+          "title": "Incumbent disputes mayoral race result",
+          "snippet": "The incumbent mayor disputed the results as false and contested the count, calling the reported opposition win incorrect and unconfirmed.",
+          "publisher": "Al Jazeera",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "politics-006",
+      "idHint": "politics-006",
+      "domain": "politics",
+      "claim": "The senate passed the infrastructure bill with bipartisan support this week.",
+      "gold_verdict": "VERIFIED",
+      "gold_evidence_reference": {
+        "url": "https://www.reuters.com/politics/senate-passes-infrastructure-bill",
+        "title": "Senate passes infrastructure bill",
+        "publisher": "Reuters"
+      },
+      "evidence_explanation": "Two independent major outlets confirm passage of the bill with bipartisan votes.",
+      "corpus": [
+        {
+          "id": "d10",
+          "contentType": "SUMMARY",
+          "url": "https://www.reuters.com/politics/senate-passes-infrastructure-bill",
+          "title": "Senate passes infrastructure bill",
+          "snippet": "The senate confirmed passage of the infrastructure bill this week with bipartisan support, according to official congressional records.",
+          "publisher": "Reuters",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        },
+        {
+          "id": "d11",
+          "contentType": "SUMMARY",
+          "url": "https://www.washingtonpost.com/politics/infrastructure-bill-passes",
+          "title": "Bipartisan infrastructure bill clears senate",
+          "snippet": "Congressional records verify the bill passed with support from both parties, corroborating the bipartisan vote count.",
+          "publisher": "The Washington Post",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "politics-007",
+      "idHint": "politics-007",
+      "domain": "politics",
+      "claim": "A minor local politician claims the census bureau inflated population figures for their district.",
+      "gold_verdict": "INSUFFICIENT_EVIDENCE",
+      "gold_evidence_reference": null,
+      "evidence_explanation": "Retrieval found only unrelated coverage; no source addresses this specific district-level allegation.",
+      "corpus": [
+        {
+          "id": "d12",
+          "contentType": "HEADLINE_ONLY",
+          "url": "https://www.example-news.net/unrelated-local-story",
+          "title": "Unrelated local council story",
+          "snippet": "The local council discussed unrelated road maintenance budgets and parking regulations this quarter.",
+          "publisher": "Example Local News",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "science-001",
+      "idHint": "science-001",
+      "domain": "science",
+      "claim": "Researchers confirmed a new exoplanet orbiting a sun-like star 40 light years away.",
+      "gold_verdict": "VERIFIED",
+      "gold_evidence_reference": {
+        "url": "https://www.nature.com/articles/exoplanet-confirmed",
+        "title": "New exoplanet confirmed by astronomers",
+        "publisher": "Nature"
+      },
+      "evidence_explanation": "Two independent scientific/major-news sources confirm the discovery.",
+      "corpus": [
+        {
+          "id": "d13",
+          "contentType": "SUMMARY",
+          "url": "https://www.nature.com/articles/exoplanet-confirmed",
+          "title": "New exoplanet confirmed by astronomers",
+          "snippet": "Astronomers confirmed a new exoplanet orbiting a sun-like star 40 light years away, according to peer-reviewed official data published this week.",
+          "publisher": "Nature",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        },
+        {
+          "id": "d14",
+          "contentType": "SUMMARY",
+          "url": "https://www.bbc.com/news/science-exoplanet-discovery",
+          "title": "Exoplanet discovery verified",
+          "snippet": "The discovery was verified and corroborated by independent observatories, confirming the sun-like star hosts a new exoplanet.",
+          "publisher": "BBC",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "science-002",
+      "idHint": "science-002",
+      "domain": "science",
+      "claim": "A widely shared post claims scientists proved cold fusion works at room temperature.",
+      "gold_verdict": "REFUTED",
+      "gold_evidence_reference": {
+        "url": "https://www.science.org/content/cold-fusion-debunked",
+        "title": "Room-temperature cold fusion claim debunked",
+        "publisher": "Science"
+      },
+      "evidence_explanation": "Two independent scientific sources debunk the claim as false and lacking evidence.",
+      "corpus": [
+        {
+          "id": "d15",
+          "contentType": "SUMMARY",
+          "url": "https://www.science.org/content/cold-fusion-debunked",
+          "title": "Room-temperature cold fusion claim debunked",
+          "snippet": "The claim that scientists proved cold fusion works at room temperature was debunked; independent labs found no evidence and called the result false.",
+          "publisher": "Science",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        },
+        {
+          "id": "d16",
+          "contentType": "SUMMARY",
+          "url": "https://www.nature.com/articles/cold-fusion-refuted",
+          "title": "Cold fusion result refuted by replication attempts",
+          "snippet": "Replication attempts refuted the cold fusion claim, confirming it as an unconfirmed and incorrect result with no evidence that fusion occurred.",
+          "publisher": "Nature",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "science-003",
+      "idHint": "science-003",
+      "domain": "science",
+      "claim": "A university lab claims a new battery chemistry doubles energy density.",
+      "gold_verdict": "INSUFFICIENT_EVIDENCE",
+      "gold_evidence_reference": null,
+      "evidence_explanation": "No independent replication or reporting was retrieved addressing the specific claim.",
+      "corpus": [
+        {
+          "id": "d17",
+          "contentType": "HEADLINE_ONLY",
+          "url": "https://www.example-science-blog.net/battery-hype",
+          "title": "Battery hype roundup",
+          "snippet": "Various startups made unrelated announcements about battery recycling programs and unrelated supply chain news.",
+          "publisher": "Example Science Blog",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "science-004",
+      "idHint": "science-004",
+      "domain": "science",
+      "claim": "A study reports a newly discovered dinosaur species was twice the size previously estimated.",
+      "gold_verdict": "CONFLICTED",
+      "gold_evidence_reference": null,
+      "evidence_explanation": "One independent outlet confirms the larger size estimate while another independent outlet disputes and contests the finding.",
+      "corpus": [
+        {
+          "id": "d18",
+          "contentType": "SUMMARY",
+          "url": "https://www.nature.com/articles/dinosaur-size-confirmed",
+          "title": "New dinosaur species confirmed larger than thought",
+          "snippet": "Paleontologists confirmed the newly discovered dinosaur species was twice the size previously estimated, according to official fossil measurements.",
+          "publisher": "Nature",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        },
+        {
+          "id": "d19",
+          "contentType": "SUMMARY",
+          "url": "https://www.science.org/content/dinosaur-size-disputed",
+          "title": "Dinosaur size estimate disputed",
+          "snippet": "A rival team disputed the size claim as incorrect, contesting the measurement methodology used in the debated estimate.",
+          "publisher": "Science",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "science-005",
+      "idHint": "science-005",
+      "domain": "science",
+      "claim": "NASA confirmed water ice exists in permanently shadowed lunar craters.",
+      "gold_verdict": "VERIFIED",
+      "gold_evidence_reference": {
+        "url": "https://www.nasa.gov/press-release/lunar-ice-confirmed",
+        "title": "NASA confirms lunar water ice",
+        "publisher": "NASA"
+      },
+      "evidence_explanation": "Two independent official/major-news sources confirm the finding.",
+      "corpus": [
+        {
+          "id": "d20",
+          "contentType": "SUMMARY",
+          "url": "https://www.nasa.gov/press-release/lunar-ice-confirmed",
+          "title": "NASA confirms lunar water ice",
+          "snippet": "NASA confirmed water ice exists in permanently shadowed lunar craters, according to official mission data.",
+          "publisher": "NASA",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        },
+        {
+          "id": "d21",
+          "contentType": "SUMMARY",
+          "url": "https://www.reuters.com/science/lunar-ice-verified",
+          "title": "Lunar ice presence verified",
+          "snippet": "Independent researchers verified and corroborated the presence of water ice in shadowed lunar craters.",
+          "publisher": "Reuters",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "science-006",
+      "idHint": "science-006",
+      "domain": "science",
+      "claim": "A blog post claims vaccines contain microchips for tracking citizens.",
+      "gold_verdict": "REFUTED",
+      "gold_evidence_reference": {
+        "url": "https://www.who.int/news/vaccine-microchip-hoax-debunked",
+        "title": "WHO debunks vaccine microchip hoax",
+        "publisher": "World Health Organization"
+      },
+      "evidence_explanation": "Two independent official/scientific sources debunk the claim as a false hoax.",
+      "corpus": [
+        {
+          "id": "d22",
+          "contentType": "SUMMARY",
+          "url": "https://www.who.int/news/vaccine-microchip-hoax-debunked",
+          "title": "WHO debunks vaccine microchip hoax",
+          "snippet": "The World Health Organization debunked the claim that vaccines contain microchips, calling it a false hoax with no evidence that any tracking device exists.",
+          "publisher": "World Health Organization",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        },
+        {
+          "id": "d23",
+          "contentType": "SUMMARY",
+          "url": "https://www.nature.com/articles/vaccine-hoax-refuted",
+          "title": "Vaccine microchip claim refuted",
+          "snippet": "Scientists refuted the microchip hoax as fabricated and incorrect, confirming no such tracking technology exists in any vaccine.",
+          "publisher": "Nature",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "science-007",
+      "idHint": "science-007",
+      "domain": "science",
+      "claim": "A private lab claims to have created a room-temperature superconductor.",
+      "gold_verdict": "INSUFFICIENT_EVIDENCE",
+      "gold_evidence_reference": null,
+      "evidence_explanation": "No independent replication or peer-reviewed coverage was retrieved for this claim.",
+      "corpus": [
+        {
+          "id": "d24",
+          "contentType": "HEADLINE_ONLY",
+          "url": "https://www.example-science-news.net/unrelated-physics-story",
+          "title": "Unrelated physics story",
+          "snippet": "Physicists discussed unrelated particle collider upgrades and funding announcements this month.",
+          "publisher": "Example Science News",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "technology-001",
+      "idHint": "technology-001",
+      "domain": "technology",
+      "claim": "The company confirmed its new smartphone chip is manufactured using a 2-nanometer process.",
+      "gold_verdict": "VERIFIED",
+      "gold_evidence_reference": {
+        "url": "https://www.reuters.com/technology/2nm-chip-confirmed",
+        "title": "Chipmaker confirms 2nm process",
+        "publisher": "Reuters"
+      },
+      "evidence_explanation": "Two independent major-tech-news sources confirm the manufacturing process.",
+      "corpus": [
+        {
+          "id": "d25",
+          "contentType": "SUMMARY",
+          "url": "https://www.reuters.com/technology/2nm-chip-confirmed",
+          "title": "Chipmaker confirms 2nm process",
+          "snippet": "The company confirmed its new smartphone chip is manufactured using a 2-nanometer process, according to official technical specifications.",
+          "publisher": "Reuters",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        },
+        {
+          "id": "d26",
+          "contentType": "SUMMARY",
+          "url": "https://www.theverge.com/2nm-chip-verified",
+          "title": "2nm chip claim verified",
+          "snippet": "Independent teardown analysis verified and corroborated the 2-nanometer manufacturing process.",
+          "publisher": "The Verge",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "technology-002",
+      "idHint": "technology-002",
+      "domain": "technology",
+      "claim": "A viral post claims a popular messaging app secretly sells private messages to advertisers.",
+      "gold_verdict": "REFUTED",
+      "gold_evidence_reference": {
+        "url": "https://www.reuters.com/technology/messaging-app-denies-selling-messages",
+        "title": "App denies selling private messages",
+        "publisher": "Reuters"
+      },
+      "evidence_explanation": "Two independent outlets report the company denied and the claim was debunked by security audits.",
+      "corpus": [
+        {
+          "id": "d27",
+          "contentType": "SUMMARY",
+          "url": "https://www.reuters.com/technology/messaging-app-denies-selling-messages",
+          "title": "App denies selling private messages",
+          "snippet": "The company denied the claim that it sells private messages to advertisers, calling the viral post false and misleading.",
+          "publisher": "Reuters",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        },
+        {
+          "id": "d28",
+          "contentType": "SUMMARY",
+          "url": "https://www.wired.com/story/messaging-app-audit-debunks-claim",
+          "title": "Security audit debunks messaging claim",
+          "snippet": "An independent security audit debunked the claim, finding no evidence that messages were sold to advertisers.",
+          "publisher": "Wired",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "technology-003",
+      "idHint": "technology-003",
+      "domain": "technology",
+      "claim": "A startup claims its new AI model outperforms all existing models on every benchmark.",
+      "gold_verdict": "INSUFFICIENT_EVIDENCE",
+      "gold_evidence_reference": null,
+      "evidence_explanation": "No independent benchmark verification was retrieved for this specific claim.",
+      "corpus": [
+        {
+          "id": "d29",
+          "contentType": "HEADLINE_ONLY",
+          "url": "https://www.example-tech-blog.net/unrelated-ai-news",
+          "title": "Unrelated AI funding news",
+          "snippet": "Several unrelated AI startups announced new funding rounds this week, unrelated to any specific benchmark claim.",
+          "publisher": "Example Tech Blog",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "technology-004",
+      "idHint": "technology-004",
+      "domain": "technology",
+      "claim": "Reports say the social media platform outage was caused by a cyberattack.",
+      "gold_verdict": "CONFLICTED",
+      "gold_evidence_reference": null,
+      "evidence_explanation": "One independent outlet confirms a cyberattack while another independent outlet reports the company denies it and attributes it to a configuration error.",
+      "corpus": [
+        {
+          "id": "d30",
+          "contentType": "SUMMARY",
+          "url": "https://www.bbc.com/news/outage-cyberattack-confirmed",
+          "title": "Outage confirmed as cyberattack",
+          "snippet": "Security researchers confirmed the outage was caused by a cyberattack, according to official incident data.",
+          "publisher": "BBC",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        },
+        {
+          "id": "d31",
+          "contentType": "SUMMARY",
+          "url": "https://www.techcrunch.com/outage-company-denies-cyberattack",
+          "title": "Company denies cyberattack, cites config error",
+          "snippet": "The company denied the cyberattack claim as false, stating the outage was caused by an internal configuration error instead.",
+          "publisher": "TechCrunch",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "technology-005",
+      "idHint": "technology-005",
+      "domain": "technology",
+      "claim": "The regulator confirmed the tech company will pay a record antitrust fine.",
+      "gold_verdict": "VERIFIED",
+      "gold_evidence_reference": {
+        "url": "https://www.reuters.com/technology/antitrust-fine-confirmed",
+        "title": "Regulator confirms record antitrust fine",
+        "publisher": "Reuters"
+      },
+      "evidence_explanation": "Two independent major-news sources confirm the official fine.",
+      "corpus": [
+        {
+          "id": "d32",
+          "contentType": "SUMMARY",
+          "url": "https://www.reuters.com/technology/antitrust-fine-confirmed",
+          "title": "Regulator confirms record antitrust fine",
+          "snippet": "The regulator confirmed the tech company will pay a record antitrust fine, according to official government data.",
+          "publisher": "Reuters",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        },
+        {
+          "id": "d33",
+          "contentType": "SUMMARY",
+          "url": "https://www.ft.com/content/antitrust-fine-verified",
+          "title": "Antitrust fine verified by regulator filing",
+          "snippet": "Official filings verified and corroborated the record antitrust fine imposed on the company.",
+          "publisher": "Financial Times",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "technology-006",
+      "idHint": "technology-006",
+      "domain": "technology",
+      "claim": "An old rumor from 2019 claims a major OS update will brick millions of devices.",
+      "gold_verdict": "REFUTED",
+      "gold_evidence_reference": {
+        "url": "https://www.theverge.com/os-update-brick-claim-debunked",
+        "title": "OS update \"bricking\" claim debunked",
+        "publisher": "The Verge"
+      },
+      "evidence_explanation": "The claim was debunked by two independent tech outlets; though the coverage is now stale, the refutation stands.",
+      "corpus": [
+        {
+          "id": "d34",
+          "contentType": "SUMMARY",
+          "url": "https://www.theverge.com/os-update-brick-claim-debunked",
+          "title": "OS update \"bricking\" claim debunked",
+          "snippet": "The claim that the update would brick millions of devices was debunked as false; the company confirmed no widespread device failures occurred.",
+          "publisher": "The Verge",
+          "publishedAt": "2019-03-01T00:00:00.000Z"
+        },
+        {
+          "id": "d35",
+          "contentType": "SUMMARY",
+          "url": "https://www.wired.com/story/os-update-rumor-refuted",
+          "title": "Bricking rumor refuted",
+          "snippet": "Independent testing refuted the bricking rumor, finding no evidence that devices were damaged by the update.",
+          "publisher": "Wired",
+          "publishedAt": "2019-03-01T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "technology-007",
+      "idHint": "technology-007",
+      "domain": "technology",
+      "claim": "A niche forum post claims a specific router model has a hidden backdoor.",
+      "gold_verdict": "INSUFFICIENT_EVIDENCE",
+      "gold_evidence_reference": null,
+      "evidence_explanation": "No independent security research addressing this specific model was retrieved.",
+      "corpus": [
+        {
+          "id": "d36",
+          "contentType": "HEADLINE_ONLY",
+          "url": "https://www.example-security-blog.net/unrelated-router-news",
+          "title": "Unrelated router firmware news",
+          "snippet": "The manufacturer released an unrelated firmware update improving Wi-Fi range for a different product line.",
+          "publisher": "Example Security Blog",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "finance-001",
+      "idHint": "finance-001",
+      "domain": "finance",
+      "claim": "The central bank confirmed it raised interest rates by half a percentage point.",
+      "gold_verdict": "VERIFIED",
+      "gold_evidence_reference": {
+        "url": "https://www.bloomberg.com/news/rate-hike-confirmed",
+        "title": "Central bank confirms rate hike",
+        "publisher": "Bloomberg"
+      },
+      "evidence_explanation": "Two independent major financial-news outlets confirm the official rate decision.",
+      "corpus": [
+        {
+          "id": "d37",
+          "contentType": "SUMMARY",
+          "url": "https://www.bloomberg.com/news/rate-hike-confirmed",
+          "title": "Central bank confirms rate hike",
+          "snippet": "The central bank confirmed it raised interest rates by half a percentage point, according to official policy statements.",
+          "publisher": "Bloomberg",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        },
+        {
+          "id": "d38",
+          "contentType": "SUMMARY",
+          "url": "https://www.reuters.com/markets/rate-hike-verified",
+          "title": "Rate hike verified by policy minutes",
+          "snippet": "Meeting minutes verified and corroborated the half-point interest rate increase.",
+          "publisher": "Reuters",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "finance-002",
+      "idHint": "finance-002",
+      "domain": "finance",
+      "claim": "A social media post claims a major bank is secretly insolvent and about to collapse.",
+      "gold_verdict": "REFUTED",
+      "gold_evidence_reference": {
+        "url": "https://www.reuters.com/business/bank-insolvency-rumor-denied",
+        "title": "Bank denies insolvency rumor",
+        "publisher": "Reuters"
+      },
+      "evidence_explanation": "Two independent outlets report the claim was denied and debunked with audited capital reserve data.",
+      "corpus": [
+        {
+          "id": "d39",
+          "contentType": "SUMMARY",
+          "url": "https://www.reuters.com/business/bank-insolvency-rumor-denied",
+          "title": "Bank denies insolvency rumor",
+          "snippet": "The bank denied the insolvency claim as false, and regulators debunked the rumor citing audited capital reserves.",
+          "publisher": "Reuters",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        },
+        {
+          "id": "d40",
+          "contentType": "SUMMARY",
+          "url": "https://www.ft.com/content/bank-collapse-claim-refuted",
+          "title": "Bank collapse claim refuted by regulator",
+          "snippet": "The financial regulator refuted the collapse claim, confirming there is no evidence of insolvency.",
+          "publisher": "Financial Times",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "finance-003",
+      "idHint": "finance-003",
+      "domain": "finance",
+      "claim": "A newsletter claims a specific small-cap stock will 10x within a month.",
+      "gold_verdict": "INSUFFICIENT_EVIDENCE",
+      "gold_evidence_reference": null,
+      "evidence_explanation": "No independent financial reporting was retrieved evaluating this specific speculative claim.",
+      "corpus": [
+        {
+          "id": "d41",
+          "contentType": "HEADLINE_ONLY",
+          "url": "https://www.example-finance-blog.net/unrelated-market-roundup",
+          "title": "Unrelated weekly market roundup",
+          "snippet": "The roundup covered unrelated large-cap earnings reports and macroeconomic indicators for the week.",
+          "publisher": "Example Finance Blog",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "finance-004",
+      "idHint": "finance-004",
+      "domain": "finance",
+      "claim": "Analysts report the housing market is heading toward a sharp price correction this year.",
+      "gold_verdict": "CONFLICTED",
+      "gold_evidence_reference": null,
+      "evidence_explanation": "One independent outlet confirms analysts predicting a correction while another independent outlet reports analysts dispute this and see continued growth.",
+      "corpus": [
+        {
+          "id": "d42",
+          "contentType": "SUMMARY",
+          "url": "https://www.bloomberg.com/news/housing-correction-confirmed",
+          "title": "Analysts confirm housing correction risk",
+          "snippet": "Analysts confirmed the housing market is heading toward a sharp price correction, according to official market data.",
+          "publisher": "Bloomberg",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        },
+        {
+          "id": "d43",
+          "contentType": "SUMMARY",
+          "url": "https://www.reuters.com/business/housing-correction-disputed",
+          "title": "Housing correction claim disputed",
+          "snippet": "Other analysts disputed the correction forecast as incorrect, contesting the data and predicting continued price growth instead.",
+          "publisher": "Reuters",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "finance-005",
+      "idHint": "finance-005",
+      "domain": "finance",
+      "claim": "The government confirmed a new tax rebate program for small businesses.",
+      "gold_verdict": "VERIFIED",
+      "gold_evidence_reference": {
+        "url": "https://www.reuters.com/business/tax-rebate-confirmed",
+        "title": "Government confirms small-business tax rebate",
+        "publisher": "Reuters"
+      },
+      "evidence_explanation": "Two independent major-news outlets confirm the official program.",
+      "corpus": [
+        {
+          "id": "d44",
+          "contentType": "SUMMARY",
+          "url": "https://www.reuters.com/business/tax-rebate-confirmed",
+          "title": "Government confirms small-business tax rebate",
+          "snippet": "The government confirmed a new tax rebate program for small businesses, according to official treasury data.",
+          "publisher": "Reuters",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        },
+        {
+          "id": "d45",
+          "contentType": "SUMMARY",
+          "url": "https://www.bloomberg.com/news/tax-rebate-verified",
+          "title": "Small-business rebate program verified",
+          "snippet": "Treasury filings verified and corroborated the new tax rebate program for small businesses.",
+          "publisher": "Bloomberg",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "finance-006",
+      "idHint": "finance-006",
+      "domain": "finance",
+      "claim": "A chain email claims a cryptocurrency exchange is offering guaranteed 500% returns.",
+      "gold_verdict": "REFUTED",
+      "gold_evidence_reference": {
+        "url": "https://www.reuters.com/technology/crypto-guaranteed-returns-scam-debunked",
+        "title": "Regulator debunks guaranteed-return crypto scheme",
+        "publisher": "Reuters"
+      },
+      "evidence_explanation": "Two independent sources debunk the guaranteed-return claim as a fabricated scam.",
+      "corpus": [
+        {
+          "id": "d46",
+          "contentType": "SUMMARY",
+          "url": "https://www.reuters.com/technology/crypto-guaranteed-returns-scam-debunked",
+          "title": "Regulator debunks guaranteed-return crypto scheme",
+          "snippet": "Regulators debunked the guaranteed 500% return claim as a fabricated scam, confirming it is false and misleading.",
+          "publisher": "Reuters",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        },
+        {
+          "id": "d47",
+          "contentType": "SUMMARY",
+          "url": "https://www.bbc.com/news/crypto-scam-refuted",
+          "title": "Crypto guaranteed-return scheme refuted",
+          "snippet": "Financial watchdogs refuted the scheme, finding no evidence that any such guaranteed returns exist.",
+          "publisher": "BBC",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "finance-007",
+      "idHint": "finance-007",
+      "domain": "finance",
+      "claim": "A regional credit union claims record profits this quarter driven by a niche loan product.",
+      "gold_verdict": "INSUFFICIENT_EVIDENCE",
+      "gold_evidence_reference": null,
+      "evidence_explanation": "No independent financial reporting on this specific regional institution was retrieved.",
+      "corpus": [
+        {
+          "id": "d48",
+          "contentType": "HEADLINE_ONLY",
+          "url": "https://www.example-finance-news.net/unrelated-national-bank-story",
+          "title": "Unrelated national bank earnings",
+          "snippet": "A large national bank reported unrelated quarterly earnings figures for its mortgage division.",
+          "publisher": "Example Finance News",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "health-001",
+      "idHint": "health-001",
+      "domain": "health",
+      "claim": "Health officials confirmed the new vaccine reduces hospitalization risk by 80 percent.",
+      "gold_verdict": "VERIFIED",
+      "gold_evidence_reference": {
+        "url": "https://www.who.int/news/vaccine-efficacy-confirmed",
+        "title": "WHO confirms vaccine efficacy data",
+        "publisher": "World Health Organization"
+      },
+      "evidence_explanation": "Two independent official/scientific sources confirm the clinical trial data.",
+      "corpus": [
+        {
+          "id": "d49",
+          "contentType": "SUMMARY",
+          "url": "https://www.who.int/news/vaccine-efficacy-confirmed",
+          "title": "WHO confirms vaccine efficacy data",
+          "snippet": "Health officials confirmed the new vaccine reduces hospitalization risk by 80 percent, according to official clinical trial data.",
+          "publisher": "World Health Organization",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        },
+        {
+          "id": "d50",
+          "contentType": "SUMMARY",
+          "url": "https://www.nature.com/articles/vaccine-trial-verified",
+          "title": "Vaccine trial results verified",
+          "snippet": "Independent reviewers verified and corroborated the 80 percent hospitalization risk reduction.",
+          "publisher": "Nature",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "health-002",
+      "idHint": "health-002",
+      "domain": "health",
+      "claim": "A viral video claims a common painkiller causes infertility within weeks of use.",
+      "gold_verdict": "REFUTED",
+      "gold_evidence_reference": {
+        "url": "https://www.who.int/news/painkiller-infertility-claim-debunked",
+        "title": "WHO debunks painkiller infertility claim",
+        "publisher": "World Health Organization"
+      },
+      "evidence_explanation": "Two independent official/scientific sources debunk the claim as false.",
+      "corpus": [
+        {
+          "id": "d51",
+          "contentType": "SUMMARY",
+          "url": "https://www.who.int/news/painkiller-infertility-claim-debunked",
+          "title": "WHO debunks painkiller infertility claim",
+          "snippet": "The claim that the painkiller causes infertility was debunked as false; no evidence that supports the viral video was found.",
+          "publisher": "World Health Organization",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        },
+        {
+          "id": "d52",
+          "contentType": "SUMMARY",
+          "url": "https://www.nih.gov/news/painkiller-claim-refuted",
+          "title": "Infertility claim refuted by clinical review",
+          "snippet": "A clinical review refuted the infertility claim, confirming it is incorrect and unsupported by any trial data.",
+          "publisher": "National Institutes of Health",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "health-003",
+      "idHint": "health-003",
+      "domain": "health",
+      "claim": "A wellness influencer claims a specific herbal tea cures type 2 diabetes.",
+      "gold_verdict": "REFUTED",
+      "gold_evidence_reference": {
+        "url": "https://www.who.int/news/herbal-tea-diabetes-claim-debunked",
+        "title": "Health authorities debunk herbal tea diabetes cure claim",
+        "publisher": "World Health Organization"
+      },
+      "evidence_explanation": "Two independent health authorities debunk the unproven cure claim.",
+      "corpus": [
+        {
+          "id": "d53",
+          "contentType": "SUMMARY",
+          "url": "https://www.who.int/news/herbal-tea-diabetes-claim-debunked",
+          "title": "Health authorities debunk herbal tea diabetes cure claim",
+          "snippet": "The claim that an herbal tea cures type 2 diabetes was debunked as false and unproven by clinical evidence.",
+          "publisher": "World Health Organization",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        },
+        {
+          "id": "d54",
+          "contentType": "SUMMARY",
+          "url": "https://www.nih.gov/news/diabetes-cure-claim-refuted",
+          "title": "Diabetes cure claim refuted",
+          "snippet": "Researchers refuted the claim, finding no evidence that the tea has any effect on diabetes.",
+          "publisher": "National Institutes of Health",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "health-004",
+      "idHint": "health-004",
+      "domain": "health",
+      "claim": "A regional hospital claims a new surgical technique cuts recovery time in half.",
+      "gold_verdict": "INSUFFICIENT_EVIDENCE",
+      "gold_evidence_reference": null,
+      "evidence_explanation": "No independent peer-reviewed coverage of this specific technique was retrieved.",
+      "corpus": [
+        {
+          "id": "d55",
+          "contentType": "HEADLINE_ONLY",
+          "url": "https://www.example-health-news.net/unrelated-hospital-story",
+          "title": "Unrelated hospital funding story",
+          "snippet": "The hospital announced unrelated funding for a new emergency room wing.",
+          "publisher": "Example Health News",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "health-005",
+      "idHint": "health-005",
+      "domain": "health",
+      "claim": "Public health data show flu cases rising sharply this winter compared to last year.",
+      "gold_verdict": "CONFLICTED",
+      "gold_evidence_reference": null,
+      "evidence_explanation": "One independent public-health source confirms a sharp rise while another independent source disputes the comparison methodology.",
+      "corpus": [
+        {
+          "id": "d56",
+          "contentType": "SUMMARY",
+          "url": "https://www.who.int/news/flu-cases-rising-confirmed",
+          "title": "Flu cases confirmed rising sharply",
+          "snippet": "Public health data confirmed flu cases are rising sharply this winter, according to official surveillance figures.",
+          "publisher": "World Health Organization",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        },
+        {
+          "id": "d57",
+          "contentType": "SUMMARY",
+          "url": "https://www.nih.gov/news/flu-comparison-disputed",
+          "title": "Flu case comparison disputed",
+          "snippet": "Researchers disputed the year-over-year comparison as misleading, contesting the surveillance methodology used.",
+          "publisher": "National Institutes of Health",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "health-006",
+      "idHint": "health-006",
+      "domain": "health",
+      "claim": "Regulators confirmed a recalled batch of infant formula was contaminated with bacteria.",
+      "gold_verdict": "VERIFIED",
+      "gold_evidence_reference": {
+        "url": "https://www.reuters.com/business/formula-recall-confirmed",
+        "title": "Regulators confirm formula contamination",
+        "publisher": "Reuters"
+      },
+      "evidence_explanation": "Two independent official/major-news sources confirm the contamination finding.",
+      "corpus": [
+        {
+          "id": "d58",
+          "contentType": "SUMMARY",
+          "url": "https://www.reuters.com/business/formula-recall-confirmed",
+          "title": "Regulators confirm formula contamination",
+          "snippet": "Regulators confirmed the recalled batch of infant formula was contaminated with bacteria, according to official lab data.",
+          "publisher": "Reuters",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        },
+        {
+          "id": "d59",
+          "contentType": "SUMMARY",
+          "url": "https://www.who.int/news/formula-contamination-verified",
+          "title": "Formula contamination verified",
+          "snippet": "Independent lab testing verified and corroborated the bacterial contamination in the recalled batch.",
+          "publisher": "World Health Organization",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "health-007",
+      "idHint": "health-007",
+      "domain": "health",
+      "claim": "A supplement company claims its product boosts immunity by 300 percent.",
+      "gold_verdict": "INSUFFICIENT_EVIDENCE",
+      "gold_evidence_reference": null,
+      "evidence_explanation": "No independent clinical evaluation of this specific supplement claim was retrieved.",
+      "corpus": [
+        {
+          "id": "d60",
+          "contentType": "HEADLINE_ONLY",
+          "url": "https://www.example-wellness-blog.net/unrelated-supplement-news",
+          "title": "Unrelated supplement market news",
+          "snippet": "The wellness industry saw unrelated growth in a different product category this quarter.",
+          "publisher": "Example Wellness Blog",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "climate-001",
+      "idHint": "climate-001",
+      "domain": "climate",
+      "claim": "Scientists confirmed last year was the hottest year on record globally.",
+      "gold_verdict": "VERIFIED",
+      "gold_evidence_reference": {
+        "url": "https://www.nature.com/articles/hottest-year-confirmed",
+        "title": "Hottest year on record confirmed",
+        "publisher": "Nature"
+      },
+      "evidence_explanation": "Two independent scientific/major-news sources confirm the record temperature data.",
+      "corpus": [
+        {
+          "id": "d61",
+          "contentType": "SUMMARY",
+          "url": "https://www.nature.com/articles/hottest-year-confirmed",
+          "title": "Hottest year on record confirmed",
+          "snippet": "Scientists confirmed last year was the hottest year on record globally, according to official temperature data.",
+          "publisher": "Nature",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        },
+        {
+          "id": "d62",
+          "contentType": "SUMMARY",
+          "url": "https://www.reuters.com/business/environment/hottest-year-verified",
+          "title": "Record heat verified by climate agencies",
+          "snippet": "Independent climate agencies verified and corroborated the record global temperatures.",
+          "publisher": "Reuters",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "climate-002",
+      "idHint": "climate-002",
+      "domain": "climate",
+      "claim": "A viral post claims glaciers are actually growing worldwide, disproving climate change.",
+      "gold_verdict": "REFUTED",
+      "gold_evidence_reference": {
+        "url": "https://www.nature.com/articles/glacier-growth-claim-debunked",
+        "title": "Global glacier growth claim debunked",
+        "publisher": "Nature"
+      },
+      "evidence_explanation": "Two independent scientific sources debunk the claim using satellite measurement data.",
+      "corpus": [
+        {
+          "id": "d63",
+          "contentType": "SUMMARY",
+          "url": "https://www.nature.com/articles/glacier-growth-claim-debunked",
+          "title": "Global glacier growth claim debunked",
+          "snippet": "The claim that glaciers are growing worldwide was debunked as false; satellite data confirms continued net glacier loss.",
+          "publisher": "Nature",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        },
+        {
+          "id": "d64",
+          "contentType": "SUMMARY",
+          "url": "https://www.science.org/content/glacier-claim-refuted",
+          "title": "Glacier growth claim refuted by satellite data",
+          "snippet": "Satellite measurements refuted the growth claim, finding no evidence of worldwide glacier expansion.",
+          "publisher": "Science",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "climate-003",
+      "idHint": "climate-003",
+      "domain": "climate",
+      "claim": "A local advocacy group claims a specific factory is the single largest emitter in the region.",
+      "gold_verdict": "INSUFFICIENT_EVIDENCE",
+      "gold_evidence_reference": null,
+      "evidence_explanation": "No independent emissions audit of this specific factory was retrieved.",
+      "corpus": [
+        {
+          "id": "d65",
+          "contentType": "HEADLINE_ONLY",
+          "url": "https://www.example-environment-blog.net/unrelated-emissions-story",
+          "title": "Unrelated regional emissions report",
+          "snippet": "The report covered unrelated national emissions trends without naming any specific factory.",
+          "publisher": "Example Environment Blog",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "climate-004",
+      "idHint": "climate-004",
+      "domain": "climate",
+      "claim": "Researchers report a coral reef system is recovering faster than expected after bleaching.",
+      "gold_verdict": "CONFLICTED",
+      "gold_evidence_reference": null,
+      "evidence_explanation": "One independent source confirms faster recovery while another independent source disputes the recovery assessment.",
+      "corpus": [
+        {
+          "id": "d66",
+          "contentType": "SUMMARY",
+          "url": "https://www.nature.com/articles/reef-recovery-confirmed",
+          "title": "Coral reef recovery confirmed faster than expected",
+          "snippet": "Researchers confirmed the coral reef system is recovering faster than expected, according to official survey data.",
+          "publisher": "Nature",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        },
+        {
+          "id": "d67",
+          "contentType": "SUMMARY",
+          "url": "https://www.science.org/content/reef-recovery-disputed",
+          "title": "Reef recovery assessment disputed",
+          "snippet": "Other researchers disputed the recovery assessment as premature, contesting the survey methodology used.",
+          "publisher": "Science",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "climate-005",
+      "idHint": "climate-005",
+      "domain": "climate",
+      "claim": "The government confirmed a new national target to cut emissions 50 percent by 2035.",
+      "gold_verdict": "VERIFIED",
+      "gold_evidence_reference": {
+        "url": "https://www.reuters.com/business/environment/emissions-target-confirmed",
+        "title": "Government confirms 2035 emissions target",
+        "publisher": "Reuters"
+      },
+      "evidence_explanation": "Two independent major-news sources confirm the official policy target.",
+      "corpus": [
+        {
+          "id": "d68",
+          "contentType": "SUMMARY",
+          "url": "https://www.reuters.com/business/environment/emissions-target-confirmed",
+          "title": "Government confirms 2035 emissions target",
+          "snippet": "The government confirmed a new national target to cut emissions 50 percent by 2035, according to official policy documents.",
+          "publisher": "Reuters",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        },
+        {
+          "id": "d69",
+          "contentType": "SUMMARY",
+          "url": "https://www.theguardian.com/environment/emissions-target-verified",
+          "title": "Emissions target verified in policy filing",
+          "snippet": "Policy filings verified and corroborated the 50 percent emissions reduction target by 2035.",
+          "publisher": "The Guardian",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "climate-006",
+      "idHint": "climate-006",
+      "domain": "climate",
+      "claim": "An outdated report from 2019 claims a specific city will be underwater by 2025.",
+      "gold_verdict": "REFUTED",
+      "gold_evidence_reference": {
+        "url": "https://www.nature.com/articles/city-underwater-claim-debunked",
+        "title": "City \"underwater by 2025\" claim debunked",
+        "publisher": "Nature"
+      },
+      "evidence_explanation": "Two independent scientific sources debunked the specific timeline claim, though the coverage itself is now stale.",
+      "corpus": [
+        {
+          "id": "d70",
+          "contentType": "SUMMARY",
+          "url": "https://www.nature.com/articles/city-underwater-claim-debunked",
+          "title": "City \"underwater by 2025\" claim debunked",
+          "snippet": "The claim that the city would be underwater by 2025 was debunked as false and based on a misread sea-level model.",
+          "publisher": "Nature",
+          "publishedAt": "2019-03-01T00:00:00.000Z"
+        },
+        {
+          "id": "d71",
+          "contentType": "SUMMARY",
+          "url": "https://www.science.org/content/underwater-claim-refuted",
+          "title": "Underwater timeline claim refuted",
+          "snippet": "Climate scientists refuted the specific timeline, confirming the original claim misrepresented the underlying model.",
+          "publisher": "Science",
+          "publishedAt": "2019-03-01T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "climate-007",
+      "idHint": "climate-007",
+      "domain": "climate",
+      "claim": "A regional utility claims its new wind farm will power 200,000 homes.",
+      "gold_verdict": "INSUFFICIENT_EVIDENCE",
+      "gold_evidence_reference": null,
+      "evidence_explanation": "No independent verification of this specific capacity claim was retrieved.",
+      "corpus": [
+        {
+          "id": "d72",
+          "contentType": "HEADLINE_ONLY",
+          "url": "https://www.example-energy-news.net/unrelated-wind-story",
+          "title": "Unrelated wind energy market story",
+          "snippet": "The story covered unrelated wind turbine manufacturing trends in a different country.",
+          "publisher": "Example Energy News",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "history-001",
+      "idHint": "history-001",
+      "domain": "history",
+      "claim": "Archivists confirmed a newly discovered letter was authentically written by the historical figure in 1863.",
+      "gold_verdict": "VERIFIED",
+      "gold_evidence_reference": {
+        "url": "https://www.nytimes.com/history/letter-authenticity-confirmed",
+        "title": "Historical letter authenticity confirmed",
+        "publisher": "The New York Times"
+      },
+      "evidence_explanation": "Two independent sources confirm the archival authentication.",
+      "corpus": [
+        {
+          "id": "d73",
+          "contentType": "SUMMARY",
+          "url": "https://www.nytimes.com/history/letter-authenticity-confirmed",
+          "title": "Historical letter authenticity confirmed",
+          "snippet": "Archivists confirmed a newly discovered 1863 letter was authentically written by the historical figure, according to official forensic analysis.",
+          "publisher": "The New York Times",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        },
+        {
+          "id": "d74",
+          "contentType": "SUMMARY",
+          "url": "https://www.bbc.com/news/letter-verified-1863",
+          "title": "Letter dated 1863 verified as genuine",
+          "snippet": "Independent document examiners verified and corroborated the authenticity of the letter.",
+          "publisher": "BBC",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "history-002",
+      "idHint": "history-002",
+      "domain": "history",
+      "claim": "A popular meme claims a famous ancient monument was built in only three years.",
+      "gold_verdict": "REFUTED",
+      "gold_evidence_reference": {
+        "url": "https://www.nature.com/articles/monument-construction-claim-debunked",
+        "title": "Monument three-year construction claim debunked",
+        "publisher": "Nature"
+      },
+      "evidence_explanation": "Two independent sources debunk the timeline using archaeological evidence.",
+      "corpus": [
+        {
+          "id": "d75",
+          "contentType": "SUMMARY",
+          "url": "https://www.nature.com/articles/monument-construction-claim-debunked",
+          "title": "Monument three-year construction claim debunked",
+          "snippet": "The claim that the monument was built in three years was debunked as false; archaeological evidence indicates decades of construction.",
+          "publisher": "Nature",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        },
+        {
+          "id": "d76",
+          "contentType": "SUMMARY",
+          "url": "https://www.bbc.com/news/monument-timeline-refuted",
+          "title": "Monument construction timeline refuted",
+          "snippet": "Historians refuted the three-year timeline, confirming it is incorrect based on excavation records.",
+          "publisher": "BBC",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "history-003",
+      "idHint": "history-003",
+      "domain": "history",
+      "claim": "A local museum claims an artifact in its collection belonged to a specific minor noble family.",
+      "gold_verdict": "INSUFFICIENT_EVIDENCE",
+      "gold_evidence_reference": null,
+      "evidence_explanation": "No independent provenance research on this specific artifact was retrieved.",
+      "corpus": [
+        {
+          "id": "d77",
+          "contentType": "HEADLINE_ONLY",
+          "url": "https://www.example-history-blog.net/unrelated-museum-story",
+          "title": "Unrelated museum exhibit story",
+          "snippet": "The museum announced an unrelated new exhibit on regional pottery traditions.",
+          "publisher": "Example History Blog",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "history-004",
+      "idHint": "history-004",
+      "domain": "history",
+      "claim": "Historians report the cause of a centuries-old shipwreck has finally been identified.",
+      "gold_verdict": "CONFLICTED",
+      "gold_evidence_reference": null,
+      "evidence_explanation": "One independent source confirms the identified cause while another independent source disputes the conclusion.",
+      "corpus": [
+        {
+          "id": "d78",
+          "contentType": "SUMMARY",
+          "url": "https://www.nytimes.com/history/shipwreck-cause-confirmed",
+          "title": "Shipwreck cause confirmed after centuries",
+          "snippet": "Historians confirmed the cause of the centuries-old shipwreck, according to official marine archaeology data.",
+          "publisher": "The New York Times",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        },
+        {
+          "id": "d79",
+          "contentType": "SUMMARY",
+          "url": "https://www.bbc.com/news/shipwreck-cause-disputed",
+          "title": "Shipwreck cause conclusion disputed",
+          "snippet": "Other historians disputed the conclusion as premature, contesting the marine archaeology methodology used.",
+          "publisher": "BBC",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "history-005",
+      "idHint": "history-005",
+      "domain": "history",
+      "claim": "Records confirmed the treaty was signed in 1848, not 1850 as commonly believed.",
+      "gold_verdict": "VERIFIED",
+      "gold_evidence_reference": {
+        "url": "https://www.nytimes.com/history/treaty-date-confirmed",
+        "title": "Treaty signing date confirmed as 1848",
+        "publisher": "The New York Times"
+      },
+      "evidence_explanation": "Two independent sources confirm the corrected date using archival records.",
+      "corpus": [
+        {
+          "id": "d80",
+          "contentType": "SUMMARY",
+          "url": "https://www.nytimes.com/history/treaty-date-confirmed",
+          "title": "Treaty signing date confirmed as 1848",
+          "snippet": "Archival records confirmed the treaty was signed in 1848, not 1850 as commonly believed, according to official government archives.",
+          "publisher": "The New York Times",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        },
+        {
+          "id": "d81",
+          "contentType": "SUMMARY",
+          "url": "https://www.bbc.com/news/treaty-date-verified",
+          "title": "Treaty date verified by archivists",
+          "snippet": "Independent archivists verified and corroborated the 1848 signing date.",
+          "publisher": "BBC",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "history-006",
+      "idHint": "history-006",
+      "domain": "history",
+      "claim": "A viral thread claims a well-known historical battle never actually happened.",
+      "gold_verdict": "REFUTED",
+      "gold_evidence_reference": {
+        "url": "https://www.nytimes.com/history/battle-denial-debunked",
+        "title": "Battle-denial claim debunked by historians",
+        "publisher": "The New York Times"
+      },
+      "evidence_explanation": "Two independent sources debunk the denial claim using extensive documentary evidence.",
+      "corpus": [
+        {
+          "id": "d82",
+          "contentType": "SUMMARY",
+          "url": "https://www.nytimes.com/history/battle-denial-debunked",
+          "title": "Battle-denial claim debunked by historians",
+          "snippet": "The claim that the battle never happened was debunked as false; extensive documentary evidence confirms the event occurred.",
+          "publisher": "The New York Times",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        },
+        {
+          "id": "d83",
+          "contentType": "SUMMARY",
+          "url": "https://www.bbc.com/news/battle-claim-refuted",
+          "title": "Battle occurrence claim refuted",
+          "snippet": "Historians refuted the denial, confirming there is no evidence supporting the claim that the battle never happened.",
+          "publisher": "BBC",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "history-007",
+      "idHint": "history-007",
+      "domain": "history",
+      "claim": "A regional historical society claims a specific building is the oldest in the country.",
+      "gold_verdict": "INSUFFICIENT_EVIDENCE",
+      "gold_evidence_reference": null,
+      "evidence_explanation": "No independent architectural dating study of this specific building was retrieved.",
+      "corpus": [
+        {
+          "id": "d84",
+          "contentType": "HEADLINE_ONLY",
+          "url": "https://www.example-heritage-blog.net/unrelated-building-story",
+          "title": "Unrelated heritage preservation story",
+          "snippet": "The society announced unrelated funding for preservation of a different historical site.",
+          "publisher": "Example Heritage Blog",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "current-events-001",
+      "idHint": "current-events-001",
+      "domain": "current_events",
+      "claim": "Officials confirmed a magnitude 6.5 earthquake struck the coastal region overnight.",
+      "gold_verdict": "VERIFIED",
+      "gold_evidence_reference": {
+        "url": "https://www.reuters.com/world/earthquake-confirmed",
+        "title": "Magnitude 6.5 earthquake confirmed",
+        "publisher": "Reuters"
+      },
+      "evidence_explanation": "Two independent major-news outlets confirm the official seismic data.",
+      "corpus": [
+        {
+          "id": "d85",
+          "contentType": "SUMMARY",
+          "url": "https://www.reuters.com/world/earthquake-confirmed",
+          "title": "Magnitude 6.5 earthquake confirmed",
+          "snippet": "Officials confirmed a magnitude 6.5 earthquake struck the coastal region overnight, according to official seismic monitoring data.",
+          "publisher": "Reuters",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        },
+        {
+          "id": "d86",
+          "contentType": "SUMMARY",
+          "url": "https://apnews.com/article/earthquake-verified",
+          "title": "Coastal earthquake verified by seismologists",
+          "snippet": "Independent seismologists verified and corroborated the magnitude 6.5 reading.",
+          "publisher": "Associated Press",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "current-events-002",
+      "idHint": "current-events-002",
+      "domain": "current_events",
+      "claim": "A widely circulated video claims to show a riot at a major airport this week, but it is actually old footage.",
+      "gold_verdict": "REFUTED",
+      "gold_evidence_reference": {
+        "url": "https://apnews.com/article/airport-riot-video-debunked",
+        "title": "Airport riot video debunked as old footage",
+        "publisher": "Associated Press"
+      },
+      "evidence_explanation": "Two independent outlets debunk the video as false, unrelated old footage.",
+      "corpus": [
+        {
+          "id": "d87",
+          "contentType": "SUMMARY",
+          "url": "https://apnews.com/article/airport-riot-video-debunked",
+          "title": "Airport riot video debunked as old footage",
+          "snippet": "The viral video claiming to show this week’s airport riot was debunked as false; it is actually old, unrelated footage from years earlier.",
+          "publisher": "Associated Press",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        },
+        {
+          "id": "d88",
+          "contentType": "SUMMARY",
+          "url": "https://www.reuters.com/fact-check/airport-video-refuted",
+          "title": "Airport video claim refuted",
+          "snippet": "Fact-checkers refuted the claim, confirming no such riot occurred this week and the footage is misleading.",
+          "publisher": "Reuters",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "current-events-003",
+      "idHint": "current-events-003",
+      "domain": "current_events",
+      "claim": "Local residents claim a specific bridge closure is due to a hidden structural failure.",
+      "gold_verdict": "INSUFFICIENT_EVIDENCE",
+      "gold_evidence_reference": null,
+      "evidence_explanation": "No independent engineering report on this specific bridge closure was retrieved.",
+      "corpus": [
+        {
+          "id": "d89",
+          "contentType": "HEADLINE_ONLY",
+          "url": "https://www.example-local-news.net/unrelated-traffic-story",
+          "title": "Unrelated traffic advisory",
+          "snippet": "The advisory covered unrelated road construction in a different part of the city.",
+          "publisher": "Example Local News",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "current-events-004",
+      "idHint": "current-events-004",
+      "domain": "current_events",
+      "claim": "Reports say the music festival was cancelled due to severe weather.",
+      "gold_verdict": "CONFLICTED",
+      "gold_evidence_reference": null,
+      "evidence_explanation": "One independent outlet confirms cancellation while another independent outlet reports organizers dispute the cancellation and say it was postponed, not cancelled.",
+      "corpus": [
+        {
+          "id": "d90",
+          "contentType": "SUMMARY",
+          "url": "https://www.bbc.com/news/festival-cancelled-confirmed",
+          "title": "Festival cancellation confirmed",
+          "snippet": "Organizers confirmed the music festival was cancelled due to severe weather, according to official festival statements.",
+          "publisher": "BBC",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        },
+        {
+          "id": "d91",
+          "contentType": "SUMMARY",
+          "url": "https://apnews.com/article/festival-postponed-disputed",
+          "title": "Festival organizers dispute cancellation, cite postponement",
+          "snippet": "Organizers disputed the cancellation reports as incorrect, stating the event was merely postponed rather than cancelled.",
+          "publisher": "Associated Press",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "current-events-005",
+      "idHint": "current-events-005",
+      "domain": "current_events",
+      "claim": "Authorities confirmed a wildfire has been fully contained after burning 5,000 acres.",
+      "gold_verdict": "VERIFIED",
+      "gold_evidence_reference": {
+        "url": "https://apnews.com/article/wildfire-contained-confirmed",
+        "title": "Wildfire containment confirmed",
+        "publisher": "Associated Press"
+      },
+      "evidence_explanation": "Two independent major-news outlets confirm the official containment status.",
+      "corpus": [
+        {
+          "id": "d92",
+          "contentType": "SUMMARY",
+          "url": "https://apnews.com/article/wildfire-contained-confirmed",
+          "title": "Wildfire containment confirmed",
+          "snippet": "Authorities confirmed the wildfire has been fully contained after burning 5,000 acres, according to official fire department data.",
+          "publisher": "Associated Press",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        },
+        {
+          "id": "d93",
+          "contentType": "SUMMARY",
+          "url": "https://www.reuters.com/world/wildfire-verified-contained",
+          "title": "Wildfire containment verified",
+          "snippet": "Independent fire monitoring verified and corroborated the full containment of the wildfire.",
+          "publisher": "Reuters",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "current-events-006",
+      "idHint": "current-events-006",
+      "domain": "current_events",
+      "claim": "A rumor from years ago claims a specific celebrity secretly passed away and is being replaced by a body double.",
+      "gold_verdict": "REFUTED",
+      "gold_evidence_reference": {
+        "url": "https://apnews.com/article/celebrity-death-rumor-debunked",
+        "title": "Celebrity \"body double\" rumor debunked",
+        "publisher": "Associated Press"
+      },
+      "evidence_explanation": "Two independent outlets debunk the long-running rumor as false.",
+      "corpus": [
+        {
+          "id": "d94",
+          "contentType": "SUMMARY",
+          "url": "https://apnews.com/article/celebrity-death-rumor-debunked",
+          "title": "Celebrity \"body double\" rumor debunked",
+          "snippet": "The rumor that the celebrity secretly passed away and was replaced by a body double was debunked as false, with no evidence supporting it.",
+          "publisher": "Associated Press",
+          "publishedAt": "2019-03-01T00:00:00.000Z"
+        },
+        {
+          "id": "d95",
+          "contentType": "SUMMARY",
+          "url": "https://www.reuters.com/fact-check/celebrity-rumor-refuted",
+          "title": "Celebrity death rumor refuted",
+          "snippet": "Fact-checkers refuted the claim, confirming public appearances contradict the debunked rumor.",
+          "publisher": "Reuters",
+          "publishedAt": "2019-03-01T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "current-events-007",
+      "idHint": "current-events-007",
+      "domain": "current_events",
+      "claim": "A neighborhood group claims a new zoning change will double local traffic within a year.",
+      "gold_verdict": "INSUFFICIENT_EVIDENCE",
+      "gold_evidence_reference": null,
+      "evidence_explanation": "No independent traffic study addressing this specific zoning claim was retrieved.",
+      "corpus": [
+        {
+          "id": "d96",
+          "contentType": "HEADLINE_ONLY",
+          "url": "https://www.example-local-news.net/unrelated-zoning-story",
+          "title": "Unrelated zoning meeting recap",
+          "snippet": "The recap covered an unrelated zoning discussion in a different neighborhood.",
+          "publisher": "Example Local News",
+          "publishedAt": "2026-08-20T00:00:00.000Z"
+        }
+      ]
+    }
+  ]
+}
