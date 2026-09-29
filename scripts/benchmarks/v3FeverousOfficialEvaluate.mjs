@@ -12,10 +12,13 @@ async function main() {
     await run("git", ["clone", "--depth", "50", "https://github.com/Raldir/FEVEROUS.git", "repo"], tmp);
     await run("git", ["checkout", "32b68ce4e33c53f34ae2e6d88b51cd073ab85ab6"], path.join(tmp, "repo"));
     const evaluator = path.join(tmp, "repo", "src", "feverous", "evaluation", "evaluate.py");
-    await run("python3", [evaluator, "--input_path", input], tmp, { ...process.env, PYTHONPATH: path.join(tmp, "repo", "src") });
+    const scorerInput = path.join(tmp, "predictions.jsonl");
+    const predictedLines = (await fs.readFile(input, "utf8")).split(/\r?\n/).filter(Boolean);
+    await fs.writeFile(scorerInput, JSON.stringify({ id: "header" }) + "\n" + predictedLines.join("\n") + "\n");
+    await run("python3", [evaluator, "--input_path", scorerInput], tmp, { ...process.env, PYTHONPATH: path.join(tmp, "repo", "src") });
     const out = path.resolve(arg("output") || "artifacts/v3/feverous/official-scorer-run.json");
     await fs.mkdir(path.dirname(out), { recursive: true });
-    await fs.writeFile(out, JSON.stringify({ benchmark_id: "feverous", protocol_version: "truthlens-v3-benchmark-protocol-v1", evaluator_source: "https://github.com/Raldir/FEVEROUS/blob/main/src/feverous/evaluation/evaluate.py", input, generated_at: new Date().toISOString() }, null, 2) + "\n");
+    await fs.writeFile(out, JSON.stringify({ benchmark_id: "feverous", protocol_version: "truthlens-v3-benchmark-protocol-v1", evaluator_source: "https://github.com/Raldir/FEVEROUS/blob/32b68ce4e33c53f34ae2e6d88b51cd073ab85ab6/src/feverous/evaluation/evaluate.py", input, generated_at: new Date().toISOString() }, null, 2) + "\n");
   } finally { await fs.rm(tmp, { recursive: true, force: true }); }
 }
 main().catch((error) => { console.error(error?.stack || error); process.exit(1); });
