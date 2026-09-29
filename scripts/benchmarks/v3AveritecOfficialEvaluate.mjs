@@ -29,7 +29,30 @@ async function main() {
     const scorerRun = await runPython(tmp, "eval.py", ["--predictions", predictions, "--references", references]);
     const out = path.resolve(arg("output") || "artifacts/v3/averitec/official-scorer-run.json");
     await fs.mkdir(path.dirname(out), { recursive: true });
-    await fs.writeFile(out, JSON.stringify({ benchmark_id: "averitec", protocol_version: "truthlens-v3-benchmark-protocol-v1", scorer_source: "https://github.com/MichSchli/AVeriTeC/blob/7c62d1ec8df3fb560d6efe2b85fa191135636f81/eval.py", predictions, references, scorer_stdout: scorerRun.stdout, scorer_stderr: scorerRun.stderr, generated_at: new Date().toISOString() }, null, 2) + "\n");
+    const metricNumber = (pattern) => {
+      const match = scorerRun.stdout.match(pattern);
+      return match ? Number(match[1]) : null;
+    };
+    const metrics = {
+      question_only_hu_meteor: metricNumber(/Question-only score.*?:\\s*([0-9.eE+-]+)/),
+      question_answer_hu_meteor: metricNumber(/Question-answer score.*?:\\s*([0-9.eE+-]+)/),
+      veracity_accuracy: metricNumber(/ \\* acc:\\s*([0-9.eE+-]+)/),
+      veracity_macro_f1: metricNumber(/ \\* macro:\\s*([0-9.eE+-]+)/),
+      justification_meteor: metricNumber(/Justification score.*?:\\s*([0-9.eE+-]+)/),
+      averitec_veracity_meteor_at_0_2: metricNumber(/Veracity scores \\(meteor @ 0.2\\):\\s*([0-9.eE+-]+)/),
+      averitec_veracity_meteor_at_0_3: metricNumber(/Veracity scores \\(meteor @ 0.3\\):\\s*([0-9.eE+-]+)/)
+    };
+    await fs.writeFile(out, JSON.stringify({
+      benchmark_id: "averitec",
+      protocol_version: "truthlens-v3-benchmark-protocol-v1",
+      scorer_source: "https://github.com/MichSchli/AVeriTeC/blob/7c62d1ec8df3fb560d6efe2b85fa191135636f81/eval.py",
+      predictions,
+      references,
+      metrics,
+      scorer_stdout: scorerRun.stdout,
+      scorer_stderr: scorerRun.stderr,
+      generated_at: new Date().toISOString()
+    }, null, 2) + "\n");
   } finally { await fs.rm(tmp, { recursive: true, force: true }); }
 }
 main().catch((error) => { console.error(error?.stack || error); process.exit(1); });
