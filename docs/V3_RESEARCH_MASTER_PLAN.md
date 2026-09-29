@@ -158,3 +158,27 @@ Only after all quality gates:
 ## Definition of “world-leading”
 
 TruthLens earns a defensible world-leading/SOTA statement only when Phase 7 supplies current, reproducible, apples-to-apples evidence. Until then, the project should describe itself as research-grade / world-class in engineering scope without making an unsupported accuracy claim.
+
+## Phase 2 live status - current branch
+
+Implemented in the current Phase 2 branch:
+- fail-closed benchmark registry and protocol preflight;
+- benchmark run artifact schema and validator;
+- pinned official scorer revisions for FEVER, AVeriTeC and FEVEROUS;
+- reproducible asset materializer with published-checksum verification plus local SHA-256 manifests;
+- FEVER open-retrieval candidate preparation and TruthLens evaluator;
+- AVeriTeC end-to-end TruthLens live-web adapter with the production LIAR prior disabled for benchmark isolation;
+- FEVEROUS structured page/sentence/table-cell/list candidate preparation and TruthLens evaluator;
+- official scorer wrappers with persisted stdout/stderr artifacts;
+- fail-closed Phase 2 coordinator;
+- machine-enforced sequential phase gate.
+
+Phase 2 remains IN PROGRESS until the benchmark execution gates are satisfied. The branch will not enter Phase 3 merely because adapters exist.
+
+Remaining Phase 2 gates:
+1. Run the declared full benchmark evaluations on pinned assets where the compute footprint is practical.
+2. Verify every full run with dataset/model/configuration provenance artifacts.
+3. Complete or explicitly freeze the independent external open-web holdout; until that is done it remains a stated generalization gate, not a hidden omission.
+4. Resolve all CI/adapter-smoke failures and only then merge Phase 2.
+
+The current phase state remains: Phase 2 = in_progress; Phase 3..8 = planned.
