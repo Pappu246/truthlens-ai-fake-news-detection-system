@@ -39,6 +39,8 @@
       "claims_sha256": null,
       "corpus_sha256": null,
       "implementation": "scripts/benchmarks/v3FeverEvaluate.ts + scripts/benchmarks/v3FeverOfficialEvaluate.mjs",
+      "dataset_release": "Zenodo 10.5281/zenodo.4925954 v1",
+      "published_checksums": {"shared_task_dev.jsonl": {"algorithm": "md5", "value": "4eecc1018b3d2bd46089ca36d886f439"}, "wiki-pages.zip": {"algorithm": "md5", "value": "ed8bfd894a2c47045dca61f0c8dc4c07"}},
       "notes": "Adapter and official scorer are wired. Full benchmark remains blocked until the exact FEVER asset package and hashes are pinned."
     },
     {
@@ -54,6 +56,8 @@
       "claims_sha256": null,
       "corpus_sha256": null,
       "implementation": "scripts/benchmarks/v3AveritecOfficialEvaluate.mjs",
+      "source_revision": "MichSchli/AVeriTeC main @ 7c62d1ec8df3fb560d6efe2b85fa191135636f81",
+      "dataset_content_ids": {"data/dev.json": {"git_blob_sha1": "40974243267f395dc583d805d10f043812419249"}, "data/train.json": {"git_blob_sha1": "0f190e115cf2ee23416e8a539c8d6ac043d7cc83"}},
       "notes": "Official evaluator wrapper is wired. End-to-end TruthLens retrieval remains a separate live/open-web integration gate; exact release and hashes must be pinned before scoring."
     },
     {
@@ -70,6 +74,8 @@
       "claims_sha256": null,
       "corpus_sha256": null,
       "implementation": "scripts/benchmarks/v3FeverousOfficialEvaluate.mjs",
+      "dataset_release": "Zenodo 10.5281/zenodo.4911508 v1",
+      "published_checksums": {"dev.jsonl": {"algorithm": "md5", "value": "56150713a60ecf3ea0f32f42561e1082"}, "feverous-wiki-pages-db.zip": {"algorithm": "md5", "value": "b01271df477efdfca99441c7dc6fe859"}},
       "notes": "Official evaluator wrapper is wired. TruthLens structured evidence generation remains a separate adapter gate; dataset release and hashes must be pinned before scoring."
     },
     {
