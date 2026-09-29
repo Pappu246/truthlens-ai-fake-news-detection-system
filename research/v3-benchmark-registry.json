@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "protocol_version": "truthlens-v3-benchmark-protocol-v1",
+  "policy": {
+    "same_dataset_split_required": true,
+    "same_metric_required": true,
+    "same_evidence_setting_required": true,
+    "test_set_tuning_forbidden": true,
+    "unverified_score_claims_forbidden": true,
+    "benchmark_scores_are_not_real_world_accuracy": true
+  },
+  "benchmarks": [
+    {
+      "id": "scifact",
+      "display_name": "SciFact",
+      "status": "verified-baseline",
+      "task": "scientific claim verification",
+      "split": "dev",
+      "evidence_setting": "open-retrieval over 5,183-document corpus",
+      "primary_metrics": ["directional_accuracy", "directional_macro_f1", "gold_evidence_recall_at_5"],
+      "dataset_source": "https://github.com/allenai/scifact",
+      "protocol_source": "https://github.com/allenai/scifact/blob/master/doc/evaluation.md",
+      "claims_sha256": "86f0435d08fdb65d1aa41d1472684f57e6e71930626497bdf4d7a9ec1a632217",
+      "corpus_sha256": "b8d6c89624cb2ed74dee8938effc4f5d8bd2086887880af8110d64be4ceade62",
+      "implementation": "scripts/v2ScifactEndToEnd.ts",
+      "notes": "Current verified runtime-equivalent full-corpus baseline. Production two-independent-source policy is reported separately."
+    },
+    {
+      "id": "fever",
+      "display_name": "FEVER",
+      "status": "protocol-locked",
+      "task": "claim verification against textual evidence",
+      "split": "shared-task development",
+      "evidence_setting": "open retrieval from official FEVER knowledge source",
+      "primary_metrics": ["fever_score", "label_accuracy", "evidence_precision", "evidence_recall", "evidence_f1"],
+      "dataset_source": "https://fever.ai/dataset/fever.html",
+      "protocol_source": "https://fever.ai/2018/task.html",
+      "scorer_source": "https://github.com/sheffieldnlp/fever-scorer",
+      "claims_sha256": null,
+      "corpus_sha256": null,
+      "implementation": null,
+      "notes": "Adapter execution remains blocked until a reproducible local dataset package and verified hashes are pinned."
+    },
+    {
+      "id": "averitec",
+      "display_name": "AVeriTeC",
+      "status": "protocol-locked",
+      "task": "real-world claim verification with web evidence",
+      "split": "dev for local iteration; blind test only for official submission",
+      "evidence_setting": "claim + provided document collection; web retrieval must be declared separately",
+      "primary_metrics": ["claim_verification_accuracy", "evidence_quality"],
+      "dataset_source": "https://github.com/MichSchli/AVeriTeC",
+      "protocol_source": "https://fever.ai/2025/task.html",
+      "claims_sha256": null,
+      "corpus_sha256": null,
+      "implementation": null,
+      "notes": "The official 2025 task uses a revised document collection with temporal-leakage fixes. Local evaluation must pin the exact release before scoring."
+    },
+    {
+      "id": "feverous",
+      "display_name": "FEVEROUS",
+      "status": "protocol-locked",
+      "task": "fact verification over text and structured table evidence",
+      "split": "development / blind-test submission",
+      "evidence_setting": "text + table-cell evidence",
+      "primary_metrics": ["feverous_score", "accuracy", "evidence_f1", "evidence_precision", "evidence_recall"],
+      "dataset_source": "https://fever.ai/dataset/feverous.html",
+      "protocol_source": "https://fever.ai/2021/task.html",
+      "scorer_source": "https://github.com/Raldir/FEVEROUS",
+      "claims_sha256": null,
+      "corpus_sha256": null,
+      "implementation": null,
+      "notes": "Structured evidence is not silently collapsed into plain-text evidence. A dedicated adapter is required."
+    },
+    {
+      "id": "openweb-external",
+      "display_name": "External Open-Web Verification Set",
+      "status": "planned",
+      "task": "fresh real-world claim verification",
+      "split": "sealed human-annotated holdout",
+      "evidence_setting": "live/open-web evidence with source provenance",
+      "primary_metrics": ["verdict_accuracy", "macro_f1", "evidence_recall", "citation_correctness", "calibration_ece"],
+      "dataset_source": null,
+      "protocol_source": null,
+      "claims_sha256": null,
+      "corpus_sha256": null,
+      "implementation": null,
+      "notes": "Must be independently annotated and sealed before model tuning. No synthetic-only set can substitute for this gate."
+    }
+  ]
+}
