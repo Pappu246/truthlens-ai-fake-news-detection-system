@@ -5,7 +5,7 @@
 ## Current production boundary
 
 - Production `main`: `32db8230547658b7d5d2a615599526d88c22fce9`
-- Current V2 research branch head: `0fa403da02d9087231237aa193b3b6a4b6e4f33e`
+- Current V2 research branch head: `cc91c8a2847b2ce993b80297ca5166cf49268601`
 - PR #26 remains open and research-only.
 - No research branch has been merged or deployed to production.
 
@@ -25,8 +25,8 @@
 ## Latest completed verification
 
 - Full CI #176 on the preceding research head: **SUCCESS**, including dependency audit, type-check/build, production suites, V2 pipeline/route/model-quality suites.
-- Phase 2 ISOT pipeline tests #131: **SUCCESS**.
-- The current head contains workflow-only hardening after CI #176; the current CI #180 is the fresh validation run for that final head.
+- Phase 2 ISOT pipeline tests #145: **SUCCESS**.
+- Current head CI #204: **SUCCESS**, including dependency audit, type-check/build, production suites, V2 pipeline/route/model-quality suites.
 - Latest completed external model-quality component evaluation: sealed local pretrained run #54. It evaluated all 300 SciFact dev claims and 469 evaluator-compatible passages.
 - The latest completed model-quality evaluation is workflow #162 on commit `6e052a3c944002c80f89654ca4c0043c5630ed16`; the full 300-claim component artifact is recorded and the current-head SciFact benchmark is the remaining end-to-end gate.
 
@@ -62,8 +62,14 @@ The 37% result is not presented as production accuracy or as a world-level claim
 
 The production two-independent-source rule remains unchanged. No production thresholds, source policy, abstention rules, or production model artifacts have been changed.
 
-## Remaining scientific gate
+## Remaining scientific and release gates
 
-The code-side implementation work is complete. The unresolved research gate is empirical: obtain a completed current-head 300-claim SciFact artifact, compare it against Run #19, and keep it separate from production metrics. If the new end-to-end result remains weak, further progress should target retrieval recall/reranking and independently labelled calibration rather than changing production policy to fit the benchmark.
+The code-side implementation work is complete. The unresolved gates are empirical and release-validation oriented:
 
-PR #26 must remain research-only until an end-to-end result provides sufficient evidence for any proposed production change.
+1. Complete current-head SciFact Run #57 and record its exact artifact, hashes, and metrics.
+2. Complete current-head Phase 7 ISOT Run #130 and record its exact artifact and metrics.
+3. Run/confirm the final research-branch CI after any result/documentation commits.
+4. Review retrieval Recall@K, NLI quality, verdict metrics, abstention, source-independence behavior, and calibration together without conflating datasets.
+5. Keep any production migration decision separate from research measurements.
+
+PR #26 must remain research-only until these empirical gates are closed and a separate production proposal is justified.
