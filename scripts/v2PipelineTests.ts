@@ -13,6 +13,7 @@ import { enrichWithFullText } from '../server/v2/retrieval/fullTextEnricher';
 import { RawDocument, RetrievedCandidate } from '../server/v2/types';
 import { EmbeddingModel } from '../server/v2/retrieval/embeddings';
 import { SciFactOpenCorpusSource } from '../server/v2/retrieval/scifactCorpusSource';
+import { expandQueries } from '../server/v2/queryExpansion';
 
 let passed = 0;
 let failed = 0;
@@ -57,6 +58,21 @@ async function main(): Promise<void> {
   console.log('='.repeat(72));
   console.log('TRUTHLENS V2 PIPELINE TESTS');
   console.log('='.repeat(72));
+
+  // --------------------------------------------------------- 0. QUERY DIVERSITY
+  section('0. Shared extractor query diversity is preserved');
+  {
+    const expanded = expandQueries(CLAIM);
+    check('original query is present', expanded.all.includes(expanded.original));
+    check('support-oriented query is present', expanded.all.includes(expanded.support));
+    check('contradiction-oriented query is present', expanded.all.includes(expanded.contradiction));
+    check('at least two extractor/base variants survive expansion', expanded.all.filter(q =>
+      q !== expanded.support && q !== expanded.contradiction
+    ).length >= 2, expanded.all.join(' | '));
+    check('expanded queries are deterministic', JSON.stringify(expanded) === JSON.stringify(expandQueries(CLAIM)));
+    check('expanded query set has no duplicates', expanded.all.length === new Set(expanded.all).size);
+  }
+
 
   // ------------------------------------------------------------- 1. SUPPORT
   section('1. Strong supporting evidence -> VERIFIED');
