@@ -12,6 +12,10 @@ on:
       - '.github/workflows/v3-benchmark-adapter-smoke.yml'
   workflow_dispatch:
 
+concurrency:
+  group: truthlens-phase2-adapter-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
