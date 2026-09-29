@@ -13,7 +13,7 @@ async function main() {
   try {
     const scorer = path.join(tmp, "fever_scorer.py");
     const runner = path.join(tmp, "run.py");
-    await fs.writeFile(scorer, await fetchText("https://raw.githubusercontent.com/sheffieldnlp/fever-scorer/master/src/fever/scorer.py"));
+    await fs.writeFile(scorer, await fetchText("https://raw.githubusercontent.com/sheffieldnlp/fever-scorer/4801615100fbf6327f8e99b5dbaefe5dd890e869/src/fever/scorer.py"));
     const code = ["import json, sys", "sys.path.insert(0, " + JSON.stringify(tmp) + ")", "from fever_scorer import fever_score", "with open(" + JSON.stringify(predictions) + ", encoding=\"utf-8\") as f: predictions = json.load(f)", "with open(" + JSON.stringify(actual) + ", encoding=\"utf-8\") as f: actual = [json.loads(line) for line in f if line.strip()]", "strict, acc, precision, recall, f1 = fever_score(predictions, actual)", "print(json.dumps({\"strict_score\": strict, \"label_accuracy\": acc, \"evidence_precision\": precision, \"evidence_recall\": recall, \"evidence_f1\": f1}, indent=2))"].join("\n");
     await fs.writeFile(runner, code);
     await runPython(tmp, "run.py");
