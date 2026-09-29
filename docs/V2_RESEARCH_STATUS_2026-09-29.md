@@ -6,12 +6,12 @@ This is a research-branch status record. Production behavior is unchanged and th
 
 ## Verified repository state
 
-- Research head before this document: `6e052a3c944002c80f89654ca4c0043c5630ed16`
+- Current research head: `cc91c8a2847b2ce993b80297ca5166cf49268601`
 - Production baseline remains on the separate production branch.
 - Latest CI/type-check/build run on the research code head: **success**; the current docs-only head also has a passing CI gate.
 - Phase 2 ISOT pipeline tests: **success**.
 - Phase 2 real ISOT data validation: **success**.
-- Phase 7 real ISOT benchmark: **success**.
+- Phase 7 real ISOT benchmark: **in progress** on run #130; no final result is published yet.
 
 ## Real ISOT benchmark
 
@@ -67,9 +67,12 @@ The result is a component-quality evaluation, not final TruthLens verdict accura
 
 ## Current validation still running
 
-The full open-corpus SciFact end-to-end benchmark is currently **Run #57**, executing against the frozen 300-claim / 5,183-document setup with sealed local pretrained models. Its result must be recorded separately once the run completes.
+Two long-running research validations are currently active on the current research head:
 
-No production threshold, decision policy, source policy, abstention rule, or production model should be changed solely from the component-quality result above.
+- Full open-corpus SciFact end-to-end benchmark **Run #57**, frozen 300 claims / 5,183 documents, with sealed local pretrained models. Setup, dataset-hash verification, dependencies, runtime installation, and model-seal verification have passed; the benchmark step is still running and has not produced a final artifact.
+- Phase 7 real ISOT benchmark **Run #130**, using the leakage-aware ISOT preparation path. Dataset download/verification and split preparation have passed; the benchmark step is still running and has not produced a final artifact.
+
+No result is published until the complete artifact exists.
 
 ## Remaining research gates
 
