@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "purpose": "Research discovery and benchmark-source registry. Discovery is advisory; it never authorizes model promotion.",
+  "paper_search": [
+    {
+      "provider": "openalex",
+      "query": "fact verification evidence retrieval misinformation",
+      "lookback_days": 45
+    },
+    {
+      "provider": "openalex",
+      "query": "claim verification natural language inference evidence",
+      "lookback_days": 45
+    },
+    {
+      "provider": "openalex",
+      "query": "retrieval augmented fact checking source attribution",
+      "lookback_days": 45
+    }
+  ],
+  "model_search": [
+    {
+      "provider": "huggingface",
+      "query": "fact verification"
+    },
+    {
+      "provider": "huggingface",
+      "query": "natural language inference"
+    },
+    {
+      "provider": "huggingface",
+      "query": "cross encoder reranker"
+    },
+    {
+      "provider": "huggingface",
+      "query": "sentence embedding"
+    }
+  ],
+  "benchmark_sources": [
+    {
+      "id": "fever",
+      "name": "FEVER",
+      "url": "https://fever.ai/"
+    },
+    {
+      "id": "scifact",
+      "name": "SciFact",
+      "url": "https://github.com/allenai/scifact"
+    },
+    {
+      "id": "averitec",
+      "name": "AVeriTeC",
+      "url": "https://fever.ai/2025/task.html"
+    },
+    {
+      "id": "feverous",
+      "name": "FEVEROUS",
+      "url": "https://fever.ai/dataset/feverous.html"
+    }
+  ],
+  "promotion_policy": {
+    "auto_discover": true,
+    "auto_benchmark": true,
+    "auto_create_pr": false,
+    "auto_merge": false,
+    "auto_deploy": false,
+    "require_independent_verification": true
+  }
+}

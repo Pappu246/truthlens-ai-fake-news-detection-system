@@ -1,0 +1,40 @@
+name: TruthLens Research Intelligence
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+  schedule:
+    - cron: "30 4 * * 0"
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: Discover research and benchmark changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run research intelligence scan
+        run: node scripts/researchIntelligence.mjs
+        env:
+          RESEARCH_INTELLIGENCE_OUT: research-intelligence-output
+
+      - name: Upload research intelligence artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: truthlens-research-intelligence-${{ github.run_number }}
+          path: research-intelligence-output/
+          if-no-files-found: error
+          retention-days: 30

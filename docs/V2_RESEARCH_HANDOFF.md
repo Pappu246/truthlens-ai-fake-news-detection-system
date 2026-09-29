@@ -1,42 +1,49 @@
 # TruthLens V2 Research Handoff
 
-**Status:** Research engineering and benchmark gates are complete for the unchanged V2 runtime. PR #26 is ready for production review/merge subject to normal repository governance.
+**Status:** V2 research pipeline is merged into production. Future work must continue in the staged V3 research roadmap; do not restart V2 or rework completed production contracts.
 
-## Current verified state
+## Verified production state
 
-- Production `main`: `32db8230547658b7d5d2a615599526d88c22fce9`
-- Research branch: `research/truthlens-v2-model-quality`
-- PR #26: open, unmerged, mergeable.
-- CI #250: SUCCESS.
-- Phase 2 pipeline #163: SUCCESS.
-- Phase 2 validation #159: SUCCESS.
-- Phase 7 benchmark #148: SUCCESS.
-- Model-quality evaluation #196: SUCCESS.
-- SciFact Run #87: completed SUCCESS with a valid full-corpus artifact.
+- Production `main`: `1c2eb483d186b9569d1ff944689fb6fbc94d36b0`
+- PR #26: merged.
+- Post-merge CI: SUCCESS.
+- Post-merge Production Smoke Test: SUCCESS.
+- Live Render smoke: **55/55 checks passed**.
+- Committed dependency audit at the merge gate: **0 vulnerabilities**.
 
-## Scientific disposition
+## V2 scientific state
 
-Run #87 is the latest completed benchmark whose code/runtime is demonstrably equivalent to the current V2 implementation. Its artifact reports:
+The V2 runtime is now part of `main`. Its benchmark claims remain task- and dataset-specific.
 
-- Open candidate recall: 60.33%
-- Gold evidence Recall@5: 73.40%
-- Directional accuracy: 34.33%
-- Directional macro-F1: 0.320335
-- Production-policy abstention: 75%
+Latest completed runtime-equivalent SciFact benchmark artifact:
 
-No current-head metric is fabricated from an incomplete run. The runtime-equivalence comparison is explicit and reproducible.
+- Claims: 300
+- Corpus documents: 5,183
+- Open candidate recall: **60.33%**
+- Gold evidence Recall@5: **73.40%**
+- Directional accuracy: **34.33%**
+- Directional macro-F1: **0.320335**
+- Production-policy abstention: **75%**
+- Calibration diagnostic: ECE improved from **0.333920** to **0.236281** with temperature 4 on the diagnostic holdout.
+
+These are research benchmark measurements, not universal real-world truth-detection accuracy.
 
 ## Production boundary
 
-The V2 branch adds an experimental endpoint in `server/appFactory.ts`; it does not replace the existing production article/claim/evidence contracts or model artifact. Production `main` remains frozen at `32db823...` until PR #26 is actually merged.
+The V2 route is additive. Existing article, claim, URL extraction, live-news, evidence, security, and model-artifact contracts were preserved and re-verified after merge.
 
-## Final checks
+Future changes must preserve:
+1. production/research metric separation;
+2. explicit abstention and provenance semantics;
+3. security and dependency gates;
+4. benchmark reproducibility and frozen-input hashes;
+5. no blind automatic promotion of candidate models.
 
-- Dependency audit on committed dependencies: 0 vulnerabilities.
-- CI and V2 regression suites: green.
-- ISOT data leakage checks: zero split-straddling near-duplicate groups.
-- Production artifact was not modified by Phase 7.
-- V2 model-quality and SciFact artifacts preserve dataset/model hashes.
-- Metrics are kept separated by task and dataset.
+## Next research program
 
-No universal real-world accuracy or world-leading claim is made.
+The next stage is **TruthLens V3: Continuous Research & Verification Quality**. The master sequencing contract is:
+`docs/V3_RESEARCH_MASTER_PLAN.md`
+
+The phases are strictly sequential. A later phase may not be declared complete until its predecessor's exit gates are documented and green.
+
+No claim of "world-leading accuracy" is currently made. Such a claim requires reproducible, apples-to-apples, independently verifiable benchmark evidence against the relevant current state of the field.
