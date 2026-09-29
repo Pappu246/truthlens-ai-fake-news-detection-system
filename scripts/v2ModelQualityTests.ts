@@ -10,6 +10,7 @@ import { FixtureCorpusSource } from '../server/v2/retrieval/corpusSource';
 import { HuggingFaceNliAdapter } from '../server/v2/nli/huggingFaceNliAdapter';
 import { HuggingFaceEmbeddingModel } from '../server/v2/retrieval/huggingFaceEmbeddingModel';
 import { denseSearch } from '../server/v2/retrieval/embeddings';
+import { rerankEvidence } from '../server/v2/rerank/reranker';
 import {
   applyConfidenceTemperature,
   fitConfidenceTemperature,
@@ -186,7 +187,27 @@ async function main(): Promise<void> {
     check('dense search scores are normalised', results.every(item => item.score >= 0 && item.score <= 1));
   }
 
-  console.log('\n5. Temperature calibration utilities are stable');
+  console.log('\n5. Synthetic benchmark documents retain document-level independence');
+  {
+    const candidates = [
+      {
+        ...doc('1', 'https://scifact.local/document/1', 'SciFact corpus', 'Paper one', 'supports the scientific claim'),
+        canonicalUrl: 'https://scifact.local/document/1', foundBy: [], lexicalScore: 1, denseScore: 1, fusionScore: 1
+      },
+      {
+        ...doc('2', 'https://scifact.local/document/2', 'SciFact corpus', 'Paper two', 'supports the scientific claim differently'),
+        canonicalUrl: 'https://scifact.local/document/2', foundBy: [], lexicalScore: 0.9, denseScore: 0.9, fusionScore: 0.9
+      }
+    ] as any;
+    const ranked = rerankEvidence(candidates);
+    check('first synthetic document is independent', ranked.find(e => e.id === '1')?.isDuplicateCluster === false);
+    check('second synthetic document is not falsely treated as same-domain duplicate', ranked.find(e => e.id === '2')?.isDuplicateCluster === false);
+    check('synthetic source cluster keeps document identity',
+      new Set(ranked.map(e => e.domainClusterId)).size === 2,
+      ranked.map(e => e.domainClusterId).join(' | '));
+  }
+
+  console.log('\n6. Temperature calibration utilities are stable');
   {
     const samples = [
       { correct: true, confidence: 0.92 },
