@@ -58,3 +58,8 @@
 ## Residual risk
 
 No mitigation removes all model or retrieval error. The system should expose uncertainty and evidence rather than imply certainty beyond the benchmarked protocol.
+
+### Temporal integrity
+- Evidence published after a supplied claim date is excluded from directional reasoning when the temporal gate is enabled.
+- Temporal exclusions are recorded in provenance rather than silently disappearing.
+- Missing/invalid publication dates remain explicit residual risk and do not become fabricated timestamps.
