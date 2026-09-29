@@ -1,11 +1,11 @@
 # TruthLens V2 Research Handoff
 
-**Status:** Engineering-complete research branch; production remains frozen. The latest fully completed external SciFact benchmark remains the frozen Run #19 baseline. Current-head Run #57 is actively executing the complete 300-claim evaluation and has not yet produced an artifact.
+**Status:** Engineering-complete research branch; production remains frozen. The latest fully completed external SciFact benchmark remains the frozen Run #19 baseline. Current-head Run #90 is actively executing the complete 300-claim evaluation and has not yet produced an artifact.
 
 ## Current production boundary
 
 - Production `main`: `32db8230547658b7d5d2a615599526d88c22fce9`
-- Current V2 research branch head: `cc91c8a2847b2ce993b80297ca5166cf49268601`
+- Current V2 research branch head: `ba7631ebf4e3f1d6917d8fd04ab167ad50130b2f`
 - PR #26 remains open and research-only.
 - No research branch has been merged or deployed to production.
 
@@ -26,9 +26,9 @@
 
 - Full CI #176 on the preceding research head: **SUCCESS**, including dependency audit, type-check/build, production suites, V2 pipeline/route/model-quality suites.
 - Phase 2 ISOT pipeline tests #145: **SUCCESS**.
-- Current head CI #204: **SUCCESS**, including dependency audit, type-check/build, production suites, V2 pipeline/route/model-quality suites.
+- Current head CI #243: **SUCCESS**, including dependency audit, type-check/build, production suites, V2 pipeline/route/model-quality suites.
 - Latest completed external model-quality component evaluation: sealed local pretrained run #54. It evaluated all 300 SciFact dev claims and 469 evaluator-compatible passages.
-- The latest completed model-quality evaluation is workflow #162 on commit `6e052a3c944002c80f89654ca4c0043c5630ed16`; the full 300-claim component artifact is recorded and the current-head SciFact benchmark is the remaining end-to-end gate.
+- The latest completed model-quality evaluation is workflow #194 on the current research head; the full 300-claim component artifact is recorded and the current-head SciFact benchmark is the remaining end-to-end gate.
 
 ## Latest completed end-to-end SciFact benchmark
 
