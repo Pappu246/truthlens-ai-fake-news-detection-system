@@ -72,3 +72,8 @@ jobs:
 
       - name: V2 model-quality tests
         run: npm run test:v2-quality
+
+      - name: Research intelligence syntax/config
+        run: |
+          node --check scripts/researchIntelligence.mjs
+          node -e "JSON.parse(require('fs').readFileSync('research/research-intelligence-registry.json', 'utf8')); console.log('Research registry JSON: OK')"
