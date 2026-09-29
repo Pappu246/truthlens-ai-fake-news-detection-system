@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "current_phase": 1,
+  "current_phase_status": "IN_PROGRESS",
+  "completed_phases": [0],
+  "next_phase": 2,
+  "production_commit": "1c2eb483d186b9569d1ff944689fb6fbc94d36b0",
+  "phase1_requirements": {
+    "watcher_runs": true,
+    "artifact_published": true,
+    "production_unchanged": true
+  },
+  "phase2_unlocked": false,
+  "sota_claim_allowed": false
+}
