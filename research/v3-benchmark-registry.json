@@ -73,11 +73,11 @@
       "scorer_source": "https://github.com/Raldir/FEVEROUS",
       "claims_sha256": null,
       "corpus_sha256": null,
-      "implementation": "scripts/benchmarks/v3FeverousOfficialEvaluate.mjs",
+      "implementation": "scripts/benchmarks/v3FeverousPrepareCandidates.py + scripts/benchmarks/v3FeverousEvaluate.ts + scripts/benchmarks/v3FeverousOfficialEvaluate.mjs",
       "scorer_revision": "Raldir/FEVEROUS @ 32b68ce4e33c53f34ae2e6d88b51cd073ab85ab6",
       "dataset_release": "Zenodo 10.5281/zenodo.4911508 v1",
       "published_checksums": {"dev.jsonl": {"algorithm": "md5", "value": "56150713a60ecf3ea0f32f42561e1082"}, "feverous-wiki-pages-db.zip": {"algorithm": "md5", "value": "b01271df477efdfca99441c7dc6fe859"}},
-      "notes": "Official evaluator wrapper is wired. TruthLens structured evidence generation remains a separate adapter gate; dataset release and hashes must be pinned before scoring."
+      "notes": "Structured page/sentence/table-cell/list candidate preparation, TruthLens evaluation, and official scoring wrappers are wired. Full benchmark requires explicit 10+ GB asset materialization."
     },
     {
       "id": "openweb-external",
