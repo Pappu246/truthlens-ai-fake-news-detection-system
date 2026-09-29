@@ -26,7 +26,7 @@ https://github.com/allenai/scifact
 
 1. The benchmark source indexes the **entire 5,183-document corpus** with BM25 once and reuses that index across all claims.
 2. For each claim, the normal V2 query expansion runs.
-3. The source returns the top 100 open-retrieval candidates for each expanded query.
+3. Run #21 used a BM25-only open-retrieval candidate pool of 100 per expanded query. The current research branch additionally supports a full-corpus dense retrieval channel over the same frozen corpus; its next measurement is kept separate from the recorded Run #21 baseline.
 4. The unchanged V2 pipeline then runs its normal hybrid BM25+dense retrieval, reranking and NLI layers over that candidate pool.
 5. The pretrained local NLI model is the sealed `Xenova/nli-deberta-v3-xsmall` q8 model and the embedding model is the sealed `Xenova/all-MiniLM-L6-v2` q8 model.
 6. The benchmark direction is SUPPORT / CONTRADICT / NOT_ENOUGH_INFO. It uses the weighted NLI votes produced by the pipeline so that the benchmark has a single-source-compatible decision surface.
@@ -85,3 +85,9 @@ Directional per-class results:
 Production-policy diagnostics on the same claims: mapped accuracy **37.33%**, mapped macro-F1 **0.181230**, abstention **100%**, non-abstain coverage **0%**, and CONFLICTED rate **0.33%**. These are not standard SciFact task metrics because the unchanged production policy requires independent corroboration.
 
 The GitHub Actions artifact was `truthlens-v2-scifact-end-to-end` (artifact ID **11015937689**, SHA-256 **cc796d94b22003229de1e281b52aaa487d6db3721ea8fc4767a7b6ce8b2d2595**). A repository copy of the machine-readable summary is stored at `data/v2/scifact_end_to_end_results.json`.
+
+## Next retrieval iteration
+
+The current research branch adds an optional full-corpus dense retrieval channel to `SciFactOpenCorpusSource` using the sealed `Xenova/all-MiniLM-L6-v2` model. The source fuses full-corpus BM25 and dense top-K candidates with reciprocal-rank fusion before the unchanged V2 hybrid/reranking/NLI pipeline runs. The dense index is built once per process in small batches and reused across claims.
+
+This is a research-only retrieval experiment. The **Run #21** numbers above remain the frozen BM25-open baseline; a subsequent benchmark run must be reported as a new experiment and must not overwrite or retroactively relabel the baseline.
