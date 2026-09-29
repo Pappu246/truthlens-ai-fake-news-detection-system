@@ -4,9 +4,9 @@
 
 ## Latest completed authoritative result
 
-The latest **completed** full-corpus SciFact benchmark remains Run #19. Newer current-head reruns were attempted after the V2 retrieval/query/NLI engineering upgrades, but the GitHub Actions job was cancelled before an artifact was produced. Those canceled attempts are not treated as benchmark results.
+The latest **completed** full-corpus SciFact benchmark remains Run #19. It remains the baseline until a current-head run produces a complete machine-readable artifact.
 
-### Run identity
+### Run #19 identity
 
 - Workflow: **V2 SciFact End-to-End Benchmark**
 - Run: **#19**
@@ -27,12 +27,7 @@ The latest **completed** full-corpus SciFact benchmark remains Run #19. Newer cu
 - Candidate pool K: **100**
 - Final pipeline evidence K: **8**
 
-## Models
-
-- NLI: `Xenova/nli-deberta-v3-xsmall`, `q8@3fac2500`
-- Embedding: `Xenova/all-MiniLM-L6-v2`, `q8@afdb6f1a`
-
-## End-to-end metrics
+## Baseline metrics
 
 | Metric | Result |
 |---|---:|
@@ -41,49 +36,33 @@ The latest **completed** full-corpus SciFact benchmark remains Run #19. Newer cu
 | Directional accuracy | **37.00%** |
 | Directional macro-F1 | **0.341899** |
 
-### Directional per-class results
+## Current-head run
 
-| Class | Precision | Recall | F1 | Support |
-|---|---:|---:|---:|---:|
-| SUPPORT | 1.000000 | 0.096774 | 0.176471 | 124 |
-| CONTRADICT | 0.267516 | 0.656250 | 0.380090 | 64 |
-| NOT_ENOUGH_INFO | 0.435115 | 0.508929 | 0.469136 | 112 |
+**Run #91** is the current-head full-corpus validation on commit `4c0581e199f86c278d7b8ce08d3639adeba41c2f`.
 
-## Production-policy view
+Setup, dataset hashes/counts, dependency installation, local pretrained runtime installation, and sealed-model verification have passed. The benchmark execution step is still running, and **no artifact or new score exists yet**.
 
-SciFact uses a one-gold-paper evidence convention while TruthLens production requires two independent directional sources. The production-policy view is therefore reported separately.
+An older run #90 on commit `ba7631ebf4e3f1d6917d8fd04ab167ad50130b2f` is also still marked in progress. Neither is treated as evidence.
 
-| Metric | Result |
-|---|---:|
-| Mapped accuracy | 37.33% |
-| Mapped macro-F1 | 0.181230 |
-| Abstention rate | 100% |
-| Non-abstain coverage | 0% |
-| Non-abstain accuracy | 0% |
-| CONFLICTED rate | 0.33% |
+## Current-head changes under test
 
-The 100% abstention rate is a direct consequence of the dataset/policy mismatch and is not a model-quality score.
-
-## Current-head research changes not yet assigned a score
-
-Since Run #19, the research branch has added and regression-tested:
+Since the baseline, the branch has added and regression-tested:
 
 - full-corpus dense retrieval with explicit K=300;
-- preservation of all diversified extractor queries plus deterministic support/contradiction variants;
+- preservation of diversified extractor queries plus deterministic support/contradiction variants;
 - synthetic benchmark source-independence handling for `.local/document/<id>`;
 - batched pretrained-NLI relatedness embeddings;
-- external calibration diagnostics;
-- stronger CI/dependency and workflow controls.
-
-Current-head full 300-claim reruns were launched, but the GitHub Actions jobs were cancelled before artifacts were produced. No new metric is inferred from partial or canceled runs.
+- calibration diagnostics;
+- stronger CI/dependency and long-running-workflow controls.
 
 ## Research safety
 
 - PR #26 remains **open and not merged**.
-- Production `main` remains at `32db8230547658b7d5d2a615599526d88c22fce9`.
+- Production `main` remains `32db8230547658b7d5d2a615599526d88c22fce9`.
+- The research branch contains an additive experimental V2 route in `server/appFactory.ts`; production `main` does not contain it.
 - No production thresholds, source rules, abstention policy, or model artifact were changed.
 - No ISOT, LIAR, or SciFact metrics are combined.
 
 ## Interpretation
 
-Run #19 remains a reproducible external baseline, not a production-accuracy estimate and not evidence of world-leading performance. Retrieval remains the main disclosed bottleneck. A current-head score must only be published after a complete 300-claim run produces the machine-readable artifact.
+Run #19 remains a reproducible research baseline, not a production-accuracy estimate and not evidence of world-leading performance. A current-head SciFact claim is valid only after a complete 300-claim artifact is produced and independently checked.

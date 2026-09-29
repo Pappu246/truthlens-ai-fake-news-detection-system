@@ -1,75 +1,65 @@
 # TruthLens V2 Research Handoff
 
-**Status:** Engineering-complete research branch; production remains frozen. The latest fully completed external SciFact benchmark remains the frozen Run #19 baseline. Current-head Run #90 is actively executing the complete 300-claim evaluation and has not yet produced an artifact.
+**Status:** Engineering-complete research branch; production `main` remains frozen. The latest completed SciFact result is still the frozen Run #19 baseline because the current-head Run #91 has not yet produced an artifact.
 
-## Current production boundary
+## Current repository state
 
 - Production `main`: `32db8230547658b7d5d2a615599526d88c22fce9`
-- Current V2 research branch head: `ba7631ebf4e3f1d6917d8fd04ab167ad50130b2f`
-- PR #26 remains open and research-only.
-- No research branch has been merged or deployed to production.
+- Research head: `4c0581e199f86c278d7b8ce08d3639adeba41c2f`
+- PR #26: open, not merged, mergeable, research-only.
+- CI #248: SUCCESS.
+- Phase 2 pipeline #162: SUCCESS.
+- Phase 2 data validation #158: SUCCESS.
+- Phase 7 benchmark #147: SUCCESS.
+- Model-quality evaluation #195: SUCCESS.
+- SciFact E2E #91: IN PROGRESS.
 
-## Engineering work completed in this research branch
+## Production boundary
+
+The research branch adds an experimental `POST /api/v2/evidence/verify` route and a V2 health component in the shared `server/appFactory.ts`. This is additive research behavior. The production article/claim/evidence verdict contracts, production model artifact, thresholds, source policy and abstention policy were not replaced or retuned, and `main` itself remains unchanged.
+
+## Engineering completed
 
 - Evidence-grounded V2 pipeline: claim -> query expansion -> hybrid BM25/dense retrieval -> reranking -> pretrained NLI -> aggregation/abstention -> provenance.
-- All diversified queries from the shared production claim extractor are preserved; deterministic support/contradiction variants are added without replacing the production extractor.
-- Full-corpus dense retrieval is supported with explicit candidate depth. The benchmark configuration uses candidate K=100, dense K=300, and final evidence K=8.
-- Synthetic SciFact `.local/document/<id>` URLs are clustered per document so independent papers are not incorrectly collapsed into one source cluster. Real registrable-domain clustering is unchanged.
-- Regression tests cover query diversity, deterministic expansion, dense retrieval candidate contribution, and synthetic-source independence.
-- Pretrained NLI relatedness embeddings are batched to reduce worker round-trips while preserving the same inference semantics.
-- External calibration diagnostics record raw ECE/Brier and a held-out temperature-scaling analysis; runtime production confidence semantics were not changed.
-- The legacy 36-row demo assumptions in `scripts/test_pipeline.ts` are retired; the entry point delegates to the canonical production+V2 gate.
-- CI includes an explicit `npm audit --audit-level=moderate` gate.
-- Heavy V2 evaluation workflows are PR-only, ignore docs-only changes, do not auto-cancel an active benchmark, and have extended timeouts.
+- Diversified claim-extractor queries are preserved; deterministic support/contradiction variants are added.
+- Full-corpus dense retrieval supports explicit candidate depth.
+- Synthetic SciFact source-independence handling avoids collapsing independent papers solely because of fixture hostnames.
+- Batched pretrained-NLI relatedness embeddings preserve inference semantics while reducing worker round-trips.
+- Calibration diagnostics include raw ECE/Brier and held-out temperature-scaling analysis.
+- V2 pipeline, route and model-quality regression suites are green.
+- CI includes a dependency audit gate.
 
-## Latest completed verification
+## Current verified research measurements
 
-- Full CI #176 on the preceding research head: **SUCCESS**, including dependency audit, type-check/build, production suites, V2 pipeline/route/model-quality suites.
-- Phase 2 ISOT pipeline tests #145: **SUCCESS**.
-- Current head CI #243: **SUCCESS**, including dependency audit, type-check/build, production suites, V2 pipeline/route/model-quality suites.
-- Latest completed external model-quality component evaluation: sealed local pretrained run #54. It evaluated all 300 SciFact dev claims and 469 evaluator-compatible passages.
-- The latest completed model-quality evaluation is workflow #194 on the current research head; the full 300-claim component artifact is recorded and the current-head SciFact benchmark is the remaining end-to-end gate.
+### ISOT
 
-## Latest completed end-to-end SciFact benchmark
+The current Phase 7 run #147 completed successfully on 44,898 rows with zero split-straddling near-duplicate groups. Calibrated linear SVM test F1 is 0.994048 and temporal F1 is 0.998107; the Reuters-dateline-mitigated test F1 remains 0.994048.
 
-The current authoritative completed benchmark remains **Run #19**:
+### Pretrained V2 component quality
 
-- Workflow: **V2 SciFact End-to-End Benchmark**
-- Run ID: `36512277229`
-- Evaluated commit: `f40440d8caf58126f215fce2aa1e7c843934538b`
-- Artifact: `truthlens-v2-scifact-end-to-end`
-- Artifact ID: `11012755708`
-- Artifact SHA-256: `29322f9630fd693b658bf3c108b2621c487d1d8c3ee178b90f6090cbd1a3d38c`
-- Frozen inputs: **300 SciFact dev claims / 5,183 corpus documents**
-- Candidate K: **100**
-- Final evidence K: **8**
+Run #195 completed successfully. Local pretrained NLI accuracy is 0.524520 and macro-F1 is 0.536936 on 300 frozen SciFact claims / 469 evaluator-compatible passages. ECE-10 is 0.309079, worse than the heuristic comparator's 0.141591 in this evaluation. These are component-level measurements.
 
-### Measured result
+### SciFact end-to-end
 
-- Open candidate recall: **53.67%**
-- Gold-evidence Recall@5: **68.09%**
-- Directional accuracy: **37.00%**
-- Directional macro-F1: **0.341899**
-- SUPPORT F1: **0.176471**
-- CONTRADICT F1: **0.380090**
-- NOT_ENOUGH_INFO F1: **0.469136**
+The authoritative completed baseline remains Run #19:
 
-Production-policy diagnostics on this benchmark were mapped accuracy **37.33%**, mapped macro-F1 **0.181230**, abstention **100%**, non-abstain coverage **0%**, and CONFLICTED rate **0.33%**. Those figures are diagnostic only because classic SciFact does not satisfy the unchanged TruthLens requirement for two independent directional sources.
+- Open candidate recall: 53.67%
+- Gold evidence Recall@5: 68.09%
+- Directional accuracy: 37.00%
+- Directional macro-F1: 0.341899
 
-## Research integrity boundary
+Current-head Run #91 is evaluating the same frozen 300 claims / 5,183 documents with sealed local models. No new score is inferred before the artifact is complete.
 
-The 37% result is not presented as production accuracy or as a world-level claim. It is the last completed end-to-end measurement on frozen inputs and sealed research models. The newer dense-retrieval/query-diversity/reranking fixes are intentionally **not assigned a new accuracy number** until a complete 300-claim artifact is produced.
+## Integrity rules
 
-The production two-independent-source rule remains unchanged. No production thresholds, source policy, abstention rules, or production model artifacts have been changed.
+- Never combine ISOT, LIAR and SciFact metrics into one headline score.
+- Never promote a partial/canceled SciFact run to a benchmark result.
+- Keep production migration/deployment separate from research measurements.
+- Treat source independence, temporal cutoff, abstention and calibration as explicit properties, not hidden assumptions.
 
-## Remaining scientific and release gates
+## Remaining scientific/release gates
 
-The code-side implementation work is complete. The unresolved gates are empirical and release-validation oriented:
-
-1. Complete current-head SciFact Run #57 and record its exact artifact, hashes, and metrics.
-2. Complete current-head Phase 7 ISOT Run #130 and record its exact artifact and metrics.
-3. Run/confirm the final research-branch CI after any result/documentation commits.
-4. Review retrieval Recall@K, NLI quality, verdict metrics, abstention, source-independence behavior, and calibration together without conflating datasets.
-5. Keep any production migration decision separate from research measurements.
-
-PR #26 must remain research-only until these empirical gates are closed and a separate production proposal is justified.
+1. Finish SciFact run #91 and validate the resulting artifact.
+2. Update the authoritative SciFact result record only from that completed artifact.
+3. Run one final CI/docs-consistency gate after any result-state commit.
+4. Review retrieval Recall@K, NLI component quality, verdict metrics, abstention, source independence and calibration together.

@@ -4,63 +4,51 @@
 
 Branch: `research/truthlens-v2-model-quality`
 
-The research branch has separately completed current Phase 2 and Phase 7 validation workflows with success. These benchmarks evaluate the ISOT dataset and remain distinct from the SciFact/V2 evidence-grounding benchmark.
+The current research head has separately completed Phase 2 and Phase 7 validation workflows with success. These evaluate the ISOT dataset and remain distinct from the SciFact/V2 evidence-grounding benchmark.
 
 ## Phase 2 — real ISOT data validation
 
-Latest completed validation run: **#157** — SUCCESS.
+Latest completed validation: **run #158 — SUCCESS**  
+Run ID: `36605230722`  
+Validated commit: `4c0581e199f86c278d7b8ce08d3639adeba41c2f`  
+Artifact ID: `11050851349`  
+Artifact ZIP SHA-256: `ee65b9ac7d897174eb68c7b036de596519a5715fda67d5b5e71b6a992713ea30`
 
-The workflow verified the official Phase 2 dataset assets, executed the real-data preparation pipeline, and uploaded the measured preparation/split artifacts.
+Preparation results:
+
+- 44,898 raw rows: 23,481 fake / 21,417 real
+- Exact duplicate extra rows: 5,795
+- Near-duplicate groups: 5,401 involving 12,133 articles
+- Cross-label near-duplicate groups: 2
+- Near-duplicate groups crossing train/validation/test splits: 0
+- Strict Reuters-dateline matches: 18,618
+- Unparseable dates: 10
+- Temporal cutoff: 2017-01-01
+
+The Reuters dateline shortcut risk is measured explicitly rather than hidden.
 
 ## Phase 7 — leakage-aware ISOT benchmark
 
-Latest completed benchmark run: **#146** — SUCCESS.
+Latest completed benchmark: **run #147 — SUCCESS**  
+Run ID: `36605230497`  
+Validated commit: `4c0581e199f86c278d7b8ce08d3639adeba41c2f`  
+Artifact ID: `11051501395`  
+Artifact ZIP SHA-256: `ed9b80fc0d91fd5fd67f98758287e7a98c08dafe4854e7f8e788c894a626e77e`
 
-The benchmark uses near-duplicate-aware grouping and a separate temporal test while leaving the production model artifact unchanged.
+Measured F1 values:
 
-The latest measured ISOT results remain controlled dataset benchmarks, not claims of universal real-world fake-news detection accuracy. They must never be combined with SciFact, LIAR, or live-news measurements.
+| Model | Variant | Validation F1 | Test F1 | Temporal F1 |
+|---|---|---:|---:|---:|
+| Logistic regression | raw | 0.987810 | 0.989831 | 0.993817 |
+| Calibrated linear SVM | raw | 0.993997 | 0.994048 | 0.998107 |
+| Logistic regression | Reuters-dateline mitigated | 0.987952 | 0.989831 | 0.993873 |
+| Calibrated linear SVM | Reuters-dateline mitigated | 0.993853 | 0.994048 | 0.998107 |
+
+The benchmark log confirms `production_artifact_modified=false`. These are controlled dataset measurements, not universal real-world accuracy claims.
 
 ## Research disposition
 
-- Production model artifacts remain unchanged.
-- No Phase 2/Phase 7 benchmark result replaces the production release snapshot.
-- The separate V2 SciFact benchmark is the gate for evidence-grounded research quality.
-- A full current-head SciFact result must be published only from a completed artifact on the frozen 300-claim / 5,183-document setup.
-
-## Latest completed artifact record — Phase 2
-
-Workflow run: **#157**  
-Run ID: `36597318281`  
-Validated commit: `ba7631ebf4e3f1d6917d8fd04ab167ad50130b2f`  
-Artifact SHA-256: `b1059307465f721e2a5dfe8e9c0b7e9cf3e64cc57609d959574c6f3b03b7faf8`
-
-The preparation artifact records:
-- 44,898 raw rows (23,481 fake / 21,417 real)
-- 5,401 near-duplicate groups involving 12,133 articles
-- 0 near-duplicate groups straddling train/validation/test splits
-- 2 cross-label near-duplicate groups
-- 18,618 strict Reuters-dateline matches (86.93% of real rows)
-- 10 invalid dates excluded from the temporal split
-- temporal cutoff: 2017-01-01
-
-The Reuters dateline rate is a material shortcut risk and is explicitly measured rather than hidden.
-
-## Latest completed artifact record — Phase 7
-
-Workflow run: **#146**  
-Run ID: `36597318432`  
-Validated commit: `ba7631ebf4e3f1d6917d8fd04ab167ad50130b2f`  
-Artifact SHA-256: `0ed6d6a57a06c64901b92859fbf792a422f1719823fa5ba2d221688e1e92e8cb`
-
-The leakage-aware benchmark reported, on its held-out test split:
-
-| Model variant | Accuracy | Macro-F1 | ROC-AUC | PR-AUC | ECE-10 |
-|---|---:|---:|---:|---:|---:|
-| Logistic regression | 0.989607 | 0.989601 | 0.999043 | 0.999183 | 0.059294 |
-| Calibrated linear SVM | 0.993764 | 0.993761 | 0.999311 | 0.999464 | 0.005818 |
-| Logistic regression, Reuters dateline mitigated | 0.989607 | 0.989601 | 0.999043 | 0.999184 | 0.059309 |
-| Calibrated linear SVM, Reuters dateline mitigated | 0.993912 | 0.993909 | 0.999311 | 0.999464 | 0.005822 |
-
-Separate temporal evaluation for the calibrated linear SVM reported accuracy **0.998677** and macro-F1 **0.998545**. The benchmark is dataset-specific and is not evidence of universal real-world fake-news detection accuracy.
-
-The benchmark explicitly records `production_artifact_modified=false`.
+- Production `main` remains `32db8230547658b7d5d2a615599526d88c22fce9`.
+- No Phase 2/Phase 7 result replaces the production release snapshot.
+- The V2 SciFact benchmark remains a separate evidence-grounding gate.
+- A SciFact score is published only after a complete 300-claim artifact exists.
