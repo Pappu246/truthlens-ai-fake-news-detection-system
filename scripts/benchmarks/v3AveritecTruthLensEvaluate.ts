@@ -42,8 +42,8 @@ function normalizeEvidence(evidence: any[], queries: string[]) {
 }
 
 async function main() {
-  const input = path.resolve(arg('input', 'artifacts/v3/averitec/dev.json'));
-  const output = path.resolve(arg('output', 'artifacts/v3/averitec/truthlens-predictions.json'));
+  const input = path.resolve(arg('input', 'artifacts/v3/averitec/dev.json')!);
+  const output = path.resolve(arg('output', 'artifacts/v3/averitec/truthlens-predictions.json')!);
   const maxClaims = Number(arg('max-claims', '0'));
   const rows: Reference[] = JSON.parse(fs.readFileSync(input, 'utf8'));
   const selected = maxClaims > 0 ? rows.slice(0, maxClaims) : rows;
