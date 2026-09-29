@@ -48,7 +48,7 @@ function sourceClusterKey(url: string): string {
     // Treat each synthetic document path as its own cluster so benchmark
     // documents are not incorrectly collapsed into one publisher domain.
     if (host.endsWith('.local')) {
-      return `${host}${parsed.pathname.replace(/\\/+$/, '')}`;
+      return `${host}${parsed.pathname.replace(/\/+$/, '')}`;
     }
 
     const parts = host.split('.');
