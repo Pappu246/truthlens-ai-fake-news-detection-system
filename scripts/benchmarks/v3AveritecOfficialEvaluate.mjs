@@ -29,7 +29,7 @@ async function main() {
     const scorerRun = await runPython(tmp, "eval.py", ["--predictions", predictions, "--references", references]);
     const out = path.resolve(arg("output") || "artifacts/v3/averitec/official-scorer-run.json");
     await fs.mkdir(path.dirname(out), { recursive: true });
-    await fs.writeFile(out, JSON.stringify({ benchmark_id: "averitec", protocol_version: "truthlens-v3-benchmark-protocol-v1", scorer_source: "https://github.com/MichSchli/AVeriTeC/blob/main/eval.py", predictions, references, generated_at: new Date().toISOString() }, null, 2) + "\n");
+    await fs.writeFile(out, JSON.stringify({ benchmark_id: "averitec", protocol_version: "truthlens-v3-benchmark-protocol-v1", scorer_source: "https://github.com/MichSchli/AVeriTeC/blob/7c62d1ec8df3fb560d6efe2b85fa191135636f81/eval.py", predictions, references, scorer_stdout: scorerRun.stdout, scorer_stderr: scorerRun.stderr, generated_at: new Date().toISOString() }, null, 2) + "\n");
   } finally { await fs.rm(tmp, { recursive: true, force: true }); }
 }
 main().catch((error) => { console.error(error?.stack || error); process.exit(1); });
