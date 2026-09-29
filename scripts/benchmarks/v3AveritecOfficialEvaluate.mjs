@@ -11,8 +11,8 @@ async function main() {
   const references = path.resolve(arg("references") || "data/external/averitec/dev.json");
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "truthlens-averitec-"));
   try {
-    await fs.writeFile(path.join(tmp, "eval.py"), await fetchText("https://raw.githubusercontent.com/MichSchli/AVeriTeC/main/eval.py"));
-    await fs.writeFile(path.join(tmp, "utils.py"), await fetchText("https://raw.githubusercontent.com/MichSchli/AVeriTeC/main/utils.py"));
+    await fs.writeFile(path.join(tmp, "eval.py"), await fetchText("https://raw.githubusercontent.com/MichSchli/AVeriTeC/7c62d1ec8df3fb560d6efe2b85fa191135636f81/eval.py"));
+    await fs.writeFile(path.join(tmp, "utils.py"), await fetchText("https://raw.githubusercontent.com/MichSchli/AVeriTeC/7c62d1ec8df3fb560d6efe2b85fa191135636f81/utils.py"));
     await runPython(tmp, "eval.py", ["--predictions", predictions, "--references", references]);
     const out = path.resolve(arg("output") || "artifacts/v3/averitec/official-scorer-run.json");
     await fs.mkdir(path.dirname(out), { recursive: true });
