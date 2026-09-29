@@ -49,7 +49,7 @@
       "status": "protocol-locked",
       "task": "real-world claim verification with web evidence",
       "split": "dev for local iteration; blind test only for official submission",
-      "evidence_setting": "claim + provided document collection; web retrieval must be declared separately",
+      "evidence_setting": "open-web evidence retrieval with source URLs and QA-style evidence; no fixed corpus is bundled in the benchmark repository",
       "primary_metrics": ["claim_verification_accuracy", "evidence_quality"],
       "dataset_source": "https://github.com/MichSchli/AVeriTeC",
       "protocol_source": "https://fever.ai/2025/task.html",
@@ -58,7 +58,7 @@
       "implementation": "scripts/benchmarks/v3AveritecOfficialEvaluate.mjs",
       "source_revision": "MichSchli/AVeriTeC main @ 7c62d1ec8df3fb560d6efe2b85fa191135636f81",
       "dataset_content_ids": {"data/dev.json": {"git_blob_sha1": "40974243267f395dc583d805d10f043812419249"}, "data/train.json": {"git_blob_sha1": "0f190e115cf2ee23416e8a539c8d6ac043d7cc83"}},
-      "notes": "Official evaluator wrapper is wired. End-to-end TruthLens retrieval remains a separate live/open-web integration gate; exact release and hashes must be pinned before scoring."
+      "notes": "TruthLens uses the benchmark’s open-web evidence setting. The official evaluator is pinned; source revision and dev.json Git blob identity are recorded. Full dev execution remains pending."
     },
     {
       "id": "feverous",
