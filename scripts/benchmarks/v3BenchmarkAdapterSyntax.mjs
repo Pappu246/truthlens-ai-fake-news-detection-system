@@ -15,13 +15,13 @@ const pythonFiles = [
 ];
 
 for (const file of nodeFiles) {
-  if (file.endsWith('.ts')) {
-    execFileSync('npx', ['tsx', '--no-warnings', file, '--help'], { stdio: 'pipe' });
-  } else {
+  if (!file.endsWith('.ts')) {
     execFileSync('node', ['--check', file], { stdio: 'pipe' });
+    console.log('syntax ok:', file);
   }
-  console.log('syntax ok:', file);
 }
+
+console.log('TypeScript adapters are validated by the repository type-check gate.');
 
 for (const file of pythonFiles) {
   execFileSync('python3', ['-m', 'py_compile', file], { stdio: 'pipe' });
