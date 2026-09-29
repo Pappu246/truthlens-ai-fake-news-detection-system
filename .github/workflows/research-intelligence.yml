@@ -2,6 +2,9 @@ name: TruthLens Research Intelligence
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - "research/v3-phase1-gate-validation"
   pull_request:
     branches:
       - main
