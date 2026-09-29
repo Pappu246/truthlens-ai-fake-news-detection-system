@@ -112,25 +112,33 @@ async function main(): Promise<void> {
   });
 
   for (const claim of claims) {
-    const builtClaim = buildClaim(claim.claim);
-    const docIds = Object.keys(claim.evidence || {});
-    if (docIds.length === 0) throw new Error(`Claim ${claim.id} has no gold evidence for smoke validation`);
+    try {
+      const builtClaim = buildClaim(claim.claim);
+      const docIds = Object.keys(claim.evidence || {});
+      if (docIds.length === 0) throw new Error('no gold evidence');
 
-    const doc = docsById.get(docIds[0]);
-    if (!doc) throw new Error(`Missing document ${docIds[0]} for claim ${claim.id}`);
+      const doc = docsById.get(docIds[0]);
+      if (!doc) throw new Error(`missing document ${docIds[0]}`);
 
-    const rationale = claim.evidence[docIds[0]][0];
-    const passage = rationale.sentences.map(index => doc.abstract[index]).filter(Boolean).join(' ').trim();
-    if (!passage) throw new Error(`Empty rationale for claim ${claim.id}`);
+      const rationale = claim.evidence[docIds[0]][0];
+      const passage = rationale.sentences.map(index => doc.abstract[index]).filter(Boolean).join(' ').trim();
+      if (!passage) {
+        throw new Error(`empty rationale for document ${docIds[0]}; sentence_indices=${JSON.stringify(rationale.sentences)} abstract_length=${doc.abstract.length}`);
+      }
 
-    const nliResult = await nli.classify(builtClaim, passage);
-    if (nliResult.modelName !== 'facebook/bart-large-mnli' || !['SUPPORTS', 'REFUTES', 'NEUTRAL'].includes(nliResult.label)) {
-      throw new Error(`Unexpected NLI adapter result for claim ${claim.id}`);
-    }
+      const nliResult = await nli.classify(builtClaim, passage);
+      if (nliResult.modelName !== 'facebook/bart-large-mnli' || !['SUPPORTS', 'REFUTES', 'NEUTRAL'].includes(nliResult.label)) {
+        throw new Error(`unexpected NLI result: model=${nliResult.modelName} label=${nliResult.label} confidence=${nliResult.confidence}`);
+      }
 
-    const vectors = await embedding.embedBatch([claim.claim, passage]);
-    if (vectors.length !== 2 || vectors.some(vector => vector.length !== 4)) {
-      throw new Error(`Unexpected embedding adapter result for claim ${claim.id}`);
+      const vectors = await embedding.embedBatch([claim.claim, passage]);
+      if (vectors.length !== 2 || vectors.some(vector => vector.length !== 4 || vector.some(value => !Number.isFinite(value)))) {
+        throw new Error(`unexpected embedding result: vector_lengths=${vectors.map(vector => vector.length).join(',')}`);
+      }
+
+      console.log(`smoke claim ${claim.id}: PASS`);
+    } catch (error) {
+      throw new Error(`Smoke validation failed for claim ${claim.id}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
