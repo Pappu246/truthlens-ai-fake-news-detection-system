@@ -80,7 +80,6 @@ def build_index(wiki_dir: Path, db_path: Path) -> None:
                 "INSERT OR IGNORE INTO sentences(page,line_id,text) VALUES(?,?,?)",
                 batch
             )
-            con.execute("INSERT INTO sentences_fts(sentences_fts) VALUES('rebuild')")
             con.commit()
             total += len(batch)
             batch.clear()
