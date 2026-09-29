@@ -77,3 +77,6 @@ jobs:
         run: |
           node --check scripts/researchIntelligence.mjs
           node -e "JSON.parse(require('fs').readFileSync('research/research-intelligence-registry.json', 'utf8')); console.log('Research registry JSON: OK')"
+
+      - name: V3 phase sequence gate
+        run: node scripts/validateV3PhaseState.mjs
