@@ -61,3 +61,27 @@ These numbers are diagnostic only and must not be presented as standard SciFact 
 - No production thresholds, source policy, abstention rule or production model are changed.
 - No synthetic fixture numbers are mixed into this benchmark.
 - The benchmark does **not** establish world-leading performance by itself; it establishes a reproducible external end-to-end baseline for TruthLens V2.
+
+## Measured result — SciFact dev (Run #21)
+
+Run #21 completed successfully on commit `7a1f130b92d6c10710d70bfe545e11e0feccf65e`.
+
+- Frozen inputs: **300 dev claims / 5,183 corpus documents**.
+- Candidate pool: **100**.
+- Final V2 evidence set: **8**.
+- Open candidate recall: **53.67%**.
+- Gold-evidence Recall@5: **68.09%**.
+- Benchmark directional accuracy: **37.00%**.
+- Benchmark directional macro-F1: **0.341899**.
+
+Directional per-class results:
+
+| Label | Precision | Recall | F1 | Support |
+|---|---:|---:|---:|---:|
+| SUPPORT | 1.000000 | 0.096774 | 0.176471 | 124 |
+| CONTRADICT | 0.267516 | 0.656250 | 0.380090 | 64 |
+| NOT_ENOUGH_INFO | 0.435115 | 0.508929 | 0.469136 | 112 |
+
+Production-policy diagnostics on the same claims: mapped accuracy **37.33%**, mapped macro-F1 **0.181230**, abstention **100%**, non-abstain coverage **0%**, and CONFLICTED rate **0.33%**. These are not standard SciFact task metrics because the unchanged production policy requires independent corroboration.
+
+The GitHub Actions artifact was `truthlens-v2-scifact-end-to-end` (artifact ID **11015937689**, SHA-256 **cc796d94b22003229de1e281b52aaa487d6db3721ea8fc4767a7b6ce8b2d2595**). A repository copy of the machine-readable summary is stored at `data/v2/scifact_end_to_end_results.json`.
