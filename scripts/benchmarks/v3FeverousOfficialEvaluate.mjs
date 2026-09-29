@@ -9,7 +9,7 @@ async function main() {
   const input = path.resolve(arg("input") || "artifacts/v3/feverous/predictions.jsonl");
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "truthlens-feverous-"));
   try {
-    await run("git", ["clone", "--depth", "1", "https://github.com/Raldir/FEVEROUS.git", "repo"], tmp);
+    await run("git", ["clone", "--depth", "1", "https://github.com/Raldir/FEVEROUS.git#32b68ce4e33c53f34ae2e6d88b51cd073ab85ab6", "repo"], tmp);
     const evaluator = path.join(tmp, "repo", "src", "feverous", "evaluation", "evaluate.py");
     await run("python3", [evaluator, "--input_path", input], tmp, { ...process.env, PYTHONPATH: path.join(tmp, "repo", "src") });
     const out = path.resolve(arg("output") || "artifacts/v3/feverous/official-scorer-run.json");
