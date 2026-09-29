@@ -321,7 +321,7 @@ export class PretrainedNliAdapter implements NliAdapter {
    */
   public classifyBatch(claim: ExtractedClaim, passages: string[]): NliClassification[] {
     if (passages.length === 0) return [];
-    const fullClaimText = (claim.normalizedText || '').trim().replace(/\\s+/g, ' ');
+    const fullClaimText = (claim.normalizedText || '').trim().replace(/\s+/g, ' ');
     const conditioning = conditionHypothesis(fullClaimText);
 
     // Batch the relatedness embeddings so a research batch performs one worker
