@@ -71,7 +71,7 @@ async function main() {
 
     const provenance = result.provenance;
     const evidence = provenance.evidence || [];
-    const queries = provenance.queries || [];
+    const queries = provenance.queries?.all || [];
 
     predictions.push({
       claim: row.claim,
@@ -80,11 +80,11 @@ async function main() {
       justification: evidence.slice(0, 5).map((e: any) => e.passage || e.snippet || e.title || '').filter(Boolean).join(' '),
       truthlens_provenance: {
         final_verdict: provenance.final_verdict,
-        confidence: provenance.confidence,
+        confidence: provenance.final_confidence,
         abstained: provenance.abstained,
-        abstention_reason: provenance.abstentionReason,
+        abstention_reason: provenance.abstention_reason,
         evidence_count: evidence.length,
-        retrieval_diagnostics: provenance.retrievalDiagnostics,
+        retrieval_diagnostics: provenance.retrieval_summary,
         evidence_urls: evidence.map((e: any) => e.url)
       }
     });
