@@ -11,7 +11,7 @@ TruthLens AI is a TypeScript/Node.js system for news-analysis assistance. It com
 
 ## Verified release snapshot
 
-The current application source of truth is `main` at commit [`32db823`](https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/commit/32db8230547658b7d5d2a615599526d88c22fce9). The post-merge production smoke workflow completed successfully with **55/55 checks passed** against the Render deployment on 2026-09-26 UTC: [workflow run](https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/actions/runs/36241411149).
+The current application source of truth is `main` at merge commit [`1c2eb48`](https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/commit/1c2eb483d186b9569d1ff944689fb6fbc94d36b0). After the merge, the main CI and production-smoke gates completed successfully. The live Render production smoke verification recorded **55/55 checks passed** on 2026-09-29 UTC.
 
 Article and claim measurements below are separate benchmarks. They must not be added, averaged, or presented as one overall accuracy.
 
@@ -262,7 +262,7 @@ See [docs/FINAL_REPORT.md](docs/FINAL_REPORT.md) for the complete final release 
 
 ## TruthLens V2 Research
 
-The research branch `research/truthlens-v2-model-quality` contains an evidence-grounded verification pipeline:
+`main` now contains the verified V2 evidence-grounded verification pipeline. The experimental `/api/v2/evidence/verify` route is additive to the existing production API surface. Its research benchmark results remain separate from the established article and claim production metrics.
 
 `claim -> query expansion -> hybrid retrieval -> reranking -> pretrained NLI -> aggregation/abstention -> provenance`
 
@@ -279,4 +279,4 @@ Research documentation:
 
 Benchmark results are reported with frozen-input hashes, exact commit/workflow provenance, explicit abstention semantics, and documented limitations. Research-branch measurements are not production accuracy claims.
 
-Production `main` remains a separate release boundary and is not changed by the V2 research branch.
+Production source of truth: `main` at merge commit `1c2eb483d186b9569d1ff944689fb6fbc94d36b0`. Future model/research upgrades must use the staged research-branch → benchmark → regression → review → production-promotion process defined in `docs/V3_RESEARCH_MASTER_PLAN.md`. No benchmark result is promoted into a universal real-world accuracy claim.
