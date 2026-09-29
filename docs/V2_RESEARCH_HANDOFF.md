@@ -5,7 +5,7 @@
 ## Current production boundary
 
 - Production `main`: `32db8230547658b7d5d2a615599526d88c22fce9`
-- Current V2 research branch head: `e3f18aa3c6c5ca138bbef2392a9c35f902fb4546`
+- Current V2 research branch head: `ddbe01c07488401cb6e781f2888c54959638d79a`
 - PR #26 remains open and research-only.
 - No research branch has been merged or deployed to production.
 
@@ -70,7 +70,7 @@ The component-level pretrained comparison still shows better NLI accuracy/F1 tha
 
 ## Remaining research work
 
-The mandatory end-to-end evaluation checkpoint is complete and all current validation gates are green. There is no known validation blocker on the research branch.
+The mandatory end-to-end evaluation checkpoint is complete and all currently required validation gates are green on the latest completed checkpoint. A redundant post-documentation SciFact run may still be active; it does not change the already recorded Run #21 result.
 
 Recommended next research iteration:
 
