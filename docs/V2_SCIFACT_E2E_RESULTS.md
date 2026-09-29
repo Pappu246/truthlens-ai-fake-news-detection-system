@@ -5,14 +5,14 @@
 ## Run identity
 
 - Workflow: **V2 SciFact End-to-End Benchmark**
-- Latest authoritative run: **#16**
-- Run ID: `36473822898`
+- Latest authoritative run: **#17**
+- Run ID: `36487799066`
 - Branch: `research/truthlens-v2-model-quality`
-- Evaluated commit: `4af36a73506ddbe33e78f6505af73a7938810907`
+- Evaluated commit: `f0545eb695bf0015820064ddcc58e43fce1b3346`
 - Artifact: `truthlens-v2-scifact-end-to-end`
-- Artifact ID: `10998862059`
-- Artifact SHA-256: `6146fa5258fab79610e341fab5a6bdc74d6ecc3c3c9ed1632b3a2fa0061cf0de`
-- Generated: **2026-09-28T21:23:56.362Z**
+- Artifact ID: `11003489903`
+- Artifact SHA-256: `55f4a7f9fcd658fdb3e3a66d86c99418ac6696fa2b9a0a98cc16404b5527341c`
+- Generated: **2026-09-28T22:24:00Z**
 
 ## Frozen evaluation inputs
 
@@ -63,7 +63,7 @@ The 100% abstention rate is expected under the unchanged production-source polic
 
 ## Interpretation
 
-Run #16 reproduces the same measured end-to-end result as the previous authoritative SciFact run, confirming deterministic behavior on the frozen inputs and sealed model artifacts. Retrieval remains the dominant disclosed bottleneck: open candidate recall is **53.67%** and gold-evidence Recall@5 is **68.09%**. Directional performance remains **37.0% accuracy** and **0.3419 macro-F1**.
+Run #17 reproduces the same measured end-to-end result as the previous authoritative SciFact run, confirming deterministic behavior on the frozen inputs and sealed model artifacts. Retrieval remains the dominant disclosed bottleneck: open candidate recall is **53.67%** and gold-evidence Recall@5 is **68.09%**. Directional performance remains **37.0% accuracy** and **0.3419 macro-F1**.
 
 The benchmark is a reproducible external measurement, **not** evidence of world-leading performance and **not** a production-accuracy estimate. The result does not justify production promotion.
 
@@ -77,4 +77,4 @@ The benchmark is a reproducible external measurement, **not** evidence of world-
 
 ## Reproduction
 
-The workflow freezes the SciFact inputs by SHA-256, verifies counts, installs the local pretrained runtime, verifies the sealed research models, runs the complete benchmark, and uploads the JSON/log artifact. The artifact above is the authoritative result for Run #16.
+The workflow freezes the SciFact inputs by SHA-256, verifies counts, installs the local pretrained runtime, verifies the sealed research models, runs the complete benchmark, and uploads the JSON/log artifact. The artifact above is the authoritative result for Run #17.
