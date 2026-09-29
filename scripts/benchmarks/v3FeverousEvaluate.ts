@@ -41,11 +41,11 @@ async function main() {
     });
     const predictedLabel = mapVerdict(result.provenance.final_verdict);
     if (predictedLabel === row.label) labelCorrect += 1;
-    const candidateIds = new Set(row.candidates.map((c) => c.feverous_page + '::' + c.feverous_element_id));
+    const candidateIds = new Set(row.candidates.map((c) => c.feverous_id));
     const goldFlat = (row.gold_evidence || []).flat();
     if (goldFlat.some((id) => candidateIds.has(id))) candidateRecall += 1;
     const scoredEvidence = result.provenance.evidence.slice().sort((a, b) => b.rerank_score - a.rerank_score).slice(0, 5)
-      .map((e) => { const c = row.candidates.find((x) => x.url === e.url); return c?.feverous_element_id || null; })
+      .map((e) => { const c = row.candidates.find((x) => x.url === e.url); return c?.feverous_id || null; })
       .filter((x): x is string => Boolean(x));
     predictions.push({
       id: row.id, claim: row.claim, label: row.label, predicted_label: predictedLabel,
