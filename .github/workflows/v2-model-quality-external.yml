@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: truthlens-v2-model-quality-${{ github.event.pull_request.number || github.ref_name }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   preflight:
@@ -111,7 +111,7 @@ jobs:
 
   local-pretrained-evaluation:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 180
     steps:
       - name: Checkout V2 research branch
         uses: actions/checkout@v4
