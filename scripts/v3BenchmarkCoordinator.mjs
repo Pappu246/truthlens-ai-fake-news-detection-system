@@ -89,7 +89,27 @@ async function runAveritec() {
 }
 
 async function runFeverous() {
-  throw new Error("FEVEROUS coordinator blocked until the structured TruthLens prediction adapter is implemented. Materializing 10+ GB of corpus before that gate would be wasteful.");
+  const root = path.join(ROOT, "artifacts", "v3", "feverous");
+  await run("node", ["scripts/benchmarks/v3MaterializeAssets.mjs", "--benchmark=feverous", "--with-corpus"]);
+  await run("unzip", ["-q", path.join(root, "feverous-wiki-pages-db.zip"), "-d", path.join(root, "wiki-db")]);
+  const dbPath = path.join(root, "wiki-db", "feverous_wiki_pages.db");
+  await run("python3", [
+    "scripts/benchmarks/v3FeverousPrepareCandidates.py",
+    "--db=" + dbPath,
+    "--claims=" + path.join(root, "dev.jsonl"),
+    "--output=" + path.join(root, "candidates.jsonl")
+  ]);
+  await run("npx", [
+    "tsx", "scripts/benchmarks/v3FeverousEvaluate.ts",
+    "--input=" + path.join(root, "candidates.jsonl"),
+    "--output=" + path.join(root, "truthlens-predictions.jsonl"),
+    "--report=" + path.join(root, "truthlens-adapter-report.json")
+  ]);
+  await run("node", [
+    "scripts/benchmarks/v3FeverousOfficialEvaluate.mjs",
+    "--input=" + path.join(root, "truthlens-predictions.jsonl"),
+    "--output=" + path.join(root, "official-scorer-run.json")
+  ]);
 }
 
 async function runOpenWeb() {
