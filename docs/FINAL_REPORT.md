@@ -1,9 +1,9 @@
 # TruthLens AI — Final Release Audit
 
-**Audit date:** 2026-09-26 UTC
+**Audit date:** 2026-09-29 UTC
 **Audited repository:** `Pappu246/truthlens-ai-fake-news-detection-system`
 **Source-of-truth branch:** `main`
-**Current main SHA:** `7e570a56288da85f2a90acb8d0c1dd051bd142ab`
+**Current main SHA:** `32db8230547658b7d5d2a615599526d88c22fce9`
 
 This report records verified state only. Article and claim benchmarks are separate measurements and are not combined into one accuracy number. Neither benchmark accuracy is a guarantee of real-world fact-checking accuracy.
 
@@ -21,7 +21,7 @@ This report records verified state only. Article and claim benchmarks are separa
 - **PR state:** Merged
 - **PR head:** `3097504027f382ed65a1c194880ce561366c9d71`
 - **Merge commit:** `7e570a56288da85f2a90acb8d0c1dd051bd142ab`
-- **Resulting `main`:** `7e570a56288da85f2a90acb8d0c1dd051bd142ab`
+- **Resulting main after PR #23:** `7e570a56288da85f2a90acb8d0c1dd051bd142ab`
 
 The complete PR diff was inspected. It changed the RSS/Atom provider, frontend live-news fallback logic, shared news types, the contract suite, and evidence documentation. The server-side fix addresses the real defect: `/api/news/latest` now labels each feed item before it leaves the provider.
 
@@ -89,6 +89,10 @@ The URL analysis flow validates, fetches, extracts, and then analyzes the freshl
 
 The post-merge production smoke workflow verified `/api/news/latest` labels, including the invariant that headline-only items are not presented as full articles. RSS/Atom descriptions are not promoted to full article content merely because they contain `description`, `summary`, or `content` text.
 
+## Post-release dependency security maintenance
+
+PR #25 was subsequently merged into main at commit 32db8230547658b7d5d2a615599526d88c22fce9 to address the Express/qs security advisories. The merged change updates Express 4.22.3 and qs 6.16.0; its recorded verification reports 0 vulnerabilities from both npm audit and npm audit --omit=dev. This dependency-maintenance change did not alter application logic, model artifacts, evidence behavior, SSRF protections, or live-news semantics.
+
 ## Security and test results
 
 Local verification on the current main source passed:
@@ -105,7 +109,7 @@ Local verification on the current main source passed:
 - SSRF tests: **8 passed, 0 failed**
 - PR #23 required checks: green, including CI, ISOT pipeline/data validation, benchmark, and Vercel checks
 
-`npm audit` reports **two moderate unresolved dependency advisories** in the `qs` dependency path used by Express. No audit fix was applied during this recovery task; application source and lockfile were not changed to manipulate that result.
+`npm audit` was clean on the post-release security maintenance commit described above. Any future dependency changes should re-run the audit rather than relying on this historical snapshot.
 
 ## Production verification
 
