@@ -259,3 +259,24 @@ render.yaml                 Render deployment definition
 ```
 
 See [docs/FINAL_REPORT.md](docs/FINAL_REPORT.md) for the complete final release audit, including PR #23 promotion, exact benchmark values, security results, deployment verification, and known limitations.
+
+## TruthLens V2 Research
+
+The research branch `research/truthlens-v2-model-quality` contains an evidence-grounded verification pipeline:
+
+`claim -> query expansion -> hybrid retrieval -> reranking -> pretrained NLI -> aggregation/abstention -> provenance`
+
+Research documentation:
+- [V2 Architecture](docs/V2_ARCHITECTURE.md)
+- [V2 Benchmark Protocol](docs/V2_BENCHMARK_PROTOCOL.md)
+- [V2 Model Card](docs/V2_MODEL_CARD.md)
+- [V2 Reproducibility Protocol](docs/V2_REPRODUCIBILITY.md)
+- [V2 Threat Model](docs/V2_THREAT_MODEL.md)
+- [V2 Evaluation Matrix](docs/V2_EVALUATION_MATRIX.md)
+- [V2 Known Limitations](docs/V2_KNOWN_LIMITATIONS.md)
+
+### Research integrity
+
+Benchmark results are reported with frozen-input hashes, exact commit/workflow provenance, explicit abstention semantics, and documented limitations. Research-branch measurements are not production accuracy claims.
+
+Production `main` remains a separate release boundary and is not changed by the V2 research branch.
