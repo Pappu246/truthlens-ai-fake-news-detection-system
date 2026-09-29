@@ -1,0 +1,5 @@
+cff-version: 1.2.0
+title: "TruthLens AI"
+message: "If you use this software or research materials, please cite the repository and the specific benchmark/research commit used."
+type: software
+repository-code: "https://github.com/Pappu246/truthlens-ai-fake-news-detection-system"
