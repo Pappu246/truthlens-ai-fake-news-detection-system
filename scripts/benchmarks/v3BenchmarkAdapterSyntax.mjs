@@ -11,7 +11,8 @@ const nodeFiles = [
 ];
 
 const pythonFiles = [
-  'scripts/benchmarks/v3FeverPrepareCandidates.py'
+  'scripts/benchmarks/v3FeverPrepareCandidates.py',
+  'scripts/benchmarks/v3FeverousPrepareCandidates.py'
 ];
 
 for (const file of nodeFiles) {
