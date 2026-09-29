@@ -14,8 +14,6 @@ on:
 
 jobs:
   isot-pipeline-tests:
-
-  isot-pipeline-tests:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
