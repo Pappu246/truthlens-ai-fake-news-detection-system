@@ -1,87 +1,62 @@
 # TruthLens V2 — Model Quality Upgrade
 
-## What changed
+## Research model paths
 
-The V2 research stack now has production-shaped seams for real pretrained inference while keeping deterministic offline CI as the default.
+The V2 research stack provides deterministic offline adapters plus sealed local pretrained inference.
 
 ### NLI
 
-Set:
+The research NLI path can use:
 
-```bash
-TRUTHLENS_ENABLE_REMOTE_NLI=true
-HF_TOKEN=hf_...
-```
+- Local sealed model: `Xenova/nli-deberta-v3-xsmall`, q8@3fac2500.
+- Optional hosted path: Hugging Face Inference Providers with `facebook/bart-large-mnli`.
 
-The default remote model is `facebook/bart-large-mnli`.
-
-The adapter calls Hugging Face Inference Providers and maps three zero-shot labels into the V2 evidence labels. This is a real pretrained NLI model path, but it is not the same as a dedicated pairwise cross-encoder call; a local/managed cross-encoder remains a future upgrade.
+The local sealed path is the authoritative pretrained component evaluation path because it is reproducible and does not require a hosted model token.
 
 ### Embeddings
 
-Set:
+The research dense-retrieval path can use:
 
-```bash
-TRUTHLENS_ENABLE_REMOTE_EMBEDDINGS=true
-HF_TOKEN=hf_...
-```
+- Local sealed model: `Xenova/all-MiniLM-L6-v2`, q8@afdb6f1a.
+- Deterministic hashing-ngram embeddings for offline CI.
+- Optional hosted Hugging Face feature extraction.
 
-The default remote embedding model is `BAAI/bge-small-en-v1.5`.
+## Completed component evaluation
 
-The adapter uses the Hugging Face feature-extraction task and returns a normalised vector. Hybrid retrieval remains BM25 + dense retrieval + RRF.
+Latest completed sealed local evaluation: workflow **#162**, evaluating 300 frozen SciFact dev claims / 5,183 documents.
 
-You can override models:
+| Metric | Heuristic | Local pretrained |
+|---|---:|---:|
+| NLI accuracy | 0.307036 | **0.524520** |
+| NLI macro-F1 | 0.205958 | **0.536936** |
+| NLI ECE-10 | 0.141591 | 0.309079 |
+| Mean embedding margin | 0.039649 | **0.551816** |
+| Positive embedding-margin rate | 0.654255 | **1.000000** |
 
-```bash
-TRUTHLENS_NLI_MODEL=facebook/bart-large-mnli
-TRUTHLENS_EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
-```
-
-Remote inference is opt-in and should not be enabled in offline CI.
+The pretrained models improve the measured component classification/separation quality, but ECE is worse. No production confidence recalibration is inferred from this result.
 
 ## Conflict reasoning
 
-The decision policy no longer requires mathematically symmetric support/refute strength. A genuine dispute can be `CONFLICTED` when:
+The decision policy requires independent material evidence on both sides before returning `CONFLICTED`. It records the conflict basis in provenance and remains deterministic.
 
-- both sides have at least one independent domain;
-- each side has material weighted evidence;
-- each side has a minimum top vote;
-- the weaker side is at least 40% as strong as the stronger side.
+## Calibration
 
-Every conflict decision is recorded as `independent_material_conflict` in the provenance rule trace.
-
-This is designed to address the previous weak `CONFLICTED` recall without allowing a single weak/off-topic document to create a conflict.
-
-## Confidence calibration
-
-The evaluation harness now reports:
+The research evaluation reports:
 
 - raw ECE;
 - Brier score;
-- deterministic calibration/holdout split;
-- fitted temperature;
-- raw holdout ECE;
-- temperature-scaled holdout ECE.
+- held-out temperature-scaling diagnostics.
 
-Runtime confidence is not silently recalibrated from the development set. A held-out calibration artifact must be selected and versioned before changing production confidence semantics.
+Runtime production confidence is not silently recalibrated from the same development set.
 
 ## Test commands
-
-Offline regression:
 
 ```bash
 npm run test:v2-quality
 npm run test:all-with-v2
-```
-
-Evaluation:
-
-```bash
 npm run eval:v2
 ```
 
-## Safety and fallback behavior
+## Production safety
 
-If the remote flags or `HF_TOKEN` are absent, the system falls back to deterministic hashing embeddings and deterministic heuristic NLI.
-
-No API token is required for CI. Remote failures should be treated as model-provider failures and surfaced in diagnostics rather than silently presented as pretrained-model results.
+The model-quality upgrade is research-only. It does not change production thresholds, source policy, abstention behavior, or production model artifacts.
