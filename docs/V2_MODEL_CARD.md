@@ -78,3 +78,7 @@ TruthLens should surface evidence and uncertainty rather than manufacture certai
 ## Production boundary
 
 This model card describes the research branch only. Production main retains its independent source rule, thresholds, deployment policy, and model artifacts unless explicitly reviewed and changed through the normal release process.
+
+## Temporal evidence integrity
+
+When a claim date is available, the V2 research pipeline can enforce a publication-time cutoff so evidence published after the claim cannot contribute to directional reasoning. The cutoff and number of excluded candidates are preserved in provenance. This is disabled only when no valid claim date is supplied or when explicitly overridden for a research ablation.
