@@ -75,7 +75,7 @@ A separate sealed human-annotated set is required for real-world generalization.
 ## Current Phase 2 exit gate
 
 The phase is not complete until:
-1. every required benchmark has a pinned dataset/version and hash;
+1. every required benchmark has a pinned dataset/version plus either a reproducible SHA-256, an authoritative published checksum, or an immutable source revision (for Git-hosted assets);
 2. every benchmark has a runnable adapter;
 3. each adapter produces the declared primary metrics;
 4. the same TruthLens model configuration can be evaluated without hidden benchmark-specific tuning;
@@ -96,9 +96,9 @@ As of the current Phase 2 research branch:
 | Benchmark | TruthLens adapter | Official scorer wrapper | Data/hash pin | Phase status |
 |---|---|---|---|---|
 | SciFact | Yes — existing full-corpus evaluator | Native benchmark evaluator | Yes | Baseline verified |
-| FEVER | Yes — open-retrieval candidate preparation + TruthLens evaluator | Yes | **Not yet pinned for the current asset package** | In progress |
-| AVeriTeC | Protocol/prediction adapter | Yes — upstream `eval.py` | **Not yet pinned for current release** | In progress |
-| FEVEROUS | Official evaluator adapter | Yes — upstream `evaluate.py` | **Not yet pinned; structured TruthLens prediction adapter remains** | In progress |
+| FEVER | Yes — open-retrieval candidate preparation + TruthLens evaluator | Yes | **Zenodo v1 + published MD5 pinned; local SHA-256 materialization still required for the full run** | In progress |
+| AVeriTeC | Protocol/prediction adapter | Yes — repo commit + Git blob IDs pinned; local SHA-256 materialization still required | Yes — upstream `eval.py` | In progress |
+| FEVEROUS | Official evaluator adapter | Yes — upstream `evaluate.py` | **Zenodo v1 + published MD5 pinned; structured TruthLens prediction adapter remains** | In progress |
 | External open-web | Not yet a scored TruthLens benchmark | N/A | **Sealed independent holdout still required** | Remaining gate |
 
 The FEVER adapter uses an open-retrieval FTS5 index over the official Wikipedia shard corpus. Gold evidence is never injected into the candidate pool. Its output is intentionally compatible with the official FEVER scorer, which defines strict evidence-aware scoring in addition to label accuracy and evidence precision/recall/F1. citeturn449019search0
