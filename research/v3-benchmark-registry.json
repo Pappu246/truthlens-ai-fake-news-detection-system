@@ -38,8 +38,8 @@
       "scorer_source": "https://github.com/sheffieldnlp/fever-scorer",
       "claims_sha256": null,
       "corpus_sha256": null,
-      "implementation": null,
-      "notes": "Adapter execution remains blocked until a reproducible local dataset package and verified hashes are pinned."
+      "implementation": "scripts/benchmarks/v3FeverEvaluate.ts + scripts/benchmarks/v3FeverOfficialEvaluate.mjs",
+      "notes": "Adapter and official scorer are wired. Full benchmark remains blocked until the exact FEVER asset package and hashes are pinned."
     },
     {
       "id": "averitec",
@@ -53,8 +53,8 @@
       "protocol_source": "https://fever.ai/2025/task.html",
       "claims_sha256": null,
       "corpus_sha256": null,
-      "implementation": null,
-      "notes": "The official 2025 task uses a revised document collection with temporal-leakage fixes. Local evaluation must pin the exact release before scoring."
+      "implementation": "scripts/benchmarks/v3AveritecOfficialEvaluate.mjs",
+      "notes": "Official evaluator wrapper is wired. End-to-end TruthLens retrieval remains a separate live/open-web integration gate; exact release and hashes must be pinned before scoring."
     },
     {
       "id": "feverous",
@@ -69,8 +69,8 @@
       "scorer_source": "https://github.com/Raldir/FEVEROUS",
       "claims_sha256": null,
       "corpus_sha256": null,
-      "implementation": null,
-      "notes": "Structured evidence is not silently collapsed into plain-text evidence. A dedicated adapter is required."
+      "implementation": "scripts/benchmarks/v3FeverousOfficialEvaluate.mjs",
+      "notes": "Official evaluator wrapper is wired. TruthLens structured evidence generation remains a separate adapter gate; dataset release and hashes must be pinned before scoring."
     },
     {
       "id": "openweb-external",
