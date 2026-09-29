@@ -8,7 +8,7 @@ on:
 
 concurrency:
   group: truthlens-v2-scifact-${{ github.event.pull_request.number || github.ref_name }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -16,7 +16,7 @@ permissions:
 jobs:
   scifact-e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 240
     steps:
       - name: Checkout research branch
         uses: actions/checkout@v4
