@@ -18,7 +18,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: truthlens-v2-model-quality-${{ github.event.pull_request.number || github.ref_name }}
+  group: truthlens-v2-model-quality-${{ github.event.pull_request.number || github.ref_name }}-${{ github.sha }}
   cancel-in-progress: false
 
 jobs:
