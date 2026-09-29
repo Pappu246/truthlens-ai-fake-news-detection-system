@@ -3,7 +3,7 @@ import path from 'node:path';
 import { FixtureCorpusSource } from '../../server/v2/retrieval/corpusSource';
 import { verifyClaimV2 } from '../../server/v2/pipeline';
 
-type Candidate = { id: string; url: string; title: string; snippet: string; body?: string; contentType: 'FULL_ARTICLE' | 'SUMMARY' | 'HEADLINE_ONLY'; publisher: string; publishedAt?: string | null; retrievedAt: string; retrievalMethod: string; feverous_page: string; feverous_element_id: string; feverous_type: string; };
+type Candidate = { id: string; url: string; title: string; snippet: string; body?: string; contentType: 'FULL_ARTICLE' | 'SUMMARY' | 'HEADLINE_ONLY'; publisher: string; publishedAt?: string | null; retrievedAt: string; retrievalMethod: string; feverous_page: string; feverous_element_id: string; feverous_type: string; feverous_id: string; };
 type Row = { id: string | number; claim: string; label: string; gold_evidence: string[][]; candidates: Candidate[]; };
 
 function arg(name: string, fallback?: string) { const hit = process.argv.find((v) => v.startsWith('--' + name + '=')); return hit ? hit.slice(name.length + 3) : fallback; }
