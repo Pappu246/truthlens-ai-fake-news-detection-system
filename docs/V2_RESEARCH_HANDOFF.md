@@ -5,20 +5,20 @@
 ## Current production boundary
 
 - Production `main`: `32db8230547658b7d5d2a615599526d88c22fce9`
-- Current V2 research branch head: `f40440d8caf58126f215fce2aa1e7c843934538b`
+- Current V2 research branch head: `e3f18aa3c6c5ca138bbef2392a9c35f902fb4546`
 - PR #26 remains open and research-only.
 - No research branch has been merged or deployed to production.
 
 ## Final validation checkpoint
 
-- CI #128: **SUCCESS**.
-- Phase 2 Real ISOT Data Validation #95: **SUCCESS**.
-- Phase 2 ISOT Pipeline Tests #99: **SUCCESS**.
-- Phase 7 Real ISOT Benchmark #84: **SUCCESS**.
-- V2 Model Quality External Evaluation #99: **SUCCESS**.
-- V2 SciFact End-to-End Benchmark #19: **SUCCESS**.
-- SciFact artifact: `truthlens-v2-scifact-end-to-end`, artifact ID `11012755708`.
-- Artifact SHA-256: `29322f9630fd693b658bf3c108b2621c487d1d8c3ee178b90f6090cbd1a3d38c`.
+- CI #132: **SUCCESS**.
+- Phase 2 Real ISOT Data Validation #99: **SUCCESS**.
+- Phase 2 ISOT Pipeline Tests #95: **SUCCESS**.
+- Phase 7 Real ISOT Benchmark #88: **SUCCESS**.
+- V2 Model Quality External Evaluation #108: **SUCCESS**.
+- V2 SciFact End-to-End Benchmark #21: **SUCCESS**.
+- SciFact artifact: `truthlens-v2-scifact-end-to-end`, artifact ID `11015937689`.
+- Artifact SHA-256: `cc796d94b22003229de1e281b52aaa487d6db3721ea8fc4767a7b6ce8b2d259`.
 - Frozen SciFact inputs: **300 dev claims / 5,183 corpus documents**; exact dataset hashes verified.
 - No duplicate SciFact run was created while the active benchmark was running.
 
@@ -57,7 +57,7 @@ The production-policy view intentionally abstains on all 300 SciFact claims beca
 
 ## Interpretation
 
-The latest benchmark reproduces the prior measured result exactly on the frozen SciFact inputs. This confirms reproducibility of the current research stack but also confirms that the end-to-end system is not yet strong enough for production promotion.
+SciFact E2E Run #21 completed successfully on the frozen inputs. The exact machine-readable summary is persisted at `data/v2/scifact_end_to_end_results.json`. This confirms reproducibility of the current research stack but also confirms that the end-to-end system is not yet strong enough for production promotion.
 
 The main research bottleneck remains retrieval/reranking:
 
@@ -70,7 +70,7 @@ The component-level pretrained comparison still shows better NLI accuracy/F1 tha
 
 ## Remaining research work
 
-The mandatory end-to-end evaluation checkpoint is complete. There is no validation blocker for this checkpoint.
+The mandatory end-to-end evaluation checkpoint is complete and all current validation gates are green. There is no known validation blocker on the research branch.
 
 Recommended next research iteration:
 
