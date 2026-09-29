@@ -7,10 +7,6 @@ on:
   pull_request:
     branches:
       - main
-    paths:
-      - 'scripts/isot_data_pipeline.py'
-      - 'scripts/benchmark_isot.py'
-      - '.github/workflows/isot-phase7-benchmark.yml'
   workflow_dispatch:
 
 permissions:
