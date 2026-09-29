@@ -1,0 +1,9 @@
+[
+  {
+    "id": 1,
+    "label": "SUPPORTS",
+    "predicted_label": "SUPPORTS",
+    "evidence": [[null, null, "Sky", 0]],
+    "predicted_evidence": [["Sky", 0]]
+  }
+]
