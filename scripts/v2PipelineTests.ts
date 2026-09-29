@@ -11,6 +11,8 @@ import { verifyClaimV2 } from '../server/v2/pipeline';
 import { FixtureCorpusSource } from '../server/v2/retrieval/corpusSource';
 import { enrichWithFullText } from '../server/v2/retrieval/fullTextEnricher';
 import { RawDocument, RetrievedCandidate } from '../server/v2/types';
+import { EmbeddingModel } from '../server/v2/retrieval/embeddings';
+import { SciFactOpenCorpusSource } from '../server/v2/retrieval/scifactCorpusSource';
 
 let passed = 0;
 let failed = 0;
@@ -238,6 +240,46 @@ async function main(): Promise<void> {
     check('provenance carries decision_rule_trace with at least one entry', p.decision_rule_trace.length > 0);
     check('provenance carries retrieval_summary', !!p.retrieval_summary);
     check('provenance is JSON-serializable', (() => { try { JSON.stringify(p); return true; } catch { return false; } })());
+  }
+
+  // ------------------------------------------------------ 16. OPEN DENSE RETRIEVAL
+  section('16. Full-corpus dense retrieval contributes candidates outside lexical BM25 hits');
+  {
+    const fakeEmbedding: EmbeddingModel = {
+      name: 'test-dense',
+      version: 'fixture-v1',
+      dimensions: 2,
+      embed(text: string): number[] {
+        return /dense-target|dense query/i.test(text) ? [1, 0] : [0, 1];
+      },
+      embedBatch(texts: string[]): number[][] {
+        return texts.map(text => /dense-target|dense query/i.test(text) ? [1, 0] : [0, 1]);
+      }
+    };
+    const source = new SciFactOpenCorpusSource([
+      { doc_id: 1, title: 'Lexical unrelated', abstract: ['ordinary science text'], structured: false },
+      { doc_id: 2, title: 'Dense target', abstract: ['dense-target scientific abstract'], structured: false }
+    ], {
+      topK: 1,
+      denseEmbeddingModel: fakeEmbedding,
+      denseTopK: 1,
+      enableDenseRetrieval: true,
+      denseBatchSize: 1
+    });
+    const docs = await source.fetchCandidates('dense query', {
+      claimId: 'dense-fixture',
+      originalText: 'dense query',
+      normalizedText: 'dense query',
+      claimType: 'Other',
+      importance: 'HIGH',
+      entities: [],
+      dates: [],
+      locations: [],
+      numbers: [],
+      keywords: [],
+      searchQueries: ['dense query']
+    });
+    check('dense retrieval returns the semantic target', docs[0]?.id === '2', docs.map(d => d.id).join(','));
   }
 
   // ------------------------------------------------------ 14. ABSTENTION
