@@ -184,6 +184,8 @@ export interface ProvenanceRecord {
     total_candidates_retrieved: number;
     total_candidates_after_dedup: number;
     total_evidence_used_in_decision: number;
+    temporal_cutoff: string | null;
+    temporal_candidates_excluded: number;
   };
   generated_at: string;
   limitations: string[];
