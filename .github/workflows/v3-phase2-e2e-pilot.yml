@@ -1,0 +1,111 @@
+name: V3 Phase 2 End-to-End Pilot
+
+on:
+  push:
+    branches:
+      - research/truthlens-v3-phase2-benchmark-harness
+    paths:
+      - 'scripts/benchmarks/**'
+      - 'scripts/v3BenchmarkCoordinator.mjs'
+      - 'research/v3-benchmark-registry.json'
+      - '.github/workflows/v3-phase2-e2e-pilot.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fever-pilot:
+    name: FEVER 100-claim pilot
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install project
+        run: npm ci
+      - name: Materialize FEVER v1 assets
+        run: node scripts/benchmarks/v3MaterializeAssets.mjs --benchmark=fever --with-corpus
+      - name: Extract FEVER corpus
+        run: unzip -q artifacts/v3/benchmark-assets/fever/wiki-pages.zip -d artifacts/v3/benchmark-assets/fever/wiki-pages
+      - name: Locate wiki shard directory
+        id: locate
+        shell: bash
+        run: |
+          set -euo pipefail
+          shard=$(find artifacts/v3/benchmark-assets/fever/wiki-pages -name 'wiki-*.jsonl' -print -quit)
+          test -n "$shard"
+          echo "wiki_dir=$(dirname "$shard")" >> "$GITHUB_OUTPUT"
+      - name: Prepare FEVER candidates
+        run: |
+          python3 scripts/benchmarks/v3FeverPrepareCandidates.py \
+            --wiki-dir="${{ steps.locate.outputs.wiki_dir }}" \
+            --claims=artifacts/v3/benchmark-assets/fever/shared_task_dev.jsonl \
+            --db=artifacts/v3/benchmark-assets/fever/fever-sentences.sqlite \
+            --output=artifacts/v3/fever/candidates.jsonl \
+            --build-index
+      - name: Run TruthLens FEVER pilot
+        run: |
+          config_sha=$(sha256sum research/v3-benchmark-registry.json | cut -d' ' -f1)
+          claims_sha=$(jq -r '.files[] | select(.name=="shared_task_dev.jsonl") | .sha256' artifacts/v3/benchmark-assets/fever/asset-manifest.json)
+          corpus_sha=$(jq -r '.files[] | select(.name=="wiki-pages.zip") | .sha256' artifacts/v3/benchmark-assets/fever/asset-manifest.json)
+          npx tsx scripts/benchmarks/v3FeverEvaluate.ts \
+            --input=artifacts/v3/fever/candidates.jsonl \
+            --max-claims=100 \
+            --output=artifacts/v3/fever/pilot-report.json \
+            --predictions-output=artifacts/v3/fever/pilot-predictions.json \
+            --claims-sha256="$claims_sha" \
+            --corpus-sha256="$corpus_sha" \
+            --config-sha256="$config_sha"
+      - name: Run official FEVER scorer
+        run: |
+          node scripts/benchmarks/v3FeverOfficialEvaluate.mjs \
+            --predictions=artifacts/v3/fever/pilot-predictions.json \
+            --actual=artifacts/v3/benchmark-assets/fever/shared_task_dev.jsonl \
+            --output=artifacts/v3/fever/pilot-official-scorer.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: truthlens-v3-fever-100-pilot
+          path: artifacts/v3/fever/
+
+  averitec-pilot:
+    name: AVeriTeC 100-claim pilot
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install project
+        run: npm ci
+      - name: Materialize AVeriTeC dev set
+        run: node scripts/benchmarks/v3MaterializeAssets.mjs --benchmark=averitec
+      - name: Run TruthLens AVeriTeC pilot
+        run: |
+          npx tsx scripts/benchmarks/v3AveritecTruthLensEvaluate.ts \
+            --input=artifacts/v3/benchmark-assets/averitec/dev.json \
+            --max-claims=100 \
+            --output=artifacts/v3/averitec/pilot-predictions.json
+      - name: Install evaluator dependencies
+        run: python -m pip install --upgrade pip numpy scipy scikit-learn nltk leven
+      - name: Prepare evaluator data
+        run: python -m nltk.downloader punkt punkt_tab wordnet omw-1.4
+      - name: Run official AVeriTeC scorer
+        run: |
+          node scripts/benchmarks/v3AveritecOfficialEvaluate.mjs \
+            --predictions=artifacts/v3/averitec/pilot-predictions.json \
+            --references=artifacts/v3/benchmark-assets/averitec/dev.json \
+            --output=artifacts/v3/averitec/pilot-official-scorer.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: truthlens-v3-averitec-100-pilot
+          path: artifacts/v3/averitec/
