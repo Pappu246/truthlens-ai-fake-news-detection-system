@@ -1,11 +1,11 @@
 # TruthLens V2 Research Handoff
 
-**Status:** Engineering-complete research branch; production remains frozen. The latest fully completed external SciFact benchmark remains the frozen Run #19 baseline. A newer full-corpus rerun is configured on the current head but has not yet produced an artifact because the GitHub Actions job was cancelled while queued/infrastructure execution was being retried.
+**Status:** Engineering-complete research branch; production remains frozen. The latest fully completed external SciFact benchmark remains the frozen Run #19 baseline. Current-head Run #57 is actively executing the complete 300-claim evaluation and has not yet produced an artifact.
 
 ## Current production boundary
 
 - Production `main`: `32db8230547658b7d5d2a615599526d88c22fce9`
-- Current V2 research branch head: `7fb806110f9160bc60af6ca72b12db07badc6dc1`
+- Current V2 research branch head: `0fa403da02d9087231237aa193b3b6a4b6e4f33e`
 - PR #26 remains open and research-only.
 - No research branch has been merged or deployed to production.
 
@@ -28,7 +28,7 @@
 - Phase 2 ISOT pipeline tests #131: **SUCCESS**.
 - The current head contains workflow-only hardening after CI #176; the current CI #180 is the fresh validation run for that final head.
 - Latest completed external model-quality component evaluation: sealed local pretrained run #54. It evaluated all 300 SciFact dev claims and 469 evaluator-compatible passages.
-- A newer model-quality run on the current head passed the token-free harness smoke stage but its long local-pretrained stage was cancelled by Actions before producing a new artifact; the job is being retried without code changes.
+- The latest completed model-quality evaluation is workflow #162 on commit `6e052a3c944002c80f89654ca4c0043c5630ed16`; the full 300-claim component artifact is recorded and the current-head SciFact benchmark is the remaining end-to-end gate.
 
 ## Latest completed end-to-end SciFact benchmark
 
