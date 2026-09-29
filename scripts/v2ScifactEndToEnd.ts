@@ -3,7 +3,7 @@
  * --------------------------------------------
  * Runs the actual V2 research pipeline against the FULL SciFact dev corpus:
  *
- *   claim -> open BM25 candidate retrieval -> V2 hybrid lexical+dense retrieval
+ *   claim -> open BM25/dense candidate retrieval -> V2 hybrid retrieval
  *   -> reranking -> pretrained NLI -> benchmark decision + production decision
  *
  * IMPORTANT:
@@ -16,7 +16,6 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import { buildClaim } from '../server/v2/queryExpansion';
 import { verifyClaimV2 } from '../server/v2/pipeline';
 import { PretrainedNliAdapter } from '../server/v2/nli/pretrainedNliAdapter';
 import { TransformerEmbeddingModel } from '../server/v2/retrieval/transformerEmbeddingModel';
@@ -83,7 +82,6 @@ function goldLabel(claim: SciFactClaim): GoldLabel {
 function benchmarkDirection(result: Awaited<ReturnType<typeof verifyClaimV2>>): GoldLabel {
   let support = 0;
   let refute = 0;
-
   for (const evidence of result.provenance.evidence) {
     const vote = evidence.nli_label === 'SUPPORTS' ? 1 : evidence.nli_label === 'REFUTES' ? -1 : 0;
     if (!vote) continue;
@@ -92,7 +90,6 @@ function benchmarkDirection(result: Awaited<ReturnType<typeof verifyClaimV2>>): 
     if (vote > 0) support += weight;
     else refute += weight;
   }
-
   if (support <= 0 && refute <= 0) return 'NOT_ENOUGH_INFO';
   if (support > refute) return 'SUPPORT';
   if (refute > support) return 'CONTRADICT';
@@ -133,17 +130,17 @@ async function main(): Promise<void> {
   const maxClaims = Math.max(1, Math.min(Number(arg('max-claims') || allClaims.length), allClaims.length));
   const claims = allClaims.slice(0, maxClaims);
   const topCandidates = Math.max(20, Math.min(Number(arg('candidate-k') || 100), corpus.length));
+  const denseTopK = Math.max(topCandidates, Math.min(Number(arg('dense-k') || topCandidates), corpus.length));
   const finalTopK = Math.max(5, Math.min(Number(arg('final-k') || 8), 20));
+
+  console.log(`SciFact retrieval config: candidate-k=${topCandidates}, dense-k=${denseTopK}, final-k=${finalTopK}`);
 
   const embeddingModel = new TransformerEmbeddingModel();
   const nliAdapter = new PretrainedNliAdapter({ embeddingModel });
-  // Build the 5,183-document BM25 index once and lazily build a sealed local
-  // dense index once; both are reused across the full claim set.
-  // The candidate-id accumulator is reset per claim so recall remains claim-local.
   const source = new SciFactOpenCorpusSource(corpus, {
     topK: topCandidates,
     denseEmbeddingModel: embeddingModel,
-    denseTopK: topCandidates,
+    denseTopK,
     enableDenseRetrieval: true,
     denseBatchSize: 32
   });
@@ -151,7 +148,6 @@ async function main(): Promise<void> {
   const goldPredictions: string[] = [];
   const benchmarkPredictions: string[] = [];
   const productionPredictions: string[] = [];
-
   let candidateRecall = 0;
   let evidenceRecallAt5 = 0;
   let evidenceRecallDenominator = 0;
@@ -159,7 +155,6 @@ async function main(): Promise<void> {
   let productionCorrectNonAbstain = 0;
   let productionNonAbstain = 0;
   let conflicted = 0;
-
   const rows: Array<Record<string, unknown>> = [];
 
   try {
@@ -173,11 +168,7 @@ async function main(): Promise<void> {
         corpus: source,
         nliAdapter,
         nliConcurrency: 8,
-        retrieval: {
-          embeddingModel,
-          perQueryTopK: 15,
-          finalTopK
-        },
+        retrieval: { embeddingModel, perQueryTopK: 15, finalTopK },
         enableFullTextEnrichment: false,
         minCandidatesExpectedWarning: 0
       });
@@ -246,6 +237,7 @@ async function main(): Promise<void> {
         claims_sha256: claimsSha,
         corpus_sha256: corpusSha,
         candidate_pool_k: topCandidates,
+        dense_retrieval_k: denseTopK,
         final_pipeline_k: finalTopK
       },
       models: {
@@ -270,6 +262,7 @@ async function main(): Promise<void> {
       },
       interpretation: [
         'This is an end-to-end retrieval + reranking + NLI benchmark over the full SciFact dev corpus, not a synthetic fixture.',
+        'candidate_pool_k and dense_retrieval_k are reported separately so retrieval-ablation changes are auditable.',
         'The benchmark directional decision is a single-source-compatible research evaluator because classic SciFact provides evidence from cited papers; it does not replace the production two-independent-source policy.',
         'Production-policy metrics are reported separately to expose the cost of the policy/dataset mismatch rather than hiding it.',
         'No production thresholds, source rules, abstention rules, or production models were changed.',
