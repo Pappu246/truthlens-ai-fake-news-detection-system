@@ -8,6 +8,7 @@ import { verifyClaimV2 } from '../server/v2/pipeline';
 import { decideVerdict } from '../server/v2/decision/decisionPolicy';
 import { FixtureCorpusSource } from '../server/v2/retrieval/corpusSource';
 import { HuggingFaceNliAdapter } from '../server/v2/nli/huggingFaceNliAdapter';
+import { PretrainedNliAdapter } from '../server/v2/nli/pretrainedNliAdapter';
 import { HuggingFaceEmbeddingModel } from '../server/v2/retrieval/huggingFaceEmbeddingModel';
 import { denseSearch } from '../server/v2/retrieval/embeddings';
 import { rerankEvidence } from '../server/v2/rerank/reranker';
@@ -141,6 +142,43 @@ async function main(): Promise<void> {
     check('remote adapter exposes model identity', result.modelName === 'facebook/bart-large-mnli');
     check('remote adapter preserves probability ordering', result.scores.supports > result.scores.refutes);
     check('remote adapter sends the actual claim in the NLI hypothesis', capturedBody.includes('The office confirmed the number.'));
+  }
+
+
+
+  console.log('\n3b. Batched pretrained NLI collapses repeated whitespace consistently');
+  {
+    let capturedHypothesis = '';
+    const fakeClient = {
+      classifyBatch: (inputs: Array<{ premise: string; hypothesis: string; maxTokens: number }>) => {
+        capturedHypothesis = inputs[0]?.hypothesis || '';
+        return inputs.map(() => ({
+          probs: { entailment: 0.70, contradiction: 0.10, neutral: 0.20 }
+        }));
+      }
+    } as any;
+    const fakeEmbedding = {
+      name: 'test-embedding',
+      version: 'test',
+      dimensions: 3,
+      embed: () => [1, 0, 0],
+      embedBatch: (texts: string[]) => texts.map(() => [1, 0, 0])
+    } as any;
+    const adapter = new PretrainedNliAdapter({
+      client: fakeClient,
+      embeddingModel: fakeEmbedding,
+      relatednessFloor: 0
+    });
+    const result = adapter.classifyBatch(
+      {
+        normalizedText: 'Office   confirmed   the   number.',
+        entities: [],
+        keywords: ['office', 'confirmed', 'number']
+      } as any,
+      ['The office confirmed the number according to the official statement.']
+    );
+    check('batch NLI receives normalized whitespace', capturedHypothesis === 'Office confirmed the number.');
+    check('batch NLI still returns a classification', result.length === 1 && result[0].label === 'SUPPORTS');
   }
 
   console.log('\n4. Hugging Face embedding adapter contract works without network');
