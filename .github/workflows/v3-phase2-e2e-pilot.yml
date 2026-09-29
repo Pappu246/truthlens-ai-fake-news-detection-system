@@ -1,3 +1,4 @@
+# Phase 2 real-data pilot: intentionally separate from the required CI smoke gate.
 name: V3 Phase 2 End-to-End Pilot
 
 on:
