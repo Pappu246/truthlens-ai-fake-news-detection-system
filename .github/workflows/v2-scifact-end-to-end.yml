@@ -77,7 +77,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p artifacts/v2-scifact-e2e
-          npm run eval:v2-scifact-e2e --             --data-dir=/tmp/truthlens-scifact/scifact             --max-claims=300             --candidate-k=100             --final-k=8             --output=artifacts/v2-scifact-e2e/scifact-end-to-end.json             2>&1 | tee artifacts/v2-scifact-e2e/scifact-end-to-end.log
+          npm run eval:v2-scifact-e2e --             --data-dir=/tmp/truthlens-scifact/scifact             --max-claims=300             --candidate-k=100             --dense-k=300             --final-k=8             --output=artifacts/v2-scifact-e2e/scifact-end-to-end.json             2>&1 | tee artifacts/v2-scifact-e2e/scifact-end-to-end.log
 
       - name: Upload benchmark artifact
         uses: actions/upload-artifact@v4
