@@ -7,10 +7,6 @@ on:
   pull_request:
     branches:
       - main
-    paths:
-      - 'backend/tests/test_isot_pipeline.py'
-      - 'scripts/isot_data_pipeline.py'
-      - '.github/workflows/isot-phase2-tests.yml'
 
 jobs:
   isot-pipeline-tests:
