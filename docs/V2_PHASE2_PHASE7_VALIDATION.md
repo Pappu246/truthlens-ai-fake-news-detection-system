@@ -26,3 +26,41 @@ The latest measured ISOT results remain controlled dataset benchmarks, not claim
 - No Phase 2/Phase 7 benchmark result replaces the production release snapshot.
 - The separate V2 SciFact benchmark is the gate for evidence-grounded research quality.
 - A full current-head SciFact result must be published only from a completed artifact on the frozen 300-claim / 5,183-document setup.
+
+## Latest completed artifact record — Phase 2
+
+Workflow run: **#144**  
+Run ID: `36594824989`  
+Validated commit: `067cc9ddb2630e3a31a3feefde1f4c6d2a0d252f`  
+Artifact SHA-256: `38fcc26960396d2020a8f67d2fca26469e8a6c467004840426ce5baf82697c2e`
+
+The preparation artifact records:
+- 44,898 raw rows (23,481 fake / 21,417 real)
+- 5,401 near-duplicate groups involving 12,133 articles
+- 0 near-duplicate groups straddling train/validation/test splits
+- 2 cross-label near-duplicate groups
+- 18,618 strict Reuters-dateline matches (86.93% of real rows)
+- 10 invalid dates excluded from the temporal split
+- temporal cutoff: 2017-01-01
+
+The Reuters dateline rate is a material shortcut risk and is explicitly measured rather than hidden.
+
+## Latest completed artifact record — Phase 7
+
+Workflow run: **#132**  
+Run ID: `36593170779`  
+Validated commit: `cc8f93f6e87934f56e05171959878145493a78b9`  
+Artifact SHA-256: `62ef477d5851dba1acc3e76f6f47ad270123aba63f3212abea5cbb1421182c88`
+
+The leakage-aware benchmark reported, on its held-out test split:
+
+| Model variant | Accuracy | Macro-F1 | ROC-AUC | PR-AUC | ECE-10 |
+|---|---:|---:|---:|---:|---:|
+| Logistic regression | 0.989607 | 0.989601 | 0.999043 | 0.999183 | 0.059294 |
+| Calibrated linear SVM | 0.993764 | 0.993761 | 0.999311 | 0.999464 | 0.005818 |
+| Logistic regression, Reuters dateline mitigated | 0.989607 | 0.989601 | 0.999043 | 0.999184 | 0.059309 |
+| Calibrated linear SVM, Reuters dateline mitigated | 0.993912 | 0.993909 | 0.999311 | 0.999464 | 0.005822 |
+
+Separate temporal evaluation for the calibrated linear SVM reported accuracy **0.998677** and macro-F1 **0.998545**. The benchmark is dataset-specific and is not evidence of universal real-world fake-news detection accuracy.
+
+The benchmark explicitly records `production_artifact_modified=false`.
