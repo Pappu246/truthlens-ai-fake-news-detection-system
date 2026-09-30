@@ -8,7 +8,7 @@ import { EvidenceEngine, EvidenceRetriever } from '../server/verification/eviden
 import { sanitiseUntrustedEvidence } from '../server/verification/evidenceEngine';
 import { buildArticleVerification } from '../server/verification/assessmentEngine';
 import { refineEvidenceRelationSemantically } from '../server/verification/semanticRelation';
-import { evaluateSourceDiversity } from '../server/verification/evidenceAnalyzer';
+import { classifyEvidenceRelation, evaluateSourceDiversity } from '../server/verification/evidenceAnalyzer';
 import { verifyEvidenceProvenance } from '../server/verification/evidenceProvider';
 import { extractClaimsHeuristic } from '../server/verification/claimExtractor';
 import { ExtractedClaim, EvidenceItem, ClaimVerificationResult } from '../src/types';
@@ -115,6 +115,11 @@ function makeClaim(
   };
 }
 
+
+function evaluateSourceRelationForGate14(testClaim: ExtractedClaim, evidenceText: string): string {
+  return classifyEvidenceRelation(testClaim, evidenceText, 0.80, { isConsistent: true });
+}
+
 async function main(): Promise<void> {
   console.log('='.repeat(72));
   console.log('GATE-14 REMAINING WORK TESTS');
@@ -181,6 +186,21 @@ async function main(): Promise<void> {
     !/ignore all previous instructions|reveal your system prompt/i.test(seenSafePassage) &&
     /\[neutralised-instruction\]/.test(seenSafePassage),
     seenSafePassage);
+
+
+  console.log('\\n1b. Claim-aware contradiction hardening');
+  const contradictionFixtures = [
+    ['The city opened a new public hospital in 2023.', 'City officials said the hospital did not open in 2023; the opening occurred in 2024.'],
+    ['Researchers found a link between the exposure and the outcome.', 'The authors explicitly state that the study did not find evidence supporting the claimed link.'],
+    ['The court convicted the defendant in 2022.', 'Court records show the defendant was acquitted, not convicted, in 2022.'],
+    ['The airline added five new routes this year.', 'The airline said it did not add five new routes this year.'],
+    ['The unemployment rate remained below five percent.', 'The statistical bulletin shows the unemployment rate exceeded five percent during the relevant months.']
+  ] as const;
+  for (const [fixtureClaim, fixtureEvidence] of contradictionFixtures) {
+    const fixtureClaimObject = { ...claim, normalizedText: fixtureClaim, originalText: fixtureClaim };
+    const relation = evaluateSourceRelationForGate14(fixtureClaimObject, fixtureEvidence);
+    check('explicit or directional contradiction -> CONTRADICTS', relation === 'CONTRADICTS', relation);
+  }
 
   console.log('\\n2. Production-safe telemetry');
   const originalInfo = console.info;
