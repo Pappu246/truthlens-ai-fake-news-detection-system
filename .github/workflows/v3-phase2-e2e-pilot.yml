@@ -2,14 +2,6 @@
 name: V3 Phase 2 End-to-End Pilot
 
 on:
-  pull_request:
-    branches:
-      - main
-    paths:
-      - 'scripts/benchmarks/**'
-      - 'scripts/v3BenchmarkCoordinator.mjs'
-      - 'research/v3-benchmark-registry.json'
-      - '.github/workflows/v3-phase2-e2e-pilot.yml'
   push:
     branches:
       - research/truthlens-v3-phase2-benchmark-harness
@@ -21,8 +13,8 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: truthlens-phase2-pilot-${{ github.ref }}
-  cancel-in-progress: false
+  group: truthlens-v3-pilot-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
