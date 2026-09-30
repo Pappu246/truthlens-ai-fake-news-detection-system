@@ -1,9 +1,6 @@
 name: V3 Phase 2 Full Benchmarks
 
 on:
-  pull_request:
-    branches:
-      - main
   push:
     branches:
       - research/truthlens-v3-phase2-benchmark-harness
