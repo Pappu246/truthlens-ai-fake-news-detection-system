@@ -68,3 +68,4 @@ jobs:
         run: node --check scripts/benchmarks/v3FeverousOfficialEvaluate.mjs
 
 # Phase 2 frozen-head trigger: evaluate this exact branch revision.
+# Frozen-head unified execution marker.
