@@ -117,3 +117,4 @@ jobs:
           name: truthlens-v3-averitec-100-pilot
           path: artifacts/v3/averitec/
 # Phase 2 frozen-head trigger: evaluate this exact branch revision.
+# Frozen-head unified execution marker.
