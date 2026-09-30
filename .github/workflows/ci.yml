@@ -88,6 +88,9 @@ jobs:
           node --check scripts/researchIntelligence.mjs
           node -e "JSON.parse(require('fs').readFileSync('research/research-intelligence-registry.json', 'utf8')); console.log('Research registry JSON: OK')"
 
+      - name: Gate 14 release audit
+        run: npm run audit:gate14
+
       - name: Upload evidence/research evaluation artifacts
         if: always()
         uses: actions/upload-artifact@v4
