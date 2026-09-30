@@ -413,7 +413,7 @@ function selectClaimsWithDocumentCoverage(
     bodySlots,
     Math.ceil(withPositions.length / Math.max(1, bodySlots))
   ));
-  const buckets: Array<typeof withPositions> = Array.from({ length: bucketCount }, () => []);
+  const buckets: Array<typeof withPositions> = Array.from({ length: bucketCount }, () => [] as typeof withPositions[number][]);
 
   for (const entry of withPositions) {
     const ratio = bodyText.length > 0 ? entry.position / bodyText.length : 0;
