@@ -98,3 +98,20 @@ jobs:
           path: artifacts/v3/feverous/
           if-no-files-found: error
           retention-days: 30
+  evidence-gate:
+    name: Phase 2 scorer evidence gate
+    needs:
+      - fever-full
+      - averitec-full
+      - feverous-full
+    if: ${{ success() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: truthlens-v3-*-full
+          path: phase2-artifacts
+          merge-multiple: false
+      - name: Validate official scorer artifacts
+        run: node scripts/v3Phase2EvidenceGate.mjs phase2-artifacts
