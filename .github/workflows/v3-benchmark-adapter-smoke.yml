@@ -31,6 +31,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Install FEVER scorer compatibility dependency
+        run: python -m pip install --disable-pip-version-check --no-input six
+
       - name: Run official FEVER scorer smoke
         run: |
           set -euo pipefail
@@ -46,7 +49,7 @@ jobs:
           node-version: 20
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.10'
       - name: Install evaluator dependencies
         run: python -m pip install --upgrade pip numpy scipy scikit-learn nltk leven
       - name: Prepare NLTK meteor data
