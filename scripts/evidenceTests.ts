@@ -18,6 +18,7 @@ import {
 import { EvidenceItem } from '../src/types';
 import { buildArticleVerification } from '../server/verification/assessmentEngine';
 import { ClaimVerificationResult } from '../src/types';
+import { extractClaimsHeuristic } from '../server/verification/claimExtractor';
 
 let passed = 0;
 let failed = 0;
@@ -200,7 +201,34 @@ async function main(): Promise<void> {
   check('final interpretation states evidence is independent of the model',
     /independent of the statistical claim model/i.test(supported.final_interpretation));
 
-  section('8. Fetched-source provenance and article abstention');
+  section('8. Full-article claim coverage');
+  const longFiller = Array.from({ length: 220 }, (_, i) =>
+    `Context paragraph ${i + 1} adds ordinary article prose without a factual verification trigger.`
+  ).join(' ');
+  const longArticle = [
+    'NASA announced a new Mars mission in January 2025.',
+    longFiller.slice(0, 3800),
+    'The Global Health Institute confirmed 18 new clinics opened in June 2025.',
+    longFiller.slice(3800, 7600),
+    'Reuters reported unemployment fell to 4.1 percent in March 2024.',
+    longFiller.slice(7600, 11400),
+    'The European Space Agency published a report on climate satellites in 2023.',
+    longFiller.slice(11400),
+    'Acme Space Agency announced its launch was delayed in September 2026.'
+  ].join(' ');
+  const coveredClaims = extractClaimsHeuristic('', longArticle);
+  check('long article is scanned beyond the first matching claims',
+    coveredClaims.length > 0 && coveredClaims.length <= 6,
+    String(coveredClaims.length));
+  check('claim extraction includes a late-document claim',
+    coveredClaims.some(c => /Acme Space Agency/.test(c.originalText)),
+    coveredClaims.map(c => c.originalText).join(' | '));
+  check('claim ids are re-numbered after coverage selection',
+    coveredClaims.every((claim, idx) => claim.claimId === `claim-${idx + 1}`));
+  check('long-article claim coverage is position-aware',
+    new Set(coveredClaims.map(c => c.originalText)).size === coveredClaims.length);
+
+  section('9. Fetched-source provenance and article abstention');
   const fetched = await new EvidenceEngine(stub([
     item({
       evidenceExcerpt: 'The official report states the unemployment rate fell to 4.1 percent in March 2024.',
