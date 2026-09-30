@@ -277,7 +277,7 @@ Research documentation:
 
 ### Current Gate-14 research audit snapshot (2026-09-30)
 
-The current Gate-14 branch preserves the production/research boundary. Verified CI run `36747200211` reports 90 contract tests, 61 evidence tests, 24 Gate-14 tests, 20 SSRF tests, 72 V2 pipeline tests, 9 V2 route tests, and 19 V2 model-quality tests with zero failures. The current head is deployed to a READY Vercel deployment, while external API probing remains subject to Vercel Authentication on the preview URL.
+The current Gate-14 branch preserves the production/research boundary. Verified CI run `36747200211` reports 90 contract tests, 61 evidence tests, 24 Gate-14 tests, 20 SSRF tests, 72 V2 pipeline tests, 9 V2 route tests, and 19 V2 model-quality tests with zero failures. The last independently verified READY Vercel deployment corresponds to commit `bd63808ea259efc2170235e54185edec018d773a`. The newer documentation-only PR head is currently blocked by a Vercel `build-rate-limit` check, so there is not yet a verified READY deployment for that head. External API probing on the READY preview is also subject to Vercel Authentication.
 
 The frozen evidence-relation benchmark contains 30 deterministic fixtures and reports 83.333% accuracy, 82.222% macro-F1, 66.667% coverage, and 33.333% abstention. It is an evidence-relation diagnostic, not production article accuracy; five of ten CONTRADICT fixtures were classified as SUPPORT.
 
