@@ -12,8 +12,8 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: truthlens-phase2-full-\${{ github.ref }}
-  cancel-in-progress: false
+  group: truthlens-phase2-full-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
