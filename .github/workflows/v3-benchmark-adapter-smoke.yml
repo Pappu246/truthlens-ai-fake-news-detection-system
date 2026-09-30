@@ -66,3 +66,5 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate FEVEROUS adapter syntax
         run: node --check scripts/benchmarks/v3FeverousOfficialEvaluate.mjs
+
+# Phase 2 frozen-head trigger: evaluate this exact branch revision.
