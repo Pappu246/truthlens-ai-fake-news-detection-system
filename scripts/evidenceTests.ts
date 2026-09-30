@@ -218,6 +218,17 @@ async function main(): Promise<void> {
   check('fetched evidence records source word count',
     fetched.evidence[0].source_content_word_count === 412);
 
+  const unproven = await new EvidenceEngine(stub([
+    item({
+      relation: 'SUPPORTS',
+      provenanceVerified: false,
+      sourceFetchStatus: 'FETCHED',
+      sourceFinalUrl: 'https://example.com/unverified'
+    })
+  ])).verifyClaim(CLAIM);
+  check('explicitly unverified provenance cannot create a positive signal',
+    unproven.status === 'INSUFFICIENT_EVIDENCE', unproven.status);
+
   const claim = (importance: 'HIGH' | 'MEDIUM' | 'LOW', assessment: 'SUPPORTED' | 'CONTRADICTED' | 'MIXED' | 'INSUFFICIENT') => ({
     claim: {
       claimId: 'c-' + importance + '-' + assessment,
