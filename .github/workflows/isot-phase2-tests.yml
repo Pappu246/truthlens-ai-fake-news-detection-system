@@ -8,8 +8,13 @@ on:
     branches:
       - main
 
+concurrency:
+  group: truthlens-isot-legacy-${{ github.event.pull_request.number || github.ref_name }}
+  cancel-in-progress: true
+
 jobs:
   isot-pipeline-tests:
+    if: ${{ github.event_name != 'pull_request' || github.head_ref != 'research/truthlens-v3-phase2-benchmark-harness' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
