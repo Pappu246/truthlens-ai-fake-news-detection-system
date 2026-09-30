@@ -227,6 +227,28 @@ async function main(): Promise<void> {
     independentDistinct.independentSourcesCount === 3,
     JSON.stringify(independentDistinct));
 
+  const nearDuplicate = [
+    evidence({
+      sourceName: 'Outlet A',
+      sourceUrl: 'https://a.example/story',
+      sourceFinalUrl: 'https://a.example/story',
+      title: 'Officials report unemployment fell this month',
+      evidenceExcerpt: 'Officials report unemployment fell this month after steady job gains. The monthly report says the national rate declined as payrolls increased.'
+    }),
+    evidence({
+      id: 'ev-near',
+      sourceName: 'Outlet B',
+      sourceUrl: 'https://b.example/story',
+      sourceFinalUrl: 'https://b.example/story',
+      title: 'Officials report unemployment fell this month',
+      evidenceExcerpt: 'Officials report unemployment fell this month after steady job gains. The monthly report says the national rate declined as payrolls increased, according to a wire-service account.'
+    })
+  ];
+  const nearDuplicateResult = evaluateSourceDiversity(nearDuplicate);
+  check('minor copy edits are still treated as one evidence cluster',
+    nearDuplicateResult.independentSourcesCount === 1,
+    JSON.stringify(nearDuplicateResult));
+
   console.log('\\n3. Provenance-chain adversarial validation');
   check('same publisher host remains provenance-verified',
     verifyEvidenceProvenance(
