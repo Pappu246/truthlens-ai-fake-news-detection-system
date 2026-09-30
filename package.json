@@ -35,7 +35,8 @@
     "download:v2-models": "tsx scripts/v2DownloadModels.ts",
     "eval:v2-scifact-e2e": "tsx scripts/v2ScifactEndToEnd.ts",
     "test:gate14": "tsx scripts/gate14RemainingTests.ts",
-    "eval:evidence-benchmark": "tsx scripts/evidenceBenchmark.ts"
+    "eval:evidence-benchmark": "tsx scripts/evidenceBenchmark.ts",
+    "audit:gate14": "tsx scripts/gate14ReleaseAudit.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
