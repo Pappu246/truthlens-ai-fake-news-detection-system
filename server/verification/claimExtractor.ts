@@ -105,7 +105,7 @@ function extractClaimComponents(sentence: string): {
   }
 
   // 2. Dates / Temporal markers
-  const dateMatches = sentence.match(/\b(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2}(?:,\s*\d{4})?|\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b|\b(?:yesterday|today|tomorrow|last week|next month|from tomorrow|starting tomorrow|in \d{4})\b/gi);
+  const dateMatches = sentence.match(/\b(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+(?:(?:\d{1,2}(?:,\s*\d{4})?)|(?:\d{4}))|\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b|\b(?:yesterday|today|tomorrow|last week|next month|from tomorrow|starting tomorrow|in \d{4})\b/gi);
   if (dateMatches) {
     for (const d of dateMatches) {
       const clean = d.trim();
