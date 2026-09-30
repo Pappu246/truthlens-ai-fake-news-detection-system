@@ -1,0 +1,97 @@
+name: V3 Phase 2 Full Benchmarks
+
+on:
+  push:
+    branches:
+      - research/truthlens-v3-phase2-benchmark-harness
+    paths:
+      - 'scripts/benchmarks/**'
+      - 'scripts/v3BenchmarkCoordinator.mjs'
+      - 'research/v3-benchmark-registry.json'
+      - '.github/workflows/v3-phase2-full-benchmarks.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: truthlens-phase2-full-\${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  fever-full:
+    name: FEVER full development evaluation
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install project
+        run: npm ci
+      - name: Install FEVER scorer compatibility dependency
+        run: python -m pip install --disable-pip-version-check --no-input six
+      - name: Run FEVER full coordinator
+        run: node scripts/v3BenchmarkCoordinator.mjs --benchmark=fever
+      - uses: actions/upload-artifact@v4
+        with:
+          name: truthlens-v3-fever-full
+          path: artifacts/v3/fever/
+          if-no-files-found: error
+          retention-days: 30
+
+  averitec-full:
+    name: AVeriTeC full development evaluation
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install project
+        run: npm ci
+      - name: Install AVeriTeC evaluator dependencies
+        run: python -m pip install --disable-pip-version-check --no-input numpy scipy scikit-learn nltk leven
+      - name: Prepare NLTK data
+        run: python -m nltk.downloader punkt punkt_tab wordnet omw-1.4
+      - name: Run AVeriTeC full coordinator
+        run: node scripts/v3BenchmarkCoordinator.mjs --benchmark=averitec
+      - uses: actions/upload-artifact@v4
+        with:
+          name: truthlens-v3-averitec-full
+          path: artifacts/v3/averitec/
+          if-no-files-found: error
+          retention-days: 30
+
+  feverous-full:
+    name: FEVEROUS full structured evaluation
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install project
+        run: npm ci
+      - name: Check available disk
+        run: df -h
+      - name: Run FEVEROUS full coordinator
+        run: node scripts/v3BenchmarkCoordinator.mjs --benchmark=feverous
+      - uses: actions/upload-artifact@v4
+        with:
+          name: truthlens-v3-feverous-full
+          path: artifacts/v3/feverous/
+          if-no-files-found: error
+          retention-days: 30
