@@ -33,6 +33,22 @@ function getConfiguredAdapter(): NliAdapter | null {
   return configuredAdapter;
 }
 
+
+function sanitiseForSemanticNli(raw: string): string {
+  return (raw || '')
+    .replace(/\u0000/g, ' ')
+    .replace(/[\u0001-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, ' ')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/ignore\s+(?:all\s+|any\s+)?(?:previous|prior|above)\s+instructions?/gi, '[neutralised-instruction]')
+    .replace(/reveal\s+(?:your\s+)?(?:system\s+prompt|instructions?|secrets?)/gi, '[neutralised-instruction]')
+    .replace(/(?:print|output|return|show)\s+(?:your\s+)?(?:api[_\s-]?key|token|secret|credential|env)/gi, '[neutralised-instruction]')
+    .replace(/(?:call|execute|run|invoke)\s+(?:the\s+)?(?:tool|function|command|shell)/gi, '[neutralised-instruction]')
+    .replace(/mark\s+this\s+(?:claim|article)\s+as\s+(?:true|false|verified|real|fake)/gi, '[neutralised-instruction]')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 600);
+}
+
 function topTwo(scores: { supports: number; refutes: number; neutral: number; unclear: number }): [number, number] {
   const values = [scores.supports, scores.refutes, scores.neutral, scores.unclear].sort((a, b) => b - a);
   return [values[0] ?? 0, values[1] ?? 0];
@@ -62,7 +78,9 @@ export async function refineEvidenceRelationSemantically(
   }
 
   try {
-    const result = await adapter.classify(claim, passage);
+    const safePassage = sanitiseForSemanticNli(passage);
+    if (!safePassage) return null;
+    const result = await adapter.classify(claim, safePassage);
     const confidence = Number.isFinite(result.confidence) ? result.confidence : 0;
     const [top, second] = topTwo(result.scores);
     const margin = top - second;
