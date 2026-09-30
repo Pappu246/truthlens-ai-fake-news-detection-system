@@ -257,7 +257,11 @@ export function extractClaimsHeuristic(
 
   // 1. Check title for high-priority claim
   const titleClean = title.trim();
-  if (titleClean.length >= 15 && !NON_CLAIM_PATTERNS.some(p => p.test(titleClean))) {
+  if (
+    titleClean.length >= 15 &&
+    !NON_CLAIM_PATTERNS.some(p => p.test(titleClean)) &&
+    !containsPromptInjectionAttempt(titleClean)
+  ) {
     const comp = extractClaimComponents(titleClean);
     const norm = normalizeClaimText(titleClean);
     const cType = classifyClaimType(titleClean);
@@ -291,8 +295,9 @@ export function extractClaimsHeuristic(
   for (let i = 0; i < rawSentences.length && claims.length < 6; i++) {
     const sentence = rawSentences[i];
 
-    // Filter out boilerplate or pure opinion
+    // Filter out boilerplate, pure opinion, or prompt-injection control text.
     if (NON_CLAIM_PATTERNS.some(p => p.test(sentence))) continue;
+    if (containsPromptInjectionAttempt(sentence)) continue;
     if (/^(?:share|comment|advertisement|copyright|all rights reserved|source:)/i.test(sentence)) continue;
 
     // Check if sentence makes a verifiable factual assertion
@@ -337,24 +342,33 @@ export function extractClaimsHeuristic(
     }
   }
 
-  // If no claims met the strict criteria, fall back to the first declarative sentence
+  // If no claims met the strict criteria, fall back only to a safe declarative
+  // sentence. Prompt-injection/control text must never become a factual claim.
   if (claims.length === 0 && (body.trim().length > 20 || title.trim().length > 10)) {
-    const fallbackText = title.trim() || body.trim().slice(0, 150);
-    const comp = extractClaimComponents(fallbackText);
-    const norm = normalizeClaimText(fallbackText);
-    claims.push({
-      claimId: `claim-1`,
-      originalText: fallbackText,
-      normalizedText: norm,
-      claimType: classifyClaimType(fallbackText),
-      importance: 'HIGH',
-      entities: comp.entities,
-      dates: comp.dates,
-      locations: comp.locations,
-      numbers: comp.numbers,
-      keywords: comp.keywords,
-      searchQueries: generateSearchQueries({ normalizedText: norm, ...comp })
-    });
+    const fallbackCandidates = [
+      title.trim(),
+      ...body.replace(/\r\n/g, '\n').split(/(?<=[.!?])\s+/).map(s => s.trim())
+    ];
+    const fallbackText = fallbackCandidates.find(candidate =>
+      candidate.length > 10 && !containsPromptInjectionAttempt(candidate)
+    );
+    if (fallbackText) {
+      const comp = extractClaimComponents(fallbackText);
+      const norm = normalizeClaimText(fallbackText);
+      claims.push({
+        claimId: `claim-1`,
+        originalText: fallbackText,
+        normalizedText: norm,
+        claimType: classifyClaimType(fallbackText),
+        importance: 'HIGH',
+        entities: comp.entities,
+        dates: comp.dates,
+        locations: comp.locations,
+        numbers: comp.numbers,
+        keywords: comp.keywords,
+        searchQueries: generateSearchQueries({ normalizedText: norm, ...comp })
+      });
+    }
   }
 
   return claims;
