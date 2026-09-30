@@ -9,8 +9,6 @@ on:
       - 'server/v2/**'
       - 'scripts/v2*.ts'
       - 'data/v2/**'
-      - 'package.json'
-      - 'package-lock.json'
       - '.github/workflows/v2-*.yml'
   workflow_dispatch:
 
