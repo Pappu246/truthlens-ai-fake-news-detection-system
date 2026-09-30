@@ -86,12 +86,18 @@ export class EvidenceProvider {
     return (selected.join(' ') || text.slice(0, 1600)).slice(0, 1800);
   }
 
-  private provenanceMatches(sourceName: string, finalUrl: string, originalType: SourceType): boolean {
+  private provenanceMatches(sourceName: string, originalUrl: string, finalUrl: string, originalType: SourceType): boolean {
     try {
-      const host = new URL(finalUrl).hostname.toLowerCase().replace(/^www\./, '');
-      if (host === 'news.google.com') return false;
-      const finalType = determineSourceType(finalUrl, sourceName);
-      if (finalType === originalType && finalType !== 'UNKNOWN') return true;
+      const finalHost = new URL(finalUrl).hostname.toLowerCase().replace(/^www\./, '');
+      const originalHost = new URL(originalUrl).hostname.toLowerCase().replace(/^www\./, '');
+      if (!finalHost || finalHost === 'news.google.com') return false;
+
+      const samePublisherHost =
+        originalHost !== 'news.google.com' &&
+        (finalHost === originalHost ||
+          finalHost.endsWith('.' + originalHost) ||
+          originalHost.endsWith('.' + finalHost));
+
       const aliases: Record<string, string[]> = {
         reuters: ['reuters.com'], 'associated press': ['apnews.com'], ap: ['apnews.com'],
         bbc: ['bbc.com', 'bbc.co.uk'], npr: ['npr.org'], bloomberg: ['bloomberg.com'],
@@ -99,8 +105,24 @@ export class EvidenceProvider {
       };
       const name = sourceName.toLowerCase();
       const matched = Object.entries(aliases).find(([alias]) => name.includes(alias));
-      return matched ? matched[1].some(domain => host === domain || host.endsWith('.' + domain))
-        : originalType === 'UNKNOWN' && finalType === 'UNKNOWN';
+      const aliasMatch = matched
+        ? matched[1].some(domain => finalHost === domain || finalHost.endsWith('.' + domain))
+        : false;
+
+      const finalType = determineSourceType(finalUrl, sourceName);
+      if (samePublisherHost) {
+        return originalType === 'UNKNOWN'
+          ? true
+          : finalType === originalType || aliasMatch;
+      }
+
+      // Google News discovery URLs do not identify the publisher. In that case
+      // the named publisher alias must match the verified final host.
+      if (originalHost === 'news.google.com') return aliasMatch;
+
+      // Cross-domain redirects are only accepted when the named publisher has
+      // an explicit alias. Never accept "both UNKNOWN" across domains.
+      return aliasMatch;
     } catch {
       return false;
     }
@@ -354,7 +376,7 @@ export class EvidenceProvider {
       } catch (err: any) {
         console.warn(`[EvidenceProvider] Wikipedia search failed for query "${query}":`, err.message);
         record({ provider: 'wikipedia_search', query, attemptedAt: new Date().toISOString(),
-                 ok: false, resultCount: 0, error: err.message || 'network error' });
+                 ok: false, resultCount: 0, error: err.message || 'network error', stage: 'SEARCH' });
       }
     }
 
