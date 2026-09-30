@@ -306,7 +306,7 @@ async function main(): Promise<void> {
     sanitised.neutralised >= 2,
     sanitised.text);
 
-  console.log(\`\\nGATE-14 REMAINING TESTS: \${passed} passed, \${failed} failed (\${passed + failed} total)\`);
+  console.log('\\nGATE-14 REMAINING TESTS: ' + passed + ' passed, ' + failed + ' failed (' + (passed + failed) + ' total)');
   if (failed) process.exit(1);
 }
 
