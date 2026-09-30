@@ -106,24 +106,85 @@ export async function verifyArticleContent(options: {
 /**
  * Backward-compatible single claim verification helper
  */
-export function verifyClaim(text: string, sourceUrl?: string | null): ClaimVerificationResponse {
+export async function verifyClaim(text: string, sourceUrl?: string | null): Promise<ClaimVerificationResponse> {
   const claim = extractPrimaryClaim(text);
   const source = evaluateSourceProvenance(sourceUrl);
 
-  const evidence: EvidenceSearchStatus = {
-    available: true,
-    status: 'AVAILABLE',
-    message: 'Phase 4 Claim Extraction and Evidence Verification Engine active.',
-    reason: 'Multi-source live web and knowledge verification pipeline enabled.',
-    results: []
-  };
+  if (!claim.has_claim) {
+    return {
+      claim,
+      source,
+      evidence: {
+        available: false,
+        status: 'UNAVAILABLE',
+        message: 'No verifiable factual claim was extracted.',
+        reason: 'The supplied text did not contain a sufficiently specific factual assertion.',
+        results: []
+      },
+      status: 'COMPLETED',
+      verification_verdict: 'INSUFFICIENT_EVIDENCE',
+      verification_note: 'No factual claim was available for live evidence retrieval.'
+    };
+  }
 
+  const extracted = await extractClaims('', claim.detected_claim);
+  const target = extracted[0];
+  if (!target) {
+    return {
+      claim,
+      source,
+      evidence: {
+        available: false,
+        status: 'UNAVAILABLE',
+        message: 'Claim normalization failed.',
+        reason: 'The extracted claim could not be converted into the evidence-search contract.',
+        results: []
+      },
+      status: 'COMPLETED',
+      verification_verdict: 'INSUFFICIENT_EVIDENCE',
+      verification_note: 'The claim could not be normalized for evidence retrieval.'
+    };
+  }
+
+  const results = await evidenceProvider.searchEvidenceForClaim(target);
+  const assessment = results.length
+    ? results.reduce((best, item) => {
+        const rank: Record<string, number> = {
+          CONTRADICTS: 4, SUPPORTS: 3, MIXED: 2, INSUFFICIENT: 1, IRRELEVANT: 0
+        };
+        return (rank[item.relation] ?? 0) > (rank[best.relation] ?? 0) ? item : best;
+      }, results[0])
+    : undefined;
+
+  const verdict =
+    results.some(r => r.relation === 'CONTRADICTS') ? 'LIKELY FALSE' :
+    results.some(r => r.relation === 'MIXED') ? 'MIXED / CONTESTED' :
+    results.some(r => r.relation === 'SUPPORTS') ? 'LIKELY SUPPORTED' :
+    'INSUFFICIENT EVIDENCE';
+
+  const unavailable = results.length === 0;
   return {
     claim,
     source,
-    evidence,
+    evidence: {
+      available: !unavailable,
+      status: unavailable ? 'UNAVAILABLE' : 'AVAILABLE',
+      message: unavailable ? 'No usable fetched evidence was found.' : 'Live evidence retrieval completed.',
+      reason: unavailable
+        ? 'No retrieved source page passed fetch and provenance checks.'
+        : 'Evidence was retrieved from source pages through the SSRF-safe fetch pipeline.',
+      results: results.map(item => ({
+        ...item,
+        assessment: item.relation,
+        source_final_url: item.sourceFinalUrl,
+        provenance_verified: item.provenanceVerified,
+        source_fetch_status: item.sourceFetchStatus
+      }))
+    },
     status: 'COMPLETED',
-    verification_verdict: 'MULTI_SIGNAL_PIPELINE_ACTIVE',
-    verification_note: 'Claim extraction and live evidence search engine configured.'
+    verification_verdict: verdict,
+    verification_note: assessment
+      ? `Primary evidence signal: ${assessment.relation} from ${assessment.sourceName}.`
+      : 'No evidence signal was strong enough to support a verdict.'
   };
 }
