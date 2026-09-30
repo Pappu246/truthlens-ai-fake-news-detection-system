@@ -181,6 +181,28 @@ async function main(): Promise<void> {
     /\[neutralised-instruction\]/.test(seenSafePassage),
     seenSafePassage);
 
+  console.log('\\n2. Production-safe telemetry');
+  const originalInfo = console.info;
+  const telemetryLogs: string[] = [];
+  console.info = (...args: unknown[]) => telemetryLogs.push(args.map(String).join(' '));
+  try {
+    const telemetryRun: EvidenceRetriever = async (_c, d) => {
+      d.push({ provider: 'search', query: 'fixture', attemptedAt: new Date().toISOString(), ok: false, resultCount: 0, stage: 'SEARCH', error: 'offline' });
+      return [];
+    };
+    await new EvidenceEngine(telemetryRun).verifyClaim(claim.normalizedText);
+  } finally {
+    console.info = originalInfo;
+  }
+  const telemetry = telemetryLogs.find(line => /truthlens\.evidence\.verification/.test(line));
+  check('telemetry emits an aggregate evidence event',
+    Boolean(telemetry));
+  check('telemetry excludes raw claim text and secrets',
+    Boolean(telemetry) &&
+    !telemetry!.includes(claim.normalizedText) &&
+    !/api[_-]?key|token|secret|system prompt/i.test(telemetry!),
+    telemetry || 'no telemetry event');
+
   console.log('\\n2. Source independence / syndication');
   const identical = [
     evidence({ sourceName: 'Outlet A', sourceUrl: 'https://a.example/story', sourceFinalUrl: 'https://a.example/story' }),
