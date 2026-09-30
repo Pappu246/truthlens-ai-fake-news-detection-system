@@ -17,6 +17,7 @@ import {
 } from '../server/verification/evidenceEngine';
 import { EvidenceItem } from '../src/types';
 import { buildArticleVerification } from '../server/verification/assessmentEngine';
+import { ClaimVerificationResult } from '../src/types';
 
 let passed = 0;
 let failed = 0;
@@ -229,7 +230,7 @@ async function main(): Promise<void> {
   check('explicitly unverified provenance cannot create a positive signal',
     unproven.status === 'INSUFFICIENT_EVIDENCE', unproven.status);
 
-  const claim = (importance: 'HIGH' | 'MEDIUM' | 'LOW', assessment: 'SUPPORTED' | 'CONTRADICTED' | 'MIXED' | 'INSUFFICIENT') => ({
+  const claim = (importance: 'HIGH' | 'MEDIUM' | 'LOW', assessment: 'SUPPORTED' | 'CONTRADICTED' | 'MIXED' | 'INSUFFICIENT'): ClaimVerificationResult => ({
     claim: {
       claimId: 'c-' + importance + '-' + assessment,
       originalText: 'A factual assertion about the public record.',
