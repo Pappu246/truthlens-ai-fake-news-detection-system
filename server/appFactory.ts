@@ -549,11 +549,14 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
   });
 
   // 6. Claim Verification Endpoint
-  app.post('/api/verify-claim', (req, res) => {
+  app.post('/api/verify-claim', async (req, res) => {
     try {
       const text = req.body.text || req.body.claim || '';
       const sourceUrl = req.body.source_url || '';
-      const verification = verifyClaim(text, sourceUrl);
+      if (!text.trim()) {
+        return res.status(400).json({ detail: 'Claim text is required.' });
+      }
+      const verification = await verifyClaim(text, sourceUrl);
       res.json(verification);
     } catch (err: any) {
       res.status(400).json({ detail: err.message });
