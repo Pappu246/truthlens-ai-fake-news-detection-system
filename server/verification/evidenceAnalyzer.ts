@@ -332,16 +332,40 @@ export function aggregateClaimAssessment(
     confidenceScore = 0.65;
     confidenceExplanation = 'Multiple independent sources retrieved, but evidence contains conflicting assertions.';
   } else if (counts.contradicts > 0) {
-    assessment = 'CONTRADICTED';
-    explanation = numWarningItem?.numericalConsistency?.warning ||
-      `Retrieved evidence directly refutes or contradicts the factual assertion (${counts.contradicts} source${counts.contradicts > 1 ? 's' : ''}).`;
-    confidenceScore = Math.min(0.95, 0.60 + (diversity.independentSourcesCount * 0.15));
-    confidenceExplanation = `Substantiated by ${diversity.independentSourcesCount} independent source(s) identifying factual disagreement.`;
+    const strongContradiction = relevantItems.some(item =>
+      item.relation === 'CONTRADICTS' &&
+      ['OFFICIAL_GOVERNMENT', 'OFFICIAL_ORGANIZATION', 'PRIMARY_SCIENTIFIC', 'MAJOR_NEWS', 'REPUTABLE_SOURCE'].includes(item.sourceType)
+    );
+    const contradictionThresholdMet = diversity.independentSourcesCount >= 2 || strongContradiction;
+    if (!contradictionThresholdMet) {
+      assessment = 'INSUFFICIENT';
+      explanation = 'A contradiction was retrieved, but the available evidence does not meet the minimum independence/source-quality threshold for a negative factual assessment.';
+      confidenceScore = 0.35;
+      confidenceExplanation = 'One weak or non-independent contradiction is not sufficient for a strong conclusion.';
+    } else {
+      assessment = 'CONTRADICTED';
+      explanation = numWarningItem?.numericalConsistency?.warning ||
+        `Retrieved evidence directly refutes or contradicts the factual assertion (${counts.contradicts} source${counts.contradicts > 1 ? 's' : ''}).`;
+      confidenceScore = Math.min(0.95, 0.60 + (diversity.independentSourcesCount * 0.15));
+      confidenceExplanation = `Substantiated by ${diversity.independentSourcesCount} independent source(s) identifying factual disagreement.`;
+    }
   } else if (counts.supports >= 1) {
-    assessment = 'SUPPORTED';
-    explanation = `Retrieved external reporting corroborates the factual assertion across ${diversity.independentSourcesCount} independent source(s).`;
-    confidenceScore = Math.min(0.95, 0.55 + (diversity.independentSourcesCount * 0.15));
-    confidenceExplanation = `Corroborated by ${diversity.independentSourcesCount} reputable external reporting outlet(s).`;
+    const strongSupport = relevantItems.some(item =>
+      item.relation === 'SUPPORTS' &&
+      ['OFFICIAL_GOVERNMENT', 'OFFICIAL_ORGANIZATION', 'PRIMARY_SCIENTIFIC', 'MAJOR_NEWS', 'REPUTABLE_SOURCE'].includes(item.sourceType)
+    );
+    const supportThresholdMet = diversity.independentSourcesCount >= 2 || strongSupport;
+    if (!supportThresholdMet) {
+      assessment = 'INSUFFICIENT';
+      explanation = 'Supporting evidence was retrieved, but the available evidence does not meet the minimum independence/source-quality threshold for a positive factual assessment.';
+      confidenceScore = 0.35;
+      confidenceExplanation = 'A single weak or non-independent source is not sufficient for strong corroboration.';
+    } else {
+      assessment = 'SUPPORTED';
+      explanation = `Retrieved external reporting corroborates the factual assertion across ${diversity.independentSourcesCount} independent source(s).`;
+      confidenceScore = Math.min(0.95, 0.55 + (diversity.independentSourcesCount * 0.15));
+      confidenceExplanation = `Corroborated by ${diversity.independentSourcesCount} reputable external reporting outlet(s).`;
+    }
   } else if (counts.mixed > 0) {
     assessment = 'MIXED';
     explanation = 'Retrieved evidence indicates partial agreement or inconclusive circumstances.';
