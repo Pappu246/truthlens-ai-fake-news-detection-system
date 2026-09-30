@@ -36,7 +36,7 @@ Current configuration:
 - Local NLI: `Xenova/nli-deberta-v3-xsmall`, q8@3fac2500
 - Local embedding: `Xenova/all-MiniLM-L6-v2`, q8@afdb6f1a
 
-The current-head end-to-end rerun is executing against the frozen 300-claim / 5,183-document SciFact inputs. Its result is not reported until a complete artifact is produced.
+The current-head end-to-end rerun is queued as SciFact workflow run **#215** against the frozen 300-claim / 5,183-document inputs. A preceding run **#208** is still recorded as in progress for the previous Gate-14 head. Neither result is reported until a complete artifact is produced.
 
 ## Metrics
 
