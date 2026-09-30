@@ -41,8 +41,9 @@ async function main(): Promise<void> {
   check(result, 'Observability is aggregate-only', !obs.includes('claim_text') && !obs.includes('source_url'),
     'no raw claim/source fields in telemetry payload');
 
-  const docs = fs.readFileSync('docs/GATE14_RELEASE_AUDIT.md', 'utf8');
-  check(result, 'Release governance documentation present', docs.includes('Release gates') && docs.includes('production / research'),
+  const docs = fs.readFileSync('docs/GATE14_RELEASE_AUDIT.md', 'utf8').toLowerCase();
+  check(result, 'Release governance documentation present',
+    docs.includes('release gates') && docs.includes('production / research'),
     'Gate-14 governance record');
 
   check(result, 'Evidence benchmark fixture exists', fs.existsSync('research/evidence_benchmark.json'),
