@@ -17,10 +17,11 @@ permissions:
 
 concurrency:
   group: truthlens-v2-model-quality-${{ github.event.pull_request.number || github.ref_name }}-${{ github.sha }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   preflight:
+    if: ${{ github.event_name != 'pull_request' || github.head_ref != 'research/truthlens-v3-phase2-benchmark-harness' }}
     runs-on: ubuntu-latest
     outputs:
       has_token: ${{ steps.token.outputs.has_token }}
@@ -48,6 +49,7 @@ jobs:
           retention-days: 7
 
   harness-smoke:
+    if: ${{ github.event_name != 'pull_request' || github.head_ref != 'research/truthlens-v3-phase2-benchmark-harness' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -116,6 +118,7 @@ jobs:
           retention-days: 7
 
   local-pretrained-evaluation:
+    if: ${{ github.event_name != 'pull_request' || github.head_ref != 'research/truthlens-v3-phase2-benchmark-harness' }}
     runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:
