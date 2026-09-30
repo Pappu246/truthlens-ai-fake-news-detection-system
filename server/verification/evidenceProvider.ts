@@ -5,6 +5,7 @@ import {
   SourceType
 } from '../../src/types';
 import { safeFetchHtml } from '../security/urlValidator';
+import * as cheerio from 'cheerio';
 import {
   determineSourceType,
   calculateRelevance,
@@ -40,6 +41,121 @@ export class EvidenceProvider {
 
   constructor(options?: { timeoutMs?: number }) {
     this.timeoutMs = options?.timeoutMs || 8000;
+  }
+
+  private extractReadableText(html: string): string {
+    const $ = cheerio.load(html);
+    $('script,style,noscript,template,nav,header,footer,aside,form,svg').remove();
+    const selectors = [
+      'article', '[itemprop="articleBody"]', 'main', '.article-body',
+      '.article__body', '.story-body', '.story__body', '.entry-content', '.post-content'
+    ];
+    let best = '';
+    for (const selector of selectors) {
+      $(selector).each((_i, el) => {
+        const text = $(el).text().replace(/\s+/g, ' ').trim();
+        if (text.length > best.length) best = text;
+      });
+      if (best.length >= 500) break;
+    }
+    if (best.length < 200) {
+      const paragraphs = $('p')
+        .map((_i, el) => $(el).text().replace(/\s+/g, ' ').trim())
+        .get()
+        .filter((p: string) => p.length >= 40);
+      best = paragraphs.join(' ').replace(/\s+/g, ' ').trim();
+    }
+    return best;
+  }
+
+  private selectEvidenceExcerpt(claim: ExtractedClaim, text: string, title: string): string {
+    const sentences = text.split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(s => s.length >= 30);
+    if (sentences.length === 0) return text.slice(0, 1600);
+    const terms = [...claim.entities, ...claim.keywords, ...claim.numbers]
+      .map(t => t.toLowerCase().replace(/[^a-z0-9%.-]/g, '')).filter(Boolean);
+    const scored = sentences.map((sentence, index) => {
+      const lower = sentence.toLowerCase();
+      const hits = terms.reduce((n, term) => n + (lower.includes(term) ? 1 : 0), 0);
+      const titleBoost = title && lower.includes(title.toLowerCase().slice(0, 24)) ? 1 : 0;
+      return { sentence, index, score: hits + titleBoost };
+    });
+    scored.sort((a, b) => b.score - a.score || a.index - b.index);
+    const selected = scored.slice(0, 3).sort((a, b) => a.index - b.index).map(x => x.sentence);
+    return (selected.join(' ') || text.slice(0, 1600)).slice(0, 1800);
+  }
+
+  private provenanceMatches(sourceName: string, finalUrl: string, originalType: SourceType): boolean {
+    try {
+      const host = new URL(finalUrl).hostname.toLowerCase().replace(/^www\./, '');
+      if (host === 'news.google.com') return false;
+      const finalType = determineSourceType(finalUrl, sourceName);
+      if (finalType === originalType && finalType !== 'UNKNOWN') return true;
+      const aliases: Record<string, string[]> = {
+        reuters: ['reuters.com'], 'associated press': ['apnews.com'], ap: ['apnews.com'],
+        bbc: ['bbc.com', 'bbc.co.uk'], npr: ['npr.org'], bloomberg: ['bloomberg.com'],
+        afp: ['afp.com'], wikipedia: ['wikipedia.org', 'wikimedia.org']
+      };
+      const name = sourceName.toLowerCase();
+      const matched = Object.entries(aliases).find(([alias]) => name.includes(alias));
+      return matched ? matched[1].some(domain => host === domain || host.endsWith('.' + domain))
+        : originalType === 'UNKNOWN' && finalType === 'UNKNOWN';
+    } catch {
+      return false;
+    }
+  }
+
+  private async hydrateEvidenceItem(
+    item: EvidenceItem,
+    claim: ExtractedClaim,
+    diagnostics?: RetrievalDiagnostic[]
+  ): Promise<EvidenceItem> {
+    try {
+      const fetched = await safeFetchHtml(item.sourceUrl, {
+        timeoutMs: this.timeoutMs,
+        maxBytes: 2.5 * 1024 * 1024,
+        maxRedirects: 5,
+        userAgent: 'TruthLens-EvidenceBot/1.0 (academic; evidence retrieval)'
+      });
+      const body = this.extractReadableText(fetched.html);
+      if (body.length < 120) throw new Error('Publisher page did not expose enough readable article text.');
+      const excerpt = this.selectEvidenceExcerpt(claim, body, item.title);
+      const { score, explanation } = calculateRelevance(claim, excerpt, item.title);
+      const numericalConsistency = checkNumericalConsistency(claim, excerpt);
+      const temporalConsistency = checkTemporalConsistency(claim, item.publishedAt);
+      const relation = classifyEvidenceRelation(claim, excerpt, score, numericalConsistency);
+      const provenanceVerified = this.provenanceMatches(item.sourceName, fetched.finalUrl, item.sourceType);
+      return {
+        ...item,
+        sourceFinalUrl: fetched.finalUrl,
+        evidenceExcerpt: excerpt,
+        sourceFetchStatus: 'FETCHED',
+        sourceContentWordCount: body.split(/\s+/).filter(Boolean).length,
+        provenanceVerified,
+        relation,
+        relevanceScore: score,
+        relevanceExplanation: explanation,
+        numericalConsistency,
+        temporalConsistency
+      };
+    } catch (err: any) {
+      diagnostics?.push({
+        provider: 'publisher_source_fetch',
+        query: claim.normalizedText,
+        attemptedAt: new Date().toISOString(),
+        ok: false,
+        resultCount: 0,
+        error: err?.message || 'source fetch failed'
+      });
+      return {
+        ...item,
+        sourceFetchStatus: 'FAILED',
+        provenanceVerified: false,
+        relation: 'INSUFFICIENT',
+        relevanceScore: 0,
+        relevanceExplanation: 'Publisher page could not be fetched or parsed: ' + (err?.message || 'unknown error'),
+        evidenceExcerpt: undefined
+      };
+    }
   }
 
   /**
@@ -202,6 +318,12 @@ export class EvidenceProvider {
       }
     }
 
+    const hydrated: EvidenceItem[] = [];
+    for (const item of results.slice(0, 6)) {
+      hydrated.push(await this.hydrateEvidenceItem(item, claim, diagnostics));
+    }
+    results.splice(0, results.length, ...hydrated);
+
     // Sort results by relevance score descending and source priority
     results.sort((a, b) => {
       // Prioritize official or major news
@@ -238,8 +360,10 @@ export class EvidenceProvider {
     for (const q of queriesToRun) {
       const items = await this.search(q, claim, diagnostics);
       for (const item of items) {
-        if (!seenUrls.has(item.sourceUrl)) {
-          seenUrls.add(item.sourceUrl);
+        if (item.sourceFetchStatus !== 'FETCHED') continue;
+        const dedupeUrl = item.sourceFinalUrl || item.sourceUrl;
+        if (!seenUrls.has(dedupeUrl)) {
+          seenUrls.add(dedupeUrl);
           allEvidence.push(item);
         }
       }
