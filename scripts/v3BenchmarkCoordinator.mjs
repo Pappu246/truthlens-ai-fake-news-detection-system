@@ -149,6 +149,12 @@ async function runOpenWeb() {
   throw new Error("External open-web benchmark blocked until the independently annotated holdout is sealed and hash-pinned.");
 }
 
+if (process.argv.includes("--check-only")) {
+  assertPhase2();
+  console.log("TruthLens V3 Phase 2 coordinator dry-check: PASS");
+  process.exit(0);
+}
+
 async function main() {
   assertPhase2();
   const benchmark = arg("benchmark");
