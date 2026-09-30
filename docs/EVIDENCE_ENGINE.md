@@ -102,7 +102,7 @@ Structural guarantees, asserted by `npm run test:evidence`:
 
 ## Testing
 
-`npm run test:evidence` — 53 assertions. Retrieval is stubbed behind the
+`npm run test:evidence` — **61 assertions**. Retrieval is stubbed behind the
 `EvidenceRetriever` seam so the SUPPORTED / CONTRADICTED / MIXED /
 INSUFFICIENT / SEARCH_UNAVAILABLE branches and every injection defence run
 deterministically without network access. The stub is a test-only injection
