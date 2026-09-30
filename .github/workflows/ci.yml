@@ -6,6 +6,7 @@ on:
       - main
       - "ml-upgrade-*"
       - "research/truthlens-v2-model-quality"
+      - "gate14-*"
   pull_request:
     branches:
       - main
