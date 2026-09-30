@@ -19,8 +19,7 @@ if (!fs.existsSync(file)) {
   process.exit(1);
 }
 
-const rows = fs.readFileSync(file, "utf8").split(/?
-/).filter(Boolean).map(JSON.parse);
+const rows = fs.readFileSync(file, "utf8").split(/\r?\n/).filter(Boolean).map(JSON.parse);
 const errors = [];
 const ids = new Set();
 
