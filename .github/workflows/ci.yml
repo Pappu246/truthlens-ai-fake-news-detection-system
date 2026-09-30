@@ -99,3 +99,6 @@ jobs:
       - name: V3 benchmark coordinator syntax
         run: npm run test:v3-coordinator
 
+      - name: V3 Phase 2 evidence gate syntax
+        run: node --check scripts/v3Phase2EvidenceGate.mjs
+
