@@ -14,6 +14,7 @@ import {
   classifyEvidenceRelation,
   aggregateClaimAssessment
 } from './evidenceAnalyzer';
+import { refineEvidenceRelationSemantically } from './semanticRelation';
 
 export interface EvidenceSearchOptions {
   maxResultsPerClaim?: number;
@@ -34,6 +35,7 @@ export interface RetrievalDiagnostic {
   httpStatus?: number;
   resultCount: number;
   error?: string;
+  stage?: 'SEARCH' | 'PUBLISHER_FETCH' | 'PROVENANCE';
 }
 
 export class EvidenceProvider {
@@ -122,8 +124,45 @@ export class EvidenceProvider {
       const { score, explanation } = calculateRelevance(claim, excerpt, item.title);
       const numericalConsistency = checkNumericalConsistency(claim, excerpt);
       const temporalConsistency = checkTemporalConsistency(claim, item.publishedAt);
-      const relation = classifyEvidenceRelation(claim, excerpt, score, numericalConsistency);
-      const provenanceVerified = this.provenanceMatches(item.sourceName, fetched.finalUrl, item.sourceType);
+      const lexicalRelation = classifyEvidenceRelation(claim, excerpt, score, numericalConsistency);
+      const provenanceVerified = this.provenanceMatches(item.sourceName, item.sourceUrl, fetched.finalUrl, item.sourceType);
+
+      if (diagnostics && !provenanceVerified) {
+        diagnostics.push({
+          provider: 'publisher_provenance_verification',
+          query: claim.normalizedText,
+          attemptedAt: new Date().toISOString(),
+          ok: true,
+          resultCount: 0,
+          error: 'Publisher identity did not match the discovered source after redirect verification.',
+          stage: 'PROVENANCE'
+        });
+      }
+
+      let relation = lexicalRelation;
+      let finalExplanation = explanation;
+      if (provenanceVerified && numericalConsistency.isConsistent) {
+        const semantic = await refineEvidenceRelationSemantically(
+          claim,
+          excerpt,
+          lexicalRelation,
+          score
+        );
+        if (semantic && semantic.relation !== 'MIXED') {
+          relation = semantic.relation;
+          finalExplanation =
+            explanation +
+            ` | semantic NLI: ${semantic.relation} confidence=${semantic.confidence.toFixed(3)} margin=${semantic.margin.toFixed(3)} model=${semantic.modelName}`;
+        } else if (semantic) {
+          finalExplanation =
+            explanation +
+            ` | semantic NLI abstained confidence=${semantic.confidence.toFixed(3)} margin=${semantic.margin.toFixed(3)} model=${semantic.modelName}`;
+        }
+      } else if (!provenanceVerified) {
+        relation = 'INSUFFICIENT';
+        finalExplanation = 'Publisher provenance could not be verified; directional evidence was withheld.';
+      }
+
       return {
         ...item,
         sourceFinalUrl: fetched.finalUrl,
@@ -133,7 +172,7 @@ export class EvidenceProvider {
         provenanceVerified,
         relation,
         relevanceScore: score,
-        relevanceExplanation: explanation,
+        relevanceExplanation: finalExplanation,
         numericalConsistency,
         temporalConsistency
       };
@@ -144,7 +183,8 @@ export class EvidenceProvider {
         attemptedAt: new Date().toISOString(),
         ok: false,
         resultCount: 0,
-        error: err?.message || 'source fetch failed'
+        error: err?.message || 'source fetch failed',
+        stage: 'PUBLISHER_FETCH'
       });
       return {
         ...item,
@@ -198,7 +238,7 @@ export class EvidenceProvider {
       if (!res.ok) {
         record({ provider: 'google_news_rss', query, attemptedAt: new Date().toISOString(),
                  ok: false, httpStatus: res.status, resultCount: 0,
-                 error: `HTTP ${res.status}` });
+                 error: `HTTP ${res.status}`, stage: 'SEARCH' });
       }
       if (res.ok) {
         const text = await res.text();
@@ -253,12 +293,12 @@ export class EvidenceProvider {
         }
         newsCount = results.length;
         record({ provider: 'google_news_rss', query, attemptedAt: new Date().toISOString(),
-                 ok: true, httpStatus: res.status, resultCount: newsCount });
+                 ok: true, httpStatus: res.status, resultCount: newsCount, stage: 'SEARCH' });
       }
     } catch (err: any) {
       console.warn(`[EvidenceProvider] News RSS search failed for query "${query}":`, err.message);
       record({ provider: 'google_news_rss', query, attemptedAt: new Date().toISOString(),
-               ok: false, resultCount: 0, error: err.message || 'network error' });
+               ok: false, resultCount: 0, error: err.message || 'network error', stage: 'SEARCH' });
     }
 
     // 2. If claim is Science / Historical / Statistics or if news hits were low, check Wikipedia
@@ -274,7 +314,7 @@ export class EvidenceProvider {
 
         if (!res.ok) {
           record({ provider: 'wikipedia_search', query, attemptedAt: new Date().toISOString(),
-                   ok: false, httpStatus: res.status, resultCount: 0, error: `HTTP ${res.status}` });
+                   ok: false, httpStatus: res.status, resultCount: 0, error: `HTTP ${res.status}`, stage: 'SEARCH' });
         }
         if (res.ok) {
           const data = await res.json();
@@ -309,7 +349,7 @@ export class EvidenceProvider {
             }
           }
           record({ provider: 'wikipedia_search', query, attemptedAt: new Date().toISOString(),
-                   ok: true, httpStatus: res.status, resultCount: results.length - newsCount });
+                   ok: true, httpStatus: res.status, resultCount: results.length - newsCount, stage: 'SEARCH' });
         }
       } catch (err: any) {
         console.warn(`[EvidenceProvider] Wikipedia search failed for query "${query}":`, err.message);
@@ -360,7 +400,7 @@ export class EvidenceProvider {
     for (const q of queriesToRun) {
       const items = await this.search(q, claim, diagnostics);
       for (const item of items) {
-        if (item.sourceFetchStatus !== 'FETCHED') continue;
+        if (item.sourceFetchStatus !== 'FETCHED' || item.provenanceVerified === false) continue;
         const dedupeUrl = item.sourceFinalUrl || item.sourceUrl;
         if (!seenUrls.has(dedupeUrl)) {
           seenUrls.add(dedupeUrl);
@@ -371,6 +411,38 @@ export class EvidenceProvider {
     }
 
     return allEvidence;
+  }
+
+  /**
+   * Gathers evidence and classifies the retrieval outcome without collapsing
+   * search failure, no-evidence, publisher-fetch failure, and provenance rejection.
+   */
+  public async searchEvidenceForClaimDetailed(
+    claim: ExtractedClaim,
+    diagnostics?: RetrievalDiagnostic[]
+  ): Promise<{
+    items: EvidenceItem[];
+    status: 'AVAILABLE' | 'NO_EVIDENCE' | 'SEARCH_FAILED' | 'PUBLISHER_FETCH_FAILED' | 'PROVENANCE_REJECTED';
+  }> {
+    const allEvidence = await this.searchEvidenceForClaim(claim, diagnostics);
+    const entries = diagnostics ?? [];
+    const searchEntries = entries.filter(d => (d.stage ?? 'SEARCH') === 'SEARCH');
+    const fetchFailures = entries.filter(d => d.stage === 'PUBLISHER_FETCH' && !d.ok);
+    const provenanceRejections = entries.filter(d => d.stage === 'PROVENANCE' && d.ok);
+
+    if (allEvidence.length > 0) {
+      return { items: allEvidence, status: 'AVAILABLE' };
+    }
+    if (searchEntries.length > 0 && searchEntries.every(d => !d.ok)) {
+      return { items: [], status: 'SEARCH_FAILED' };
+    }
+    if (fetchFailures.length > 0) {
+      return { items: [], status: 'PUBLISHER_FETCH_FAILED' };
+    }
+    if (provenanceRejections.length > 0) {
+      return { items: [], status: 'PROVENANCE_REJECTED' };
+    }
+    return { items: [], status: 'NO_EVIDENCE' };
   }
 
   /**
