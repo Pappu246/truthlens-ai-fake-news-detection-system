@@ -46,7 +46,11 @@ export interface EvidenceRecord {
   retrieved_source: string;
   source_title: string;
   source_url: string;
+  source_final_url: string | null;
   source_domain: string;
+  provenance_verified: boolean;
+  source_fetch_status: 'FETCHED' | 'FAILED' | 'NOT_ATTEMPTED' | 'UNKNOWN';
+  source_content_word_count: number | null;
   source_type: string;
   evidence_excerpt: string;
   relevance_signal: {
@@ -319,9 +323,14 @@ export class EvidenceEngine {
     }
 
     // ---- sanitise + structure -------------------------------------------
+    // A production provider may return discovery candidates that failed source
+    // hydration. Those records remain useful for audit, but cannot influence the
+    // verification signal. Deterministic test retrievers may omit the field.
+    const usableItems = items.filter(item => item.sourceFetchStatus !== 'FAILED');
+
     let neutralisedTotal = 0;
-    const records: EvidenceRecord[] = items.map((item, i) => {
-      const excerpt = sanitiseUntrustedEvidence(item.snippet || item.title || '');
+    const records: EvidenceRecord[] = usableItems.map((item, i) => {
+      const excerpt = sanitiseUntrustedEvidence(item.evidenceExcerpt || item.snippet || item.title || '');
       const title = sanitiseUntrustedEvidence(item.title || '', 240);
       const sourceName = sanitiseUntrustedEvidence(item.sourceName || 'Unknown source', 120);
       neutralisedTotal += excerpt.neutralised + title.neutralised + sourceName.neutralised;
@@ -332,7 +341,11 @@ export class EvidenceEngine {
         retrieved_source: sourceName.text,
         source_title: title.text,
         source_url: item.sourceUrl,
-        source_domain: domainOf(item.sourceUrl),
+        source_final_url: item.sourceFinalUrl || null,
+        source_domain: domainOf(item.sourceFinalUrl || item.sourceUrl),
+        provenance_verified: item.provenanceVerified === true,
+        source_fetch_status: item.sourceFetchStatus || 'UNKNOWN',
+        source_content_word_count: item.sourceContentWordCount ?? null,
         source_type: item.sourceType,
         evidence_excerpt: excerpt.text,
         relevance_signal: {
@@ -364,8 +377,8 @@ export class EvidenceEngine {
       unclear: records.filter(r => r.stance === 'UNCLEAR').length
     };
 
-    const aggregated = aggregateClaimAssessment(claim, items);
-    const diversity = evaluateSourceDiversity(items.filter(e => e.relation !== 'IRRELEVANT'));
+    const aggregated = aggregateClaimAssessment(claim, usableItems);
+    const diversity = evaluateSourceDiversity(usableItems.filter(e => e.relation !== 'IRRELEVANT'));
 
     let status: VerificationStatus;
     let direction: EvidenceVerificationReport['verification_signal']['direction'];
@@ -382,8 +395,9 @@ export class EvidenceEngine {
         * Math.min(1, (diversity?.independentSourcesCount || 0) / 3));
 
     const limitations = [
-      'Evidence relation is inferred from headlines and short snippets, not from full-article entailment.',
+      'Evidence relation is a deterministic lexical/numerical/temporal assessment, not a semantic NLI proof.',
       'Retrieval covers a news index and Wikipedia; it is not an exhaustive survey of the record.',
+      'Publisher pages are fetched through the SSRF-safe fetcher before production evidence is admitted.',
       'SUPPORTED means independent reporting corroborates the assertion; it is not proof of truth.'
     ];
     if (relevant.length < records.length) {
