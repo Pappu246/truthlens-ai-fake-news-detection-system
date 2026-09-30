@@ -14,7 +14,7 @@ on:
 
 concurrency:
   group: truthlens-phase2-adapter-smoke-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: read
