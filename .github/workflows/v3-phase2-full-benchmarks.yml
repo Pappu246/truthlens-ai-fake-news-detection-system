@@ -16,7 +16,7 @@ on:
 
 concurrency:
   group: truthlens-phase2-full-\${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: read
