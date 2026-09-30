@@ -123,7 +123,7 @@ const INJECTION_PATTERNS: RegExp[] = [
   /disregard\s+(?:all\s+|any\s+)?(?:previous|prior|above)\s+(?:instructions?|rules?)/gi,
   /you\s+are\s+now\s+(?:a|an|the)\b/gi,
   /system\s*(?:prompt|message|instruction)/gi,
-  /reveal\s+(?:your\s+)?(?:system\s+prompt|instructions?|secrets?)/gi,
+  /reveal\s+(?:your\s+)?(?:system\s+prompt|instructions?|secrets?|api[_\s-]?keys?|tokens?|credentials?)/gi,
   /(?:print|output|return|show)\s+(?:your\s+)?(?:api[_\s-]?key|token|secret|credential|env)/gi,
   /(?:call|execute|run|invoke)\s+(?:the\s+)?(?:tool|function|command|shell)/gi,
   /mark\s+this\s+(?:claim|article)\s+as\s+(?:true|false|verified|real|fake)/gi,
