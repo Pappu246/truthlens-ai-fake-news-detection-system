@@ -9,6 +9,7 @@ import { sanitiseUntrustedEvidence } from '../server/verification/evidenceEngine
 import { buildArticleVerification } from '../server/verification/assessmentEngine';
 import { refineEvidenceRelationSemantically } from '../server/verification/semanticRelation';
 import { evaluateSourceDiversity } from '../server/verification/evidenceAnalyzer';
+import { verifyEvidenceProvenance } from '../server/verification/evidenceProvider';
 import { extractClaimsHeuristic } from '../server/verification/claimExtractor';
 import { ExtractedClaim, EvidenceItem, ClaimVerificationResult } from '../src/types';
 import { NliAdapter } from '../server/v2/nli/nliAdapter';
@@ -225,6 +226,36 @@ async function main(): Promise<void> {
   check('distinct article content across three domains remains independently countable',
     independentDistinct.independentSourcesCount === 3,
     JSON.stringify(independentDistinct));
+
+  console.log('\\n3. Provenance-chain adversarial validation');
+  check('same publisher host remains provenance-verified',
+    verifyEvidenceProvenance(
+      'Reuters',
+      'https://www.reuters.com/world/story',
+      'https://www.reuters.com/world/story?utm_source=test',
+      'MAJOR_NEWS'
+    ) === true);
+  check('unrelated cross-domain redirect is rejected',
+    verifyEvidenceProvenance(
+      'Reuters',
+      'https://www.reuters.com/world/story',
+      'https://malicious.example/reuters-copy',
+      'MAJOR_NEWS'
+    ) === false);
+  check('Google News redirect requires named-publisher alias match',
+    verifyEvidenceProvenance(
+      'Reuters',
+      'https://news.google.com/rss/articles/example',
+      'https://www.reuters.com/world/story',
+      'MAJOR_NEWS'
+    ) === true);
+  check('Google News redirect to unrelated host is rejected',
+    verifyEvidenceProvenance(
+      'Reuters',
+      'https://news.google.com/rss/articles/example',
+      'https://malicious.example/story',
+      'MAJOR_NEWS'
+    ) === false);
 
   console.log('\\n3. Claim extraction adversarial validation');
   const hostile = extractClaimsHeuristic(
