@@ -378,16 +378,32 @@ export class EvidenceProvider {
    */
   public async verifyClaims(claims: ExtractedClaim[]): Promise<ClaimVerificationResult[]> {
     const results: ClaimVerificationResult[] = [];
+    const importantClaims = claims.filter(c => c.importance === 'HIGH' || c.importance === 'MEDIUM');
 
+    // First spend retrieval budget on the claims that can materially affect the
+    // article verdict. Low-importance claims are only searched when the
+    // important-claim pass does not establish enough evidence, avoiding a
+    // large latency increase on normal articles.
     for (const claim of claims) {
-      // Only prioritize search for HIGH and MEDIUM claims to conserve network, but evaluate all
-      let evidenceItems: EvidenceItem[] = [];
-      if (claim.importance === 'HIGH' || claim.importance === 'MEDIUM') {
-        evidenceItems = await this.searchEvidenceForClaim(claim);
+      if (claim.importance !== 'HIGH' && claim.importance !== 'MEDIUM') {
+        results.push(aggregateClaimAssessment(claim, []));
+        continue;
       }
+      const evidenceItems = await this.searchEvidenceForClaim(claim);
+      results.push(aggregateClaimAssessment(claim, evidenceItems));
+    }
 
-      const claimResult = aggregateClaimAssessment(claim, evidenceItems);
-      results.push(claimResult);
+    const importantResults = results.filter(r => r.claim.importance === 'HIGH' || r.claim.importance === 'MEDIUM');
+    const importantCoverage = importantClaims.length > 0 &&
+      importantResults.filter(r => r.assessment !== 'INSUFFICIENT').length === importantClaims.length;
+
+    if (!importantCoverage) {
+      for (let i = 0; i < results.length; i++) {
+        const claim = results[i].claim;
+        if (claim.importance !== 'LOW' || results[i].assessment !== 'INSUFFICIENT') continue;
+        const evidenceItems = await this.searchEvidenceForClaim(claim);
+        results[i] = aggregateClaimAssessment(claim, evidenceItems);
+      }
     }
 
     return results;
