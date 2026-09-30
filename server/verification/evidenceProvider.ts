@@ -38,6 +38,48 @@ export interface RetrievalDiagnostic {
   stage?: 'SEARCH' | 'PUBLISHER_FETCH' | 'PROVENANCE';
 }
 
+export function verifyEvidenceProvenance(
+  sourceName: string,
+  originalUrl: string,
+  finalUrl: string,
+  originalType: SourceType
+): boolean {
+  try {
+    const finalHost = new URL(finalUrl).hostname.toLowerCase().replace(/^www\./, '');
+    const originalHost = new URL(originalUrl).hostname.toLowerCase().replace(/^www\./, '');
+    if (!finalHost || finalHost === 'news.google.com') return false;
+
+    const samePublisherHost =
+      originalHost !== 'news.google.com' &&
+      (finalHost === originalHost ||
+        finalHost.endsWith('.' + originalHost) ||
+        originalHost.endsWith('.' + finalHost));
+
+    const aliases: Record<string, string[]> = {
+      reuters: ['reuters.com'], 'associated press': ['apnews.com'], ap: ['apnews.com'],
+      bbc: ['bbc.com', 'bbc.co.uk'], npr: ['npr.org'], bloomberg: ['bloomberg.com'],
+      afp: ['afp.com'], wikipedia: ['wikipedia.org', 'wikimedia.org']
+    };
+    const name = sourceName.toLowerCase();
+    const matched = Object.entries(aliases).find(([alias]) => name.includes(alias));
+    const aliasMatch = matched
+      ? matched[1].some(domain => finalHost === domain || finalHost.endsWith('.' + domain))
+      : false;
+
+    const finalType = determineSourceType(finalUrl, sourceName);
+    if (samePublisherHost) {
+      return originalType === 'UNKNOWN'
+        ? true
+        : finalType === originalType || aliasMatch;
+    }
+
+    if (originalHost === 'news.google.com') return aliasMatch;
+    return aliasMatch;
+  } catch {
+    return false;
+  }
+}
+
 export class EvidenceProvider {
   private timeoutMs: number;
 
@@ -86,47 +128,6 @@ export class EvidenceProvider {
     return (selected.join(' ') || text.slice(0, 1600)).slice(0, 1800);
   }
 
-export function verifyEvidenceProvenance(
-  sourceName: string,
-  originalUrl: string,
-  finalUrl: string,
-  originalType: SourceType
-): boolean {
-  try {
-    const finalHost = new URL(finalUrl).hostname.toLowerCase().replace(/^www\./, '');
-    const originalHost = new URL(originalUrl).hostname.toLowerCase().replace(/^www\./, '');
-    if (!finalHost || finalHost === 'news.google.com') return false;
-
-    const samePublisherHost =
-      originalHost !== 'news.google.com' &&
-      (finalHost === originalHost ||
-        finalHost.endsWith('.' + originalHost) ||
-        originalHost.endsWith('.' + finalHost));
-
-    const aliases: Record<string, string[]> = {
-      reuters: ['reuters.com'], 'associated press': ['apnews.com'], ap: ['apnews.com'],
-      bbc: ['bbc.com', 'bbc.co.uk'], npr: ['npr.org'], bloomberg: ['bloomberg.com'],
-      afp: ['afp.com'], wikipedia: ['wikipedia.org', 'wikimedia.org']
-    };
-    const name = sourceName.toLowerCase();
-    const matched = Object.entries(aliases).find(([alias]) => name.includes(alias));
-    const aliasMatch = matched
-      ? matched[1].some(domain => finalHost === domain || finalHost.endsWith('.' + domain))
-      : false;
-
-    const finalType = determineSourceType(finalUrl, sourceName);
-    if (samePublisherHost) {
-      return originalType === 'UNKNOWN'
-        ? true
-        : finalType === originalType || aliasMatch;
-    }
-
-    if (originalHost === 'news.google.com') return aliasMatch;
-    return aliasMatch;
-  } catch {
-    return false;
-  }
-}
 
   private async hydrateEvidenceItem(
     item: EvidenceItem,
