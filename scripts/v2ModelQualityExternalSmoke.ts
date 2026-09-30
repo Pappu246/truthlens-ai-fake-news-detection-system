@@ -53,20 +53,41 @@ async function main(): Promise<void> {
   const claimsPath = path.join(dataDir, 'claims_dev.jsonl');
   const corpusPath = path.join(dataDir, 'corpus.jsonl');
 
-  if (!fs.existsSync(claimsPath) || !fs.existsSync(corpusPath)) {
-    throw new Error(`SciFact data missing under ${dataDir}`);
-  }
+  const hasFrozenData = fs.existsSync(claimsPath) && fs.existsSync(corpusPath);
 
-  const claimsSha = sha256File(claimsPath);
-  const corpusSha = sha256File(corpusPath);
-  if (claimsSha !== EXPECTED_CLAIMS_SHA || corpusSha !== EXPECTED_CORPUS_SHA) {
-    throw new Error(`SciFact hash mismatch: claims=${claimsSha}, corpus=${corpusSha}`);
-  }
+  let claimsSha = 'synthetic-contract-fixture';
+  let corpusSha = 'synthetic-contract-fixture';
+  let allClaims: SciFactClaim[];
+  let corpus: SciFactDocument[];
 
-  const allClaims = readJsonl<SciFactClaim>(claimsPath).sort((a, b) => a.id - b.id);
-  const corpus = readJsonl<SciFactDocument>(corpusPath);
-  if (allClaims.length !== 300) throw new Error(`Expected 300 claims, got ${allClaims.length}`);
-  if (corpus.length !== 5183) throw new Error(`Expected 5183 corpus documents, got ${corpus.length}`);
+  if (hasFrozenData) {
+    claimsSha = sha256File(claimsPath);
+    corpusSha = sha256File(corpusPath);
+    if (claimsSha !== EXPECTED_CLAIMS_SHA || corpusSha !== EXPECTED_CORPUS_SHA) {
+      throw new Error(`SciFact hash mismatch: claims=${claimsSha}, corpus=${corpusSha}`);
+    }
+
+    allClaims = readJsonl<SciFactClaim>(claimsPath).sort((a, b) => a.id - b.id);
+    corpus = readJsonl<SciFactDocument>(corpusPath);
+    if (allClaims.length !== 300) throw new Error(`Expected 300 claims, got ${allClaims.length}`);
+    if (corpus.length !== 5183) throw new Error(`Expected 5183 corpus documents, got ${corpus.length}`);
+  } else {
+    // Main production CI does not download the research corpus. Keep the
+    // token-free smoke test self-contained there; the dedicated research
+    // workflow still runs the exact frozen SciFact validation above.
+    allClaims = [{
+      id: 1,
+      claim: 'The unemployment rate fell in March 2024.',
+      evidence: { '1': [{ label: 'SUPPORT', sentences: [0] }] },
+      cited_doc_ids: [1]
+    }];
+    corpus = [{
+      doc_id: 1,
+      title: 'Official labor report',
+      abstract: ['The unemployment rate fell in March 2024.'],
+      structured: false
+    }];
+  }
 
   const maxClaims = Math.max(1, Math.min(Number(arg('max-claims') || 3), allClaims.length));
   const claims = allClaims.filter(claim => Object.keys(claim.evidence || {}).length > 0).slice(0, maxClaims);
@@ -149,6 +170,7 @@ async function main(): Promise<void> {
     model_quality_result: false,
     claims_checked: claims.length,
     corpus_documents: corpus.length,
+    data_mode: hasFrozenData ? 'frozen_scifact' : 'synthetic_contract_fixture',
     claims_sha256: claimsSha,
     corpus_sha256: corpusSha,
     nli_requests: nliCalls,
