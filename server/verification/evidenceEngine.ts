@@ -37,6 +37,13 @@ export type VerificationStatus =
   | 'SEARCH_UNAVAILABLE';
 
 export type EvidenceStance = 'SUPPORT' | 'CONTRADICT' | 'UNCLEAR';
+export type EvidenceRetrievalOutcome =
+  | 'NOT_ATTEMPTED'
+  | 'SEARCH_FAILED'
+  | 'NO_EVIDENCE'
+  | 'PUBLISHER_FETCH_FAILED'
+  | 'PROVENANCE_REJECTED'
+  | 'AVAILABLE';
 
 /** One retrieved, sanitised piece of evidence. Every field is auditable. */
 export interface EvidenceRecord {
@@ -179,6 +186,31 @@ function stanceOf(relation: string): EvidenceStance {
   return 'UNCLEAR';
 }
 
+function deriveEvidenceOutcome(
+  items: EvidenceItem[],
+  diagnostics: RetrievalDiagnostic[],
+  attempted: boolean
+): EvidenceRetrievalOutcome {
+  if (!attempted) return 'NOT_ATTEMPTED';
+  if (items.length > 0) return 'AVAILABLE';
+  const search = diagnostics.filter(d => (d.stage ?? 'SEARCH') === 'SEARCH');
+  if (search.length > 0 && search.every(d => !d.ok)) return 'SEARCH_FAILED';
+  if (diagnostics.some(d => d.stage === 'PUBLISHER_FETCH' && !d.ok)) return 'PUBLISHER_FETCH_FAILED';
+  if (diagnostics.some(d => d.stage === 'PROVENANCE' && d.ok)) return 'PROVENANCE_REJECTED';
+  return 'NO_EVIDENCE';
+}
+
+function retrievalOutcomeDetail(status: EvidenceRetrievalOutcome): string {
+  switch (status) {
+    case 'NOT_ATTEMPTED': return 'Evidence retrieval was not attempted.';
+    case 'SEARCH_FAILED': return 'Search providers failed or were unreachable; no evidence conclusion was made.';
+    case 'NO_EVIDENCE': return 'Search completed successfully but returned no usable evidence for the specific claim.';
+    case 'PUBLISHER_FETCH_FAILED': return 'Search returned candidate sources, but publisher-page fetch/parse failed before evidence admission.';
+    case 'PROVENANCE_REJECTED': return 'Publisher pages were fetched, but source identity could not be verified; directional evidence was withheld.';
+    case 'AVAILABLE': return 'At least one fetched, provenance-verified evidence item was admitted.';
+  }
+}
+
 function buildClaim(text: string): ExtractedClaim {
   // Reuse the existing heuristic extractor so entity/date/number signals match
   // the rest of the verification stack. No second parser is introduced.
@@ -304,7 +336,8 @@ export class EvidenceEngine {
     }
 
     const allFailed = diagnostics.length > 0 && diagnostics.every(d => !d.ok);
-    if (allFailed || (items.length === 0 && diagnostics.length === 0)) {
+    const outcome = deriveEvidenceOutcome(items, diagnostics, true);
+    if (outcome === 'SEARCH_FAILED' || (items.length === 0 && diagnostics.length === 0)) {
       const report = emptyReport('SEARCH_UNAVAILABLE',
         'Evidence retrieval could not be completed, so this claim is UNVERIFIED. No verdict is implied by this ' +
         'outcome: absence of retrievable evidence is not evidence of falsity.',
@@ -359,7 +392,9 @@ export class EvidenceEngine {
         stance: stanceOf(item.relation),
         stance_basis: item.relation === 'IRRELEVANT'
           ? 'Source does not address the specific assertion.'
-          : `Classified ${item.relation} from lexical, numerical and temporal comparison against the claim.`,
+          : /semantic NLI:/i.test(item.relevanceExplanation || '')
+            ? `Classified ${item.relation} after deterministic screening plus optional semantic NLI refinement.`
+            : `Classified ${item.relation} from lexical, numerical and temporal comparison against the claim.`,
         numerical_consistency: item.numericalConsistency ?? null,
         temporal_consistency: item.temporalConsistency ?? null,
         published_at: item.publishedAt ?? null,
@@ -397,8 +432,12 @@ export class EvidenceEngine {
       : Math.min(1, (Math.abs(counts.support - counts.contradict) / (counts.support + counts.contradict))
         * Math.min(1, (diversity?.independentSourcesCount || 0) / 3));
 
+    const semanticEnabled = /^(1|true|yes)$/i.test(process.env.TRUTHLENS_ENABLE_REMOTE_NLI ?? '') &&
+      Boolean(process.env.HF_TOKEN?.trim());
     const limitations = [
-      'Evidence relation is a deterministic lexical/numerical/temporal assessment, not a semantic NLI proof.',
+      semanticEnabled
+        ? 'Ambiguous publisher passages may be refined by the existing opt-in semantic NLI adapter after lexical screening; this remains an evidence signal, not proof.'
+        : 'Evidence relation uses deterministic lexical/numerical/temporal assessment by default; semantic NLI is opt-in and disabled unless explicitly configured.',
       'Retrieval covers a news index and Wikipedia; it is not an exhaustive survey of the record.',
       'Publisher pages are fetched through the SSRF-safe fetcher before production evidence is admitted.',
       'Evidence with failed or explicitly unverified source provenance is excluded from positive verification signals.',
@@ -429,6 +468,10 @@ export class EvidenceEngine {
       },
       final_interpretation: `${status}: ${aggregated.assessmentExplanation} ` +
         'This is an evidence-retrieval signal, independent of the statistical claim model; the two are reported separately.',
+      evidence_outcome: {
+        status: 'AVAILABLE',
+        detail: retrievalOutcomeDetail('AVAILABLE')
+      },
       retrieval: {
         attempted: true,
         providers: diagnostics,
