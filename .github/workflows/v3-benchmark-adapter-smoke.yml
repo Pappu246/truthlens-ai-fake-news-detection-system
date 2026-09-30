@@ -4,9 +4,6 @@ on:
   push:
     branches:
       - research/truthlens-v3-phase2-benchmark-harness
-  pull_request:
-    branches:
-      - main
     paths:
       - 'scripts/benchmarks/**'
       - 'research/v3-benchmark-*.json'
