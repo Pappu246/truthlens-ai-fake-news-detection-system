@@ -326,7 +326,10 @@ export class EvidenceEngine {
     // A production provider may return discovery candidates that failed source
     // hydration. Those records remain useful for audit, but cannot influence the
     // verification signal. Deterministic test retrievers may omit the field.
-    const usableItems = items.filter(item => item.sourceFetchStatus !== 'FAILED');
+    const usableItems = items.filter(item =>
+      item.sourceFetchStatus !== 'FAILED' &&
+      item.provenanceVerified !== false
+    );
 
     let neutralisedTotal = 0;
     const records: EvidenceRecord[] = usableItems.map((item, i) => {
@@ -398,6 +401,7 @@ export class EvidenceEngine {
       'Evidence relation is a deterministic lexical/numerical/temporal assessment, not a semantic NLI proof.',
       'Retrieval covers a news index and Wikipedia; it is not an exhaustive survey of the record.',
       'Publisher pages are fetched through the SSRF-safe fetcher before production evidence is admitted.',
+      'Evidence with failed or explicitly unverified source provenance is excluded from positive verification signals.',
       'SUPPORTED means independent reporting corroborates the assertion; it is not proof of truth.'
     ];
     if (relevant.length < records.length) {
