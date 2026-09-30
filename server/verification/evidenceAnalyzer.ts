@@ -253,6 +253,38 @@ export function classifyEvidenceRelation(
 /**
  * Analyzes diversity among retrieved sources and detects syndication / duplication.
  */
+function normalizeForFingerprint(text: string): string {
+  return (text || '')
+    .toLowerCase()
+    .replace(/https?:\/\/\S+/g, ' ')
+    .replace(/[^a-z0-9%]+/g, ' ')
+    .replace(/\b(?:read more|click here|subscribe|sign up|advertisement|copyright)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function fnv1a(text: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+function contentClusterKey(item: EvidenceItem): string {
+  const title = normalizeForFingerprint(item.title).slice(0, 220);
+  const body = normalizeForFingerprint(item.evidenceExcerpt || item.snippet).slice(0, 360);
+  const wire = item.isSyndicated ||
+    /\b(?:reuters|ap news|associated press|afp|agence france presse|bloomberg)\b/i.test(
+      `${item.sourceName} ${item.title} ${item.snippet}`
+    );
+  if (wire && body.length >= 80) return `wire:${fnv1a(body)}`;
+  if (body.length >= 160) return `body:${fnv1a(body)}`;
+  if (title.length >= 40) return `title:${fnv1a(title)}`;
+  return `weak:${fnv1a(title + '|' + body)}`;
+}
+
 export function evaluateSourceDiversity(evidenceList: EvidenceItem[]): {
   independentSourcesCount: number;
   totalSourcesCount: number;
@@ -263,33 +295,48 @@ export function evaluateSourceDiversity(evidenceList: EvidenceItem[]): {
   }
 
   const uniqueDomains = new Set<string>();
+  const clusterToDomains = new Map<string, Set<string>>();
   let syndicatedCount = 0;
 
   for (const item of evidenceList) {
+    let domain = item.sourceName.toLowerCase().trim() || 'unknown-source';
     try {
       const canonicalSourceUrl = item.sourceFinalUrl || item.sourceUrl;
-      const domain = new URL(canonicalSourceUrl.startsWith('http') ? canonicalSourceUrl : `https://${canonicalSourceUrl}`).hostname.toLowerCase().replace(/^www\./, '');
-      uniqueDomains.add(domain);
+      domain = new URL(canonicalSourceUrl.startsWith('http') ? canonicalSourceUrl : `https://${canonicalSourceUrl}`).hostname
+        .toLowerCase()
+        .replace(/^www\./, '');
     } catch {
-      uniqueDomains.add(item.sourceName.toLowerCase());
+      /* keep source-name fallback */
     }
 
-    if (item.isSyndicated || /\b(?:reuters|ap news|associated press|afp)\b/i.test(item.snippet)) {
+    uniqueDomains.add(domain);
+    const cluster = contentClusterKey(item);
+    if (!clusterToDomains.has(cluster)) clusterToDomains.set(cluster, new Set<string>());
+    clusterToDomains.get(cluster)!.add(domain);
+
+    const text = `${item.sourceName} ${item.title} ${item.snippet}`;
+    if (item.isSyndicated || /\b(?:reuters|ap news|associated press|afp|agence france presse|bloomberg)\b/i.test(text)) {
       syndicatedCount++;
     }
   }
 
-  const independentCount = uniqueDomains.size;
-  const effectiveIndependentCount = syndicatedCount >= 2 ? Math.max(1, independentCount - syndicatedCount + 1) : independentCount;
-  
-  let syndicationNote = `${independentCount} independent root domain${independentCount !== 1 ? 's' : ''} identified.`;
+  // A content cluster represents one underlying report, regardless of how many
+  // domains republish it. Count cannot exceed distinct domains.
+  const clusterCount = clusterToDomains.size;
+  const independentCount = Math.min(uniqueDomains.size, clusterCount);
+  const wireClusterCount = Array.from(clusterToDomains.entries()).filter(([key, domains]) =>
+    key.startsWith('wire:') && domains.size > 1
+  ).length;
 
-  if (syndicatedCount >= 2) {
-    syndicationNote = `Multiple wire reports detected (${syndicatedCount} outlets republishing syndicated wire coverage); discounted to avoid treating wire reproduction as independent confirmation.`;
+  let syndicationNote =
+    `${independentCount} independent source cluster${independentCount !== 1 ? 's' : ''} across ${uniqueDomains.size} domain${uniqueDomains.size !== 1 ? 's' : ''}.`;
+  if (wireClusterCount > 0 || syndicatedCount >= 2) {
+    syndicationNote +=
+      ` ${wireClusterCount || syndicatedCount} syndicated/wire reproduction signal(s) were discounted as non-independent confirmation.`;
   }
 
   return {
-    independentSourcesCount: effectiveIndependentCount,
+    independentSourcesCount: independentCount,
     totalSourcesCount: evidenceList.length,
     syndicationNote
   };
