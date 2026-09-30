@@ -227,6 +227,83 @@ export function classifyEvidenceRelation(
     }
   }
 
+  // Claim-aware explicit negation. Conservative by design: a negator must be
+  // attached to a material predicate from the claim.
+  const predicatePatterns: RegExp[] = [
+    /\b(?:fall|fell|falling|decline|declined|decrease|decreased|drop|dropped|remain|remained)\b/i,
+    /\b(?:raise|raised|raising|increase|increased|increasing|hike|hiked)\b/i,
+    /\b(?:open|opened|opening)\b/i,
+    /\b(?:find|found|finding)\b/i,
+    /\b(?:publish|published|publishing|release|released)\b/i,
+    /\b(?:convict|convicted|conviction)\b/i,
+    /\b(?:add|added|adding)\b/i,
+    /\b(?:issue|issued|issuing)\b/i,
+    /\b(?:recall|recalled)\b/i,
+    /\b(?:report|reported|reporting)\b/i
+  ];
+
+  const hasNegatedPredicate = predicatePatterns.some(predicate => {
+    const source = predicate.source.replace(/^\\b|\\b$/g, '');
+    const directNegation = new RegExp(
+      '\\b(?:did|does|do|was|were|is|are|has|have|had)\\s+not\\s+(?:\\w+\\s+){0,2}' + source + '\\b',
+      'i'
+    );
+    const localNegation = new RegExp('\\bnot\\s+' + source + '\\b', 'i');
+    const absoluteNegation = new RegExp(
+      '\\b(?:no|never)\\s+(?:\\w+\\s+){0,2}' + source + '\\b',
+      'i'
+    );
+    return predicate.test(claim.normalizedText) &&
+      (directNegation.test(textLower) ||
+        localNegation.test(textLower) ||
+        absoluteNegation.test(textLower));
+  });
+  if (hasNegatedPredicate) {
+    return 'CONTRADICTS';
+  }
+
+  // Directional antonyms invert a claim only when the evidence does not also
+  // contain the claimed direction.
+  const directionalPairs: Array<{
+    claimSide: RegExp;
+    evidenceOpposite: RegExp;
+    evidenceClaimSide: RegExp;
+  }> = [
+    {
+      claimSide: /\b(?:fell|declined|decreased|dropped|below|under|less than)\b/i,
+      evidenceOpposite: /\b(?:rose|increased|grew|gained|exceeded|above|over|more than)\b/i,
+      evidenceClaimSide: /\b(?:fell|declined|decreased|dropped|below|under|less than)\b/i
+    },
+    {
+      claimSide: /\b(?:raised|raise|increased|hiked|increase)\b/i,
+      evidenceOpposite: /\b(?:cut|cutting|lowered|lower|decreased|reduced|reduction)\b/i,
+      evidenceClaimSide: /\b(?:raised|raise|increased|hiked|increase)\b/i
+    },
+    {
+      claimSide: /\b(?:convicted|conviction|guilty)\b/i,
+      evidenceOpposite: /\b(?:acquitted|acquittal|not guilty)\b/i,
+      evidenceClaimSide: /\b(?:convicted|conviction|guilty)\b/i
+    },
+    {
+      claimSide: /\b(?:opened|open|launched|launch)\b/i,
+      evidenceOpposite: /\b(?:closed|shut|delayed|postponed|cancelled|canceled)\b/i,
+      evidenceClaimSide: /\b(?:opened|open|launched|launch)\b/i
+    },
+    {
+      claimSide: /\b(?:added|add|introduced)\b/i,
+      evidenceOpposite: /\b(?:removed|remove|did not add|no new)\b/i,
+      evidenceClaimSide: /\b(?:added|add|introduced)\b/i
+    }
+  ];
+
+  for (const pair of directionalPairs) {
+    if (pair.claimSide.test(claim.normalizedText) &&
+        pair.evidenceOpposite.test(textLower) &&
+        !pair.evidenceClaimSide.test(textLower)) {
+      return 'CONTRADICTS';
+    }
+  }
+
   // Mixed or nuanced markers
   const mixedPatterns = [
     /\b(?:partially true|mixed reports|unclear whether|contested|debated|partly true|conflicting claims|some dispute)\b/i
