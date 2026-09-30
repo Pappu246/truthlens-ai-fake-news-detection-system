@@ -114,3 +114,5 @@ jobs:
           merge-multiple: false
       - name: Validate official scorer artifacts
         run: node scripts/v3Phase2EvidenceGate.mjs phase2-artifacts
+
+# Phase 2 frozen-head trigger: evaluate this exact branch revision.
