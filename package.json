@@ -39,7 +39,8 @@
     "test:v3-openweb-sealer": "node --check scripts/v3SealOpenWebHoldout.mjs",
     "test:v3-phase-gate": "node scripts/v3PhaseGate.mjs",
     "test:v3-materializer": "node --check scripts/benchmarks/v3MaterializeAssets.mjs",
-    "test:v3-coordinator": "node scripts/v3BenchmarkCoordinator.mjs --check-only"
+    "test:v3-coordinator": "node scripts/v3BenchmarkCoordinator.mjs --check-only",
+    "test:v3-openweb-pack": "node --check scripts/v3CreateOpenWebAnnotationPack.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
