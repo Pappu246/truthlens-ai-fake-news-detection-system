@@ -49,6 +49,26 @@ The existing external SciFact harness remains separately labeled as:
 None of those outputs alter the production model or are merged into the production
 article/claim accuracy metric.
 
+## Current verification record (2026-09-30)
+
+For commit `bd63808ea259efc2170235e54185edec018d773a`, the verified GitHub Actions runs are:
+
+| Workflow | Run | State |
+|---|---:|---|
+| CI | 36747200211 | completed / success |
+| Phase 2 Real ISOT Data Validation | 36747200145 | completed / success |
+| Phase 7 Real ISOT Benchmark | 36747200203 | completed / success |
+| V2 Model Quality External Evaluation | 36747200215 | completed / success |
+| V2 SciFact End-to-End Benchmark | 36747200196 | **in progress** |
+
+The completed production/research gates are green, but the SciFact end-to-end benchmark is still running. This is the remaining external research-validation gate; its final metrics and artifact must be reviewed before the research audit can be called complete.
+
+The current CI run reports 90 contract tests, 61 evidence tests, 24 Gate-14 tests, 20 SSRF tests, 72 V2 pipeline tests, 9 V2 route tests, and 19 V2 model-quality tests with zero failures. The frozen Gate-14 relation benchmark is 30 fixtures with 83.333% accuracy, 82.222% macro-F1, 66.667% coverage, and 33.333% abstention; five of ten CONTRADICT fixtures were classified as SUPPORT, which remains a documented relation-classification weakness.
+
+The ISOT data-validation workflow measured 44,898 rows. Near-duplicate groups do not straddle train/validation/test, but subject values are fully disjoint between REAL and FAKE labels, 18,618 rows match the strict Reuters dateline pattern (86.93% of REAL rows and 0% of FAKE rows), 5,795 rows are exact-duplicate extras, and two near-duplicate groups cross labels. These are dataset-construction limitations and must accompany any interpretation of the very high Phase-7 benchmark scores.
+
+The canonical production model artifact `data/saved_model_artifacts.json` is blob-identical with `main` at SHA `2fc56cb65b66f842cb6ef80104ec074c47173f7c`. No research benchmark changed production model weights, thresholds, source rules, or abstention policy.
+
 ## Observability
 
 Evidence verification emits aggregate telemetry only:
