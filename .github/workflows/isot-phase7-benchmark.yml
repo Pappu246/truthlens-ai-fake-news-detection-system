@@ -9,11 +9,16 @@ on:
       - main
   workflow_dispatch:
 
+concurrency:
+  group: truthlens-isot-phase7-${{ github.event.pull_request.number || github.ref_name }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
 jobs:
   benchmark:
+    if: ${{ github.event_name != 'pull_request' || github.head_ref != 'research/truthlens-v3-phase2-benchmark-harness' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
