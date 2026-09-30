@@ -17,8 +17,8 @@
 | Phase | Scope | Status | Exit gate |
 |---|---|---|---|
 | 0 | State lock, release synchronization, reproducibility contract | **COMPLETE** | Production state and handoff synchronized |
-| 1 | Continuous research intelligence: papers, models, benchmark-source watch | **IN PROGRESS** | Scheduled watcher produces versioned evidence artifacts without modifying production |
-| 2 | Multi-benchmark apples-to-apples evaluation harness | PLANNED | Frozen protocols for FEVER, SciFact, AVeriTeC, FEVEROUS and an external/open-web set |
+| 1 | Continuous research intelligence: papers, models, benchmark-source watch | **COMPLETE** | Scheduled watcher produces versioned evidence artifacts without modifying production |
+| 2 | Multi-benchmark apples-to-apples evaluation harness | **IN PROGRESS** | Frozen protocols for FEVER, SciFact, AVeriTeC, FEVEROUS and an external/open-web set |
 | 3 | Retrieval-quality upgrade | PLANNED | Demonstrated improvement in evidence recall/retrieval metrics without regression guards |
 | 4 | Verification reasoning upgrade | PLANNED | Better evidence-to-verdict reasoning on held-out data with calibrated abstention |
 | 5 | Reliability and adversarial robustness | PLANNED | Calibration, temporal integrity, source independence, prompt-injection and adversarial gates green |
