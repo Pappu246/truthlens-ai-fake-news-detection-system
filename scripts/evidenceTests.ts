@@ -16,6 +16,7 @@ import {
   sanitiseUntrustedEvidence
 } from '../server/verification/evidenceEngine';
 import { EvidenceItem } from '../src/types';
+import { buildArticleVerification } from '../server/verification/assessmentEngine';
 
 let passed = 0;
 let failed = 0;
@@ -197,6 +198,77 @@ async function main(): Promise<void> {
     !JSON.stringify(supported).match(/"accuracy"/));
   check('final interpretation states evidence is independent of the model',
     /independent of the statistical claim model/i.test(supported.final_interpretation));
+
+  section('8. Fetched-source provenance and article abstention');
+  const fetched = await new EvidenceEngine(stub([
+    item({
+      evidenceExcerpt: 'The official report states the unemployment rate fell to 4.1 percent in March 2024.',
+      sourceFinalUrl: 'https://www.reuters.com/world/example-article',
+      sourceFetchStatus: 'FETCHED',
+      sourceContentWordCount: 412,
+      provenanceVerified: true
+    })
+  ])).verifyClaim(CLAIM);
+  check('fetched evidence uses the publisher passage, not only the RSS snippet',
+    fetched.evidence[0].evidence_excerpt.includes('official report states'));
+  check('fetched evidence exposes final URL',
+    fetched.evidence[0].source_final_url === 'https://www.reuters.com/world/example-article');
+  check('fetched evidence records provenance verification',
+    fetched.evidence[0].provenance_verified === true);
+  check('fetched evidence records source word count',
+    fetched.evidence[0].source_content_word_count === 412);
+
+  const claim = (importance: 'HIGH' | 'MEDIUM' | 'LOW', assessment: 'SUPPORTED' | 'CONTRADICTED' | 'MIXED' | 'INSUFFICIENT') => ({
+    claim: {
+      claimId: 'c-' + importance + '-' + assessment,
+      originalText: 'A factual assertion about the public record.',
+      normalizedText: 'A factual assertion about the public record.',
+      claimType: 'Other',
+      importance,
+      entities: [],
+      dates: [],
+      locations: [],
+      numbers: [],
+      keywords: ['factual', 'assertion'],
+      searchQueries: []
+    },
+    assessment,
+    assessmentExplanation: assessment,
+    evidence: [],
+    evidenceCounts: { supports: assessment === 'SUPPORTED' ? 1 : 0, contradicts: assessment === 'CONTRADICTED' ? 1 : 0, mixed: assessment === 'MIXED' ? 1 : 0, insufficient: assessment === 'INSUFFICIENT' ? 1 : 0 },
+    sourceDiversity: { independentSourcesCount: assessment === 'INSUFFICIENT' ? 0 : 1, totalSourcesCount: assessment === 'INSUFFICIENT' ? 0 : 1 },
+    confidence: { score: assessment === 'INSUFFICIENT' ? 20 : 70, explanation: assessment }
+  });
+
+  const peripheralOnly = buildArticleVerification('abstain-1', {
+    claims: [claim('HIGH', 'INSUFFICIENT'), claim('LOW', 'SUPPORTED')],
+    mlRiskLevel: 'UNDETERMINED',
+    articleTitle: 'Test article',
+    contentPreview: 'Test article',
+    wordCount: 20
+  });
+  check('supported peripheral claim cannot upgrade an unverified high-importance claim',
+    peripheralOnly.finalAssessment === 'INSUFFICIENT EVIDENCE', peripheralOnly.finalAssessment);
+
+  const keySupported = buildArticleVerification('support-1', {
+    claims: [claim('HIGH', 'SUPPORTED'), claim('MEDIUM', 'SUPPORTED')],
+    mlRiskLevel: 'UNDETERMINED',
+    articleTitle: 'Test article',
+    contentPreview: 'Test article',
+    wordCount: 20
+  });
+  check('all important claims supported -> LIKELY SUPPORTED',
+    keySupported.finalAssessment === 'LIKELY SUPPORTED', keySupported.finalAssessment);
+
+  const keyContradicted = buildArticleVerification('false-1', {
+    claims: [claim('HIGH', 'CONTRADICTED')],
+    mlRiskLevel: 'UNDETERMINED',
+    articleTitle: 'Test article',
+    contentPreview: 'Test article',
+    wordCount: 20
+  });
+  check('high-importance contradiction -> LIKELY FALSE',
+    keyContradicted.finalAssessment === 'LIKELY FALSE', keyContradicted.finalAssessment);
 
   console.log(`\n${'='.repeat(72)}`);
   console.log(`EVIDENCE TESTS: ${passed} passed, ${failed} failed (${passed + failed} total)`);
