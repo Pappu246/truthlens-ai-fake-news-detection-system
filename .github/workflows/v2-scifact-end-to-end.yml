@@ -14,13 +14,14 @@ on:
 
 concurrency:
   group: truthlens-v2-scifact-${{ github.event.pull_request.number || github.ref_name }}-${{ github.sha }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
   scifact-e2e:
+    if: ${{ github.event_name != 'pull_request' || github.head_ref != 'research/truthlens-v3-phase2-benchmark-harness' }}
     runs-on: ubuntu-latest
     timeout-minutes: 240
     steps:
