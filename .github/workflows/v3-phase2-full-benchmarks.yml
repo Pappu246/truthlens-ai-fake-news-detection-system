@@ -88,6 +88,8 @@ jobs:
           python-version: '3.10'
       - name: Install project
         run: npm ci
+      - name: Install FEVEROUS evaluator dependencies
+        run: python -m pip install --disable-pip-version-check --no-input jsonlines clean-text
       - name: Check available disk
         run: df -h
       - name: Run FEVEROUS full coordinator
