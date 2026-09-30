@@ -11,6 +11,10 @@ on:
     branches:
       - main
 
+concurrency:
+  group: truthlens-ci-${{ github.event.pull_request.number || github.ref_name }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
