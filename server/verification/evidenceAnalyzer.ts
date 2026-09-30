@@ -285,6 +285,29 @@ function contentClusterKey(item: EvidenceItem): string {
   return `weak:${fnv1a(title + '|' + body)}`;
 }
 
+function shingleSet(text: string, width = 5): Set<string> {
+  const words = normalizeForFingerprint(text).split(/\s+/).filter(Boolean);
+  const set = new Set<string>();
+  if (words.length === 0) return set;
+  if (words.length <= width) {
+    set.add(words.join(' '));
+    return set;
+  }
+  for (let i = 0; i <= words.length - width; i++) {
+    set.add(words.slice(i, i + width).join(' '));
+  }
+  return set;
+}
+
+function shingleSimilarity(a: string, b: string): number {
+  const aa = shingleSet(a);
+  const bb = shingleSet(b);
+  if (aa.size === 0 || bb.size === 0) return 0;
+  let overlap = 0;
+  for (const item of aa) if (bb.has(item)) overlap++;
+  return overlap / (aa.size + bb.size - overlap);
+}
+
 export function evaluateSourceDiversity(evidenceList: EvidenceItem[]): {
   independentSourcesCount: number;
   totalSourcesCount: number;
@@ -295,8 +318,12 @@ export function evaluateSourceDiversity(evidenceList: EvidenceItem[]): {
   }
 
   const uniqueDomains = new Set<string>();
+  const domainByItem: string[] = [];
+  const clusterByItem: string[] = [];
   const clusterToDomains = new Map<string, Set<string>>();
+  const clusterRepresentative = new Map<string, string>();
   let syndicatedCount = 0;
+  let nearDuplicateCount = 0;
 
   for (const item of evidenceList) {
     let domain = item.sourceName.toLowerCase().trim() || 'unknown-source';
@@ -309,19 +336,36 @@ export function evaluateSourceDiversity(evidenceList: EvidenceItem[]): {
       /* keep source-name fallback */
     }
 
+    const sourceText = `${item.title} ${item.evidenceExcerpt || item.snippet}`;
+    const key = contentClusterKey(item);
+    const wire = item.isSyndicated ||
+      /\b(?:reuters|ap news|associated press|afp|agence france presse|bloomberg)\b/i.test(
+        `${item.sourceName} ${item.title} ${item.snippet}`
+      );
+
+    let clusterId = key;
+    const similarityThreshold = wire ? 0.68 : 0.84;
+    for (const [candidateId, representative] of clusterRepresentative.entries()) {
+      if (shingleSimilarity(sourceText, representative) >= similarityThreshold) {
+        clusterId = candidateId;
+        nearDuplicateCount++;
+        break;
+      }
+    }
+    clusterRepresentative.set(clusterId, clusterRepresentative.get(clusterId) || sourceText);
+    domainByItem.push(domain);
+    clusterByItem.push(clusterId);
+    if (!clusterToDomains.has(clusterId)) clusterToDomains.set(clusterId, new Set<string>());
+    clusterToDomains.get(clusterId)!.add(domain);
     uniqueDomains.add(domain);
-    const cluster = contentClusterKey(item);
-    if (!clusterToDomains.has(cluster)) clusterToDomains.set(cluster, new Set<string>());
-    clusterToDomains.get(cluster)!.add(domain);
 
     const text = `${item.sourceName} ${item.title} ${item.snippet}`;
-    if (item.isSyndicated || /\b(?:reuters|ap news|associated press|afp|agence france presse|bloomberg)\b/i.test(text)) {
-      syndicatedCount++;
-    }
+    if (wire) syndicatedCount++;
   }
 
-  // A content cluster represents one underlying report, regardless of how many
-  // domains republish it. Count cannot exceed distinct domains.
+  // A content cluster represents one underlying report. Distinct domains inside
+  // the same cluster are reproduction/syndication until the evidence is
+  // materially different; independence cannot exceed distinct domains.
   const clusterCount = clusterToDomains.size;
   const independentCount = Math.min(uniqueDomains.size, clusterCount);
   const wireClusterCount = Array.from(clusterToDomains.entries()).filter(([key, domains]) =>
@@ -330,9 +374,9 @@ export function evaluateSourceDiversity(evidenceList: EvidenceItem[]): {
 
   let syndicationNote =
     `${independentCount} independent source cluster${independentCount !== 1 ? 's' : ''} across ${uniqueDomains.size} domain${uniqueDomains.size !== 1 ? 's' : ''}.`;
-  if (wireClusterCount > 0 || syndicatedCount >= 2) {
+  if (wireClusterCount > 0 || syndicatedCount >= 2 || nearDuplicateCount > 0) {
     syndicationNote +=
-      ` ${wireClusterCount || syndicatedCount} syndicated/wire reproduction signal(s) were discounted as non-independent confirmation.`;
+      ` ${wireClusterCount || syndicatedCount} syndicated/wire reproduction signal(s) and ${nearDuplicateCount} near-duplicate cluster match(es) were discounted as non-independent confirmation.`;
   }
 
   return {
