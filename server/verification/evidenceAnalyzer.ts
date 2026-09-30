@@ -267,7 +267,8 @@ export function evaluateSourceDiversity(evidenceList: EvidenceItem[]): {
 
   for (const item of evidenceList) {
     try {
-      const domain = new URL(item.sourceUrl.startsWith('http') ? item.sourceUrl : `https://${item.sourceUrl}`).hostname.toLowerCase().replace(/^www\./, '');
+      const canonicalSourceUrl = item.sourceFinalUrl || item.sourceUrl;
+      const domain = new URL(canonicalSourceUrl.startsWith('http') ? canonicalSourceUrl : `https://${canonicalSourceUrl}`).hostname.toLowerCase().replace(/^www\./, '');
       uniqueDomains.add(domain);
     } catch {
       uniqueDomains.add(item.sourceName.toLowerCase());
