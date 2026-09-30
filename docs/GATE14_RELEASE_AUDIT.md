@@ -61,7 +61,7 @@ For commit `bd63808ea259efc2170235e54185edec018d773a`, the verified GitHub Actio
 | V2 Model Quality External Evaluation | 36747200215 | completed / success |
 | V2 SciFact End-to-End Benchmark | 36747200196 | **in progress** |
 
-The completed production/research gates are green, but the SciFact end-to-end benchmark is still running. This is the remaining external research-validation gate; its final metrics and artifact must be reviewed before the research audit can be called complete.
+The completed production/research gates are green at the verified commit `bd63808ea259efc2170235e54185edec018d773a`, but the SciFact end-to-end benchmark is still running. The newer documentation-only PR head currently has a Vercel `build-rate-limit` check failure and therefore does not yet have a verified READY deployment. The last independently verified READY deployment is for `bd63808...`. These are release-gate conditions, not evidence of an application-code regression.
 
 The current CI run reports 90 contract tests, 61 evidence tests, 24 Gate-14 tests, 20 SSRF tests, 72 V2 pipeline tests, 9 V2 route tests, and 19 V2 model-quality tests with zero failures. The frozen Gate-14 relation benchmark is 30 fixtures with 83.333% accuracy, 82.222% macro-F1, 66.667% coverage, and 33.333% abstention; five of ten CONTRADICT fixtures were classified as SUPPORT, which remains a documented relation-classification weakness.
 
