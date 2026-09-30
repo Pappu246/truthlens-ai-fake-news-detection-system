@@ -294,8 +294,8 @@ async function main(): Promise<void> {
   );
   check('numeric/date claim extraction retains factual components',
     extracted.length > 0 &&
-    extracted.some(c => c.numbers.some(n => /4\\.1/.test(n))) &&
-    extracted.some(c => c.dates.some(d => /March/i.test(d))),
+    extracted.some(c => c.numbers.some(n => /4\.1/.test(n))) &&
+    extracted.some(c => c.dates.some(d => /March 2024/i.test(d))),
     JSON.stringify(extracted));
 
   const sixPlus = extractClaimsHeuristic(
