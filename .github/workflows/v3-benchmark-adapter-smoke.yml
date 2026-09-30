@@ -1,6 +1,9 @@
 name: V3 Benchmark Adapter Smoke
 
 on:
+  push:
+    branches:
+      - research/truthlens-v3-phase2-benchmark-harness
   pull_request:
     branches:
       - main
