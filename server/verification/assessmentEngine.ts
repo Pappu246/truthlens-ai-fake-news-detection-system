@@ -101,10 +101,6 @@ export function buildArticleVerification(
       reasoning = 'Contradictory evidence was found, but its confidence did not meet the article-level calibration floor; the article verdict is withheld.';
       warnings.push(`Article-level contradiction requires evidence confidence >= ${calibrationFloor}.`);
     }
-    } else {
-      finalAssessment = 'MIXED / CONTESTED';
-      reasoning = `While some claims remain contested or supported, at least one secondary claim was contradicted by independent reporting.`;
-    }
   }
   // Rule 2: Mixed or conflicting sources
   else if (mixed > 0 && supported === 0) {
