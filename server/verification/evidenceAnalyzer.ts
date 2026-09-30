@@ -344,7 +344,10 @@ export function evaluateSourceDiversity(evidenceList: EvidenceItem[]): {
       );
 
     let clusterId = key;
-    const similarityThreshold = wire ? 0.68 : 0.84;
+    // 5-gram Jaccard is intentionally conservative but must still catch
+    // lightly edited wire/copy stories. Keep wire content stricter while
+    // allowing near-duplicate reporting with small editorial changes.
+    const similarityThreshold = wire ? 0.68 : 0.72;
     for (const [candidateId, representative] of clusterRepresentative.entries()) {
       if (shingleSimilarity(sourceText, representative) >= similarityThreshold) {
         clusterId = candidateId;
