@@ -1,7 +1,9 @@
 import fs from 'fs';
 import path from 'path';
 import { classifyEvidenceRelation } from '../server/verification/evidenceAnalyzer';
-import { ExtractedClaim, NumericalConsistency } from '../src/types';
+import { ExtractedClaim } from '../src/types';
+
+type NumericalConsistency = { isConsistent: boolean; claimNumbers: string[]; evidenceNumbers: string[]; warning?: string };
 
 type Gold = 'SUPPORT' | 'CONTRADICT' | 'UNCLEAR';
 
