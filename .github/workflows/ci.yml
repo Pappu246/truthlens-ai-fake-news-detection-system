@@ -100,5 +100,5 @@ jobs:
         run: npm run test:v3-coordinator
 
       - name: V3 Phase 2 evidence gate syntax
-        run: node --check scripts/v3Phase2EvidenceGate.mjs
+        run: npm run test:v3-phase2-evidence-gate
 
