@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -26,7 +27,13 @@ const ASSETS: BenchmarkAssets = {
   ]
 };
 
-function sha256(bytes: Buffer): string { return createHash('sha256').update(bytes).digest('hex'); }
+async function hashFile(file: string): Promise<{ sha256: string; bytes: number }> {
+  const hash = createHash('sha256');
+  const stream = createReadStream(file);
+  for await (const chunk of stream) hash.update(chunk as Buffer);
+  const { size } = await stat(file);
+  return { sha256: hash.digest('hex'), bytes: size };
+}
 
 async function download(url: string, out: string): Promise<void> {
   await mkdir(dirname(out), { recursive: true });
@@ -49,11 +56,10 @@ async function main(): Promise<void> {
     for (const asset of assets) {
       const out = join(root, benchmark, asset.name);
       await download(asset.url, out);
-      const bytes = await readFile(out);
-      const sha = sha256(bytes);
+      const { sha256, bytes } = await hashFile(out);
       const count = asset.kind === 'jsonl' ? await lineCount(out) : null;
-      rows.push({ name: asset.name, url: asset.url, bytes: bytes.length, sha256: sha, jsonl_rows: count });
-      console.log(JSON.stringify({ benchmark, asset: asset.name, bytes: bytes.length, sha256: sha, jsonl_rows: count }));
+      rows.push({ name: asset.name, url: asset.url, bytes, sha256, jsonl_rows: count });
+      console.log(JSON.stringify({ benchmark, asset: asset.name, bytes, sha256, jsonl_rows: count }));
     }
     (manifest.assets as Record<string, unknown>)[benchmark] = rows;
   }
