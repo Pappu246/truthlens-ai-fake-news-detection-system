@@ -114,9 +114,15 @@
       "data_requirements": [
         "fixed train/dev release",
         "fixed evidence collection release for reproducible comparison",
-        "claim-date temporal filtering"
+        "claim-date temporal filtering",
+        "provided evidence collection release or an equivalent frozen snapshot; claim JSON alone is insufficient for open-web apples-to-apples evaluation"
       ],
-      "source": "https://fever.ai/dataset/averitec.html"
+      "source": "https://fever.ai/dataset/averitec.html",
+      "evidence_collection": {
+        "required": true,
+        "status": "NOT_MATERIALIZED",
+        "note": "The official provided evidence collection is an external large store; it must be frozen by exact snapshot/hash before end-to-end AVeriTeC scoring is reported."
+      }
     },
     {
       "id": "truthlens_open_web_v1",
