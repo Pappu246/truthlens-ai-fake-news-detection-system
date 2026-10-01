@@ -17,8 +17,8 @@
 | Phase | Scope | Status | Exit gate |
 |---|---|---|---|
 | 0 | State lock, release synchronization, reproducibility contract | **COMPLETE** | Production state and handoff synchronized |
-| 1 | Continuous research intelligence: papers, models, benchmark-source watch | **IN PROGRESS** | Scheduled watcher produces versioned evidence artifacts without modifying production |
-| 2 | Multi-benchmark apples-to-apples evaluation harness | PLANNED | Frozen protocols for FEVER, SciFact, AVeriTeC, FEVEROUS and an external/open-web set |
+| 1 | Continuous research intelligence: papers, models, benchmark-source watch | **COMPLETE** | Scheduled watcher produces versioned evidence artifacts without modifying production |
+| 2 | Multi-benchmark apples-to-apples evaluation harness | **IN PROGRESS** | Frozen protocols and reproducible runners for FEVER, SciFact, AVeriTeC, FEVEROUS and an external/open-web set |
 | 3 | Retrieval-quality upgrade | PLANNED | Demonstrated improvement in evidence recall/retrieval metrics without regression guards |
 | 4 | Verification reasoning upgrade | PLANNED | Better evidence-to-verdict reasoning on held-out data with calibrated abstention |
 | 5 | Reliability and adversarial robustness | PLANNED | Calibration, temporal integrity, source independence, prompt-injection and adversarial gates green |
@@ -66,6 +66,10 @@ A scheduled GitHub Actions workflow must run successfully and publish a research
 - model identifiers;
 - benchmark-source status;
 - explicit disclaimer that discovery is not evaluation.
+
+## Phase 1 exit record (2026-10-01)
+
+Phase 1 is complete on the Gate-14 release line. Research Intelligence workflow **#148 / 36751159663** completed successfully and produced artifact `truthlens-research-intelligence-148` (digest `sha256:77ef7ff31d5bf955e2392531df767a33f5ea1e3d3bd2d523d197c07f3ec2f622`). The artifact records a discovery-only scan, no paper/model errors, successful reachability checks for declared FEVER/SciFact/FEVEROUS sources, and explicit `auto_create_pr=false`, `auto_merge=false`, `auto_deploy=false` controls. Discovery output is therefore an auditable input to research planning, not an evaluation or promotion signal.
 
 ## Phase 2 — Benchmark expansion
 
