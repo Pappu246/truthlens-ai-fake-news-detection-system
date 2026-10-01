@@ -12,22 +12,23 @@ The research branch also supports pretrained dense embeddings through the sealed
 
 The research branch has a real pretrained pairwise NLI path using `Xenova/nli-deberta-v3-xsmall`. A completed component evaluation over SciFact reported:
 
-- NLI accuracy: **0.524520** vs **0.307036** heuristic
-- NLI macro-F1: **0.536936** vs **0.205958** heuristic
-- ECE-10: pretrained **0.309079** vs heuristic **0.141591**
+- NLI accuracy: **0.524520** vs **0.311301** heuristic
+- NLI macro-F1: **0.536812** vs **0.211342** heuristic
+- ECE-10: pretrained **0.306362** vs heuristic **0.137249**
 
 So pretrained NLI materially improves component classification quality, but its calibration is worse in this comparison. Component scores must not be substituted for end-to-end verification quality.
 
 ## 3. End-to-end retrieval remains the dominant disclosed bottleneck
 
-The latest completed full-corpus end-to-end benchmark remains Run #19 and measured:
+The final completed full-corpus Gate-14 benchmark is Run #220 and measured:
 
-- Open candidate recall: **53.67%**
-- Gold-evidence Recall@5: **68.09%**
-- Directional accuracy: **37.00%**
-- Directional macro-F1: **0.341899**
+- Open candidate recall: **60.33%**
+- Gold-evidence Recall@5: **73.40%**
+- Directional accuracy: **34.33%**
+- Directional macro-F1: **0.318131**
+- Production-policy abstention: **75%**
 
-The current branch adds dense retrieval, preserves diversified extractor queries, improves source-independence handling, and enforces temporal evidence integrity. Current-head SciFact Run #90 is still executing and has not produced an artifact, so no improvement over Run #19 is claimed.
+Relative to the historical Run #19 baseline, retrieval recall improved while directional task quality did not. This makes retrieval/reasoning quality the next research bottleneck rather than a reason to change production policy.
 
 ## 4. Source independence is still policy-sensitive
 
@@ -67,10 +68,9 @@ Long-running 300-claim GitHub Actions jobs have experienced cancellations before
 
 ## What remains before any production proposal
 
-1. Complete the current-head SciFact E2E run (#215) and compare it against the frozen Run #19 baseline.
-2. Complete the current-head Phase 7 ISOT run (#293) and keep its dataset/model task separate from SciFact.
-3. If end-to-end quality remains weak, improve retrieval recall/reranking before changing decision policy.
-4. Establish an independently labelled calibration split and versioned calibrator.
-5. Evaluate broader external datasets appropriate to TruthLens' actual production use case.
-6. Preserve the two-independent-source production rule unless independently justified by new evidence.
-7. Do not merge or deploy PR #26 solely from component-level model improvements or a single benchmark.
+1. Improve Phase-2 benchmark breadth beyond SciFact so results cover textual, structured, and open-web verification settings.
+2. If end-to-end quality remains weak, improve retrieval recall/reranking before changing decision policy.
+3. Establish an independently labelled calibration split and versioned calibrator.
+4. Evaluate broader external datasets appropriate to TruthLens' actual production use case.
+5. Preserve the two-independent-source production rule unless independently justified by new evidence.
+6. Keep research metrics isolated from production article/claim accuracy and require reproducible artifacts for every reported result.
