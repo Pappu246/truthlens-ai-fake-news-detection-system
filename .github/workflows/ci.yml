@@ -97,6 +97,9 @@ jobs:
       - name: Phase 2 benchmark adapter contracts
         run: npm run test:phase2-adapters
 
+      - name: Phase 2 materialization guard
+        run: npm run test:phase2-materialization
+
       - name: Gate 14 release audit
         run: npm run audit:gate14
 
