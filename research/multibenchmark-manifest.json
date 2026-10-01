@@ -1,0 +1,155 @@
+{
+  "schema_version": 1,
+  "phase": 2,
+  "title": "TruthLens multi-benchmark apples-to-apples protocol",
+  "created_at": "2026-10-01",
+  "production_accuracy_claim": false,
+  "rules": {
+    "metric_separation": true,
+    "no_benchmark_score_as_universal_accuracy": true,
+    "gold_evidence_never_injected_into_open_retrieval": true,
+    "production_artifact_must_remain_unchanged": true,
+    "complete_artifact_required_before_publishing_metrics": true
+  },
+  "benchmarks": [
+    {
+      "id": "scifact",
+      "status": "FROZEN_AND_BASELINED",
+      "task": "scientific claim verification with evidence",
+      "labels": [
+        "SUPPORT",
+        "CONTRADICT",
+        "NOT_ENOUGH_INFO"
+      ],
+      "split": "dev",
+      "claims": 300,
+      "corpus_documents": 5183,
+      "dataset_hashes": {
+        "claims_sha256": "86f0435d08fdb65d1aa41d1472684f57e6e71930626497bdf4d7a9ec1a632217",
+        "corpus_sha256": "b8d6c89624cb2ed74dee8938effc4f5d8bd2086887880af8110d64be4ceade62"
+      },
+      "retrieval": {
+        "candidate_pool_k": 100,
+        "dense_k": 300,
+        "final_k": 8,
+        "gold_evidence_in_open_pool": false
+      },
+      "metrics": [
+        "open_candidate_recall",
+        "gold_evidence_recall_at_5",
+        "directional_accuracy",
+        "directional_macro_f1",
+        "production_policy_abstention"
+      ],
+      "source": "https://github.com/allenai/scifact"
+    },
+    {
+      "id": "fever_v1",
+      "status": "PROTOCOL_FROZEN_DATA_HASH_PENDING",
+      "task": "Wikipedia claim verification",
+      "labels": [
+        "SUPPORTS",
+        "REFUTES",
+        "NOT ENOUGH INFO"
+      ],
+      "dataset_release": "FEVER v1.0",
+      "expected_claims_total": 185445,
+      "evaluation": {
+        "primary": "official FEVER score",
+        "secondary": [
+          "label_accuracy",
+          "evidence_recall"
+        ]
+      },
+      "data_requirements": [
+        "labelled development split",
+        "matching Wikipedia evidence corpus/version",
+        "official scorer"
+      ],
+      "source": "https://fever.ai/dataset/fever.html"
+    },
+    {
+      "id": "feverous",
+      "status": "PROTOCOL_FROZEN_DATA_HASH_PENDING",
+      "task": "verification over unstructured and structured Wikipedia information",
+      "labels": [
+        "SUPPORTS",
+        "REFUTES",
+        "NOT ENOUGH INFO"
+      ],
+      "expected_claims_total": 87026,
+      "evaluation": {
+        "primary": "official FEVEROUS score",
+        "secondary": [
+          "label_accuracy",
+          "evidence_recall"
+        ]
+      },
+      "data_requirements": [
+        "development split",
+        "Wikipedia text and tables",
+        "official evaluator"
+      ],
+      "source": "https://fever.ai/dataset/feverous.html"
+    },
+    {
+      "id": "averitec",
+      "status": "PROTOCOL_FROZEN_DATA_HASH_PENDING",
+      "task": "real-world claim verification with evidence from the web",
+      "labels": [
+        "SUPPORTED",
+        "REFUTED",
+        "NOT_ENOUGH_EVIDENCE",
+        "CONFLICTING_EVIDENCE/CHERRY_PICKING"
+      ],
+      "expected_claims_total": 4568,
+      "evaluation": {
+        "primary": "official AVeriTeC score",
+        "secondary": [
+          "verdict_accuracy",
+          "evidence_recall",
+          "evidence_quality"
+        ]
+      },
+      "data_requirements": [
+        "fixed train/dev release",
+        "fixed evidence collection release for reproducible comparison",
+        "claim-date temporal filtering"
+      ],
+      "source": "https://fever.ai/dataset/averitec.html"
+    },
+    {
+      "id": "truthlens_open_web_v1",
+      "status": "PLANNED_EXTERNAL_COLLECTION",
+      "task": "fresh open-web fact verification",
+      "labels": [
+        "SUPPORTED",
+        "REFUTED",
+        "INSUFFICIENT_EVIDENCE",
+        "CONFLICTED"
+      ],
+      "target_claims": 100,
+      "collection_rules": [
+        "human-labelled before system evaluation",
+        "claim date recorded",
+        "source publication date recorded",
+        "no post-claim evidence admitted for temporal evaluation",
+        "primary-source and major-news coverage balanced",
+        "duplicate/syndicated source clustering",
+        "blind holdout released only after protocol freeze"
+      ],
+      "evaluation": {
+        "primary": [
+          "verdict_macro_f1",
+          "selective_accuracy"
+        ],
+        "secondary": [
+          "coverage",
+          "abstention_rate",
+          "calibration_ece"
+        ]
+      },
+      "source": "TruthLens-controlled external evaluation set; collection and labels are not yet frozen"
+    }
+  ]
+}
