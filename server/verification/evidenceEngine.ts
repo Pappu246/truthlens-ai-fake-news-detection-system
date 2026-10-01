@@ -27,6 +27,7 @@ import { ExtractedClaim, EvidenceItem } from '../../src/types';
 import { extractClaimsHeuristic, generateSearchQueries, classifyClaimType, normalizeClaimText } from './claimExtractor';
 import { evidenceProvider, RetrievalDiagnostic } from './evidenceProvider';
 import { aggregateClaimAssessment, evaluateSourceDiversity } from './evidenceAnalyzer';
+import { recordEvidenceTelemetry } from './observability';
 
 export type VerificationStatus =
   | 'SUPPORTED'
@@ -37,6 +38,13 @@ export type VerificationStatus =
   | 'SEARCH_UNAVAILABLE';
 
 export type EvidenceStance = 'SUPPORT' | 'CONTRADICT' | 'UNCLEAR';
+export type EvidenceRetrievalOutcome =
+  | 'NOT_ATTEMPTED'
+  | 'SEARCH_FAILED'
+  | 'NO_EVIDENCE'
+  | 'PUBLISHER_FETCH_FAILED'
+  | 'PROVENANCE_REJECTED'
+  | 'AVAILABLE';
 
 /** One retrieved, sanitised piece of evidence. Every field is auditable. */
 export interface EvidenceRecord {
@@ -46,7 +54,11 @@ export interface EvidenceRecord {
   retrieved_source: string;
   source_title: string;
   source_url: string;
+  source_final_url: string | null;
   source_domain: string;
+  provenance_verified: boolean;
+  source_fetch_status: 'FETCHED' | 'FAILED' | 'NOT_ATTEMPTED' | 'UNKNOWN';
+  source_content_word_count: number | null;
   source_type: string;
   evidence_excerpt: string;
   relevance_signal: {
@@ -79,6 +91,10 @@ export interface EvidenceVerificationReport {
     basis: string;
   };
   final_interpretation: string;
+  evidence_outcome: {
+    status: EvidenceRetrievalOutcome;
+    detail: string;
+  };
   retrieval: {
     attempted: boolean;
     providers: RetrievalDiagnostic[];
@@ -107,7 +123,7 @@ const INJECTION_PATTERNS: RegExp[] = [
   /disregard\s+(?:all\s+|any\s+)?(?:previous|prior|above)\s+(?:instructions?|rules?)/gi,
   /you\s+are\s+now\s+(?:a|an|the)\b/gi,
   /system\s*(?:prompt|message|instruction)/gi,
-  /reveal\s+(?:your\s+)?(?:system\s+prompt|instructions?|secrets?)/gi,
+  /reveal\s+(?:your\s+)?(?:system\s+prompt|instructions?|secrets?|api[_\s-]?keys?|tokens?|credentials?)/gi,
   /(?:print|output|return|show)\s+(?:your\s+)?(?:api[_\s-]?key|token|secret|credential|env)/gi,
   /(?:call|execute|run|invoke)\s+(?:the\s+)?(?:tool|function|command|shell)/gi,
   /mark\s+this\s+(?:claim|article)\s+as\s+(?:true|false|verified|real|fake)/gi,
@@ -173,6 +189,31 @@ function stanceOf(relation: string): EvidenceStance {
   if (relation === 'SUPPORTS') return 'SUPPORT';
   if (relation === 'CONTRADICTS') return 'CONTRADICT';
   return 'UNCLEAR';
+}
+
+function deriveEvidenceOutcome(
+  items: EvidenceItem[],
+  diagnostics: RetrievalDiagnostic[],
+  attempted: boolean
+): EvidenceRetrievalOutcome {
+  if (!attempted) return 'NOT_ATTEMPTED';
+  if (items.length > 0) return 'AVAILABLE';
+  const search = diagnostics.filter(d => (d.stage ?? 'SEARCH') === 'SEARCH');
+  if (search.length > 0 && search.every(d => !d.ok)) return 'SEARCH_FAILED';
+  if (diagnostics.some(d => d.stage === 'PUBLISHER_FETCH' && !d.ok)) return 'PUBLISHER_FETCH_FAILED';
+  if (diagnostics.some(d => d.stage === 'PROVENANCE' && d.ok)) return 'PROVENANCE_REJECTED';
+  return 'NO_EVIDENCE';
+}
+
+function retrievalOutcomeDetail(status: EvidenceRetrievalOutcome): string {
+  switch (status) {
+    case 'NOT_ATTEMPTED': return 'Evidence retrieval was not attempted.';
+    case 'SEARCH_FAILED': return 'Search providers failed or were unreachable; no evidence conclusion was made.';
+    case 'NO_EVIDENCE': return 'Search completed successfully but returned no usable evidence for the specific claim.';
+    case 'PUBLISHER_FETCH_FAILED': return 'Search returned candidate sources, but publisher-page fetch/parse failed before evidence admission.';
+    case 'PROVENANCE_REJECTED': return 'Publisher pages were fetched, but source identity could not be verified; directional evidence was withheld.';
+    case 'AVAILABLE': return 'At least one fetched, provenance-verified evidence item was admitted.';
+  }
 }
 
 function buildClaim(text: string): ExtractedClaim {
@@ -242,27 +283,53 @@ export class EvidenceEngine {
 
     const emptyReport = (status: VerificationStatus, interpretation: string, limitations: string[],
                          claim?: ExtractedClaim, queries: string[] = [],
-                         diagnostics: RetrievalDiagnostic[] = [], attempted = false): EvidenceVerificationReport => ({
-      available: false,
-      status,
-      claim_text: text,
-      claim_type: claim?.claimType || 'Other',
-      evidence_queries: queries,
-      evidence: [],
-      counts: { total: 0, support: 0, contradict: 0, unclear: 0 },
-      source_diversity: null,
-      verification_signal: { direction: 'NONE', strength: 0, basis: 'No usable evidence was retrieved.' },
-      final_interpretation: interpretation,
-      retrieval: {
-        attempted,
-        providers: diagnostics,
-        all_providers_failed: attempted && diagnostics.length > 0 && diagnostics.every(d => !d.ok),
-        duration_ms: Date.now() - started
-      },
-      security: { evidence_treated_as: 'UNTRUSTED_DATA', injection_markers_neutralised: 0, guarantees: securityGuarantees },
-      generated_at: generatedAt,
-      limitations
-    });
+                         diagnostics: RetrievalDiagnostic[] = [], attempted = false): EvidenceVerificationReport => {
+      const evidenceOutcome = deriveEvidenceOutcome([], diagnostics, attempted);
+      const report: EvidenceVerificationReport = {
+        available: false,
+        status,
+        claim_text: text,
+        claim_type: claim?.claimType || 'Other',
+        evidence_queries: queries,
+        evidence: [],
+        counts: { total: 0, support: 0, contradict: 0, unclear: 0 },
+        source_diversity: null,
+        verification_signal: { direction: 'NONE', strength: 0, basis: 'No usable evidence was retrieved.' },
+        final_interpretation: interpretation,
+        evidence_outcome: {
+          status: evidenceOutcome,
+          detail: retrievalOutcomeDetail(evidenceOutcome)
+        },
+        retrieval: {
+          attempted,
+          providers: diagnostics,
+          all_providers_failed: attempted &&
+            diagnostics.filter(d => (d.stage ?? 'SEARCH') === 'SEARCH').length > 0 &&
+            diagnostics.filter(d => (d.stage ?? 'SEARCH') === 'SEARCH').every(d => !d.ok),
+          duration_ms: Date.now() - started
+        },
+        security: { evidence_treated_as: 'UNTRUSTED_DATA', injection_markers_neutralised: 0, guarantees: securityGuarantees },
+        generated_at: generatedAt,
+        limitations
+      };
+      recordEvidenceTelemetry({
+        status,
+        evidenceOutcome,
+        evidenceCount: 0,
+        supportCount: 0,
+        contradictCount: 0,
+        unclearCount: 0,
+        retrievalAttempted: attempted,
+        providerCount: diagnostics.length,
+        providerFailures: diagnostics.filter(d => !d.ok).length,
+        publisherFetchFailures: diagnostics.filter(d => d.stage === 'PUBLISHER_FETCH' && !d.ok).length,
+        provenanceRejections: diagnostics.filter(d => d.stage === 'PROVENANCE' && d.ok).length,
+        semanticNliEnabled: /^(1|true|yes)$/i.test(process.env.TRUTHLENS_ENABLE_REMOTE_NLI ?? '') &&
+          Boolean(process.env.HF_TOKEN?.trim()),
+        durationMs: report.retrieval.duration_ms
+      });
+      return report;
+    };
 
     if (!text) {
       return emptyReport('NEEDS_MORE_CONTEXT', 'No claim text was supplied, so no verification was attempted.',
@@ -300,7 +367,8 @@ export class EvidenceEngine {
     }
 
     const allFailed = diagnostics.length > 0 && diagnostics.every(d => !d.ok);
-    if (allFailed || (items.length === 0 && diagnostics.length === 0)) {
+    const outcome = deriveEvidenceOutcome(items, diagnostics, true);
+    if (outcome === 'SEARCH_FAILED' || (items.length === 0 && diagnostics.length === 0)) {
       const report = emptyReport('SEARCH_UNAVAILABLE',
         'Evidence retrieval could not be completed, so this claim is UNVERIFIED. No verdict is implied by this ' +
         'outcome: absence of retrievable evidence is not evidence of falsity.',
@@ -319,9 +387,17 @@ export class EvidenceEngine {
     }
 
     // ---- sanitise + structure -------------------------------------------
+    // A production provider may return discovery candidates that failed source
+    // hydration. Those records remain useful for audit, but cannot influence the
+    // verification signal. Deterministic test retrievers may omit the field.
+    const usableItems = items.filter(item =>
+      item.sourceFetchStatus !== 'FAILED' &&
+      item.provenanceVerified !== false
+    );
+
     let neutralisedTotal = 0;
-    const records: EvidenceRecord[] = items.map((item, i) => {
-      const excerpt = sanitiseUntrustedEvidence(item.snippet || item.title || '');
+    const records: EvidenceRecord[] = usableItems.map((item, i) => {
+      const excerpt = sanitiseUntrustedEvidence(item.evidenceExcerpt || item.snippet || item.title || '');
       const title = sanitiseUntrustedEvidence(item.title || '', 240);
       const sourceName = sanitiseUntrustedEvidence(item.sourceName || 'Unknown source', 120);
       neutralisedTotal += excerpt.neutralised + title.neutralised + sourceName.neutralised;
@@ -332,7 +408,11 @@ export class EvidenceEngine {
         retrieved_source: sourceName.text,
         source_title: title.text,
         source_url: item.sourceUrl,
-        source_domain: domainOf(item.sourceUrl),
+        source_final_url: item.sourceFinalUrl || null,
+        source_domain: domainOf(item.sourceFinalUrl || item.sourceUrl),
+        provenance_verified: item.provenanceVerified === true,
+        source_fetch_status: item.sourceFetchStatus || 'UNKNOWN',
+        source_content_word_count: item.sourceContentWordCount ?? null,
         source_type: item.sourceType,
         evidence_excerpt: excerpt.text,
         relevance_signal: {
@@ -343,7 +423,9 @@ export class EvidenceEngine {
         stance: stanceOf(item.relation),
         stance_basis: item.relation === 'IRRELEVANT'
           ? 'Source does not address the specific assertion.'
-          : `Classified ${item.relation} from lexical, numerical and temporal comparison against the claim.`,
+          : /semantic NLI:/i.test(item.relevanceExplanation || '')
+            ? `Classified ${item.relation} after deterministic screening plus optional semantic NLI refinement.`
+            : `Classified ${item.relation} from lexical, numerical and temporal comparison against the claim.`,
         numerical_consistency: item.numericalConsistency ?? null,
         temporal_consistency: item.temporalConsistency ?? null,
         published_at: item.publishedAt ?? null,
@@ -364,8 +446,8 @@ export class EvidenceEngine {
       unclear: records.filter(r => r.stance === 'UNCLEAR').length
     };
 
-    const aggregated = aggregateClaimAssessment(claim, items);
-    const diversity = evaluateSourceDiversity(items.filter(e => e.relation !== 'IRRELEVANT'));
+    const aggregated = aggregateClaimAssessment(claim, usableItems);
+    const diversity = evaluateSourceDiversity(usableItems.filter(e => e.relation !== 'IRRELEVANT'));
 
     let status: VerificationStatus;
     let direction: EvidenceVerificationReport['verification_signal']['direction'];
@@ -381,16 +463,22 @@ export class EvidenceEngine {
       : Math.min(1, (Math.abs(counts.support - counts.contradict) / (counts.support + counts.contradict))
         * Math.min(1, (diversity?.independentSourcesCount || 0) / 3));
 
+    const semanticEnabled = /^(1|true|yes)$/i.test(process.env.TRUTHLENS_ENABLE_REMOTE_NLI ?? '') &&
+      Boolean(process.env.HF_TOKEN?.trim());
     const limitations = [
-      'Evidence relation is inferred from headlines and short snippets, not from full-article entailment.',
+      semanticEnabled
+        ? 'Ambiguous publisher passages may be refined by the existing opt-in semantic NLI adapter after lexical screening; this remains an evidence signal, not proof.'
+        : 'Evidence relation uses deterministic lexical/numerical/temporal assessment by default; semantic NLI is opt-in and disabled unless explicitly configured.',
       'Retrieval covers a news index and Wikipedia; it is not an exhaustive survey of the record.',
+      'Publisher pages are fetched through the SSRF-safe fetcher before production evidence is admitted.',
+      'Evidence with failed or explicitly unverified source provenance is excluded from positive verification signals.',
       'SUPPORTED means independent reporting corroborates the assertion; it is not proof of truth.'
     ];
     if (relevant.length < records.length) {
       limitations.push(`${records.length - relevant.length} retrieved source(s) were low-relevance and carry little weight.`);
     }
 
-    return {
+    const finalReport: EvidenceVerificationReport = {
       available: true,
       status,
       claim_text: text,
@@ -411,6 +499,10 @@ export class EvidenceEngine {
       },
       final_interpretation: `${status}: ${aggregated.assessmentExplanation} ` +
         'This is an evidence-retrieval signal, independent of the statistical claim model; the two are reported separately.',
+      evidence_outcome: {
+        status: 'AVAILABLE',
+        detail: retrievalOutcomeDetail('AVAILABLE')
+      },
       retrieval: {
         attempted: true,
         providers: diagnostics,
@@ -425,6 +517,22 @@ export class EvidenceEngine {
       generated_at: generatedAt,
       limitations
     };
+    recordEvidenceTelemetry({
+      status,
+      evidenceOutcome: 'AVAILABLE',
+      evidenceCount: records.length,
+      supportCount: counts.support,
+      contradictCount: counts.contradict,
+      unclearCount: counts.unclear,
+      retrievalAttempted: true,
+      providerCount: diagnostics.length,
+      providerFailures: diagnostics.filter(d => !d.ok).length,
+      publisherFetchFailures: diagnostics.filter(d => d.stage === 'PUBLISHER_FETCH' && !d.ok).length,
+      provenanceRejections: diagnostics.filter(d => d.stage === 'PROVENANCE' && d.ok).length,
+      semanticNliEnabled: semanticEnabled,
+      durationMs: finalReport.retrieval.duration_ms
+    });
+    return finalReport;
   }
 }
 

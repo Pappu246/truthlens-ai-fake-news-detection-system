@@ -81,6 +81,9 @@ export function buildArticleVerification(
 
   const highImportanceClaims = claims.filter(c => c.claim.importance === 'HIGH');
   const importantClaims = claims.filter(c => c.claim.importance === 'HIGH' || c.claim.importance === 'MEDIUM');
+  const calibratedImportantClaims = importantClaims.filter(c => c.confidence.score >= 60);
+  const lowConfidenceImportantClaims = importantClaims.filter(c => c.confidence.score < 60);
+  const calibrationFloor = 60;
 
   let finalAssessment: FinalAssessment = 'INSUFFICIENT EVIDENCE';
   let reasoning = '';
@@ -88,13 +91,15 @@ export function buildArticleVerification(
 
   // Rule 1: Key claims contradicted
   if (contradicted > 0) {
-    const highContradicted = highImportanceClaims.some(c => c.assessment === 'CONTRADICTED');
-    if (highContradicted || contradicted >= 2) {
+    const highContradicted = highImportanceClaims.some(c => c.assessment === 'CONTRADICTED' && c.confidence.score >= calibrationFloor);
+    const calibratedContradictions = claims.filter(c => c.assessment === 'CONTRADICTED' && c.confidence.score >= calibrationFloor).length;
+    if (highContradicted || calibratedContradictions >= 2) {
       finalAssessment = 'LIKELY FALSE';
-      reasoning = `Core factual assertions were directly contradicted by external reporting (${contradicted} contradicted claim${contradicted > 1 ? 's' : ''}).`;
+      reasoning = `Core factual assertions were directly contradicted by calibrated external evidence (${contradicted} contradicted claim${contradicted > 1 ? 's' : ''}; confidence floor ${calibrationFloor}).`;
     } else {
-      finalAssessment = 'MIXED / CONTESTED';
-      reasoning = `While some claims remain contested or supported, at least one secondary claim was contradicted by independent reporting.`;
+      finalAssessment = 'INSUFFICIENT EVIDENCE';
+      reasoning = 'Contradictory evidence was found, but its confidence did not meet the article-level calibration floor; the article verdict is withheld.';
+      warnings.push(`Article-level contradiction requires evidence confidence >= ${calibrationFloor}.`);
     }
   }
   // Rule 2: Mixed or conflicting sources
@@ -106,15 +111,24 @@ export function buildArticleVerification(
     finalAssessment = 'MIXED / CONTESTED';
     reasoning = `Some claims are supported by external evidence, while other assertions remain contested or inconclusive.`;
   }
-  // Rule 3: Supported claims
+  // Rule 3: Supported claims. A peripheral supported claim must never
+  // upgrade an article when a high-importance claim remains unverified.
   else if (supported > 0) {
-    const highSupported = highImportanceClaims.length === 0 || highImportanceClaims.every(c => c.assessment === 'SUPPORTED');
-    if (highSupported && supported >= Math.ceil(importantClaims.length / 2)) {
+    const unsupportedImportant = importantClaims.filter(c => c.assessment !== 'SUPPORTED');
+    const allHighSupported = highImportanceClaims.length === 0 ||
+      highImportanceClaims.every(c => c.assessment === 'SUPPORTED');
+
+    const allImportantCalibrated = importantClaims.length === calibratedImportantClaims.length;
+    if (allHighSupported && unsupportedImportant.length === 0 && allImportantCalibrated) {
       finalAssessment = 'LIKELY SUPPORTED';
-      reasoning = `Key factual assertions are substantiated by credible external reporting (${supported} verified claim${supported > 1 ? 's' : ''}).`;
+      reasoning = `Key factual assertions are substantiated by calibrated external reporting (${supported} verified claim${supported > 1 ? 's' : ''}; confidence floor ${calibrationFloor}).`;
     } else {
-      finalAssessment = 'LIKELY SUPPORTED';
-      reasoning = `External sources corroborate prominent claims, though certain peripheral details remain unverified.`;
+      finalAssessment = 'INSUFFICIENT EVIDENCE';
+      reasoning = `Some assertions are supported, but one or more important claims remain unverified; the article-level result is therefore withheld rather than upgraded from peripheral evidence.`;
+      warnings.push('Supported peripheral claims do not establish the truth of an article when important claims remain unverified.');
+      if (lowConfidenceImportantClaims.length > 0) {
+        warnings.push(`${lowConfidenceImportantClaims.length} important claim(s) fell below the article-level evidence confidence calibration floor of ${calibrationFloor}; the article verdict was withheld.`);
+      }
     }
   }
   // Rule 4: Insufficient evidence / Unverified
@@ -132,6 +146,15 @@ export function buildArticleVerification(
     if (c.temporalConflict) {
       warnings.push(`Claim "${c.claim.normalizedText.slice(0, 60)}...": ${c.temporalConflict}`);
     }
+  }
+
+  // Source-page/provenance warnings are surfaced explicitly. URL safety is
+  // necessary but is not the same thing as publisher identity verification.
+  const provenanceFailures = claims.filter(c =>
+    c.evidence.some(e => e.sourceFetchStatus === 'FAILED' || e.provenanceVerified === false)
+  ).length;
+  if (provenanceFailures > 0) {
+    warnings.push(`${provenanceFailures} claim(s) include evidence whose publisher page or provenance could not be independently confirmed; those records were not allowed to establish a positive verification signal.`);
   }
 
   // Mandatory journalistic disclaimer

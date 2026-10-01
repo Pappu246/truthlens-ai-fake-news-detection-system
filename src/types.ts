@@ -505,6 +505,16 @@ export interface EvidenceItem {
   numericalConsistency?: NumericalConsistency;
   temporalConsistency?: TemporalConsistency;
   isSyndicated?: boolean;
+  /** Text extracted from the fetched publisher page, when retrieval succeeded. */
+  evidenceExcerpt?: string;
+  /** Final URL after safe, SSRF-checked redirects. */
+  sourceFinalUrl?: string;
+  /** Whether the publisher page itself was successfully fetched and parsed. */
+  sourceFetchStatus?: 'FETCHED' | 'FAILED' | 'NOT_ATTEMPTED';
+  /** Word count of the fetched source text, when available. */
+  sourceContentWordCount?: number;
+  /** True only when the fetched source identity remains consistent with the discovered source domain. */
+  provenanceVerified?: boolean;
 }
 
 export interface ClaimVerificationResult {
