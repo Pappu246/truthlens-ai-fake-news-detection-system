@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { basename, dirname, join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
@@ -12,7 +12,7 @@ type BenchmarkAssets = Record<string, Asset[]>;
 const ASSETS: BenchmarkAssets = {
   fever_v1: [
     { name: 'train.jsonl', url: 'https://fever.ai/download/fever/train.jsonl', kind: 'jsonl' },
-    { name: 'paper_dev.jsonl', url: 'https://fever.ai/download/fever/paper_dev.jsonl', kind: 'jsonl' },
+    { name: 'shared_task_dev.jsonl', url: 'https://fever.ai/download/fever/shared_task_dev.jsonl', kind: 'jsonl' },
     { name: 'wiki-pages.zip', url: 'https://fever.ai/download/fever/wiki-pages.zip', kind: 'zip' }
   ],
   feverous: [
@@ -21,8 +21,8 @@ const ASSETS: BenchmarkAssets = {
     { name: 'feverous-wiki-pages-db.zip', url: 'https://fever.ai/download/feverous/feverous-wiki-pages-db.zip', kind: 'zip' }
   ],
   averitec: [
-    { name: 'train.json', url: 'https://raw.githubusercontent.com/MichSchli/AVeriTeC/main/data/train.json', kind: 'json' },
-    { name: 'dev.json', url: 'https://raw.githubusercontent.com/MichSchli/AVeriTeC/main/data/dev.json', kind: 'json' }
+    { name: 'train.json', url: 'https://huggingface.co/datasets/chenxwh/AVeriTeC/resolve/main/data/train.json?download=true', kind: 'json' },
+    { name: 'dev.json', url: 'https://huggingface.co/datasets/chenxwh/AVeriTeC/resolve/main/data/dev.json?download=true', kind: 'json' }
   ]
 };
 
