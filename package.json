@@ -36,7 +36,12 @@
     "eval:v2-scifact-e2e": "tsx scripts/v2ScifactEndToEnd.ts",
     "test:gate14": "tsx scripts/gate14RemainingTests.ts",
     "eval:evidence-benchmark": "tsx scripts/evidenceBenchmark.ts",
-    "audit:gate14": "tsx scripts/gate14ReleaseAudit.ts"
+    "audit:gate14": "tsx scripts/gate14ReleaseAudit.ts",
+    "check:phase2-protocol": "tsx scripts/multiBenchmarkProtocol.ts",
+    "test:phase2-protocol": "tsx scripts/multiBenchmarkProtocolTests.ts",
+    "test:phase2-adapters": "tsx scripts/phase2BenchmarkAdaptersTests.ts",
+    "materialize:phase2": "tsx scripts/materializePhase2Benchmarks.ts",
+    "test:phase2-materialization": "tsx scripts/phase2MaterializationTests.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
