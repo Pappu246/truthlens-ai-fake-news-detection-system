@@ -94,6 +94,9 @@ jobs:
       - name: Phase 2 protocol regression test
         run: npm run test:phase2-protocol
 
+      - name: Phase 2 benchmark adapter contracts
+        run: npm run test:phase2-adapters
+
       - name: Gate 14 release audit
         run: npm run audit:gate14
 
