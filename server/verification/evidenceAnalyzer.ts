@@ -227,6 +227,83 @@ export function classifyEvidenceRelation(
     }
   }
 
+  // Claim-aware explicit negation. Conservative by design: a negator must be
+  // attached to a material predicate from the claim.
+  const predicatePatterns: RegExp[] = [
+    /\b(?:fall|fell|falling|decline|declined|decrease|decreased|drop|dropped|remain|remained)\b/i,
+    /\b(?:raise|raised|raising|increase|increased|increasing|hike|hiked)\b/i,
+    /\b(?:open|opened|opening)\b/i,
+    /\b(?:find|found|finding)\b/i,
+    /\b(?:publish|published|publishing|release|released)\b/i,
+    /\b(?:convict|convicted|conviction)\b/i,
+    /\b(?:add|added|adding)\b/i,
+    /\b(?:issue|issued|issuing)\b/i,
+    /\b(?:recall|recalled)\b/i,
+    /\b(?:report|reported|reporting)\b/i
+  ];
+
+  const hasNegatedPredicate = predicatePatterns.some(predicate => {
+    const source = predicate.source.replace(/^\\b|\\b$/g, '');
+    const directNegation = new RegExp(
+      '\\b(?:did|does|do|was|were|is|are|has|have|had)\\s+not\\s+(?:\\w+\\s+){0,2}' + source + '\\b',
+      'i'
+    );
+    const localNegation = new RegExp('\\bnot\\s+' + source + '\\b', 'i');
+    const absoluteNegation = new RegExp(
+      '\\b(?:no|never)\\s+(?:\\w+\\s+){0,2}' + source + '\\b',
+      'i'
+    );
+    return predicate.test(claim.normalizedText) &&
+      (directNegation.test(textLower) ||
+        localNegation.test(textLower) ||
+        absoluteNegation.test(textLower));
+  });
+  if (hasNegatedPredicate) {
+    return 'CONTRADICTS';
+  }
+
+  // Directional antonyms invert a claim only when the evidence does not also
+  // contain the claimed direction.
+  const directionalPairs: Array<{
+    claimSide: RegExp;
+    evidenceOpposite: RegExp;
+    evidenceClaimSide: RegExp;
+  }> = [
+    {
+      claimSide: /\b(?:fell|declined|decreased|dropped|below|under|less than)\b/i,
+      evidenceOpposite: /\b(?:rose|increased|grew|gained|exceeded|above|over|more than)\b/i,
+      evidenceClaimSide: /\b(?:fell|declined|decreased|dropped|below|under|less than)\b/i
+    },
+    {
+      claimSide: /\b(?:raised|raise|increased|hiked|increase)\b/i,
+      evidenceOpposite: /\b(?:cut|cutting|lowered|lower|decreased|reduced|reduction)\b/i,
+      evidenceClaimSide: /\b(?:raised|raise|increased|hiked|increase)\b/i
+    },
+    {
+      claimSide: /\b(?:convicted|conviction|guilty)\b/i,
+      evidenceOpposite: /\b(?:acquitted|acquittal|not guilty)\b/i,
+      evidenceClaimSide: /\b(?:convicted|conviction|guilty)\b/i
+    },
+    {
+      claimSide: /\b(?:opened|open|launched|launch)\b/i,
+      evidenceOpposite: /\b(?:closed|shut|delayed|postponed|cancelled|canceled)\b/i,
+      evidenceClaimSide: /\b(?:opened|open|launched|launch)\b/i
+    },
+    {
+      claimSide: /\b(?:added|add|introduced)\b/i,
+      evidenceOpposite: /\b(?:removed|remove|did not add|no new)\b/i,
+      evidenceClaimSide: /\b(?:added|add|introduced)\b/i
+    }
+  ];
+
+  for (const pair of directionalPairs) {
+    if (pair.claimSide.test(claim.normalizedText) &&
+        pair.evidenceOpposite.test(textLower) &&
+        !pair.evidenceClaimSide.test(textLower)) {
+      return 'CONTRADICTS';
+    }
+  }
+
   // Mixed or nuanced markers
   const mixedPatterns = [
     /\b(?:partially true|mixed reports|unclear whether|contested|debated|partly true|conflicting claims|some dispute)\b/i
@@ -253,6 +330,61 @@ export function classifyEvidenceRelation(
 /**
  * Analyzes diversity among retrieved sources and detects syndication / duplication.
  */
+function normalizeForFingerprint(text: string): string {
+  return (text || '')
+    .toLowerCase()
+    .replace(/https?:\/\/\S+/g, ' ')
+    .replace(/[^a-z0-9%]+/g, ' ')
+    .replace(/\b(?:read more|click here|subscribe|sign up|advertisement|copyright)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function fnv1a(text: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+function contentClusterKey(item: EvidenceItem): string {
+  const title = normalizeForFingerprint(item.title).slice(0, 220);
+  const body = normalizeForFingerprint(item.evidenceExcerpt || item.snippet).slice(0, 360);
+  const wire = item.isSyndicated ||
+    /\b(?:reuters|ap news|associated press|afp|agence france presse|bloomberg)\b/i.test(
+      `${item.sourceName} ${item.title} ${item.snippet}`
+    );
+  if (wire && body.length >= 80) return `wire:${fnv1a(body)}`;
+  if (body.length >= 160) return `body:${fnv1a(body)}`;
+  if (title.length >= 40) return `title:${fnv1a(title)}`;
+  return `weak:${fnv1a(title + '|' + body)}`;
+}
+
+function shingleSet(text: string, width = 5): Set<string> {
+  const words = normalizeForFingerprint(text).split(/\s+/).filter(Boolean);
+  const set = new Set<string>();
+  if (words.length === 0) return set;
+  if (words.length <= width) {
+    set.add(words.join(' '));
+    return set;
+  }
+  for (let i = 0; i <= words.length - width; i++) {
+    set.add(words.slice(i, i + width).join(' '));
+  }
+  return set;
+}
+
+function shingleSimilarity(a: string, b: string): number {
+  const aa = shingleSet(a);
+  const bb = shingleSet(b);
+  if (aa.size === 0 || bb.size === 0) return 0;
+  let overlap = 0;
+  for (const item of aa) if (bb.has(item)) overlap++;
+  return overlap / (aa.size + bb.size - overlap);
+}
+
 export function evaluateSourceDiversity(evidenceList: EvidenceItem[]): {
   independentSourcesCount: number;
   totalSourcesCount: number;
@@ -263,32 +395,72 @@ export function evaluateSourceDiversity(evidenceList: EvidenceItem[]): {
   }
 
   const uniqueDomains = new Set<string>();
+  const domainByItem: string[] = [];
+  const clusterByItem: string[] = [];
+  const clusterToDomains = new Map<string, Set<string>>();
+  const clusterRepresentative = new Map<string, string>();
   let syndicatedCount = 0;
+  let nearDuplicateCount = 0;
 
   for (const item of evidenceList) {
+    let domain = item.sourceName.toLowerCase().trim() || 'unknown-source';
     try {
-      const domain = new URL(item.sourceUrl.startsWith('http') ? item.sourceUrl : `https://${item.sourceUrl}`).hostname.toLowerCase().replace(/^www\./, '');
-      uniqueDomains.add(domain);
+      const canonicalSourceUrl = item.sourceFinalUrl || item.sourceUrl;
+      domain = new URL(canonicalSourceUrl.startsWith('http') ? canonicalSourceUrl : `https://${canonicalSourceUrl}`).hostname
+        .toLowerCase()
+        .replace(/^www\./, '');
     } catch {
-      uniqueDomains.add(item.sourceName.toLowerCase());
+      /* keep source-name fallback */
     }
 
-    if (item.isSyndicated || /\b(?:reuters|ap news|associated press|afp)\b/i.test(item.snippet)) {
-      syndicatedCount++;
+    const sourceText = `${item.title} ${item.evidenceExcerpt || item.snippet}`;
+    const key = contentClusterKey(item);
+    const wire = item.isSyndicated ||
+      /\b(?:reuters|ap news|associated press|afp|agence france presse|bloomberg)\b/i.test(
+        `${item.sourceName} ${item.title} ${item.snippet}`
+      );
+
+    let clusterId = key;
+    // 5-gram Jaccard is intentionally conservative but must still catch
+    // lightly edited wire/copy stories. Keep wire content stricter while
+    // allowing near-duplicate reporting with small editorial changes.
+    const similarityThreshold = wire ? 0.68 : 0.72;
+    for (const [candidateId, representative] of clusterRepresentative.entries()) {
+      if (shingleSimilarity(sourceText, representative) >= similarityThreshold) {
+        clusterId = candidateId;
+        nearDuplicateCount++;
+        break;
+      }
     }
+    clusterRepresentative.set(clusterId, clusterRepresentative.get(clusterId) || sourceText);
+    domainByItem.push(domain);
+    clusterByItem.push(clusterId);
+    if (!clusterToDomains.has(clusterId)) clusterToDomains.set(clusterId, new Set<string>());
+    clusterToDomains.get(clusterId)!.add(domain);
+    uniqueDomains.add(domain);
+
+    const text = `${item.sourceName} ${item.title} ${item.snippet}`;
+    if (wire) syndicatedCount++;
   }
 
-  const independentCount = uniqueDomains.size;
-  const effectiveIndependentCount = syndicatedCount >= 2 ? Math.max(1, independentCount - syndicatedCount + 1) : independentCount;
-  
-  let syndicationNote = `${independentCount} independent root domain${independentCount !== 1 ? 's' : ''} identified.`;
+  // A content cluster represents one underlying report. Distinct domains inside
+  // the same cluster are reproduction/syndication until the evidence is
+  // materially different; independence cannot exceed distinct domains.
+  const clusterCount = clusterToDomains.size;
+  const independentCount = Math.min(uniqueDomains.size, clusterCount);
+  const wireClusterCount = Array.from(clusterToDomains.entries()).filter(([key, domains]) =>
+    key.startsWith('wire:') && domains.size > 1
+  ).length;
 
-  if (syndicatedCount >= 2) {
-    syndicationNote = `Multiple wire reports detected (${syndicatedCount} outlets republishing syndicated wire coverage); discounted to avoid treating wire reproduction as independent confirmation.`;
+  let syndicationNote =
+    `${independentCount} independent source cluster${independentCount !== 1 ? 's' : ''} across ${uniqueDomains.size} domain${uniqueDomains.size !== 1 ? 's' : ''}.`;
+  if (wireClusterCount > 0 || syndicatedCount >= 2 || nearDuplicateCount > 0) {
+    syndicationNote +=
+      ` ${wireClusterCount || syndicatedCount} syndicated/wire reproduction signal(s) and ${nearDuplicateCount} near-duplicate cluster match(es) were discounted as non-independent confirmation.`;
   }
 
   return {
-    independentSourcesCount: effectiveIndependentCount,
+    independentSourcesCount: independentCount,
     totalSourcesCount: evidenceList.length,
     syndicationNote
   };
@@ -332,16 +504,40 @@ export function aggregateClaimAssessment(
     confidenceScore = 0.65;
     confidenceExplanation = 'Multiple independent sources retrieved, but evidence contains conflicting assertions.';
   } else if (counts.contradicts > 0) {
-    assessment = 'CONTRADICTED';
-    explanation = numWarningItem?.numericalConsistency?.warning ||
-      `Retrieved evidence directly refutes or contradicts the factual assertion (${counts.contradicts} source${counts.contradicts > 1 ? 's' : ''}).`;
-    confidenceScore = Math.min(0.95, 0.60 + (diversity.independentSourcesCount * 0.15));
-    confidenceExplanation = `Substantiated by ${diversity.independentSourcesCount} independent source(s) identifying factual disagreement.`;
+    const strongContradiction = relevantItems.some(item =>
+      item.relation === 'CONTRADICTS' &&
+      ['OFFICIAL_GOVERNMENT', 'OFFICIAL_ORGANIZATION', 'PRIMARY_SCIENTIFIC', 'MAJOR_NEWS', 'REPUTABLE_SOURCE'].includes(item.sourceType)
+    );
+    const contradictionThresholdMet = diversity.independentSourcesCount >= 2 || strongContradiction;
+    if (!contradictionThresholdMet) {
+      assessment = 'INSUFFICIENT';
+      explanation = 'A contradiction was retrieved, but the available evidence does not meet the minimum independence/source-quality threshold for a negative factual assessment.';
+      confidenceScore = 0.35;
+      confidenceExplanation = 'One weak or non-independent contradiction is not sufficient for a strong conclusion.';
+    } else {
+      assessment = 'CONTRADICTED';
+      explanation = numWarningItem?.numericalConsistency?.warning ||
+        `Retrieved evidence directly refutes or contradicts the factual assertion (${counts.contradicts} source${counts.contradicts > 1 ? 's' : ''}).`;
+      confidenceScore = Math.min(0.95, 0.60 + (diversity.independentSourcesCount * 0.15));
+      confidenceExplanation = `Substantiated by ${diversity.independentSourcesCount} independent source(s) identifying factual disagreement.`;
+    }
   } else if (counts.supports >= 1) {
-    assessment = 'SUPPORTED';
-    explanation = `Retrieved external reporting corroborates the factual assertion across ${diversity.independentSourcesCount} independent source(s).`;
-    confidenceScore = Math.min(0.95, 0.55 + (diversity.independentSourcesCount * 0.15));
-    confidenceExplanation = `Corroborated by ${diversity.independentSourcesCount} reputable external reporting outlet(s).`;
+    const strongSupport = relevantItems.some(item =>
+      item.relation === 'SUPPORTS' &&
+      ['OFFICIAL_GOVERNMENT', 'OFFICIAL_ORGANIZATION', 'PRIMARY_SCIENTIFIC', 'MAJOR_NEWS', 'REPUTABLE_SOURCE'].includes(item.sourceType)
+    );
+    const supportThresholdMet = diversity.independentSourcesCount >= 2 || strongSupport;
+    if (!supportThresholdMet) {
+      assessment = 'INSUFFICIENT';
+      explanation = 'Supporting evidence was retrieved, but the available evidence does not meet the minimum independence/source-quality threshold for a positive factual assessment.';
+      confidenceScore = 0.35;
+      confidenceExplanation = 'A single weak or non-independent source is not sufficient for strong corroboration.';
+    } else {
+      assessment = 'SUPPORTED';
+      explanation = `Retrieved external reporting corroborates the factual assertion across ${diversity.independentSourcesCount} independent source(s).`;
+      confidenceScore = Math.min(0.95, 0.55 + (diversity.independentSourcesCount * 0.15));
+      confidenceExplanation = `Corroborated by ${diversity.independentSourcesCount} reputable external reporting outlet(s).`;
+    }
   } else if (counts.mixed > 0) {
     assessment = 'MIXED';
     explanation = 'Retrieved evidence indicates partial agreement or inconclusive circumstances.';

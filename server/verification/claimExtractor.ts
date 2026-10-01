@@ -105,7 +105,7 @@ function extractClaimComponents(sentence: string): {
   }
 
   // 2. Dates / Temporal markers
-  const dateMatches = sentence.match(/\b(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2}(?:,\s*\d{4})?|\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b|\b(?:yesterday|today|tomorrow|last week|next month|from tomorrow|starting tomorrow|in \d{4})\b/gi);
+  const dateMatches = sentence.match(/\b(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+(?:\d{4}|\d{1,2}(?:,\s*\d{4})?)|\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b|\b(?:yesterday|today|tomorrow|last week|next month|from tomorrow|starting tomorrow|in \d{4})\b/gi);
   if (dateMatches) {
     for (const d of dateMatches) {
       const clean = d.trim();
@@ -257,7 +257,11 @@ export function extractClaimsHeuristic(
 
   // 1. Check title for high-priority claim
   const titleClean = title.trim();
-  if (titleClean.length >= 15 && !NON_CLAIM_PATTERNS.some(p => p.test(titleClean))) {
+  if (
+    titleClean.length >= 15 &&
+    !NON_CLAIM_PATTERNS.some(p => p.test(titleClean)) &&
+    !containsPromptInjectionAttempt(titleClean)
+  ) {
     const comp = extractClaimComponents(titleClean);
     const norm = normalizeClaimText(titleClean);
     const cType = classifyClaimType(titleClean);
@@ -288,11 +292,12 @@ export function extractClaimsHeuristic(
     .map(s => s.trim())
     .filter(s => s.length >= 25 && s.length <= 300);
 
-  for (let i = 0; i < rawSentences.length && claims.length < 6; i++) {
+  for (let i = 0; i < rawSentences.length; i++) {
     const sentence = rawSentences[i];
 
-    // Filter out boilerplate or pure opinion
+    // Filter out boilerplate, pure opinion, or prompt-injection control text.
     if (NON_CLAIM_PATTERNS.some(p => p.test(sentence))) continue;
+    if (containsPromptInjectionAttempt(sentence)) continue;
     if (/^(?:share|comment|advertisement|copyright|all rights reserved|source:)/i.test(sentence)) continue;
 
     // Check if sentence makes a verifiable factual assertion
@@ -337,27 +342,110 @@ export function extractClaimsHeuristic(
     }
   }
 
-  // If no claims met the strict criteria, fall back to the first declarative sentence
+  // If no claims met the strict criteria, fall back only to a safe declarative
+  // sentence. Prompt-injection/control text must never become a factual claim.
   if (claims.length === 0 && (body.trim().length > 20 || title.trim().length > 10)) {
-    const fallbackText = title.trim() || body.trim().slice(0, 150);
-    const comp = extractClaimComponents(fallbackText);
-    const norm = normalizeClaimText(fallbackText);
-    claims.push({
-      claimId: `claim-1`,
-      originalText: fallbackText,
-      normalizedText: norm,
-      claimType: classifyClaimType(fallbackText),
-      importance: 'HIGH',
-      entities: comp.entities,
-      dates: comp.dates,
-      locations: comp.locations,
-      numbers: comp.numbers,
-      keywords: comp.keywords,
-      searchQueries: generateSearchQueries({ normalizedText: norm, ...comp })
-    });
+    const fallbackCandidates = [
+      title.trim(),
+      ...body.replace(/\r\n/g, '\n').split(/(?<=[.!?])\s+/).map(s => s.trim())
+    ];
+    const fallbackText = fallbackCandidates.find(candidate =>
+      candidate.length > 10 && !containsPromptInjectionAttempt(candidate)
+    );
+    if (fallbackText) {
+      const comp = extractClaimComponents(fallbackText);
+      const norm = normalizeClaimText(fallbackText);
+      claims.push({
+        claimId: `claim-1`,
+        originalText: fallbackText,
+        normalizedText: norm,
+        claimType: classifyClaimType(fallbackText),
+        importance: 'HIGH',
+        entities: comp.entities,
+        dates: comp.dates,
+        locations: comp.locations,
+        numbers: comp.numbers,
+        keywords: comp.keywords,
+        searchQueries: generateSearchQueries({ normalizedText: norm, ...comp })
+      });
+    }
   }
 
   return claims;
+}
+
+/**
+ * Select a bounded set of claims while preserving coverage across the whole article.
+ *
+ * The ML classifier already consumes the complete article body. Evidence retrieval
+ * is intentionally bounded, so claim verification uses representative claims spread
+ * across the document instead of only the first few matching sentences.
+ */
+function selectClaimsWithDocumentCoverage(
+  claims: ExtractedClaim[],
+  body: string,
+  maxClaims = 6
+): ExtractedClaim[] {
+  if (claims.length <= maxClaims) {
+    return claims.map((claim, idx) => ({ ...claim, claimId: `claim-${idx + 1}` }));
+  }
+
+  const bodyText = body.replace(/\r\n/g, '\n');
+  const titleClaims = claims.filter(c => c.originalText.trim() && !bodyText.includes(c.originalText));
+  const bodyClaims = claims.filter(c => !titleClaims.includes(c));
+
+  const score = (claim: ExtractedClaim): number => {
+    const importance = claim.importance === 'HIGH' ? 3 : claim.importance === 'MEDIUM' ? 2 : 1;
+    const concrete =
+      Math.min(2, claim.numbers.length) +
+      Math.min(1, claim.entities.length) +
+      Math.min(1, claim.dates.length);
+    return importance * 10 + concrete;
+  };
+
+  const withPositions = bodyClaims.map(claim => ({
+    claim,
+    position: Math.max(0, bodyText.indexOf(claim.originalText))
+  })).sort((a, b) => a.position - b.position);
+
+  const bodySlots = Math.max(0, maxClaims - Math.min(1, titleClaims.length));
+  const bucketCount = Math.max(1, Math.min(
+    bodySlots,
+    Math.ceil(withPositions.length / Math.max(1, bodySlots))
+  ));
+  const buckets: Array<typeof withPositions> = Array.from({ length: bucketCount }, () => [] as typeof withPositions[number][]);
+
+  for (const entry of withPositions) {
+    const ratio = bodyText.length > 0 ? entry.position / bodyText.length : 0;
+    const bucket = Math.min(bucketCount - 1, Math.floor(ratio * bucketCount));
+    buckets[bucket].push(entry);
+  }
+
+  const selected: ExtractedClaim[] = [];
+  if (titleClaims.length > 0) {
+    selected.push(titleClaims[0]);
+  }
+
+  for (const bucket of buckets) {
+    if (selected.length >= maxClaims) break;
+    bucket.sort((a, b) => score(b.claim) - score(a.claim) || a.position - b.position);
+    if (bucket[0]) selected.push(bucket[0].claim);
+  }
+
+  const selectedSet = new Set(selected);
+  const remaining = claims
+    .filter(c => !selectedSet.has(c))
+    .sort((a, b) => score(b) - score(a) || a.originalText.localeCompare(b.originalText));
+
+  for (const claim of remaining) {
+    if (selected.length >= maxClaims) break;
+    selected.push(claim);
+  }
+
+  return selected.slice(0, maxClaims).map((claim, idx) => ({
+    ...claim,
+    claimId: `claim-${idx + 1}`
+  }));
 }
 
 /**
@@ -438,14 +526,16 @@ export async function extractClaims(
   description: string = ''
 ): Promise<ExtractedClaim[]> {
   // If Gemini API Key is available, attempt AI-assisted extraction
-  if (process.env.GEMINI_API_KEY) {
+  // Long articles fall back to deterministic full-text extraction instead of silently truncating the body.
+  const canUseGeminiForFullBody = Boolean(process.env.GEMINI_API_KEY) && body.length <= 12000;
+  if (canUseGeminiForFullBody) {
     try {
       const ai = new GoogleGenAI();
 
       // SECURITY: Sanitize all untrusted inputs
       const safeTitle = sanitizeForPrompt(title, 500);
       const safeDescription = sanitizeForPrompt(description, 800);
-      const safeBody = sanitizeForPrompt(body, 2500);
+      const safeBody = sanitizeForPrompt(body, 12000);
 
       // SECURITY: System instructions are separate from untrusted data
       // This is the authoritative instruction set that must NOT be overridable by article content

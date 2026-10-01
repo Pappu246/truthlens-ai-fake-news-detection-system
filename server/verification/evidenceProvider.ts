@@ -5,6 +5,7 @@ import {
   SourceType
 } from '../../src/types';
 import { safeFetchHtml } from '../security/urlValidator';
+import * as cheerio from 'cheerio';
 import {
   determineSourceType,
   calculateRelevance,
@@ -13,6 +14,7 @@ import {
   classifyEvidenceRelation,
   aggregateClaimAssessment
 } from './evidenceAnalyzer';
+import { refineEvidenceRelationSemantically } from './semanticRelation';
 
 export interface EvidenceSearchOptions {
   maxResultsPerClaim?: number;
@@ -33,6 +35,49 @@ export interface RetrievalDiagnostic {
   httpStatus?: number;
   resultCount: number;
   error?: string;
+  stage?: 'SEARCH' | 'PUBLISHER_FETCH' | 'PROVENANCE';
+}
+
+export function verifyEvidenceProvenance(
+  sourceName: string,
+  originalUrl: string,
+  finalUrl: string,
+  originalType: SourceType
+): boolean {
+  try {
+    const finalHost = new URL(finalUrl).hostname.toLowerCase().replace(/^www\./, '');
+    const originalHost = new URL(originalUrl).hostname.toLowerCase().replace(/^www\./, '');
+    if (!finalHost || finalHost === 'news.google.com') return false;
+
+    const samePublisherHost =
+      originalHost !== 'news.google.com' &&
+      (finalHost === originalHost ||
+        finalHost.endsWith('.' + originalHost) ||
+        originalHost.endsWith('.' + finalHost));
+
+    const aliases: Record<string, string[]> = {
+      reuters: ['reuters.com'], 'associated press': ['apnews.com'], ap: ['apnews.com'],
+      bbc: ['bbc.com', 'bbc.co.uk'], npr: ['npr.org'], bloomberg: ['bloomberg.com'],
+      afp: ['afp.com'], wikipedia: ['wikipedia.org', 'wikimedia.org']
+    };
+    const name = sourceName.toLowerCase();
+    const matched = Object.entries(aliases).find(([alias]) => name.includes(alias));
+    const aliasMatch = matched
+      ? matched[1].some(domain => finalHost === domain || finalHost.endsWith('.' + domain))
+      : false;
+
+    const finalType = determineSourceType(finalUrl, sourceName);
+    if (samePublisherHost) {
+      return originalType === 'UNKNOWN'
+        ? true
+        : finalType === originalType || aliasMatch;
+    }
+
+    if (originalHost === 'news.google.com') return aliasMatch;
+    return aliasMatch;
+  } catch {
+    return false;
+  }
 }
 
 export class EvidenceProvider {
@@ -40,6 +85,140 @@ export class EvidenceProvider {
 
   constructor(options?: { timeoutMs?: number }) {
     this.timeoutMs = options?.timeoutMs || 8000;
+  }
+
+  private extractReadableText(html: string): string {
+    const $ = cheerio.load(html);
+    $('script,style,noscript,template,nav,header,footer,aside,form,svg').remove();
+    const selectors = [
+      'article', '[itemprop="articleBody"]', 'main', '.article-body',
+      '.article__body', '.story-body', '.story__body', '.entry-content', '.post-content'
+    ];
+    let best = '';
+    for (const selector of selectors) {
+      $(selector).each((_i, el) => {
+        const text = $(el).text().replace(/\s+/g, ' ').trim();
+        if (text.length > best.length) best = text;
+      });
+      if (best.length >= 500) break;
+    }
+    if (best.length < 200) {
+      const paragraphs = $('p')
+        .map((_i, el) => $(el).text().replace(/\s+/g, ' ').trim())
+        .get()
+        .filter((p: string) => p.length >= 40);
+      best = paragraphs.join(' ').replace(/\s+/g, ' ').trim();
+    }
+    return best;
+  }
+
+  private selectEvidenceExcerpt(claim: ExtractedClaim, text: string, title: string): string {
+    const sentences = text.split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(s => s.length >= 30);
+    if (sentences.length === 0) return text.slice(0, 1600);
+    const terms = [...claim.entities, ...claim.keywords, ...claim.numbers]
+      .map(t => t.toLowerCase().replace(/[^a-z0-9%.-]/g, '')).filter(Boolean);
+    const scored = sentences.map((sentence, index) => {
+      const lower = sentence.toLowerCase();
+      const hits = terms.reduce((n, term) => n + (lower.includes(term) ? 1 : 0), 0);
+      const titleBoost = title && lower.includes(title.toLowerCase().slice(0, 24)) ? 1 : 0;
+      return { sentence, index, score: hits + titleBoost };
+    });
+    scored.sort((a, b) => b.score - a.score || a.index - b.index);
+    const selected = scored.slice(0, 3).sort((a, b) => a.index - b.index).map(x => x.sentence);
+    return (selected.join(' ') || text.slice(0, 1600)).slice(0, 1800);
+  }
+
+
+  private async hydrateEvidenceItem(
+    item: EvidenceItem,
+    claim: ExtractedClaim,
+    diagnostics?: RetrievalDiagnostic[]
+  ): Promise<EvidenceItem> {
+    try {
+      const fetched = await safeFetchHtml(item.sourceUrl, {
+        timeoutMs: this.timeoutMs,
+        maxBytes: 2.5 * 1024 * 1024,
+        maxRedirects: 5,
+        userAgent: 'TruthLens-EvidenceBot/1.0 (academic; evidence retrieval)'
+      });
+      const body = this.extractReadableText(fetched.html);
+      if (body.length < 120) throw new Error('Publisher page did not expose enough readable article text.');
+      const excerpt = this.selectEvidenceExcerpt(claim, body, item.title);
+      const { score, explanation } = calculateRelevance(claim, excerpt, item.title);
+      const numericalConsistency = checkNumericalConsistency(claim, excerpt);
+      const temporalConsistency = checkTemporalConsistency(claim, item.publishedAt);
+      const lexicalRelation = classifyEvidenceRelation(claim, excerpt, score, numericalConsistency);
+      const provenanceVerified = verifyEvidenceProvenance(item.sourceName, item.sourceUrl, fetched.finalUrl, item.sourceType);
+
+      if (diagnostics && !provenanceVerified) {
+        diagnostics.push({
+          provider: 'publisher_provenance_verification',
+          query: claim.normalizedText,
+          attemptedAt: new Date().toISOString(),
+          ok: true,
+          resultCount: 0,
+          error: 'Publisher identity did not match the discovered source after redirect verification.',
+          stage: 'PROVENANCE'
+        });
+      }
+
+      let relation = lexicalRelation;
+      let finalExplanation = explanation;
+      if (provenanceVerified && numericalConsistency.isConsistent) {
+        const semantic = await refineEvidenceRelationSemantically(
+          claim,
+          excerpt,
+          lexicalRelation,
+          score
+        );
+        if (semantic && semantic.relation !== 'MIXED') {
+          relation = semantic.relation;
+          finalExplanation =
+            explanation +
+            ` | semantic NLI: ${semantic.relation} confidence=${semantic.confidence.toFixed(3)} margin=${semantic.margin.toFixed(3)} model=${semantic.modelName}`;
+        } else if (semantic) {
+          finalExplanation =
+            explanation +
+            ` | semantic NLI abstained confidence=${semantic.confidence.toFixed(3)} margin=${semantic.margin.toFixed(3)} model=${semantic.modelName}`;
+        }
+      } else if (!provenanceVerified) {
+        relation = 'INSUFFICIENT';
+        finalExplanation = 'Publisher provenance could not be verified; directional evidence was withheld.';
+      }
+
+      return {
+        ...item,
+        sourceFinalUrl: fetched.finalUrl,
+        evidenceExcerpt: excerpt,
+        sourceFetchStatus: 'FETCHED',
+        sourceContentWordCount: body.split(/\s+/).filter(Boolean).length,
+        provenanceVerified,
+        relation,
+        relevanceScore: score,
+        relevanceExplanation: finalExplanation,
+        numericalConsistency,
+        temporalConsistency
+      };
+    } catch (err: any) {
+      diagnostics?.push({
+        provider: 'publisher_source_fetch',
+        query: claim.normalizedText,
+        attemptedAt: new Date().toISOString(),
+        ok: false,
+        resultCount: 0,
+        error: err?.message || 'source fetch failed',
+        stage: 'PUBLISHER_FETCH'
+      });
+      return {
+        ...item,
+        sourceFetchStatus: 'FAILED',
+        provenanceVerified: false,
+        relation: 'INSUFFICIENT',
+        relevanceScore: 0,
+        relevanceExplanation: 'Publisher page could not be fetched or parsed: ' + (err?.message || 'unknown error'),
+        evidenceExcerpt: undefined
+      };
+    }
   }
 
   /**
@@ -82,7 +261,7 @@ export class EvidenceProvider {
       if (!res.ok) {
         record({ provider: 'google_news_rss', query, attemptedAt: new Date().toISOString(),
                  ok: false, httpStatus: res.status, resultCount: 0,
-                 error: `HTTP ${res.status}` });
+                 error: `HTTP ${res.status}`, stage: 'SEARCH' });
       }
       if (res.ok) {
         const text = await res.text();
@@ -137,12 +316,12 @@ export class EvidenceProvider {
         }
         newsCount = results.length;
         record({ provider: 'google_news_rss', query, attemptedAt: new Date().toISOString(),
-                 ok: true, httpStatus: res.status, resultCount: newsCount });
+                 ok: true, httpStatus: res.status, resultCount: newsCount, stage: 'SEARCH' });
       }
     } catch (err: any) {
       console.warn(`[EvidenceProvider] News RSS search failed for query "${query}":`, err.message);
       record({ provider: 'google_news_rss', query, attemptedAt: new Date().toISOString(),
-               ok: false, resultCount: 0, error: err.message || 'network error' });
+               ok: false, resultCount: 0, error: err.message || 'network error', stage: 'SEARCH' });
     }
 
     // 2. If claim is Science / Historical / Statistics or if news hits were low, check Wikipedia
@@ -158,7 +337,7 @@ export class EvidenceProvider {
 
         if (!res.ok) {
           record({ provider: 'wikipedia_search', query, attemptedAt: new Date().toISOString(),
-                   ok: false, httpStatus: res.status, resultCount: 0, error: `HTTP ${res.status}` });
+                   ok: false, httpStatus: res.status, resultCount: 0, error: `HTTP ${res.status}`, stage: 'SEARCH' });
         }
         if (res.ok) {
           const data = await res.json();
@@ -193,14 +372,20 @@ export class EvidenceProvider {
             }
           }
           record({ provider: 'wikipedia_search', query, attemptedAt: new Date().toISOString(),
-                   ok: true, httpStatus: res.status, resultCount: results.length - newsCount });
+                   ok: true, httpStatus: res.status, resultCount: results.length - newsCount, stage: 'SEARCH' });
         }
       } catch (err: any) {
         console.warn(`[EvidenceProvider] Wikipedia search failed for query "${query}":`, err.message);
         record({ provider: 'wikipedia_search', query, attemptedAt: new Date().toISOString(),
-                 ok: false, resultCount: 0, error: err.message || 'network error' });
+                 ok: false, resultCount: 0, error: err.message || 'network error', stage: 'SEARCH' });
       }
     }
+
+    const hydrated: EvidenceItem[] = [];
+    for (const item of results.slice(0, 6)) {
+      hydrated.push(await this.hydrateEvidenceItem(item, claim, diagnostics));
+    }
+    results.splice(0, results.length, ...hydrated);
 
     // Sort results by relevance score descending and source priority
     results.sort((a, b) => {
@@ -238,8 +423,10 @@ export class EvidenceProvider {
     for (const q of queriesToRun) {
       const items = await this.search(q, claim, diagnostics);
       for (const item of items) {
-        if (!seenUrls.has(item.sourceUrl)) {
-          seenUrls.add(item.sourceUrl);
+        if (item.sourceFetchStatus !== 'FETCHED' || item.provenanceVerified === false) continue;
+        const dedupeUrl = item.sourceFinalUrl || item.sourceUrl;
+        if (!seenUrls.has(dedupeUrl)) {
+          seenUrls.add(dedupeUrl);
           allEvidence.push(item);
         }
       }
@@ -250,20 +437,68 @@ export class EvidenceProvider {
   }
 
   /**
+   * Gathers evidence and classifies the retrieval outcome without collapsing
+   * search failure, no-evidence, publisher-fetch failure, and provenance rejection.
+   */
+  public async searchEvidenceForClaimDetailed(
+    claim: ExtractedClaim,
+    diagnostics?: RetrievalDiagnostic[]
+  ): Promise<{
+    items: EvidenceItem[];
+    status: 'AVAILABLE' | 'NO_EVIDENCE' | 'SEARCH_FAILED' | 'PUBLISHER_FETCH_FAILED' | 'PROVENANCE_REJECTED';
+  }> {
+    const allEvidence = await this.searchEvidenceForClaim(claim, diagnostics);
+    const entries = diagnostics ?? [];
+    const searchEntries = entries.filter(d => (d.stage ?? 'SEARCH') === 'SEARCH');
+    const fetchFailures = entries.filter(d => d.stage === 'PUBLISHER_FETCH' && !d.ok);
+    const provenanceRejections = entries.filter(d => d.stage === 'PROVENANCE' && d.ok);
+
+    if (allEvidence.length > 0) {
+      return { items: allEvidence, status: 'AVAILABLE' };
+    }
+    if (searchEntries.length > 0 && searchEntries.every(d => !d.ok)) {
+      return { items: [], status: 'SEARCH_FAILED' };
+    }
+    if (fetchFailures.length > 0) {
+      return { items: [], status: 'PUBLISHER_FETCH_FAILED' };
+    }
+    if (provenanceRejections.length > 0) {
+      return { items: [], status: 'PROVENANCE_REJECTED' };
+    }
+    return { items: [], status: 'NO_EVIDENCE' };
+  }
+
+  /**
    * Verifies a batch of claims and aggregates verdicts.
    */
   public async verifyClaims(claims: ExtractedClaim[]): Promise<ClaimVerificationResult[]> {
     const results: ClaimVerificationResult[] = [];
+    const importantClaims = claims.filter(c => c.importance === 'HIGH' || c.importance === 'MEDIUM');
 
+    // First spend retrieval budget on the claims that can materially affect the
+    // article verdict. Low-importance claims are only searched when the
+    // important-claim pass does not establish enough evidence, avoiding a
+    // large latency increase on normal articles.
     for (const claim of claims) {
-      // Only prioritize search for HIGH and MEDIUM claims to conserve network, but evaluate all
-      let evidenceItems: EvidenceItem[] = [];
-      if (claim.importance === 'HIGH' || claim.importance === 'MEDIUM') {
-        evidenceItems = await this.searchEvidenceForClaim(claim);
+      if (claim.importance !== 'HIGH' && claim.importance !== 'MEDIUM') {
+        results.push(aggregateClaimAssessment(claim, []));
+        continue;
       }
+      const evidenceItems = await this.searchEvidenceForClaim(claim);
+      results.push(aggregateClaimAssessment(claim, evidenceItems));
+    }
 
-      const claimResult = aggregateClaimAssessment(claim, evidenceItems);
-      results.push(claimResult);
+    const importantResults = results.filter(r => r.claim.importance === 'HIGH' || r.claim.importance === 'MEDIUM');
+    const importantCoverage = importantClaims.length > 0 &&
+      importantResults.filter(r => r.assessment !== 'INSUFFICIENT').length === importantClaims.length;
+
+    if (!importantCoverage) {
+      for (let i = 0; i < results.length; i++) {
+        const claim = results[i].claim;
+        if (claim.importance !== 'LOW' || results[i].assessment !== 'INSUFFICIENT') continue;
+        const evidenceItems = await this.searchEvidenceForClaim(claim);
+        results[i] = aggregateClaimAssessment(claim, evidenceItems);
+      }
     }
 
     return results;

@@ -6,6 +6,7 @@ on:
       - main
       - "ml-upgrade-*"
       - "research/truthlens-v2-model-quality"
+      - "gate14-*"
   pull_request:
     branches:
       - main
@@ -58,6 +59,15 @@ jobs:
       - name: Evidence engine tests
         run: npm run test:evidence
 
+      - name: Gate 14 remaining security/calibration tests
+        run: npm run test:gate14
+
+      - name: Evidence-specific benchmark
+        run: npm run eval:evidence-benchmark
+
+      - name: External model-quality harness smoke
+        run: npm run test:v2-model-quality-external-smoke
+
       - name: Model artifact lifecycle tests
         run: npm run test:artifacts
 
@@ -77,3 +87,16 @@ jobs:
         run: |
           node --check scripts/researchIntelligence.mjs
           node -e "JSON.parse(require('fs').readFileSync('research/research-intelligence-registry.json', 'utf8')); console.log('Research registry JSON: OK')"
+
+      - name: Gate 14 release audit
+        run: npm run audit:gate14
+
+      - name: Upload evidence/research evaluation artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: truthlens-gate14-evaluation
+          path: |
+            artifacts/evidence-benchmark/report.json
+            artifacts/v2-model-quality/external-harness-smoke.json
+          if-no-files-found: warn

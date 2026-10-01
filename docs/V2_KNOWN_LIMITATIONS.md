@@ -67,8 +67,8 @@ Long-running 300-claim GitHub Actions jobs have experienced cancellations before
 
 ## What remains before any production proposal
 
-1. Complete current-head SciFact Run #57 and compare it against the frozen Run #19 baseline.
-2. Complete current-head Phase 7 ISOT Run #130 and keep its dataset/model task separate from SciFact.
+1. Complete the current-head SciFact E2E run (#215) and compare it against the frozen Run #19 baseline.
+2. Complete the current-head Phase 7 ISOT run (#293) and keep its dataset/model task separate from SciFact.
 3. If end-to-end quality remains weak, improve retrieval recall/reranking before changing decision policy.
 4. Establish an independently labelled calibration split and versioned calibrator.
 5. Evaluate broader external datasets appropriate to TruthLens' actual production use case.

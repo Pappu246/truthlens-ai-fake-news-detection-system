@@ -102,7 +102,7 @@ Structural guarantees, asserted by `npm run test:evidence`:
 
 ## Testing
 
-`npm run test:evidence` — 53 assertions. Retrieval is stubbed behind the
+`npm run test:evidence` — **61 assertions**. Retrieval is stubbed behind the
 `EvidenceRetriever` seam so the SUPPORTED / CONTRADICTED / MIXED /
 INSUFFICIENT / SEARCH_UNAVAILABLE branches and every injection defence run
 deterministically without network access. The stub is a test-only injection
@@ -128,3 +128,16 @@ with every citation carrying a real URL, domain and retrieval timestamp.
 4. Retrieval requires outbound network access to the news and knowledge indexes.
    In a restricted runtime the engine reports `SEARCH_UNAVAILABLE`, which is the
    correct behaviour, not a failure of the contract.
+
+## Gate-14 hardening (2026-09-30)
+
+The production evidence path now adds the following release controls:
+
+- Search candidates must pass publisher-page retrieval and provenance verification before they can contribute a directional evidence signal.
+- Provenance binds the discovered publisher to the final URL after redirects. Unrelated cross-domain redirects are rejected; Google News discovery URLs require an explicit publisher-alias match.
+- Retrieval diagnostics distinguish SEARCH_FAILED, NO_EVIDENCE, PUBLISHER_FETCH_FAILED, and PROVENANCE_REJECTED through the evidence_outcome field. These are diagnostics, not truth labels.
+- Source independence is clustered by article-content fingerprints so copied/syndicated wire coverage is not automatically treated as independent corroboration.
+- Ambiguous publisher passages may use the existing opt-in remote NLI adapter only when explicitly enabled with TRUTHLENS_ENABLE_REMOTE_NLI=true and HF_TOKEN. The semantic layer is gated by confidence/margin and never overrides an already directional deterministic relation or a numerical contradiction.
+- Article-level support/contradiction requires important claims to clear the evidence confidence calibration floor; lower-confidence evidence causes abstention.
+- Evidence-specific evaluation is tracked separately from production model accuracy: the Gate-14 benchmark reports SUPPORT / CONTRADICT / UNCLEAR precision, recall, F1, confusion, coverage and abstention.
+- Production-safe telemetry reports only aggregate verification health signals and never logs raw claim text, article content, URLs, headers, prompts, tokens or secrets.
