@@ -88,6 +88,18 @@ jobs:
           node --check scripts/researchIntelligence.mjs
           node -e "JSON.parse(require('fs').readFileSync('research/research-intelligence-registry.json', 'utf8')); console.log('Research registry JSON: OK')"
 
+      - name: Phase 2 multi-benchmark protocol
+        run: npm run check:phase2-protocol
+
+      - name: Phase 2 protocol regression test
+        run: npm run test:phase2-protocol
+
+      - name: Phase 2 benchmark adapter contracts
+        run: npm run test:phase2-adapters
+
+      - name: Phase 2 materialization guard
+        run: npm run test:phase2-materialization
+
       - name: Gate 14 release audit
         run: npm run audit:gate14
 
