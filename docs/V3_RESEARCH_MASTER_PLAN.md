@@ -67,10 +67,6 @@ A scheduled GitHub Actions workflow must run successfully and publish a research
 - benchmark-source status;
 - explicit disclaimer that discovery is not evaluation.
 
-## Phase 1 exit record (2026-10-01)
-
-Phase 1 is complete on the Gate-14 release line. Research Intelligence workflow **#148 / 36751159663** completed successfully and produced artifact `truthlens-research-intelligence-148` (digest `sha256:77ef7ff31d5bf955e2392531df767a33f5ea1e3d3bd2d523d197c07f3ec2f622`). The artifact records a discovery-only scan, no paper/model errors, successful reachability checks for declared FEVER/SciFact/FEVEROUS sources, and explicit `auto_create_pr=false`, `auto_merge=false`, `auto_deploy=false` controls. Discovery output is therefore an auditable input to research planning, not an evaluation or promotion signal.
-
 ## Phase 2 — Benchmark expansion
 
 Only after Phase 1 is green:
@@ -162,3 +158,11 @@ Only after all quality gates:
 ## Definition of “world-leading”
 
 TruthLens earns a defensible world-leading/SOTA statement only when Phase 7 supplies current, reproducible, apples-to-apples evidence. Until then, the project should describe itself as research-grade / world-class in engineering scope without making an unsupported accuracy claim.
+
+## Phase 1 exit record (2026-10-01)
+
+Phase 1 is complete on the Gate-14 release line. Research Intelligence workflow #148 / 36751159663 completed successfully and published a discovery-only artifact with no paper/model errors, reachable declared benchmark sources, and explicit no-auto-merge/no-auto-deploy controls.
+
+## Phase 2 kickoff record (2026-10-01)
+
+Phase 2 is active on research branch `research/phase2-multibenchmark-harness`. The protocol manifest freezes five lanes: SciFact, FEVER v1, FEVEROUS, AVeriTeC, and a future TruthLens Open-Web v1 set. The deterministic validator and regression test are included. Only SciFact currently has verified input hashes; the other lanes remain explicitly hash-pending until materialized.
