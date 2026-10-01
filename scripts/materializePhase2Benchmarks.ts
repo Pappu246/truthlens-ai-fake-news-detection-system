@@ -22,8 +22,8 @@ const ASSETS: BenchmarkAssets = {
     { name: 'feverous-wiki-pages-db.zip', url: 'https://fever.ai/download/feverous/feverous-wiki-pages-db.zip', kind: 'zip' }
   ],
   averitec: [
-    { name: 'train.json', url: 'https://huggingface.co/datasets/chenxwh/AVeriTeC/resolve/main/data/train.json?download=true', kind: 'json' },
-    { name: 'dev.json', url: 'https://huggingface.co/datasets/chenxwh/AVeriTeC/resolve/main/data/dev.json?download=true', kind: 'json' }
+    { name: 'train.json', url: 'https://raw.githubusercontent.com/MichSchli/AVeriTeC/main/data/train.json', kind: 'json' },
+    { name: 'dev.json', url: 'https://raw.githubusercontent.com/MichSchli/AVeriTeC/main/data/dev.json', kind: 'json' }
   ]
 };
 
