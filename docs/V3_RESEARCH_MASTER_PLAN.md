@@ -17,8 +17,8 @@
 | Phase | Scope | Status | Exit gate |
 |---|---|---|---|
 | 0 | State lock, release synchronization, reproducibility contract | **COMPLETE** | Production state and handoff synchronized |
-| 1 | Continuous research intelligence: papers, models, benchmark-source watch | **IN PROGRESS** | Scheduled watcher produces versioned evidence artifacts without modifying production |
-| 2 | Multi-benchmark apples-to-apples evaluation harness | PLANNED | Frozen protocols for FEVER, SciFact, AVeriTeC, FEVEROUS and an external/open-web set |
+| 1 | Continuous research intelligence: papers, models, benchmark-source watch | **COMPLETE** | Scheduled watcher produces versioned evidence artifacts without modifying production |
+| 2 | Multi-benchmark apples-to-apples evaluation harness | **IN PROGRESS** | Frozen protocols and reproducible runners for FEVER, SciFact, AVeriTeC, FEVEROUS and an external/open-web set |
 | 3 | Retrieval-quality upgrade | PLANNED | Demonstrated improvement in evidence recall/retrieval metrics without regression guards |
 | 4 | Verification reasoning upgrade | PLANNED | Better evidence-to-verdict reasoning on held-out data with calibrated abstention |
 | 5 | Reliability and adversarial robustness | PLANNED | Calibration, temporal integrity, source independence, prompt-injection and adversarial gates green |
@@ -158,3 +158,11 @@ Only after all quality gates:
 ## Definition of “world-leading”
 
 TruthLens earns a defensible world-leading/SOTA statement only when Phase 7 supplies current, reproducible, apples-to-apples evidence. Until then, the project should describe itself as research-grade / world-class in engineering scope without making an unsupported accuracy claim.
+
+## Phase 1 exit record (2026-10-01)
+
+Phase 1 is complete on the Gate-14 release line. Research Intelligence workflow #148 / 36751159663 completed successfully and published a discovery-only artifact with no paper/model errors, reachable declared benchmark sources, and explicit no-auto-merge/no-auto-deploy controls.
+
+## Phase 2 kickoff record (2026-10-01)
+
+Phase 2 is active on research branch `research/phase2-multibenchmark-harness`. The protocol manifest freezes five lanes: SciFact, FEVER v1, FEVEROUS, AVeriTeC, and a future TruthLens Open-Web v1 set. The deterministic validator and regression test are included. Only SciFact currently has verified input hashes; the other lanes remain explicitly hash-pending until materialized.
