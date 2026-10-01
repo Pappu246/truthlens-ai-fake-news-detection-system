@@ -38,7 +38,8 @@
     "eval:evidence-benchmark": "tsx scripts/evidenceBenchmark.ts",
     "audit:gate14": "tsx scripts/gate14ReleaseAudit.ts",
     "check:phase2-protocol": "tsx scripts/multiBenchmarkProtocol.ts",
-    "test:phase2-protocol": "tsx scripts/multiBenchmarkProtocolTests.ts"
+    "test:phase2-protocol": "tsx scripts/multiBenchmarkProtocolTests.ts",
+    "test:phase2-adapters": "tsx scripts/phase2BenchmarkAdaptersTests.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
