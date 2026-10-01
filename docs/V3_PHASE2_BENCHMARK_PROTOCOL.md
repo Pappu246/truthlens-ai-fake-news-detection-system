@@ -45,7 +45,7 @@ Retained artifact digest: `sha256:7349a2c45115f59efdfc88f30856f81f9b5a24acc7a2f6
 
 ## Materialization status
 
-`fever_v1`, `feverous`, and `averitec` are `PROTOCOL_FROZEN_DATA_HASH_PENDING` until the exact release is materialized and hashed. `truthlens_open_web_v1` remains `PLANNED_EXTERNAL_COLLECTION` until its claims, labels, and blind holdout are frozen.
+`fever_v1`, `feverous`, and `averitec` are `PROTOCOL_FROZEN_DATA_HASH_PENDING` until the exact release is materialized and hashed. For AVeriTeC, the claim JSON is not sufficient by itself: the provided evidence collection (or an equivalent frozen snapshot) must also be versioned and hashed before an end-to-end open-web result is published. `truthlens_open_web_v1` remains `PLANNED_EXTERNAL_COLLECTION` until its claims, labels, and blind holdout are frozen.
 
 ## Phase 2 exit gate
 
