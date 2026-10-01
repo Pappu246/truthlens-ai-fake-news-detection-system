@@ -163,6 +163,6 @@ TruthLens earns a defensible world-leading/SOTA statement only when Phase 7 supp
 
 Phase 1 is complete on the Gate-14 release line. Research Intelligence workflow #148 / 36751159663 completed successfully and published a discovery-only artifact with no paper/model errors, reachable declared benchmark sources, and explicit no-auto-merge/no-auto-deploy controls.
 
-## Phase 2 kickoff record (2026-10-01)
+## Phase 2 materialization closeout record (2026-10-02)
 
-Phase 2 is active on research branch `research/phase2-multibenchmark-harness`. The protocol manifest freezes five lanes: SciFact, FEVER v1, FEVEROUS, AVeriTeC, and a future TruthLens Open-Web v1 set. The deterministic validator and regression test are included. Only SciFact currently has verified input hashes; the other lanes remain explicitly hash-pending until materialized.
+FEVER v1 and FEVEROUS are now frozen with exact input hashes from successful Phase 2 materialization workflow #10 and retained artifact digest `sha256:0a98f1cf50a3ed54c17817d3a542139ea009c3cb04c752c606ec864658a0ae60`. AVeriTeC train/dev claim inputs are frozen, and its official dev knowledge-store source is pinned to revision `26238ae` with SHA-256 `021e258cd6fb5fe6d627a4667d663e95c184c966939c15124df9206142fc2212`; a dedicated materialization gate now verifies that 11.5 GB asset before end-to-end AVeriTeC scoring. The SciFact end-to-end workflow is still running on the research branch. TruthLens Open-Web v1 remains intentionally uncollected because it requires a human-labelled blind holdout.
