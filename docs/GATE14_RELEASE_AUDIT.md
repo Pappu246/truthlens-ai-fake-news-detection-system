@@ -49,25 +49,34 @@ The existing external SciFact harness remains separately labeled as:
 None of those outputs alter the production model or are merged into the production
 article/claim accuracy metric.
 
-## Current verification record (2026-09-30)
+## Current verification record (2026-10-01)
 
-For commit `bd63808ea259efc2170235e54185edec018d773a`, the verified GitHub Actions runs are:
+PR #31 was merged into `main` after the final research head passed the required gates.
+
+- Final research head: `a6563c17e6897c91a1fd8a8c483df2ff5e07c824`
+- Merge commit: `b1ac8df667b6a28d7e57d3c54dd25d1e9c90aace`
+- Production artifact SHA: `2fc56cb65b66f842cb6ef80104ec074c47173f7c`
+- Vercel production deployment: `dpl_JB8jFxR4gVbdk3mWy8nDQxZjhG3v`, target `production`, state **READY**
+
+Final Gate-14 verification runs for the research head:
 
 | Workflow | Run | State |
 |---|---:|---|
-| CI | 36747200211 | completed / success |
-| Phase 2 Real ISOT Data Validation | 36747200145 | completed / success |
-| Phase 7 Real ISOT Benchmark | 36747200203 | completed / success |
-| V2 Model Quality External Evaluation | 36747200215 | completed / success |
-| V2 SciFact End-to-End Benchmark | 36747200196 | **in progress** |
+| CI | 36751159592 | completed / success |
+| Phase 2 ISOT Pipeline Tests | 36751159383 | completed / success |
+| Phase 2 Real ISOT Data Validation | 36751159406 | completed / success |
+| Phase 7 Real ISOT Benchmark | 36751159434 | completed / success |
+| V2 Model Quality External Evaluation | 36751159391 | completed / success |
+| V2 SciFact End-to-End Benchmark | 36751159351 | completed / success |
+| TruthLens Research Intelligence | 36751159663 | completed / success |
 
-The completed production/research gates are green at the verified commit `bd63808ea259efc2170235e54185edec018d773a`, but the SciFact end-to-end benchmark is still running. The newer documentation-only PR head currently has a Vercel `build-rate-limit` check failure and therefore does not yet have a verified READY deployment. The last independently verified READY deployment is for `bd63808...`. These are release-gate conditions, not evidence of an application-code regression.
+The successful SciFact artifact records 300 evaluated claims over 5,183 corpus documents, with open candidate recall **60.33%**, gold-evidence Recall@5 **73.40%**, directional accuracy **34.33%**, directional macro-F1 **0.318131**, and a production-policy abstention rate of **75%**. The benchmark is research-only and does not change production thresholds, source rules, abstention policy, or model weights.
 
-The current CI run reports 90 contract tests, 61 evidence tests, 24 Gate-14 tests, 20 SSRF tests, 72 V2 pipeline tests, 9 V2 route tests, and 19 V2 model-quality tests with zero failures. The frozen Gate-14 relation benchmark is 30 fixtures with 83.333% accuracy, 82.222% macro-F1, 66.667% coverage, and 33.333% abstention; five of ten CONTRADICT fixtures were classified as SUPPORT, which remains a documented relation-classification weakness.
+The Phase 7 ISOT artifact confirms the benchmark did not modify the production artifact. The calibrated Linear SVM raw temporal test F1 is **0.998107**; the standard test F1 is **0.994048**. These measurements retain the documented ISOT dataset-construction limitations, including fully disjoint subject values and strong Reuters-dateline asymmetry.
 
-The ISOT data-validation workflow measured 44,898 rows. Near-duplicate groups do not straddle train/validation/test, but subject values are fully disjoint between REAL and FAKE labels, 18,618 rows match the strict Reuters dateline pattern (86.93% of REAL rows and 0% of FAKE rows), 5,795 rows are exact-duplicate extras, and two near-duplicate groups cross labels. These are dataset-construction limitations and must accompany any interpretation of the very high Phase-7 benchmark scores.
+The Research Intelligence artifact is discovery-only, contains no paper/model errors, verifies the declared FEVER/SciFact/FEVEROUS benchmark sources as reachable, and explicitly disables automatic production modification, merge, and deployment.
 
-The canonical production model artifact `data/saved_model_artifacts.json` is blob-identical with `main` at SHA `2fc56cb65b66f842cb6ef80104ec074c47173f7c`. No research benchmark changed production model weights, thresholds, source rules, or abstention policy.
+External runtime probing of protected API routes still returns Vercel Authentication redirects in the connected environment; therefore no application-level API response is claimed from that probe. The public deployment itself is READY and the project currently has no grouped Vercel runtime errors in the last-hour check.
 
 ## Observability
 

@@ -11,7 +11,7 @@ TruthLens AI is a TypeScript/Node.js system for news-analysis assistance. It com
 
 ## Verified release snapshot
 
-The current production source of truth is `main` at commit [`009bc326`](https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/commit/009bc3261800d6bc75d3927bf4f23cb07e1bb943). The current Gate-14 research head is `gate14-evidence-source-verification` at `bd63808ea259efc2170235e54185edec018d773a` (PR #31, open draft). After the merge, the main CI and production-smoke gates completed successfully. The live Render production smoke verification recorded **55/55 checks passed** on 2026-09-29 UTC.
+The current production source of truth is `main` at merge commit [`b1ac8df`](https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/commit/b1ac8df667b6a28d7e57d3c54dd25d1e9c90aace), which merged Gate 14 PR #31 after all seven required research/CI workflows passed on head `a6563c17e6897c91a1fd8a8c483df2ff5e07c824`. The resulting Vercel production deployment is **READY** for the same merge commit. The canonical production model artifact remains unchanged at blob SHA `2fc56cb65b66f842cb6ef80104ec074c47173f7c`. The earlier Render smoke verification remains a historical 55/55 record from 2026-09-29 UTC.
 
 Article and claim measurements below are separate benchmarks. They must not be added, averaged, or presented as one overall accuracy.
 
@@ -91,7 +91,7 @@ claim -> query extraction -> provider retrieval -> relevance analysis
 
 Retrieval failure and no hits are visible states. They are never converted into a fabricated citation or a forced true/false verdict. Every returned citation is tied to a URL actually supplied by a provider and includes provenance such as domain and retrieval timestamp. Retrieved text is marked `UNTRUSTED_DATA`; instruction-shaped content is neutralised before it enters an evidence record.
 
-The deterministic evidence suite passes **53/53** assertions, including prompt-injection defence, source provenance, no-fabrication behavior, support/contradiction/mixed aggregation, and retrieval-unavailable handling. See [docs/EVIDENCE_ENGINE.md](docs/EVIDENCE_ENGINE.md).
+The deterministic evidence suite passes **61/61** assertions, including prompt-injection defence, source provenance, no-fabrication behavior, support/contradiction/mixed aggregation, retrieval-unavailable handling, and Gate-14 provenance hardening. See [docs/EVIDENCE_ENGINE.md](docs/EVIDENCE_ENGINE.md).
 
 ## URL extraction
 
@@ -277,16 +277,16 @@ Research documentation:
 
 ### Current Gate-14 research audit snapshot (2026-09-30)
 
-The current Gate-14 branch preserves the production/research boundary. Verified CI run `36747200211` reports 90 contract tests, 61 evidence tests, 24 Gate-14 tests, 20 SSRF tests, 72 V2 pipeline tests, 9 V2 route tests, and 19 V2 model-quality tests with zero failures. The last independently verified READY Vercel deployment corresponds to commit `bd63808ea259efc2170235e54185edec018d773a`. The newer documentation-only PR head is currently blocked by a Vercel `build-rate-limit` check, so there is not yet a verified READY deployment for that head. External API probing on the READY preview is also subject to Vercel Authentication.
+Gate 14 is now merged into production on `main` at `b1ac8df667b6a28d7e57d3c54dd25d1e9c90aace`. The final research head `a6563c17e6897c91a1fd8a8c483df2ff5e07c824` passed CI, the SciFact end-to-end benchmark, Phase 2/7 ISOT gates, external model-quality evaluation, and Research Intelligence before merge. The resulting Vercel production deployment is READY. External API routes remain behind Vercel Authentication in the connected runtime probe, so their application-level responses are not claimed from that probe.
 
 The frozen evidence-relation benchmark contains 30 deterministic fixtures and reports 83.333% accuracy, 82.222% macro-F1, 66.667% coverage, and 33.333% abstention. It is an evidence-relation diagnostic, not production article accuracy; five of ten CONTRADICT fixtures were classified as SUPPORT.
 
 The real ISOT research benchmark uses 44,898 source rows with near-duplicate-group-aware splits and zero near-duplicate groups crossing train/validation/test. However, the dataset has fully disjoint subject values between REAL and FAKE labels, 18,618 strict Reuters dateline matches overall (86.93% of REAL rows and none of the FAKE rows), 5,795 exact-duplicate extra rows, and two cross-label near-duplicate groups. These are documented dataset-construction limitations and are why its very high research scores must not be generalized to real-world fake-news detection.
 
-The full SciFact end-to-end workflow `36747200196` is still running; until that workflow produces its final artifact and metrics, the external end-to-end research validation is incomplete. No production ML artifact change is implied by these research measurements.
+The final SciFact end-to-end workflow for Gate 14 is run `#220` / `36751159351` and completed successfully. It evaluated all 300 dev claims against 5,183 corpus documents: open candidate recall **60.33%**, gold-evidence Recall@5 **73.40%**, directional accuracy **34.33%**, directional macro-F1 **0.318131**; the separate production-policy view abstained on **75%** of claims with **25%** non-abstain coverage. Calibration is diagnostic only; no production confidence semantics changed. No production ML artifact change is implied by these research measurements.
 
 ### Research integrity
 
 Benchmark results are reported with frozen-input hashes, exact commit/workflow provenance, explicit abstention semantics, and documented limitations. Research-branch measurements are not production accuracy claims.
 
-Production source of truth: `main` at commit `009bc3261800d6bc75d3927bf4f23cb07e1bb943`. The Gate-14 research head is intentionally separate in PR #31 and is not yet production. Future model/research upgrades must use the staged research-branch → benchmark → regression → review → production-promotion process defined in `docs/V3_RESEARCH_MASTER_PLAN.md`. No benchmark result is promoted into a universal real-world accuracy claim.
+Production source of truth: `main` at merge commit `b1ac8df667b6a28d7e57d3c54dd25d1e9c90aace`. Future model/research upgrades continue to use the staged research-branch → benchmark → regression → review → production-promotion process defined in `docs/V3_RESEARCH_MASTER_PLAN.md`. No benchmark result is promoted into a universal real-world accuracy claim.
