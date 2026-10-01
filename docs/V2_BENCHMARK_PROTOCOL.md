@@ -2,12 +2,15 @@
 
 ## Completed external SciFact checkpoint
 
-The authoritative completed full-corpus SciFact result is recorded in `docs/V2_SCIFACT_E2E_RESULTS.md`. The latest completed benchmark before the current rerun is **Run #19** (300 SciFact dev claims / 5,183 corpus documents) with:
+The authoritative completed full-corpus SciFact result is recorded in `docs/V2_SCIFACT_E2E_RESULTS.md`. The frozen historical baseline is **Run #19**. The final Gate-14 current-head rerun is **Run #220 / workflow 36751159351** (300 dev claims / 5,183 corpus documents):
 
-- Directional accuracy: **0.370000**
-- Directional macro-F1: **0.341899**
-- Open candidate recall: **0.536667**
-- Gold-evidence Recall@5: **0.680851**
+- Directional accuracy: **0.343333**
+- Directional macro-F1: **0.318131**
+- Open candidate recall: **0.603333**
+- Gold-evidence Recall@5: **0.734043**
+- Production-policy abstention: **0.75**
+- Non-abstain coverage: **0.25**
+- Non-abstain accuracy: **0.28**
 
 These are research measurements only and do not alter production policy.
 
@@ -36,7 +39,7 @@ Current configuration:
 - Local NLI: `Xenova/nli-deberta-v3-xsmall`, q8@3fac2500
 - Local embedding: `Xenova/all-MiniLM-L6-v2`, q8@afdb6f1a
 
-The current-head end-to-end rerun is queued as SciFact workflow run **#215** against the frozen 300-claim / 5,183-document inputs. A preceding run **#208** is still recorded as in progress for the previous Gate-14 head. Neither result is reported until a complete artifact is produced.
+The Gate-14 current-head end-to-end rerun completed successfully as workflow run **#220** on commit `a6563c17e6897c91a1fd8a8c483df2ff5e07c824`. Its retained artifact digest is `sha256:7349a2c45115f59efdfc88f30856f81f9b5a24acc7a2f698952eaf3116c6f351`.
 
 ## Metrics
 
