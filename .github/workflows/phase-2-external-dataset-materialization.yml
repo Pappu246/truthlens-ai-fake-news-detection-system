@@ -3,7 +3,10 @@ name: Phase 2 External Dataset Materialization
 on:
   push:
     branches:
-      - 'research/phase2-multibenchmark-harness'
+      - 'research/phase2-multibenchmark-harness-v2'
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
