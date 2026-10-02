@@ -3,10 +3,10 @@ import {
   ClaimVerificationResult,
   ArticleVerificationResponse,
   EvidenceItem
-} from '../../src/types';
-import { extractClaims, extractPrimaryClaim, ClaimExtractionResult } from './claimExtractor';
-import { evidenceProvider } from './evidenceProvider';
-import { buildArticleVerification } from './assessmentEngine';
+} from '../../src/types.js';
+import { extractClaims, extractPrimaryClaim, ClaimExtractionResult } from './claimExtractor.js';
+import { evidenceProvider } from './evidenceProvider.js';
+import { buildArticleVerification } from './assessmentEngine.js';
 
 export interface SourceEvaluation {
   provided: boolean;
