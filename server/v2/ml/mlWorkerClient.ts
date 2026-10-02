@@ -23,7 +23,7 @@
 import { Worker } from 'worker_threads';
 import fs from 'fs';
 import path from 'path';
-import { ModelUnavailableError, getV2ModelDir, EMBEDDING_MODEL_MANIFEST, NLI_MODEL_MANIFEST } from './modelManifest';
+import { ModelUnavailableError, getV2ModelDir, EMBEDDING_MODEL_MANIFEST, NLI_MODEL_MANIFEST } from './modelManifest.js';
 
 const CTRL_INT32 = 8;
 const REQ_SAB_BYTES = 1 << 20; // 1 MiB request payloads (premise+hypothesis, corpus doc text)

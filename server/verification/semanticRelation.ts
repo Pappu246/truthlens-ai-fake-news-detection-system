@@ -12,9 +12,9 @@
  * - low-confidence / neutral NLI output never creates a directional verdict;
  * - adapter/network failures fall back to the deterministic relation.
  */
-import { ExtractedClaim, ClaimEvidenceRelation } from '../../src/types';
-import { NliAdapter } from '../v2/nli/nliAdapter';
-import { createConfiguredNliAdapter } from '../v2/nli/huggingFaceNliAdapter';
+import { ExtractedClaim, ClaimEvidenceRelation } from '../../src/types.js';
+import { NliAdapter } from '../v2/nli/nliAdapter.js';
+import { createConfiguredNliAdapter } from '../v2/nli/huggingFaceNliAdapter.js';
 
 export interface SemanticRelationResult {
   relation: ClaimEvidenceRelation;

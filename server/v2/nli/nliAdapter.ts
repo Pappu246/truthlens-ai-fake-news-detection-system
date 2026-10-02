@@ -6,8 +6,8 @@
  * deployments may call a remote/local pretrained model without duplicating
  * pipeline orchestration.
  */
-import { ExtractedClaim } from '../../../src/types';
-import { NliClassification } from '../types';
+import { ExtractedClaim } from '../../../src/types.js';
+import { NliClassification } from '../types.js';
 
 export interface NliAdapter {
   readonly modelName: string;

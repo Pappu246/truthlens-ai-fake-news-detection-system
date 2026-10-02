@@ -6,7 +6,7 @@
  * publisher/domain, publication date, retrieval timestamp, retrieval
  * method), NLI model/version metadata, and the full decision rule trace.
  */
-import { ExpandedQuerySet, ClassifiedEvidence, VerdictDecision, ProvenanceRecord, ProvenanceEvidenceRecord } from './types';
+import { ExpandedQuerySet, ClassifiedEvidence, VerdictDecision, ProvenanceRecord, ProvenanceEvidenceRecord } from './types.js';
 
 export const PIPELINE_VERSION = 'truthlens-v2-vertical-slice-0.1.0';
 

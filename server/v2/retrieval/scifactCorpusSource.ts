@@ -6,11 +6,11 @@
  * candidate pool to the normal V2 pipeline. This keeps retrieval open rather
  * than leaking the gold evidence documents into the candidate set.
  */
-import { ExtractedClaim } from '../../../src/types';
-import { CorpusSource } from './corpusSource';
-import { Bm25Index } from './bm25';
-import { RawDocument } from '../types';
-import { EmbeddingModel, cosineSimilarity } from './embeddings';
+import { ExtractedClaim } from '../../../src/types.js';
+import { CorpusSource } from './corpusSource.js';
+import { Bm25Index } from './bm25.js';
+import { RawDocument } from '../types.js';
+import { EmbeddingModel, cosineSimilarity } from './embeddings.js';
 
 export interface SciFactDocumentInput {
   doc_id: number;

@@ -17,10 +17,10 @@
  * This is tracked as the next recommended milestone in
  * docs/V2_KNOWN_LIMITATIONS.md.
  */
-import { ExtractedClaim } from '../../../src/types';
-import { checkNumericalConsistency, checkTemporalConsistency } from '../../verification/evidenceAnalyzer';
-import { NliAdapter } from './nliAdapter';
-import { NliClassification, NliLabel, NliScoreDistribution } from '../types';
+import { ExtractedClaim } from '../../../src/types.js';
+import { checkNumericalConsistency, checkTemporalConsistency } from '../../verification/evidenceAnalyzer.js';
+import { NliAdapter } from './nliAdapter.js';
+import { NliClassification, NliLabel, NliScoreDistribution } from '../types.js';
 
 const SUPPORT_CUES = [
   /\b(?:confirm(?:s|ed|ing)?|verif(?:y|ies|ied)|corroborat(?:e|es|ed|ing)|accurate|correct|consistent with|according to official (?:data|figures|records)|fact[- ]check(?:ed)?:?\s*true)\b/i

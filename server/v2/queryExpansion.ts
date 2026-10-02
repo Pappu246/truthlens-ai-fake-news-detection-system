@@ -11,8 +11,8 @@ import {
   generateSearchQueries,
   classifyClaimType,
   normalizeClaimText
-} from '../verification/claimExtractor';
-import { ExpandedQuerySet, ExtractedClaim } from './types';
+} from '../verification/claimExtractor.js';
+import { ExpandedQuerySet, ExtractedClaim } from './types.js';
 
 const SUPPORT_CUES = ['confirmed', 'official data', 'fact check true'];
 const CONTRADICTION_CUES = ['debunked', 'false claim', 'fact check false', 'denies'];

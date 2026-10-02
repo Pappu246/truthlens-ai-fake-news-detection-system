@@ -64,16 +64,16 @@
  * `confidence` is always `scores[label]` (schema invariants exercised by
  * scripts/v2ModelTests.ts).
  */
-import { ExtractedClaim } from '../../../src/types';
-import { NliAdapter } from './nliAdapter';
-import { NliClassification, NliLabel, NliScoreDistribution } from '../types';
-import { EmbeddingModel } from '../retrieval/embeddings';
-import { TransformerEmbeddingModel } from '../retrieval/transformerEmbeddingModel';
+import { ExtractedClaim } from '../../../src/types.js';
+import { NliAdapter } from './nliAdapter.js';
+import { NliClassification, NliLabel, NliScoreDistribution } from '../types.js';
+import { EmbeddingModel } from '../retrieval/embeddings.js';
+import { TransformerEmbeddingModel } from '../retrieval/transformerEmbeddingModel.js';
 import {
   NLI_MODEL_NAME,
   NLI_MODEL_VERSION
-} from '../ml/modelManifest';
-import { getMlWorkerClient, MlWorkerClient } from '../ml/mlWorkerClient';
+} from '../ml/modelManifest.js';
+import { getMlWorkerClient, MlWorkerClient } from '../ml/mlWorkerClient.js';
 
 export interface PretrainedNliOptions {
   /** Max combined premise+hypothesis tokens fed to the cross-encoder. */

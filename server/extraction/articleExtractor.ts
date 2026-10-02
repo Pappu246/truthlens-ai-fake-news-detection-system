@@ -1,5 +1,5 @@
 import * as cheerio from 'cheerio';
-import { ExtractedArticle } from '../../src/types';
+import { ExtractedArticle } from '../../src/types.js';
 
 export interface RawExtractionOptions {
   url: string;

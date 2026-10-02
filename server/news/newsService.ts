@@ -1,6 +1,6 @@
-import { NewsFeedResponse } from '../../src/types';
-import { FetchNewsOptions, NewsProvider } from './types';
-import { RSSNewsProvider } from './rssProvider';
+import { NewsFeedResponse } from '../../src/types.js';
+import { FetchNewsOptions, NewsProvider } from './types.js';
+import { RSSNewsProvider } from './rssProvider.js';
 
 interface CacheEntry {
   response: NewsFeedResponse;
