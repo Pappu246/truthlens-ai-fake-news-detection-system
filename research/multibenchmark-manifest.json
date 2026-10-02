@@ -114,7 +114,7 @@
     },
     {
       "id": "averitec",
-      "status": "PROTOCOL_FROZEN_EVIDENCE_MATERIALIZATION_PENDING",
+      "status": "FROZEN_AND_MATERIALIZED",
       "task": "real-world claim verification with evidence from the web",
       "labels": [
         "SUPPORTED",
@@ -140,13 +140,21 @@
       "source": "https://fever.ai/dataset/averitec.html",
       "evidence_collection": {
         "required": true,
-        "status": "REMOTE_HASH_PINNED_PENDING_CI_MATERIALIZATION",
+        "status": "MATERIALIZED_AND_HASH_VERIFIED",
         "source": "https://huggingface.co/chenxwh/AVeriTeC/resolve/26238ae/data_store/knowledge_store/dev_knowledge_store.zip",
         "pinned_revision": "26238ae",
         "sha256": "021e258cd6fb5fe6d627a4667d663e95c184c966939c15124df9206142fc2212",
         "approximate_size_gb": 11.5,
         "workflow": "Phase 2 AVeriTeC Evidence Store Materialization",
-        "note": "The official AVeriTeC repository documents the provided knowledge store as the reproducible alternative to live Google Search. The exact dev knowledge-store hash is pinned; CI must successfully download and hash the file before end-to-end scoring is reported."
+        "note": "Pinned dev knowledge store was downloaded by CI, SHA-256 verified against the frozen source, and a materialization manifest was uploaded. This gate is complete; end-to-end AVeriTeC scoring remains a separate required step.",
+        "materialization": {
+          "workflow": "Phase 2 AVeriTeC Evidence Store Materialization",
+          "workflow_run": 6,
+          "artifact_name": "truthlens-phase2-averitec-evidence-materialization",
+          "artifact_digest": "sha256:c5e1da712d42f264f10a637fe417bac0abfced0dd6873161a5a437db8c2e9480",
+          "verified_sha256": "021e258cd6fb5fe6d627a4667d663e95c184c966939c15124df9206142fc2212",
+          "verified_at": "2026-10-02T19:23:12Z"
+        }
       },
       "dataset_hashes": {
         "train_sha256": "ae5eda7c42ddf1695ef185a7ba1bc716928f5adf57103e4f78aae5f9afe00f9c",
