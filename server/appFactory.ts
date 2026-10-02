@@ -6,21 +6,21 @@ import fs from 'fs';
 // (includeVite && !isProduction). A static import would force Vercel's
 // serverless bundler to package all of Vite into the /api function,
 // exploding bundle size / cold starts and risking init failure.
-import { mlEngine } from './mlEngine';
-import { validateDataset, validateDatasetContent } from './dataValidation';
-import { verifyClaim, verifyArticleContent } from './verification/evidenceService';
-import { extractClaims, extractPrimaryClaim } from './verification/claimExtractor';
-import { evidenceProvider } from './verification/evidenceProvider';
-import { evidenceEngine } from './verification/evidenceEngine';
-import { claimModel, ClaimModelUnavailableError, ClaimSpeakerMetadata } from './claimModel';
-import { sqliteHistory } from './sqliteHistory';
-import { getExternalValidationReport } from './externalValidation';
-import { validateUrlSecurity, safeFetchHtml, normalizeUrl } from './security/urlValidator';
-import { extractArticleFromHtml } from './extraction/articleExtractor';
-import { liveNewsService } from './news/newsService';
-import { createRateLimiter } from './security/rateLimiter';
-import { verifyClaimV2 } from './v2/pipeline';
-import { PIPELINE_VERSION as V2_PIPELINE_VERSION } from './v2/provenance';
+import { mlEngine } from './mlEngine.js';
+import { validateDataset, validateDatasetContent } from './dataValidation.js';
+import { verifyClaim, verifyArticleContent } from './verification/evidenceService.js';
+import { extractClaims, extractPrimaryClaim } from './verification/claimExtractor.js';
+import { evidenceProvider } from './verification/evidenceProvider.js';
+import { evidenceEngine } from './verification/evidenceEngine.js';
+import { claimModel, ClaimModelUnavailableError, ClaimSpeakerMetadata } from './claimModel.js';
+import { sqliteHistory } from './sqliteHistory.js';
+import { getExternalValidationReport } from './externalValidation.js';
+import { validateUrlSecurity, safeFetchHtml, normalizeUrl } from './security/urlValidator.js';
+import { extractArticleFromHtml } from './extraction/articleExtractor.js';
+import { liveNewsService } from './news/newsService.js';
+import { createRateLimiter } from './security/rateLimiter.js';
+import { verifyClaimV2 } from './v2/pipeline.js';
+import { PIPELINE_VERSION as V2_PIPELINE_VERSION } from './v2/provenance.js';
 
 const DEMO_EXAMPLES = [
   {

@@ -4,7 +4,7 @@
  * Uses the Hugging Face Inference Providers feature-extraction task. It is
  * intentionally opt-in so deterministic CI remains offline.
  */
-import { EmbeddingModel } from './embeddings';
+import { EmbeddingModel } from './embeddings.js';
 
 const DEFAULT_MODEL = 'BAAI/bge-small-en-v1.5';
 const ENDPOINT_BASE = 'https://router.huggingface.co/hf-inference/models/';

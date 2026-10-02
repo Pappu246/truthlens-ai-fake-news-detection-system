@@ -1,7 +1,7 @@
 import * as cheerio from 'cheerio';
-import { NewsArticle, NewsFeedResponse } from '../../src/types';
-import { FetchNewsOptions, NewsFeedConfig, NewsProvider } from './types';
-import { normalizeUrl } from '../security/urlValidator';
+import { NewsArticle, NewsFeedResponse } from '../../src/types.js';
+import { FetchNewsOptions, NewsFeedConfig, NewsProvider } from './types.js';
+import { normalizeUrl } from '../security/urlValidator.js';
 
 // Legitimate, high-reputation public news RSS feeds
 /**

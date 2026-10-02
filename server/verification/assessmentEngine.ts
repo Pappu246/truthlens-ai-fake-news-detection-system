@@ -3,7 +3,7 @@ import {
   ClaimVerificationResult,
   ArticleVerificationResponse,
   FinalAssessment
-} from '../../src/types';
+} from '../../src/types.js';
 
 export interface FinalAssessmentInput {
   claims: ClaimVerificationResult[];

@@ -11,7 +11,7 @@
  * into a directional verdict merely because one side has a slightly stronger
  * source score.
  */
-import { ClassifiedEvidence, DecisionRuleTrace, PriorSignal, VerdictDecision, VerdictV2 } from '../types';
+import { ClassifiedEvidence, DecisionRuleTrace, PriorSignal, VerdictDecision, VerdictV2 } from '../types.js';
 
 export interface DecisionThresholds {
   minIndependentSourcesForVerdict: number;

@@ -3,8 +3,8 @@ import {
   EvidenceItem,
   ClaimVerificationResult,
   SourceType
-} from '../../src/types';
-import { safeFetchHtml } from '../security/urlValidator';
+} from '../../src/types.js';
+import { safeFetchHtml } from '../security/urlValidator.js';
 import * as cheerio from 'cheerio';
 import {
   determineSourceType,
@@ -13,8 +13,8 @@ import {
   checkTemporalConsistency,
   classifyEvidenceRelation,
   aggregateClaimAssessment
-} from './evidenceAnalyzer';
-import { refineEvidenceRelationSemantically } from './semanticRelation';
+} from './evidenceAnalyzer.js';
+import { refineEvidenceRelationSemantically } from './semanticRelation.js';
 
 export interface EvidenceSearchOptions {
   maxResultsPerClaim?: number;
