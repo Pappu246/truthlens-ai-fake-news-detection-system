@@ -14,6 +14,8 @@
 
 import { createExpressApp } from '../server/appFactory';
 
+import { createExpressApp } from '../server/appFactory';
+
 let app: any = null;
 
 async function getApp() {
