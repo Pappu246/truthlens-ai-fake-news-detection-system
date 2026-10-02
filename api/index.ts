@@ -12,7 +12,7 @@
  * All routes are defined in server/appFactory.ts — this file only adapts it for Vercel.
  */
 
-import { createExpressApp } from '../server/appFactory';
+import { createExpressApp } from '../server/appFactory.js';
 
 let app: any = null;
 
