@@ -1,86 +1,132 @@
 # TruthLens AI
 
-TruthLens AI is a TypeScript/Node.js system for news-analysis assistance. It combines an ISOT-trained article classifier, a separate LIAR claim model, URL article extraction, live RSS/Atom news, retrieval-based evidence verification, and SQLite-backed history.
+## AI-Based Fake News Detection and Article Verification System
 
-[![Live demo](https://img.shields.io/badge/demo-live-667085?style=flat-square)](https://truthlens-ai-dvpf.onrender.com)
-[![Node.js](https://img.shields.io/badge/node-%3E%3D20-667085?style=flat-square)](package.json)
-[![TypeScript](https://img.shields.io/badge/TypeScript-strict-667085?style=flat-square)](tsconfig.json)
+TruthLens AI is my B.Tech AI & ML TDP project. I built it to explore how machine learning, article analysis, and evidence-based verification can be brought together in one practical system.
+
+The basic idea is simple: **give TruthLens a news article or a claim, and the system analyses it, checks the available evidence, and explains what it found instead of blindly forcing a result.**
+
+## Project Details
+
+- **Student:** Pappu Yadav
+- **Program:** B.Tech – Artificial Intelligence & Machine Learning
+- **University:** Vivekananda Global University, Jaipur, Rajasthan
+- **Project:** TruthLens AI
+- **Project Type:** B.Tech TDP / Academic Project
+
+[![Live Demo](https://img.shields.io/badge/demo-live-667085?style=flat-square)](https://truthlens-ai-dvpf.onrender.com)
 [![CI](https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/actions/workflows/ci.yml/badge.svg)](https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/actions/workflows/ci.yml)
 
-> TruthLens is a decision-support and verification-support system. A model output, probability, evidence status, or citation is not proof that a real-world article or claim is true or false.
+---
 
-## Verified release snapshot
+## What does TruthLens do?
 
-The current production source of truth is `main` at merge commit [`b1ac8df`](https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/commit/b1ac8df667b6a28d7e57d3c54dd25d1e9c90aace), which merged Gate 14 PR #31 after all seven required research/CI workflows passed on head `a6563c17e6897c91a1fd8a8c483df2ff5e07c824`. The resulting Vercel production deployment is **READY** for the same merge commit. The canonical production model artifact remains unchanged at blob SHA `2fc56cb65b66f842cb6ef80104ec074c47173f7c`. The earlier Render smoke verification remains a historical 55/55 record from 2026-09-29 UTC.
+TruthLens is designed around a simple workflow:
 
-Article and claim measurements below are separate benchmarks. They must not be added, averaged, or presented as one overall accuracy.
+**Article / Claim → Analysis → Evidence → Result**
 
-## What is in production?
+It can:
 
-| Component | Data and task | Runtime endpoint | Verified benchmark/result |
-|---|---|---|---|
-| Article model | ISOT full-article `REAL` / `FAKE` classification | `/api/analyze` | Linear SVM, held-out accuracy **0.9959**, test `n=7,732` |
-| Claim model | LIAR binary `TRUE` / `FALSE` claim classification | `/api/claim/predict` | `text_only` accuracy **0.6271820449**, macro-F1 **0.6152909487**, test `n=802` |
-| Evidence engine | Live retrieval and support/contradiction analysis | `/api/evidence/verify` | Per-request signal; no stored accuracy number |
+- analyse article text;
+- analyse a news article directly from its URL;
+- extract important claims from an article;
+- check claims using retrieved evidence;
+- show source and provenance information;
+- work with live RSS/Atom news feeds;
+- return an abstention state when there is not enough reliable evidence;
+- keep analysis history in SQLite.
 
-The API exposes separate `article_model`, `claim_model`, and `benchmarks` blocks from `/api/models/metrics`. The models solve different tasks on different corpora.
+The system is not meant to replace a human fact-checker. Its purpose is to give the user a useful, traceable starting point for verification.
 
-> **Research stack note:** `server/v2/**` and `POST /api/v2/evidence/verify` are an additive, experimental TruthLens V2 evidence-grounded verification research stack — a first vertical slice, not a production component and not part of the verified release snapshot above. See [`docs/V2_ARCHITECTURE.md`](docs/V2_ARCHITECTURE.md), [`docs/V2_BENCHMARK_PROTOCOL.md`](docs/V2_BENCHMARK_PROTOCOL.md), and [`docs/V2_KNOWN_LIMITATIONS.md`](docs/V2_KNOWN_LIMITATIONS.md).
+---
 
-## Article model
+## How the system works
 
-The production article artifact is **Linear SVM (Calibrated), `v3.0.0-isot`**, using an 8,000-feature TF-IDF representation with 1–2 grams and sublinear term frequency. Probabilities use Platt sigmoid calibration.
-
-It was evaluated on the genuine held-out ISOT test split:
-
-| Metric | Value |
-|---|---:|
-| Dataset after cleaning | 38,656 samples |
-| Held-out test samples | 7,732 |
-| Accuracy | 0.9959 |
-| Precision, `FAKE (1)` | 0.9943 |
-| Recall, `FAKE (1)` | 0.9966 |
-| F1, `FAKE (1)` | 0.9954 |
-| 5-fold CV F1 mean ± std | 0.9955 ± 0.0008 |
-
-Held-out confusion matrix, laid out as `[[TN, FP], [FN, TP]]`, is `[[4219, 20], [12, 3481]]`.
-
-The model's default decision thresholds are `P(FAKE) >= 0.65` for `LIKELY FAKE` and `P(FAKE) <= 0.35` for `LIKELY REAL`. Inputs that fail context guards or fall in the uncertainty zone return `NEEDS MORE CONTEXT` rather than a forced binary result. Guarded responses withhold fake/real probabilities.
-
-These figures describe performance on the ISOT benchmark distribution. They are not guaranteed current-news or real-world fact-checking accuracy. For example, the separately reported out-of-domain evaluation on eligible binary LIAR claims is much lower: accuracy **0.4329**, macro-F1 **0.3265**, `n=790`. That is domain-shift evidence, not an article-model replacement benchmark.
-
-## Claim model
-
-The claim model is a separate artifact, **`1.1.0-liar-claim`**, trained on the LIAR dataset for binary claim veracity. `true` and `mostly-true` map to `TRUE`; `false` and `pants-fire` map to `FALSE`. The ordinal middle labels `half-true` and `barely-true` are excluded instead of being forced into either class.
-
-Split sizes are 6,471 train, 799 validation, and 802 test. The decision threshold is fixed at 0.50 and the test split is used only after selection and calibration are frozen.
-
-| Served variant | Test accuracy | Test macro-F1 | ROC-AUC | Brier | Test n |
-|---|---:|---:|---:|---:|---:|
-| `text_only` | 0.6271820449 | 0.6152909487 | 0.6797482838 | 0.2233191107 | 802 |
-| `text_meta` | 0.6583541147 | 0.6469730171 | 0.7184401220 | 0.2087078341 | 802 |
-
-- Without complete speaker metadata, the API serves `text_only` and explicitly reports `metadata_available: false`.
-- With complete speaker, party, and credit-history metadata, the API may serve `text_meta`.
-- Python/Node parity is verified on all 802 test rows in both variants: maximum probability drift `2.220e-16`, zero threshold label flips.
-- The LIAR result is a modest weak signal, not a guaranteed fact-checking verdict. It is not combined with the ISOT article score.
-
-### Metadata leakage finding
-
-LIAR's five speaker credit-history columns include the accompanying statement's own verdict contribution. Raw use produces a misleading diagnostic result: test accuracy `0.8004987531` and macro-F1 `0.7968141369`. The served metadata variant subtracts the current statement's contribution before feature construction; the measured test-accuracy gap is `0.1421`. The raw-credit variant is diagnostic-only and is never served.
-
-For the full protocol and leakage audit, see [docs/CLAIM_MODEL.md](docs/CLAIM_MODEL.md) and [docs/claim_model_report.json](docs/claim_model_report.json).
-
-## Evidence engine
-
-The evidence engine is an independent retrieval pipeline, not a third model accuracy number:
+At a high level, TruthLens has separate components for article classification, claim analysis, URL extraction, evidence retrieval, and live news.
 
 ```text
-claim -> query extraction -> provider retrieval -> relevance analysis
-      -> support/contradiction assessment -> aggregated verification signal
+User
+  |
+  v
+TruthLens Web Interface
+  |
+  +----> Article Analysis
+  |         |
+  |         +--> ISOT-based article model
+  |
+  +----> Claim Verification
+  |         |
+  |         +--> LIAR-based claim model
+  |         +--> Evidence retrieval
+  |         +--> Source / provenance checks
+  |
+  +----> URL Analysis
+  |         |
+  |         +--> Secure article extraction
+  |         +--> Analysis of extracted content
+  |
+  +----> Live News
+            |
+            +--> RSS / Atom feeds
 ```
 
-`POST /api/evidence/verify` can return:
+The production application runs with **React/Vite on the frontend and Node.js/Express on the backend**. Python is mainly used for the offline ML training and evaluation work.
+
+---
+
+## Main features
+
+### 1. Article Analysis
+
+A user can paste article text and receive a model-based analysis.
+
+The production article classifier is a **calibrated Linear SVM trained on the ISOT Fake News dataset**.
+
+Current held-out ISOT test result:
+
+| Metric | Result |
+|---|---:|
+| Test samples | 7,732 |
+| Accuracy | 99.59% |
+| Precision | 99.43% |
+| Recall | 99.66% |
+| F1-score | 99.54% |
+
+These numbers are **benchmark results on the ISOT test set**. They are not a guarantee that every current real-world article will be classified correctly.
+
+---
+
+### 2. Claim Verification
+
+TruthLens also has a separate claim model based on the **LIAR dataset**.
+
+The claim model is kept separate from the article model because they solve different problems and are trained on different data.
+
+| Variant | Accuracy | Macro F1 | Test samples |
+|---|---:|---:|---:|
+| Text only | 62.72% | 61.53% | 802 |
+| Text + available metadata | 65.84% | 64.70% | 802 |
+
+The metadata version is only used when the required metadata is actually available.
+
+I do **not** combine the article-model accuracy and claim-model accuracy into one overall percentage.
+
+---
+
+### 3. Evidence-Based Verification
+
+One of the main parts of TruthLens is the evidence layer.
+
+For a claim, the system can:
+
+1. build a search query;
+2. retrieve candidate evidence;
+3. analyse the relevance of the retrieved material;
+4. compare the evidence with the claim;
+5. return a verification state;
+6. preserve the source URL and provenance information.
+
+Possible evidence states include:
 
 - `SUPPORTED`
 - `CONTRADICTED`
@@ -89,204 +135,184 @@ claim -> query extraction -> provider retrieval -> relevance analysis
 - `NEEDS_MORE_CONTEXT`
 - `SEARCH_UNAVAILABLE`
 
-Retrieval failure and no hits are visible states. They are never converted into a fabricated citation or a forced true/false verdict. Every returned citation is tied to a URL actually supplied by a provider and includes provenance such as domain and retrieval timestamp. Retrieved text is marked `UNTRUSTED_DATA`; instruction-shaped content is neutralised before it enters an evidence record.
+A useful part of this design is that **the system can abstain**. When reliable evidence is not available, TruthLens does not invent a citation just to produce a confident-looking answer.
 
-The deterministic evidence suite passes **61/61** assertions, including prompt-injection defence, source provenance, no-fabrication behavior, support/contradiction/mixed aggregation, retrieval-unavailable handling, and Gate-14 provenance hardening. See [docs/EVIDENCE_ENGINE.md](docs/EVIDENCE_ENGINE.md).
+---
 
-## URL extraction
+## URL analysis and security
 
-The URL pipeline validates a URL, performs SSRF-safe fetching, validates redirects hop by hop, extracts article metadata/body text, and then analyzes the freshly extracted body. It does not reuse stale text from a previous request.
+TruthLens can accept a news article URL and extract the article before analysis.
 
-Security and reliability controls include:
+The URL pipeline includes:
 
-- permitted protocol and URL validation;
-- loopback, private, link-local, reserved-address, and DNS-rebinding checks;
-- manual redirect validation;
-- request timeout and response-size limits;
-- content-type checks and rate limiting;
-- precise handling of publisher `403`, `404`, `429`, timeout, and gateway outcomes;
-- removal of scripts, hidden content, HTML comments, and common boilerplate before extraction.
+- URL validation;
+- SSRF protection;
+- redirect validation;
+- loopback/private/link-local address checks;
+- response size and timeout limits;
+- content-type validation;
+- handling for common publisher errors such as 403, 404 and 429;
+- removal of scripts and common page boilerplate before extraction.
 
-Relevant routes are `POST /api/article/extract` and `POST /api/analyze-url`. A successful extraction carries extraction status, warnings, word count, provenance, and a content-source label. A failed extraction does not claim that a full article was extracted.
+This means an article URL is treated as untrusted external input rather than as trusted content.
 
-## Live News and `content_source`
+---
 
-`GET /api/news/latest` reads configured RSS/Atom feeds, deduplicates items, and labels each item at the server before returning it. The server label is the source of truth for every API consumer, not only the browser.
+## Live News
 
-| Label | Meaning |
-|---|---|
-| `RSS_SUMMARY_ONLY` | Feed supplied a substantive description/summary of at least 40 words; this is not a full article body. |
-| `HEADLINE_ONLY` | Description is empty or below 40 words; the item is not presented as an article body. |
-| `FULL_ARTICLE_EXTRACTED` | Reserved for the article extraction path after actual article content has been fetched and extracted; the RSS/Atom provider never emits it. |
-| `EXTRACTION_BLOCKED` | Publisher blocked live article extraction; the UI may fall back to a clearly labelled RSS summary or withhold analysis. |
+TruthLens can read configured RSS/Atom feeds and label the received content before returning it to the frontend.
 
-Each feed item also exposes `is_headline_only` and the feed-body `word_count`. Both RSS `<item>` and Atom `<entry>` paths use the same 40-word boundary. The frontend prefers the server-provided label and retains the same rule only as a compatibility fallback for older payloads.
+Examples of content labels include:
 
-Headline-only content is guarded as `NEEDS_MORE_CONTEXT`; the application does not force a prediction from a headline.
+- `RSS_SUMMARY_ONLY`
+- `HEADLINE_ONLY`
+- `FULL_ARTICLE_EXTRACTED`
+- `EXTRACTION_BLOCKED`
 
-## API surface
+Headline-only content is not treated as if it were a full article. The application can return `NEEDS_MORE_CONTEXT` when there is not enough information to justify a prediction.
+
+---
+
+## Production API
+
+Some of the main API routes are:
 
 | Route | Purpose |
 |---|---|
-| `GET /api/health` | Service, article-model, claim-model, and evidence-engine readiness |
-| `GET /api/models/metrics` | Separate article, claim, benchmark, and separation metadata |
-| `GET /api/model/diagnostics` | Loaded artifact and runtime diagnostics |
-| `POST /api/analyze` | Analyze supplied article text |
-| `POST /api/analyze-url` | Securely extract and analyze a URL |
-| `POST /api/article/extract` | Secure article extraction without classification |
-| `GET /api/news/latest` | Live RSS/Atom news with server-side content labels |
-| `GET /api/claim/metrics` | Claim-model metrics and protocol |
-| `POST /api/claim/predict` | LIAR claim prediction with explicit variant metadata |
-| `POST /api/evidence/verify` | Retrieval-backed evidence verification |
+| `GET /api/health` | Service and model health |
+| `GET /api/models/metrics` | Model metrics and runtime information |
+| `POST /api/analyze` | Analyse article text |
+| `POST /api/analyze-url` | Extract and analyse an article URL |
+| `POST /api/article/extract` | Extract article content |
+| `GET /api/news/latest` | Live RSS/Atom news |
+| `GET /api/claim/metrics` | Claim model metrics |
+| `POST /api/claim/predict` | Predict a claim |
+| `POST /api/evidence/verify` | Verify a claim using retrieved evidence |
 
-## Architecture
+---
 
-TruthLens is deployed as one Node/Express service. The browser calls same-origin `/api/*` routes; the Python code is an offline training/evaluation pipeline and is not the production API.
+## Current project status
 
-```mermaid
-flowchart LR
-    F[React / Vite frontend] --> S[Node / Express server]
-    S --> A[ISOT article model]
-    S --> C[LIAR claim model]
-    S --> X[SSRF-safe URL extractor]
-    S --> N[RSS / Atom Live News]
-    S --> E[Evidence engine]
-    S --> H[(SQLite history)]
-    X --> W[Publisher URL]
-    N --> R[Public feeds]
-    E --> P[Evidence providers]
+The production code is currently kept stable for the project demonstration.
+
+Latest verified main branch:
+
+`a22e9578503150e94afdc022c040813e4850b1d3`
+
+Current production verification includes:
+
+- **GitHub CI:** passed
+- **Production smoke test:** **53/53 passed**
+- **Vercel production:** READY
+- **Health endpoint:** 200
+- **Model metrics:** 200
+- **Claim metrics:** 200
+- **Live news endpoint:** 200
+- **Production model artifact:** loads successfully
+
+The production article model and its artifact were not changed as part of the recent deployment/runtime fixes.
+
+---
+
+## Testing
+
+The project includes automated tests for the major parts of the system, including:
+
+- API contracts;
+- article verdict behaviour;
+- claim model behaviour;
+- Python/Node model parity;
+- evidence verification;
+- model artifact loading;
+- SSRF protection;
+- V2 pipeline and route behaviour;
+- deployment/runtime checks.
+
+The latest production smoke run completed with:
+
+**53 passed, 0 failed**
+
+---
+
+## Project structure
+
+```text
+src/                         Frontend (React / Vite)
+server.ts                   Node / Express entry point
+server/                     Production API and services
+backend/                    Offline ML / research pipeline
+data/                       Datasets and model artifacts
+docs/                       Project and research documentation
+scripts/                    Tests, evaluation and verification scripts
+render.yaml                 Render deployment configuration
 ```
 
-Important production code:
+---
 
-- `server/mlEngine.ts` — article artifact loading, guards, calibrated probabilities, and verdict contract.
-- `server/claimModel.ts` — dedicated LIAR artifact and metadata-aware scoring.
-- `server/extraction/articleExtractor.ts` — article-body and metadata extraction.
-- `server/security/urlValidator.ts` — URL validation, SSRF protection, safe fetching, and redirect checks.
-- `server/news/rssProvider.ts` — RSS/Atom parsing and server-side content-source labeling.
-- `server/verification/` — claim extraction, retrieval, evidence sanitisation, relevance, and stance.
-- `server/sqliteHistory.ts` — analysis history.
-
-## Getting started
+## Running the project locally
 
 ### Requirements
 
-- Node.js 20 or newer.
-- Python 3 only for the offline training/research pipeline.
-- `GEMINI_API_KEY` is optional and must be supplied through the environment when a configured verification integration needs it.
+- Node.js 20 or newer
+- Python 3 for the offline ML/research pipeline
 
-### Install and run
+### Install
 
-```bash
-npm ci
-npm run dev
-```
+`npm ci`
 
-The local service uses port 3000 unless `PORT` is set. For a production-style local build:
+### Start in development
 
-```bash
-npm run build
-npm start
-```
+`npm run dev`
 
-Do not commit API keys or other credentials.
+### Production-style local build
 
-### Environment variables
+`npm run build`
+`npm start`
 
-| Variable | Required | Purpose |
-|---|---|---|
-| `PORT` | No | HTTP port; defaults to 3000 locally. |
-| `NODE_ENV` | Deployment setting | Render sets this to `production`. |
-| `GEMINI_API_KEY` | Optional | Optional configured verification integration. |
-| `NEWS_RSS_FEEDS` | Optional | JSON array or comma-separated feed URLs for controlled feed configuration. |
+Do not commit API keys or other credentials to the repository.
 
-## Testing and verification
+---
 
-```bash
-npm run lint
-npm run build
-npm run test:all
-```
+## Important limitations
 
-Verified on current `main`:
+TruthLens is a machine-learning and verification-support system, so its outputs should be interpreted with the available evidence.
 
-| Command | Result |
-|---|---|
-| `npm run test:contracts` | **90 passed, 0 failed** |
-| `npm run test:vercel-sim` | Pass |
-| `npm run test:verdicts` | **26 assertions passed** |
-| `npm run test:claim` | **79 passed, 0 failed** |
-| `npm run test:claim-parity` | **802/802** rows in each of two variants; zero flips |
-| `npm run test:evidence` | **61 passed, 0 failed** |
-| `npm run test:artifacts` | **12 passed, 0 failed** |
-| `npm run test:ssrf` | **20 passed, 0 failed** |
-| `npm run test:production -- <url>` | Production smoke script; post-merge GitHub Actions result is **55/55** |
+The main limitations are:
 
-The sandbox could not directly reach the Render deployment, so the POST/live production checks were executed by [GitHub Actions](https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/actions/runs/36241411149). Local tests use deterministic seams for network-dependent evidence and extraction cases.
+1. The article model is benchmarked on ISOT and may not generalise perfectly to current news, satire, Hindi/Hinglish content, or completely different domains.
+2. The LIAR claim model is a separate and comparatively weaker signal.
+3. Evidence availability depends on external sources and network access.
+4. A supported claim is evidence-based corroboration, not a mathematical proof of truth.
+5. When evidence is insufficient, the system is designed to say so instead of making up a source.
 
-## Deployment
+---
 
-`render.yaml` defines the single Node web service:
+## Why I built TruthLens
 
-- build: `npm install && npm run build`
-- start: `npm start`
-- `NODE_ENV=production`
-- optional secret `GEMINI_API_KEY`
+The goal of this project was not just to train a classifier and display **FAKE / REAL**.
 
-The deployed demo is [truthlens-ai-dvpf.onrender.com](https://truthlens-ai-dvpf.onrender.com).
+I wanted to build something closer to a practical verification workflow where a user can:
 
-## Limitations
+**submit content → analyse it → inspect the evidence → see the source → understand the limitation**
 
-1. The article benchmark is measured on ISOT and may not generalize to current news, satire, Hindi/Hinglish text, or other domains.
-2. The LIAR claim model is a weak-signal political-claim classifier. Its result is not guaranteed fact-checking accuracy, and the LIAR benchmark must not be combined with the ISOT score.
-3. `text_meta` is metadata-conditioned. The raw credit-history diagnostic is not served because it contains label leakage.
-4. Evidence relation is inferred from retrieved headlines/snippets, not full-article entailment. `SUPPORTED` is corroboration, not proof.
-5. RSS summaries are not full article bodies. Headline-only items are withheld as `NEEDS_MORE_CONTEXT`.
-6. Live retrieval depends on outbound network access; unavailable retrieval is reported explicitly.
-7. Dependency advisory status is environment- and lockfile-dependent; re-run `npm audit` after dependency changes rather than relying on a historical audit snapshot.
+That is the direction I followed while developing TruthLens AI.
 
-## Repository layout
+---
 
-```text
-src/                         React/Vite frontend
-server.ts                   Node/Express entry point
-server/                     Production services and API implementation
-backend/                    Offline Python ML/research pipeline
-data/                       Datasets and runtime model artifacts
-docs/                       Architecture, benchmark, evidence, and release reports
-scripts/                    Training, parity, regression, and smoke checks
-render.yaml                 Render deployment definition
-```
+## Documentation
 
-See [docs/FINAL_REPORT.md](docs/FINAL_REPORT.md) for the complete final release audit, including PR #23 promotion, exact benchmark values, security results, deployment verification, and known limitations.
+More detailed technical material is available in the `docs/` directory, including:
 
-## TruthLens V2 Research
+- architecture documentation;
+- evidence-engine documentation;
+- claim-model documentation;
+- benchmark and evaluation reports;
+- V2 research documentation;
+- security and threat-model notes.
 
-`main` now contains the verified V2 evidence-grounded verification pipeline. The experimental `/api/v2/evidence/verify` route is additive to the existing production API surface. Its research benchmark results remain separate from the established article and claim production metrics.
+---
 
-`claim -> query expansion -> hybrid retrieval -> reranking -> pretrained NLI -> aggregation/abstention -> provenance`
-
-Research documentation:
-- [V2 Architecture](docs/V2_ARCHITECTURE.md)
-- [V2 Benchmark Protocol](docs/V2_BENCHMARK_PROTOCOL.md)
-- [V2 Model Card](docs/V2_MODEL_CARD.md)
-- [V2 Reproducibility Protocol](docs/V2_REPRODUCIBILITY.md)
-- [V2 Threat Model](docs/V2_THREAT_MODEL.md)
-- [V2 Evaluation Matrix](docs/V2_EVALUATION_MATRIX.md)
-- [V2 Known Limitations](docs/V2_KNOWN_LIMITATIONS.md)
-
-### Current Gate-14 research audit snapshot (2026-09-30)
-
-Gate 14 is now merged into production on `main` at `b1ac8df667b6a28d7e57d3c54dd25d1e9c90aace`. The final research head `a6563c17e6897c91a1fd8a8c483df2ff5e07c824` passed CI, the SciFact end-to-end benchmark, Phase 2/7 ISOT gates, external model-quality evaluation, and Research Intelligence before merge. The resulting Vercel production deployment is READY. External API routes remain behind Vercel Authentication in the connected runtime probe, so their application-level responses are not claimed from that probe.
-
-The frozen evidence-relation benchmark contains 30 deterministic fixtures and reports 83.333% accuracy, 82.222% macro-F1, 66.667% coverage, and 33.333% abstention. It is an evidence-relation diagnostic, not production article accuracy; five of ten CONTRADICT fixtures were classified as SUPPORT.
-
-The real ISOT research benchmark uses 44,898 source rows with near-duplicate-group-aware splits and zero near-duplicate groups crossing train/validation/test. However, the dataset has fully disjoint subject values between REAL and FAKE labels, 18,618 strict Reuters dateline matches overall (86.93% of REAL rows and none of the FAKE rows), 5,795 exact-duplicate extra rows, and two cross-label near-duplicate groups. These are documented dataset-construction limitations and are why its very high research scores must not be generalized to real-world fake-news detection.
-
-The final SciFact end-to-end workflow for Gate 14 is run `#220` / `36751159351` and completed successfully. It evaluated all 300 dev claims against 5,183 corpus documents: open candidate recall **60.33%**, gold-evidence Recall@5 **73.40%**, directional accuracy **34.33%**, directional macro-F1 **0.318131**; the separate production-policy view abstained on **75%** of claims with **25%** non-abstain coverage. Calibration is diagnostic only; no production confidence semantics changed. No production ML artifact change is implied by these research measurements.
-
-### Research integrity
-
-Benchmark results are reported with frozen-input hashes, exact commit/workflow provenance, explicit abstention semantics, and documented limitations. Research-branch measurements are not production accuracy claims.
-
-Production source of truth: `main` at merge commit `b1ac8df667b6a28d7e57d3c54dd25d1e9c90aace`. Future model/research upgrades continue to use the staged research-branch → benchmark → regression → review → production-promotion process defined in `docs/V3_RESEARCH_MASTER_PLAN.md`. No benchmark result is promoted into a universal real-world accuracy claim.
+**TruthLens AI — B.Tech TDP Project**  
+**Developed by Pappu Yadav**  
+**B.Tech Artificial Intelligence & Machine Learning**  
+**Vivekananda Global University, Jaipur**
