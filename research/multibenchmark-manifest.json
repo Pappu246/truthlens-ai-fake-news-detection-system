@@ -45,7 +45,7 @@
     },
     {
       "id": "fever_v1",
-      "status": "PROTOCOL_FROZEN_DATA_HASH_PENDING",
+      "status": "FROZEN_AND_MATERIALIZED",
       "task": "Wikipedia claim verification",
       "labels": [
         "SUPPORTS",
@@ -66,11 +66,21 @@
         "matching Wikipedia evidence corpus/version",
         "official scorer"
       ],
-      "source": "https://fever.ai/dataset/fever.html"
+      "source": "https://fever.ai/dataset/fever.html",
+      "dataset_hashes": {
+        "train_sha256": "eba7e8f87076753f8494718b9a857827af7bf73e76c9e4b75420207d26e588b6",
+        "dev_sha256": "e89865bfe1b4dd054e03dd57d7241a6fde24862905f31117cf0cd719f7c78df7",
+        "wikipedia_zip_sha256": "4b06d95da6adf7fe02d2796176c670dacccb21348da89cba4c50676ab99665f2"
+      },
+      "materialization": {
+        "workflow": "Phase 2 External Dataset Materialization",
+        "workflow_run": 10,
+        "artifact_digest": "sha256:0a98f1cf50a3ed54c17817d3a542139ea009c3cb04c752c606ec864658a0ae60"
+      }
     },
     {
       "id": "feverous",
-      "status": "PROTOCOL_FROZEN_DATA_HASH_PENDING",
+      "status": "FROZEN_AND_MATERIALIZED",
       "task": "verification over unstructured and structured Wikipedia information",
       "labels": [
         "SUPPORTS",
@@ -90,11 +100,21 @@
         "Wikipedia text and tables",
         "official evaluator"
       ],
-      "source": "https://fever.ai/dataset/feverous.html"
+      "source": "https://fever.ai/dataset/feverous.html",
+      "dataset_hashes": {
+        "train_sha256": "0c29ccba41e27c5b988ca5132085e8d67c7921f265707bea170bfbde12bceee7",
+        "dev_sha256": "1ac8cfd964d4dcedc5de3375850fe3f93d39b89a73a475734bde864da1701f8f",
+        "wikipedia_db_zip_sha256": "e25e034d9848c75ab3311a7a7ad8e80e769240b5a36b055da475f20071314881"
+      },
+      "materialization": {
+        "workflow": "Phase 2 External Dataset Materialization",
+        "workflow_run": 10,
+        "artifact_digest": "sha256:0a98f1cf50a3ed54c17817d3a542139ea009c3cb04c752c606ec864658a0ae60"
+      }
     },
     {
       "id": "averitec",
-      "status": "PROTOCOL_FROZEN_DATA_HASH_PENDING",
+      "status": "PROTOCOL_FROZEN_EVIDENCE_MATERIALIZATION_PENDING",
       "task": "real-world claim verification with evidence from the web",
       "labels": [
         "SUPPORTED",
@@ -120,8 +140,17 @@
       "source": "https://fever.ai/dataset/averitec.html",
       "evidence_collection": {
         "required": true,
-        "status": "NOT_MATERIALIZED",
-        "note": "The official provided evidence collection is an external large store; it must be frozen by exact snapshot/hash before end-to-end AVeriTeC scoring is reported."
+        "status": "REMOTE_HASH_PINNED_PENDING_CI_MATERIALIZATION",
+        "source": "https://huggingface.co/chenxwh/AVeriTeC/resolve/26238ae/data_store/knowledge_store/dev_knowledge_store.zip",
+        "pinned_revision": "26238ae",
+        "sha256": "021e258cd6fb5fe6d627a4667d663e95c184c966939c15124df9206142fc2212",
+        "approximate_size_gb": 11.5,
+        "workflow": "Phase 2 AVeriTeC Evidence Store Materialization",
+        "note": "The official AVeriTeC repository documents the provided knowledge store as the reproducible alternative to live Google Search. The exact dev knowledge-store hash is pinned; CI must successfully download and hash the file before end-to-end scoring is reported."
+      },
+      "dataset_hashes": {
+        "train_sha256": "ae5eda7c42ddf1695ef185a7ba1bc716928f5adf57103e4f78aae5f9afe00f9c",
+        "dev_sha256": "499793726b4a5406780928a3d9dedc48d6dd53de778f22437d129cacdb08e300"
       }
     },
     {
