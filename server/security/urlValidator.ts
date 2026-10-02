@@ -280,9 +280,12 @@ export async function safeFetchHtml(
   const timeoutMs = options.timeoutMs ?? 12000;
   const maxBytes = options.maxBytes ?? 2.5 * 1024 * 1024; // 2.5 MB maximum
   const maxRedirects = options.maxRedirects ?? 5;
+  // Use a normal browser UA by default. Some publishers reject generic bot UAs
+  // even when the page is publicly accessible. This does not bypass authentication
+  // or robots/paywall controls; it only makes the request look like a normal page load.
   const userAgent =
     options.userAgent ??
-    'TruthLens-Bot/1.0 (+https://truthlens.ai/bot; News Article Risk Extractor)';
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36';
 
   let currentUrl = targetUrl;
   let redirectsFollowed = 0;
@@ -303,8 +306,14 @@ export async function safeFetchHtml(
         method: 'GET',
         headers: {
           'User-Agent': userAgent,
-          Accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.1',
-          'Accept-Language': 'en-US,en;q=0.9'
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Cache-Control': 'no-cache',
+          Pragma: 'no-cache',
+          'Upgrade-Insecure-Requests': '1',
+          'Sec-Fetch-Dest': 'document',
+          'Sec-Fetch-Mode': 'navigate',
+          'Sec-Fetch-Site': 'none'
         },
         redirect: 'manual', // Never let node auto-follow without validation
         signal: controller.signal
