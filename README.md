@@ -1,318 +1,428 @@
+
+<div align="center">
+
 # TruthLens AI
 
-## AI-Based Fake News Detection and Article Verification System
+### AI-Based Fake News Detection & Article Verification System
 
-TruthLens AI is my B.Tech AI & ML TDP project. I built it to explore how machine learning, article analysis, and evidence-based verification can be brought together in one practical system.
+**B.Tech Artificial Intelligence & Machine Learning — TDP Project**  
+**Pappu Yadav • Vivekananda Global University, Jaipur**
 
-The basic idea is simple: **give TruthLens a news article or a claim, and the system analyses it, checks the available evidence, and explains what it found instead of blindly forcing a result.**
+<p>
+  <a href="https://truthlens-ai-dvpf.onrender.com"><img src="https://img.shields.io/badge/Live%20Demo-TruthLens%20AI-0f172a?style=for-the-badge" alt="Live Demo"></a>
+  <a href="https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/actions"><img src="https://img.shields.io/badge/CI-passing-16a34a?style=for-the-badge" alt="CI"></a>
+  <a href="https://github.com/Pappu246/truthlens-ai-fake-news-detection-system"><img src="https://img.shields.io/badge/Type-B.Tech%20TDP-2563eb?style=for-the-badge" alt="B.Tech TDP"></a>
+  <a href="https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/blob/main/LICENSE"><img src="https://img.shields.io/badge/Status-Active-334155?style=for-the-badge" alt="Project status"></a>
+</p>
 
-## Project Details
+<p>
+  <strong>Article → Claim → Evidence → Result</strong><br/>
+  A practical verification workflow built to analyse news, retrieve supporting context, preserve source provenance, and abstain when the available evidence is not enough.
+</p>
 
-- **Student:** Pappu Yadav
-- **Program:** B.Tech – Artificial Intelligence & Machine Learning
-- **University:** Vivekananda Global University, Jaipur, Rajasthan
-- **Project:** TruthLens AI
-- **Project Type:** B.Tech TDP / Academic Project
-
-[![Live Demo](https://img.shields.io/badge/demo-live-667085?style=flat-square)](https://truthlens-ai-dvpf.onrender.com)
-[![CI](https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/actions/workflows/ci.yml/badge.svg)](https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/actions/workflows/ci.yml)
-
----
-
-## What does TruthLens do?
-
-TruthLens is designed around a simple workflow:
-
-**Article / Claim → Analysis → Evidence → Result**
-
-It can:
-
-- analyse article text;
-- analyse a news article directly from its URL;
-- extract important claims from an article;
-- check claims using retrieved evidence;
-- show source and provenance information;
-- work with live RSS/Atom news feeds;
-- return an abstention state when there is not enough reliable evidence;
-- keep analysis history in SQLite.
-
-The system is not meant to replace a human fact-checker. Its purpose is to give the user a useful, traceable starting point for verification.
+</div>
 
 ---
 
-## How the system works
+## Project at a glance
 
-At a high level, TruthLens has separate components for article classification, claim analysis, URL extraction, evidence retrieval, and live news.
+| | |
+|---|---|
+| **Student** | Pappu Yadav |
+| **Program** | B.Tech — Artificial Intelligence & Machine Learning |
+| **University** | Vivekananda Global University, Jaipur |
+| **Project type** | B.Tech TDP / Academic Project |
+| **Frontend** | React + Vite |
+| **Backend** | Node.js + Express |
+| **Production ML** | Calibrated Linear SVM |
+| **Article benchmark** | ISOT |
+| **Claim benchmark** | LIAR |
+| **Evidence layer** | Retrieval + provenance + abstention |
+| **Deployment** | Render + Vercel |
 
-```text
-User
-  |
-  v
-TruthLens Web Interface
-  |
-  +----> Article Analysis
-  |         |
-  |         +--> ISOT-based article model
-  |
-  +----> Claim Verification
-  |         |
-  |         +--> LIAR-based claim model
-  |         +--> Evidence retrieval
-  |         +--> Source / provenance checks
-  |
-  +----> URL Analysis
-  |         |
-  |         +--> Secure article extraction
-  |         +--> Analysis of extracted content
-  |
-  +----> Live News
-            |
-            +--> RSS / Atom feeds
+> **Important:** TruthLens is a verification-support system. A model prediction or evidence status is not proof of a real-world claim.
+
+---
+
+## What TruthLens actually does
+
+TruthLens is not just a **FAKE / REAL** classifier.
+
+The project combines several parts into one application:
+
+- **Article analysis** using an ISOT-trained calibrated Linear SVM.
+- **Claim analysis** using a separate LIAR-based model.
+- **Article URL extraction** with SSRF-safe fetching and redirect validation.
+- **Evidence verification** with retrieval, source provenance, and explicit abstention.
+- **Live news** from RSS/Atom feeds with server-side content-source labels.
+- **History** backed by SQLite.
+
+The main design principle is simple:
+
+> **Do not force certainty when the available information is not sufficient.**
+
+---
+
+## System overview
+
+<img src="docs/assets/truthlens-overview.svg" alt="TruthLens AI system overview" width="100%"/>
+
+---
+
+## End-to-end workflow
+
+```mermaid
+flowchart LR
+    U[User] --> I{Input}
+    I --> T[Article Text]
+    I --> URL[Article URL]
+    I --> C[Claim]
+    I --> N[Live News]
+
+    URL --> S[SSRF-safe Fetch]
+    S --> X[Article Extraction]
+    X --> A[Article Analysis]
+
+    T --> A
+    C --> V[Claim Verification]
+    V --> E[Evidence Retrieval]
+    E --> P[Provenance + Source Checks]
+    P --> D[Decision / Abstention]
+
+    N --> L[RSS / Atom Labels]
+    L --> A
+
+    A --> R[Result]
+    D --> R
+    R --> H[History / UI]
 ```
-
-The production application runs with **React/Vite on the frontend and Node.js/Express on the backend**. Python is mainly used for the offline ML training and evaluation work.
 
 ---
 
 ## Main features
 
-### 1. Article Analysis
+### 1. Article analysis
 
-A user can paste article text and receive a model-based analysis.
+The production article classifier is a **calibrated Linear SVM** trained on the ISOT Fake News dataset.
 
-The production article classifier is a **calibrated Linear SVM trained on the ISOT Fake News dataset**.
-
-Current held-out ISOT test result:
-
-| Metric | Result |
+| Metric | Held-out ISOT result |
 |---|---:|
-| Test samples | 7,732 |
-| Accuracy | 99.59% |
-| Precision | 99.43% |
-| Recall | 99.66% |
-| F1-score | 99.54% |
+| Test samples | **7,732** |
+| Accuracy | **99.59%** |
+| Precision | **99.43%** |
+| Recall | **99.66%** |
+| F1-score | **99.54%** |
 
-These numbers are **benchmark results on the ISOT test set**. They are not a guarantee that every current real-world article will be classified correctly.
+The production model is served as a separate article-analysis component and is not mixed with claim-model metrics.
 
 ---
 
-### 2. Claim Verification
+### 2. Claim verification
 
-TruthLens also has a separate claim model based on the **LIAR dataset**.
+TruthLens keeps the claim model separate because it solves a different task on a different dataset.
 
-The claim model is kept separate from the article model because they solve different problems and are trained on different data.
-
-| Variant | Accuracy | Macro F1 | Test samples |
+| Variant | Accuracy | Macro F1 | Test n |
 |---|---:|---:|---:|
-| Text only | 62.72% | 61.53% | 802 |
-| Text + available metadata | 65.84% | 64.70% | 802 |
+| Text only | **62.72%** | **61.53%** | 802 |
+| Text + available metadata | **65.84%** | **64.70%** | 802 |
 
-The metadata version is only used when the required metadata is actually available.
+The metadata-conditioned variant is used only when the required metadata is available.
 
-I do **not** combine the article-model accuracy and claim-model accuracy into one overall percentage.
-
----
-
-### 3. Evidence-Based Verification
-
-One of the main parts of TruthLens is the evidence layer.
-
-For a claim, the system can:
-
-1. build a search query;
-2. retrieve candidate evidence;
-3. analyse the relevance of the retrieved material;
-4. compare the evidence with the claim;
-5. return a verification state;
-6. preserve the source URL and provenance information.
-
-Possible evidence states include:
-
-- `SUPPORTED`
-- `CONTRADICTED`
-- `MIXED`
-- `INSUFFICIENT_EVIDENCE`
-- `NEEDS_MORE_CONTEXT`
-- `SEARCH_UNAVAILABLE`
-
-A useful part of this design is that **the system can abstain**. When reliable evidence is not available, TruthLens does not invent a citation just to produce a confident-looking answer.
+**The article score and claim score are never added or averaged into one overall accuracy.**
 
 ---
 
-## URL analysis and security
+### 3. Evidence-aware verification
 
-TruthLens can accept a news article URL and extract the article before analysis.
+The evidence layer follows this path:
 
-The URL pipeline includes:
+```text
+claim
+  ↓
+query generation
+  ↓
+retrieval
+  ↓
+relevance / support / contradiction analysis
+  ↓
+source + provenance checks
+  ↓
+final verification state
+```
 
-- URL validation;
-- SSRF protection;
-- redirect validation;
-- loopback/private/link-local address checks;
-- response size and timeout limits;
+Possible states include:
+
+- \`SUPPORTED\`
+- \`CONTRADICTED\`
+- \`MIXED\`
+- \`INSUFFICIENT_EVIDENCE\`
+- \`NEEDS_MORE_CONTEXT\`
+- \`SEARCH_UNAVAILABLE\`
+
+When evidence is unavailable or insufficient, the system can **abstain instead of inventing a citation**.
+
+---
+
+### 4. Secure article URL extraction
+
+The URL pipeline is designed to treat external webpages as untrusted input.
+
+It includes:
+
+- HTTP/HTTPS-only validation;
+- loopback/private/link-local/reserved IP blocking;
+- DNS pre-flight checks;
+- redirect validation on every hop;
+- response timeout and size limits;
 - content-type validation;
-- handling for common publisher errors such as 403, 404 and 429;
-- removal of scripts and common page boilerplate before extraction.
+- publisher error handling for common 403/404/429 cases;
+- removal of scripts, hidden elements, comments and common page boilerplate;
+- structured-data and semantic DOM extraction.
 
-This means an article URL is treated as untrusted external input rather than as trusted content.
+The extraction endpoint is:
+
+\`POST /api/article/extract\`
+
+The complete URL-analysis path is:
+
+\`POST /api/analyze-url\`
 
 ---
 
-## Live News
+### 5. Live news
 
-TruthLens can read configured RSS/Atom feeds and label the received content before returning it to the frontend.
+TruthLens can ingest RSS/Atom feeds and labels the content on the server before it reaches the frontend.
 
-Examples of content labels include:
+| Label | Meaning |
+|---|---|
+| \`RSS_SUMMARY_ONLY\` | Feed contains a substantive summary, not a full article body |
+| \`HEADLINE_ONLY\` | Feed contains only a headline / very short description |
+| \`FULL_ARTICLE_EXTRACTED\` | Full article body was actually fetched and extracted |
+| \`EXTRACTION_BLOCKED\` | Publisher blocked automated article retrieval |
 
-- `RSS_SUMMARY_ONLY`
-- `HEADLINE_ONLY`
-- `FULL_ARTICLE_EXTRACTED`
-- `EXTRACTION_BLOCKED`
+This prevents a headline-only item from being silently treated as a full article.
 
-Headline-only content is not treated as if it were a full article. The application can return `NEEDS_MORE_CONTEXT` when there is not enough information to justify a prediction.
+---
+
+## Architecture
+
+```mermaid
+flowchart TB
+    F[React / Vite Frontend] --> API[Node / Express API]
+
+    API --> M1[Article Model<br/>ISOT + Calibrated Linear SVM]
+    API --> M2[Claim Model<br/>LIAR]
+    API --> EX[Secure URL Extractor]
+    API --> EV[Evidence Engine]
+    API --> NEWS[RSS / Atom Service]
+    API --> DB[(SQLite History)]
+
+    EX --> WEB[Public Publisher URL]
+    NEWS --> FEEDS[RSS / Atom Feeds]
+    EV --> SRC[Evidence Providers]
+
+    API --> OUT[User Result]
+```
 
 ---
 
 ## Production API
 
-Some of the main API routes are:
-
-| Route | Purpose |
+| Endpoint | Purpose |
 |---|---|
-| `GET /api/health` | Service and model health |
-| `GET /api/models/metrics` | Model metrics and runtime information |
-| `POST /api/analyze` | Analyse article text |
-| `POST /api/analyze-url` | Extract and analyse an article URL |
-| `POST /api/article/extract` | Extract article content |
-| `GET /api/news/latest` | Live RSS/Atom news |
-| `GET /api/claim/metrics` | Claim model metrics |
-| `POST /api/claim/predict` | Predict a claim |
-| `POST /api/evidence/verify` | Verify a claim using retrieved evidence |
+| \`GET /api/health\` | Service and model readiness |
+| \`GET /api/models/metrics\` | Separate model / benchmark metrics |
+| \`GET /api/model/diagnostics\` | Loaded model diagnostics |
+| \`POST /api/analyze\` | Analyse supplied article text |
+| \`POST /api/analyze-url\` | Extract and analyse article URL |
+| \`POST /api/article/extract\` | Extract article body + metadata |
+| \`GET /api/news/latest\` | Live RSS/Atom news |
+| \`GET /api/claim/metrics\` | Claim-model metrics |
+| \`POST /api/claim/predict\` | Claim prediction |
+| \`POST /api/evidence/verify\` | Evidence-backed claim verification |
+| \`POST /api/v2/evidence/verify\` | Experimental V2 research pipeline |
 
 ---
 
-## Current project status
+## Technology stack
 
-The production code is currently kept stable for the project demonstration.
+| Layer | Technology |
+|---|---|
+| UI | React, Vite, Tailwind CSS |
+| API | Node.js, Express, TypeScript |
+| Article ML | Linear SVM + TF-IDF + Platt calibration |
+| Claim ML | LIAR-based claim classifier |
+| Parsing | Cheerio |
+| Evidence | Retrieval + provenance + abstention |
+| Storage | SQLite |
+| Deployment | Render + Vercel |
+| CI | GitHub Actions |
 
-Latest verified main branch:
+---
 
-`a22e9578503150e94afdc022c040813e4850b1d3`
+## Production verification
 
-Current production verification includes:
+The current production line has been verified after the latest extraction compatibility fix:
 
-- **GitHub CI:** passed
-- **Production smoke test:** **53/53 passed**
-- **Vercel production:** READY
-- **Health endpoint:** 200
-- **Model metrics:** 200
-- **Claim metrics:** 200
-- **Live news endpoint:** 200
-- **Production model artifact:** loads successfully
+- **GitHub CI:** ✅ passed
+- **Production Smoke Test:** ✅ passed
+- **Production smoke assertions:** **53 passed, 0 failed**
+- **Vercel production:** ✅ READY
+- **Article model artifact:** ✅ loaded successfully
+- **Claim model:** ✅ READY
+- **Live news endpoint:** ✅ responding
 
-The production article model and its artifact were not changed as part of the recent deployment/runtime fixes.
+The latest extraction compatibility change updates the outgoing public-page request headers while keeping the existing SSRF and redirect protections in place.
 
 ---
 
 ## Testing
 
-The project includes automated tests for the major parts of the system, including:
+The repository includes automated checks for:
 
-- API contracts;
-- article verdict behaviour;
-- claim model behaviour;
-- Python/Node model parity;
-- evidence verification;
-- model artifact loading;
-- SSRF protection;
-- V2 pipeline and route behaviour;
-- deployment/runtime checks.
+- API contracts
+- verdict regression
+- claim-model behaviour
+- Python ↔ Node parity
+- evidence verification
+- model-artifact lifecycle
+- SSRF protection
+- V2 pipeline and routes
+- research protocol validation
+- live deployment smoke testing
 
-The latest production smoke run completed with:
+Run the core suite locally with:
 
-**53 passed, 0 failed**
+```bash
+npm run lint
+npm run test:all
+```
+
+For a live deployment:
+
+```bash
+npm run test:production -- <DEPLOYMENT_URL>
+```
+
+---
+
+## Quick demo
+
+### Article text
+
+Paste any news article text into **Text** mode and run:
+
+**Analyze News Text**
+
+### Article URL
+
+Paste a public article URL into **URL** mode:
+
+**Extract Article → review extracted content → Analyze URL**
+
+### Claim verification
+
+Use a standalone factual claim and inspect:
+
+**claim → retrieved evidence → source/provenance → verification state**
+
+### Live news
+
+Open **Live News**, select an item, and inspect the content-source label before analysis.
 
 ---
 
 ## Project structure
 
 ```text
-src/                         Frontend (React / Vite)
-server.ts                   Node / Express entry point
-server/                     Production API and services
-backend/                    Offline ML / research pipeline
-data/                       Datasets and model artifacts
-docs/                       Project and research documentation
-scripts/                    Tests, evaluation and verification scripts
-render.yaml                 Render deployment configuration
+.
+├── src/                     # React / Vite frontend
+├── server/                  # Production API and services
+│   ├── extraction/          # Secure article extraction
+│   ├── verification/       # Claim + evidence verification
+│   ├── news/                # RSS / Atom news
+│   ├── security/            # URL / SSRF controls
+│   └── v2/                  # Experimental evidence pipeline
+├── backend/                 # Offline ML / research pipeline
+├── data/                    # Datasets and model artifacts
+├── docs/                    # Architecture, reports and research notes
+├── scripts/                 # Tests, evaluation and smoke scripts
+├── public/                  # Static frontend assets
+└── render.yaml              # Render deployment configuration
 ```
-
----
-
-## Running the project locally
-
-### Requirements
-
-- Node.js 20 or newer
-- Python 3 for the offline ML/research pipeline
-
-### Install
-
-`npm ci`
-
-### Start in development
-
-`npm run dev`
-
-### Production-style local build
-
-`npm run build`
-`npm start`
-
-Do not commit API keys or other credentials to the repository.
-
----
-
-## Important limitations
-
-TruthLens is a machine-learning and verification-support system, so its outputs should be interpreted with the available evidence.
-
-The main limitations are:
-
-1. The article model is benchmarked on ISOT and may not generalise perfectly to current news, satire, Hindi/Hinglish content, or completely different domains.
-2. The LIAR claim model is a separate and comparatively weaker signal.
-3. Evidence availability depends on external sources and network access.
-4. A supported claim is evidence-based corroboration, not a mathematical proof of truth.
-5. When evidence is insufficient, the system is designed to say so instead of making up a source.
 
 ---
 
 ## Why I built TruthLens
 
-The goal of this project was not just to train a classifier and display **FAKE / REAL**.
+I wanted this project to go beyond training a classifier and printing **FAKE** or **REAL**.
 
-I wanted to build something closer to a practical verification workflow where a user can:
+The idea behind TruthLens is to make the verification process visible:
 
-**submit content → analyse it → inspect the evidence → see the source → understand the limitation**
+**submit content → analyse it → inspect evidence → see the source → understand the limitation**
 
-That is the direction I followed while developing TruthLens AI.
+That is why the project includes article extraction, claim-level analysis, evidence retrieval, provenance, source labels and abstention instead of relying on a single prediction.
+
+---
+
+## Research track
+
+TruthLens also contains an experimental research track that is deliberately separated from the stable production line.
+
+Current research direction:
+
+```text
+Phase 2  → multi-benchmark evaluation
+Phase 3  → retrieval-quality improvements
+Phase 4  → verification reasoning
+Phase 5  → reliability / adversarial robustness
+Phase 6  → temporal / multilingual / out-of-domain generalization
+Phase 7  → independent benchmark audit
+Phase 8  → controlled promotion
+```
+
+Research results are kept separate from production accuracy claims.
+
+---
+
+## Limitations
+
+A few things are intentionally explicit:
+
+1. The **99.59% article result** is an ISOT held-out benchmark result, not a guarantee for every current internet article.
+2. The LIAR claim model is a separate, weaker signal and is not combined with the article score.
+3. Evidence quality depends on the sources that are reachable at runtime.
+4. Publishers can block automated retrieval; TruthLens reports that outcome instead of pretending the full article was obtained.
+5. A supported evidence result is corroboration, not mathematical proof of truth.
+6. Current-news, Hindi/Hinglish, satire and unseen domains can behave differently from the training/benchmark distributions.
 
 ---
 
 ## Documentation
 
-More detailed technical material is available in the `docs/` directory, including:
+More detailed project material is available in \`docs/\`, including:
 
-- architecture documentation;
-- evidence-engine documentation;
-- claim-model documentation;
-- benchmark and evaluation reports;
-- V2 research documentation;
-- security and threat-model notes.
+- architecture documentation
+- evidence-engine design
+- claim-model protocol
+- benchmark reports
+- security / threat-model notes
+- V2 research documentation
+- Phase 2 research protocol
 
 ---
 
-**TruthLens AI — B.Tech TDP Project**  
-**Developed by Pappu Yadav**  
-**B.Tech Artificial Intelligence & Machine Learning**  
+<div align="center">
+
+### TruthLens AI
+
+**B.Tech TDP Project by Pappu Yadav**  
+**Artificial Intelligence & Machine Learning**  
 **Vivekananda Global University, Jaipur**
+
+<br/>
+
+<a href="https://truthlens-ai-dvpf.onrender.com">Live Demo</a> •
+<a href="https://github.com/Pappu246/truthlens-ai-fake-news-detection-system">GitHub Repository</a>
+
+</div>
