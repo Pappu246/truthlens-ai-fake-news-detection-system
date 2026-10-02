@@ -18,7 +18,7 @@ async function getApp() {
   if (!app) {
     // Load the application factory lazily so module-initialization failures are
     // caught by the handler instead of escaping before Vercel can invoke it.
-    const { createExpressApp } = await import('../server/appFactory');
+    const { createExpressApp } = await import('../server/appFactory.js');
     // In Vercel, isProduction=true, includeVite=false (static files served by Vercel CDN, not Express)
     app = await createExpressApp({ isProduction: true, includeVite: false });
   }
