@@ -1,4 +1,4 @@
-import { ExtractedClaim, ClaimType, ClaimImportance } from '../../src/types';
+import { ExtractedClaim, ClaimType, ClaimImportance } from '../../src/types.js';
 import { GoogleGenAI } from '@google/genai';
 
 export interface ClaimExtractionResult {

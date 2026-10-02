@@ -22,10 +22,10 @@
  * module exists so a future milestone can flip it on for higher-fidelity
  * NLI classification without adding a new fetch path.
  */
-import { validateUrlSecurity, safeFetchHtml } from '../../security/urlValidator';
-import { extractArticleFromHtml } from '../../extraction/articleExtractor';
-import { sanitiseUntrustedEvidence } from '../../verification/evidenceEngine';
-import { RetrievedCandidate } from '../types';
+import { validateUrlSecurity, safeFetchHtml } from '../../security/urlValidator.js';
+import { extractArticleFromHtml } from '../../extraction/articleExtractor.js';
+import { sanitiseUntrustedEvidence } from '../../verification/evidenceEngine.js';
+import { RetrievedCandidate } from '../types.js';
 
 export interface EnrichmentDiagnostic {
   url: string;

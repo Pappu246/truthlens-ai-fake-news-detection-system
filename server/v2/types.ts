@@ -16,7 +16,7 @@
  * weak prior signal, but per the V2 design contract it can never
  * independently determine the final verdict when evidence exists.
  */
-import { ExtractedClaim } from '../../src/types';
+import { ExtractedClaim } from '../../src/types.js';
 
 export type { ExtractedClaim };
 

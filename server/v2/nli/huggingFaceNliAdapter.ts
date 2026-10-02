@@ -13,9 +13,9 @@
  * upgrades the first vertical slice without making the test suite network
  * dependent.
  */
-import { ExtractedClaim } from '../../../src/types';
-import { NliClassification, NliLabel } from '../types';
-import { NliAdapter } from './nliAdapter';
+import { ExtractedClaim } from '../../../src/types.js';
+import { NliClassification, NliLabel } from '../types.js';
+import { NliAdapter } from './nliAdapter.js';
 
 interface HfLabelScore {
   label?: string;

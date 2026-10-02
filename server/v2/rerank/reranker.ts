@@ -17,8 +17,8 @@
  *                    outlets republishing one wire story do not count as ten
  *                    independent confirmations
  */
-import { determineSourceType } from '../../verification/evidenceAnalyzer';
-import { RetrievedCandidate, RerankedEvidence, RerankSignals } from '../types';
+import { determineSourceType } from '../../verification/evidenceAnalyzer.js';
+import { RetrievedCandidate, RerankedEvidence, RerankSignals } from '../types.js';
 
 const WEIGHTS = {
   lexical: 0.25,

@@ -23,11 +23,11 @@
  * record and it can never alter the model contract, call tools, request
  * secrets, or change a verdict by instruction.
  */
-import { ExtractedClaim, EvidenceItem } from '../../src/types';
-import { extractClaimsHeuristic, generateSearchQueries, classifyClaimType, normalizeClaimText } from './claimExtractor';
-import { evidenceProvider, RetrievalDiagnostic } from './evidenceProvider';
-import { aggregateClaimAssessment, evaluateSourceDiversity } from './evidenceAnalyzer';
-import { recordEvidenceTelemetry } from './observability';
+import { ExtractedClaim, EvidenceItem } from '../../src/types.js';
+import { extractClaimsHeuristic, generateSearchQueries, classifyClaimType, normalizeClaimText } from './claimExtractor.js';
+import { evidenceProvider, RetrievalDiagnostic } from './evidenceProvider.js';
+import { aggregateClaimAssessment, evaluateSourceDiversity } from './evidenceAnalyzer.js';
+import { recordEvidenceTelemetry } from './observability.js';
 
 export type VerificationStatus =
   | 'SUPPORTED'

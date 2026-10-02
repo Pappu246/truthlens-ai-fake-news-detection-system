@@ -21,13 +21,13 @@
  * cross-machine build drift is the only expected residual, see
  * docs/V2_MODELS.md).
  */
-import { EmbeddingModel } from './embeddings';
+import { EmbeddingModel } from './embeddings.js';
 import {
   EMBEDDING_MODEL_DIMENSIONS,
   EMBEDDING_MODEL_NAME,
   EMBEDDING_MODEL_VERSION
-} from '../ml/modelManifest';
-import { getMlWorkerClient, MlWorkerClient } from '../ml/mlWorkerClient';
+} from '../ml/modelManifest.js';
+import { getMlWorkerClient, MlWorkerClient } from '../ml/mlWorkerClient.js';
 
 export class TransformerEmbeddingModel implements EmbeddingModel {
   public readonly name = EMBEDDING_MODEL_NAME;

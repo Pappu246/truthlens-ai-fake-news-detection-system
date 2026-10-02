@@ -5,7 +5,7 @@ import {
   ClaimVerificationResult,
   SourceType,
   ClaimEvidenceRelation
-} from '../../src/types';
+} from '../../src/types.js';
 
 export function determineSourceType(url: string, sourceName?: string): SourceType {
   const sName = (sourceName || '').toLowerCase();
