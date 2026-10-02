@@ -1,0 +1,61 @@
+name: Phase 2 AVeriTeC Evidence Store Materialization
+
+on:
+  push:
+    branches:
+      - 'research/phase2-materialization-closeout'
+      - 'research/phase2-materialization-closeout-sync'
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  materialize-averitec-evidence:
+    name: Materialize pinned AVeriTeC dev evidence store
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Download pinned AVeriTeC evidence store
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/phase2/averitec
+          URL="https://huggingface.co/chenxwh/AVeriTeC/resolve/26238ae/data_store/knowledge_store/dev_knowledge_store.zip"
+          curl --fail --retry 4 --retry-all-errors --location --connect-timeout 30 --max-time 7200 "$URL" -o artifacts/phase2/averitec/dev_knowledge_store.zip
+
+      - name: Verify pinned SHA-256
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXPECTED="021e258cd6fb5fe6d627a4667d663e95c184c966939c15124df9206142fc2212"
+          ACTUAL="$(sha256sum artifacts/phase2/averitec/dev_knowledge_store.zip | cut -d' ' -f1)"
+          test "$ACTUAL" = "$EXPECTED"
+
+      - name: Write materialization manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          BYTES="$(stat -c '%s' artifacts/phase2/averitec/dev_knowledge_store.zip)"
+          SHA="$(sha256sum artifacts/phase2/averitec/dev_knowledge_store.zip | cut -d' ' -f1)"
+          cat > artifacts/phase2/averitec/materialization-manifest.json <<EOF
+          {
+            "benchmark": "averitec",
+            "asset": "data_store/knowledge_store/dev_knowledge_store.zip",
+            "source": "https://huggingface.co/chenxwh/AVeriTeC/resolve/26238ae/data_store/knowledge_store/dev_knowledge_store.zip",
+            "pinned_revision": "26238ae",
+            "bytes": $BYTES,
+            "sha256": "$SHA",
+            "expected_sha256": "021e258cd6fb5fe6d627a4667d663e95c184c966939c15124df9206142fc2212"
+          }
+          EOF
+
+      - name: Upload materialization manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: truthlens-phase2-averitec-evidence-materialization
+          path: artifacts/phase2/averitec/materialization-manifest.json
+          if-no-files-found: error
+          retention-days: 30
