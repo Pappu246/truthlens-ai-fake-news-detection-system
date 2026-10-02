@@ -1,9 +1,9 @@
 import fs from 'fs';
 import path from 'path';
-import { validateDataset, validateDatasetContent, DatasetValidationReport, ParsedArticleRecord } from './dataValidation';
-import { extractPrimaryClaim, ClaimExtractionResult } from './verification/claimExtractor';
-import { evaluateSourceProvenance, SourceEvaluation } from './verification/evidenceService';
-import { sqliteHistory, SqliteHistoryRecord } from './sqliteHistory';
+import { validateDataset, validateDatasetContent, DatasetValidationReport, ParsedArticleRecord } from './dataValidation.js';
+import { extractPrimaryClaim, ClaimExtractionResult } from './verification/claimExtractor.js';
+import { evaluateSourceProvenance, SourceEvaluation } from './verification/evidenceService.js';
+import { sqliteHistory, SqliteHistoryRecord } from './sqliteHistory.js';
 
 export interface LinguisticIndicator {
   name: string;
