@@ -10,20 +10,20 @@
  * additive to, and fully isolated from, the production evidence engine in
  * `server/verification/evidenceEngine.ts`.
  */
-import { ExtractedClaim } from '../../src/types';
-import { claimModel } from '../claimModel';
-import { expandQueries, buildClaim } from './queryExpansion';
-import { CorpusSource, LiveEvidenceProviderCorpusSource } from './retrieval/corpusSource';
-import { hybridRetrieve, HybridRetrievalOptions } from './retrieval/hybridRetriever';
-import { enrichWithFullText } from './retrieval/fullTextEnricher';
-import { rerankEvidence } from './rerank/reranker';
-import { NliAdapter } from './nli/nliAdapter';
-import { defaultNliAdapter } from './nli/heuristicNliAdapter';
-import { createConfiguredNliAdapter } from './nli/huggingFaceNliAdapter';
-import { decideVerdict, RawPriorInput, DecisionThresholds, DEFAULT_DECISION_THRESHOLDS } from './decision/decisionPolicy';
-import { buildProvenance } from './provenance';
-import { ClassifiedEvidence, NliClassification, ProvenanceRecord, RetrievedCandidate, V2VerificationResult } from './types';
-import { sanitiseUntrustedEvidence } from '../verification/evidenceEngine';
+import { ExtractedClaim } from '../../src/types.js';
+import { claimModel } from '../claimModel.js';
+import { expandQueries, buildClaim } from './queryExpansion.js';
+import { CorpusSource, LiveEvidenceProviderCorpusSource } from './retrieval/corpusSource.js';
+import { hybridRetrieve, HybridRetrievalOptions } from './retrieval/hybridRetriever.js';
+import { enrichWithFullText } from './retrieval/fullTextEnricher.js';
+import { rerankEvidence } from './rerank/reranker.js';
+import { NliAdapter } from './nli/nliAdapter.js';
+import { defaultNliAdapter } from './nli/heuristicNliAdapter.js';
+import { createConfiguredNliAdapter } from './nli/huggingFaceNliAdapter.js';
+import { decideVerdict, RawPriorInput, DecisionThresholds, DEFAULT_DECISION_THRESHOLDS } from './decision/decisionPolicy.js';
+import { buildProvenance } from './provenance.js';
+import { ClassifiedEvidence, NliClassification, ProvenanceRecord, RetrievedCandidate, V2VerificationResult } from './types.js';
+import { sanitiseUntrustedEvidence } from '../verification/evidenceEngine.js';
 
 export interface V2PipelineOptions {
   corpus?: CorpusSource;

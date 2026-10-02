@@ -1,4 +1,4 @@
-import { NewsArticle, NewsFeedResponse } from '../../src/types';
+import { NewsArticle, NewsFeedResponse } from '../../src/types.js';
 
 export interface FetchNewsOptions {
   category?: string;

@@ -16,9 +16,9 @@
  *                             backend is introduced; this source just
  *                             re-shapes `EvidenceItem[]` into `RawDocument[]`.
  */
-import { ExtractedClaim, EvidenceItem } from '../../../src/types';
-import { evidenceProvider } from '../../verification/evidenceProvider';
-import { RawDocument } from '../types';
+import { ExtractedClaim, EvidenceItem } from '../../../src/types.js';
+import { evidenceProvider } from '../../verification/evidenceProvider.js';
+import { RawDocument } from '../types.js';
 
 export interface CorpusSource {
   readonly name: string;

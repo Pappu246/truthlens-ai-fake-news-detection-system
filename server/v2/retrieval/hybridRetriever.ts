@@ -15,13 +15,13 @@
  * Nothing here fabricates a document: every `RetrievedCandidate` traces back
  * to a `RawDocument` that a `CorpusSource` actually returned.
  */
-import { ExtractedClaim } from '../../../src/types';
-import { normalizeUrl } from '../../security/urlValidator';
-import { bm25Search } from './bm25';
-import { defaultEmbeddingModel, denseSearch, EmbeddingModel } from './embeddings';
-import { createConfiguredEmbeddingModel } from './huggingFaceEmbeddingModel';
-import { CorpusSource } from './corpusSource';
-import { ExpandedQuerySet, RawDocument, RetrievedCandidate, RetrievalChannel } from '../types';
+import { ExtractedClaim } from '../../../src/types.js';
+import { normalizeUrl } from '../../security/urlValidator.js';
+import { bm25Search } from './bm25.js';
+import { defaultEmbeddingModel, denseSearch, EmbeddingModel } from './embeddings.js';
+import { createConfiguredEmbeddingModel } from './huggingFaceEmbeddingModel.js';
+import { CorpusSource } from './corpusSource.js';
+import { ExpandedQuerySet, RawDocument, RetrievedCandidate, RetrievalChannel } from '../types.js';
 
 export interface HybridRetrievalOptions {
   embeddingModel?: EmbeddingModel;
