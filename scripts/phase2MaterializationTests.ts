@@ -25,16 +25,25 @@ for (const key of ['train_sha256', 'dev_sha256', 'wikipedia_db_zip_sha256']) {
 }
 
 const averitec = byId.get('averitec');
-if (averitec?.status !== 'PROTOCOL_FROZEN_EVIDENCE_MATERIALIZATION_PENDING') {
-  throw new Error('AVeriTeC must remain pending until the evidence-store materialization gate succeeds');
+if (averitec?.status !== 'FROZEN_AND_MATERIALIZED') {
+  throw new Error('AVeriTeC must be frozen only after the evidence-store materialization gate succeeds');
 }
 if (!averitec.evidence_collection?.required) throw new Error('AVeriTeC evidence collection must remain required');
-if (averitec.evidence_collection.status !== 'REMOTE_HASH_PINNED_PENDING_CI_MATERIALIZATION') {
-  throw new Error('AVeriTeC evidence-store status must remain explicit until CI materialization succeeds');
+if (averitec.evidence_collection.status !== 'MATERIALIZED_AND_HASH_VERIFIED') {
+  throw new Error('AVeriTeC evidence-store status must record completed CI materialization');
 }
 if (averitec.evidence_collection.pinned_revision !== '26238ae') throw new Error('AVeriTeC evidence-store revision is not pinned');
 if (averitec.evidence_collection.sha256 !== '021e258cd6fb5fe6d627a4667d663e95c184c966939c15124df9206142fc2212') {
   throw new Error('AVeriTeC evidence-store SHA-256 does not match the pinned source');
 }
+if (averitec.evidence_collection.materialization?.workflow_run !== 6) {
+  throw new Error('AVeriTeC materialization workflow run is not recorded');
+}
+if (averitec.evidence_collection.materialization?.artifact_digest !== 'sha256:c5e1da712d42f264f10a637fe417bac0abfced0dd6873161a5a437db8c2e9480') {
+  throw new Error('AVeriTeC materialization artifact digest is not recorded correctly');
+}
+if (averitec.evidence_collection.materialization?.verified_sha256 !== averitec.evidence_collection.sha256) {
+  throw new Error('AVeriTeC verified SHA-256 does not match the pinned source SHA-256');
+}
 
-console.log('Phase 2 materialization guard: FEVER/FEVEROUS hashes are frozen; AVeriTeC evidence-store materialization remains explicitly pending.');
+console.log('Phase 2 materialization guard: FEVER/FEVEROUS hashes are frozen; AVeriTeC evidence-store materialization is complete and hash-verified.');

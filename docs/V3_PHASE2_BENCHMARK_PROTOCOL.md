@@ -22,18 +22,16 @@ Frozen lanes:
 
 ## Current SciFact baseline
 
-Gate-14 workflow #220 / GitHub run `36751159351` completed on research head `a6563c17e6897c91a1fd8a8c483df2ff5e07c824`.
+The latest completed full-corpus SciFact artifact is **Run #87** (`36597257830`). The evaluated commit `5275121a425a2b8a297c6a3dd375d98ac46fa2c7` remains benchmark-runtime-equivalent to the current V2 implementation; the verified interval to the later documentation/test head contains no SciFact runtime, model, retrieval, NLI, or benchmark-workflow implementation change.
 
 - Open candidate recall: **60.33%**
 - Gold evidence Recall@5: **73.40%**
 - Directional accuracy: **34.33%**
-- Directional macro-F1: **0.318131**
+- Directional macro-F1: **0.320335**
 - Production-policy abstention: **75%**
 - Non-abstain coverage: **25%**
 
-Retained artifact digest: `sha256:7349a2c45115f59efdfc88f30856f81f9b5a24acc7a2f698952eaf3116c6f351`.
-
-A newer end-to-end SciFact workflow is still running on the Phase 2 branch. Its result must be recorded from the completed artifact before becoming the authoritative Phase 2 baseline.
+Artifact ID: `11051501500`. The benchmark remains a research/evaluation measurement only; it does not establish production or universal real-world accuracy.
 
 ## External protocol sources
 
@@ -71,7 +69,7 @@ Materialization artifact digest: `sha256:0a98f1cf50a3ed54c17817d3a542139ea009c3c
 
 ### AVeriTeC
 
-Status: **PROTOCOL_FROZEN_EVIDENCE_MATERIALIZATION_PENDING**
+Status: **FROZEN_AND_MATERIALIZED — scoring pending**
 
 The train/dev claim JSON is frozen:
 
@@ -80,7 +78,7 @@ The train/dev claim JSON is frozen:
 
 The official AVeriTeC repository documents a provided knowledge store as the reproducible alternative to live Google Search, and the public Hugging Face AVeriTeC repository exposes the dev knowledge store as an 11.5 GB Xet file. The pinned dev knowledge-store source at revision `26238ae` has SHA-256 `021e258cd6fb5fe6d627a4667d663e95c184c966939c15124df9206142fc2212`. citeturn109482search1turn506905view0
 
-A dedicated GitHub Actions gate, **Phase 2 AVeriTeC Evidence Store Materialization**, now downloads that pinned asset, verifies the SHA-256, and publishes a materialization manifest. No end-to-end AVeriTeC score is publishable until this gate completes successfully.
+A dedicated GitHub Actions gate, **Phase 2 AVeriTeC Evidence Store Materialization**, completed successfully in workflow run **#6**. It downloaded the pinned asset, verified SHA-256 `021e258cd6fb5fe6d627a4667d663e95c184c966939c15124df9206142fc2212`, and uploaded the materialization manifest artifact `truthlens-phase2-averitec-evidence-materialization` (artifact digest `sha256:c5e1da712d42f264f10a637fe417bac0abfced0dd6873161a5a437db8c2e9480`). The materialization gate is complete; **end-to-end AVeriTeC scoring remains pending**.
 
 ### TruthLens Open-Web v1
 
@@ -92,4 +90,4 @@ This lane still requires a human-labelled, blind external holdout with the froze
 
 Phase 2 exits only when every required lane has exact input hashes, fixed splits, deterministic runner configuration, a complete artifact, workflow/run provenance, a metric/limitation record, and an unchanged production model/policy.
 
-The current remaining Phase 2 blockers are therefore the completion/provenance of the new AVeriTeC evidence-store materialization gate, the final artifact from the running SciFact end-to-end workflow, and the future TruthLens Open-Web v1 external collection.
+The current Phase 2 blockers are the benchmark-result artifacts for FEVER v1, FEVEROUS, and AVeriTeC, plus the future TruthLens Open-Web v1 blind human-labelled holdout. The SciFact lane already has an authoritative completed artifact.
