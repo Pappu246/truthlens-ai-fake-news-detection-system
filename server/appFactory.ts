@@ -6,7 +6,7 @@ import fs from 'fs';
 // (includeVite && !isProduction). A static import would force Vercel's
 // serverless bundler to package all of Vite into the /api function,
 // exploding bundle size / cold starts and risking init failure.
-import { mlEngine } from './mlEngine';
+import { mlEngine } from './mlEngine.js';
 import { validateDataset, validateDatasetContent } from './dataValidation';
 import { verifyClaim, verifyArticleContent } from './verification/evidenceService';
 import { extractClaims, extractPrimaryClaim } from './verification/claimExtractor';
