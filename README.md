@@ -9,10 +9,14 @@
 **Pappu Yadav • Vivekananda Global University, Jaipur**
 
 <p>
+  <img src="./public/favicon.svg" width="72" alt="TruthLens AI logo">
+</p>
+
+<p>
   <a href="https://truthlens-ai-dvpf.onrender.com"><img src="https://img.shields.io/badge/Live%20Demo-TruthLens%20AI-0f172a?style=for-the-badge" alt="Live Demo"></a>
-  <a href="https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/actions"><img src="https://img.shields.io/badge/CI-passing-16a34a?style=for-the-badge" alt="CI"></a>
+  <a href="https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/actions/workflows/ci.yml?query=branch%3Amain"><img src="https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
   <a href="https://github.com/Pappu246/truthlens-ai-fake-news-detection-system"><img src="https://img.shields.io/badge/Type-B.Tech%20TDP-2563eb?style=for-the-badge" alt="B.Tech TDP"></a>
-  <a href="https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/blob/main/LICENSE"><img src="https://img.shields.io/badge/Status-Active-334155?style=for-the-badge" alt="Project status"></a>
+  <a href="https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/blob/main/SECURITY.md"><img src="https://img.shields.io/badge/Security-Policy-334155?style=for-the-badge" alt="Security policy"></a>
 </p>
 
 <p>
