@@ -324,11 +324,23 @@ def main():
     fixtures = []
     for article_id in fixture_indices:
         item = articles[article_id]
-        p, candidate_terms, matched_terms = score_runtime(article_text(item), artifact)
+        text_value = article_text(item)
+        p_runtime, candidate_terms, matched_terms = score_runtime(text_value, artifact)
+        # Independent sklearn oracle: the expected value must come from the
+        # fitted SVM + fitted calibrator, not from the serialized runtime scorer.
+        x_oracle = vec.transform([clean_text(text_value)])
+        p_oracle = float(
+            calibrator.predict_proba(svm.decision_function(x_oracle).reshape(-1, 1))[0, 1]
+        )
+        drift = abs(p_runtime - p_oracle)
+        if drift > 1e-12:
+            raise SystemExit(
+                f"Runtime serialization drift for {article_id}: {drift:.3e} > 1e-12"
+            )
         fixtures.append({
             "id": article_id,
-            "text": article_text(item),
-            "expected_fake_probability": p,
+            "text": text_value,
+            "expected_fake_probability": p_oracle,
             "candidate_terms": candidate_terms,
             "matched_terms": matched_terms,
         })
