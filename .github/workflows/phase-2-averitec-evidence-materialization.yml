@@ -8,6 +8,11 @@ on:
   pull_request:
     branches:
       - main
+    paths:
+      - 'research/multibenchmark-manifest.json'
+      - 'scripts/materializePhase2Benchmarks.ts'
+      - 'scripts/benchmarks/v3Materialize*'
+      - '.github/workflows/phase-2-averitec-evidence-materialization.yml'
 
 permissions:
   contents: read

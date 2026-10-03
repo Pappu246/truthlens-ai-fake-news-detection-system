@@ -10,6 +10,21 @@ on:
   pull_request:
     branches:
       - main
+    paths:
+      - 'src/**'
+      - 'server/**'
+      - 'api/**'
+      - 'backend/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vite.config.ts'
+      - 'tsconfig.json'
+      - 'vercel.json'
+      - 'render.yaml'
+      - 'index.html'
+      - 'metadata.json'
+      - '.github/workflows/ci.yml'
 
 permissions:
   contents: read
