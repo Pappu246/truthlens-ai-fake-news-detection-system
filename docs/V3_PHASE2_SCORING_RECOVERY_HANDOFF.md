@@ -58,3 +58,8 @@ After interruption:
 ## Production boundary
 
 No production model, threshold, source policy, merge, or deployment is changed by this branch.
+
+
+## Exit gate
+
+scripts/phase2ExitGate.mjs is fail-closed. It requires a completed FEVER official score artifact, a completed FEVEROUS official score artifact, a completed AVeriTeC official evaluation artifact, and a sealed 100-claim human-labelled TruthLens Open-Web holdout with matching SHA-256. It intentionally fails while any required artifact is missing. This is a research gate, not a production deployment gate.
