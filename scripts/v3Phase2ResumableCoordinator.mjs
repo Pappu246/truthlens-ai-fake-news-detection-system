@@ -154,10 +154,14 @@ async function main() {
   const manifest = await readJson(MANIFEST);
   assertPhase2(manifest);
 
-  const benchmarkIds = arg("benchmark", "all").split(",").map((x) => x.trim()).filter(Boolean);
+  const requested = arg("benchmark", "fever_v1,feverous").split(",").map((x) => x.trim()).filter(Boolean);
+  const benchmarkIds = requested.includes("all")
+    ? ["scifact", "fever_v1", "feverous", "averitec", "truthlens_open_web_v1"]
+    : requested;
   const maxClaims = Math.max(1, Number(arg("max-claims", "100")));
 
-  const state = {
+  const checkpointFile = path.join(OUT, "checkpoint.json");
+  let state = {
     schema_version: 1,
     protocol: "truthlens-v3-phase2-resumable-coordinator-v1",
     started_at: new Date().toISOString(),
@@ -165,10 +169,29 @@ async function main() {
     production_mutation_allowed: false,
     checkpoints: {}
   };
+  if (await fsp.stat(checkpointFile).then(() => true).catch(() => false) && arg("resume", "true") !== "false") {
+    try {
+      const previous = await readJson(checkpointFile);
+      if (previous.protocol === state.protocol && previous.phase === 2) {
+        state = {
+          ...state,
+          ...previous,
+          resumed_at: new Date().toISOString(),
+          checkpoints: previous.checkpoints || {}
+        };
+      }
+    } catch {
+      // Corrupt/incompatible checkpoints are ignored; the new run still stays fail-closed.
+    }
+  }
 
   await fsp.mkdir(OUT, { recursive: true });
   try {
     for (const id of benchmarkIds) {
+      const prior = state.checkpoints[id];
+      if (prior && ["COMPLETE", "SKIPPED_BASELINE", "HUMAN_REQUIRED", "BLOCKED"].includes(prior.status)) {
+        continue;
+      }
       const benchmark = findBenchmark(manifest, id);
       if (id === "scifact") {
         state.checkpoints[id] = { status: "SKIPPED_BASELINE", reason: "Authoritative SciFact baseline already exists." };
@@ -195,7 +218,15 @@ async function main() {
           ? await runFeverous(benchmark, maxClaims)
           : null;
 
-      if (!artifact) throw new Error("No execution adapter for " + id);
+      if (!artifact) {
+        state.checkpoints[id] = {
+          status: "BLOCKED_MISSING_RUNNER",
+          reason: "No executable adapter is present on this scoring-recovery branch.",
+          expected_next_step: "Recover the AVeriTeC scorer/runner on a separate research branch."
+        };
+        await checkpoint(state);
+        continue;
+      }
       const report = await readJson(artifact);
       if (report.benchmark_id !== id) throw new Error(id + " scorer artifact benchmark_id mismatch");
 
