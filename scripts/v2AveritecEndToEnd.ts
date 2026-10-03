@@ -39,7 +39,7 @@ type StoreRecord = {
 };
 
 function arg(name: string): string | undefined {
-  return process.argv.find(v => v.startsWith(\`--\${name}=\`))?.slice(name.length + 3);
+  return process.argv.find(v => v.startsWith(`--${name}=`))?.slice(name.length + 3);
 }
 
 function sha256FileAsync(file: string): Promise<string> {
@@ -58,7 +58,7 @@ function textOf(value: unknown): string {
 
 function domainOf(url: string): string {
   try {
-    return new URL(url).hostname.replace(/^www\\./, '').toLowerCase();
+    return new URL(url).hostname.replace(/^www\./, '').toLowerCase();
   } catch {
     return 'unknown';
   }
@@ -71,9 +71,9 @@ function makeDoc(claimId: number, row: number, item: number, sentence: string, u
   const publishedAt = textOf(record.published_at) || textOf(record.publishedAt) || textOf(record.date) || null;
   const domain = domainOf(cleanUrl);
   return {
-    id: \`averitec:\${claimId}:\${row}:\${item}\`,
+    id: `averitec:${claimId}:${row}:${item}`,
     url: cleanUrl,
-    title: \`\${domain} evidence\`,
+    title: `${domain} evidence`,
     snippet: text,
     contentType: 'SUMMARY',
     publisher: domain,
@@ -122,7 +122,7 @@ function recordsToDocs(records: StoreRecord[], claimId: number, retrievalTimesta
 
   const seen = new Set<string>();
   return docs.filter(doc => {
-    const key = \`\${doc.url.toLowerCase()}\\n\${doc.snippet.replace(/\\s+/g, ' ').trim().toLowerCase()}\`;
+    const key = `${doc.url.toLowerCase()}\n${doc.snippet.replace(/\s+/g, ' ').trim().toLowerCase()}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -131,8 +131,8 @@ function recordsToDocs(records: StoreRecord[], claimId: number, retrievalTimesta
 
 function detectEntryPrefix(zipFile: string): string {
   const listed = spawnSync('unzip', ['-Z1', zipFile], { encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 });
-  if (listed.status !== 0) throw new Error(\`Unable to list knowledge store zip (exit \${listed.status}).\`);
-  const sample = listed.stdout.split(/\\r?\\n/).find((entry: string) => /(?:^|\\/)output_dev\\/0\\.json$/.test(entry));
+  if (listed.status !== 0) throw new Error(`Unable to list knowledge store zip (exit ${listed.status}).`);
+  const sample = listed.stdout.split(/\r?\n/).find((entry: string) => /(?:^|\/)output_dev\/0\.json$/.test(entry));
   if (!sample) throw new Error('Pinned knowledge store does not contain output_dev/0.json.');
   return sample.slice(0, sample.lastIndexOf('output_dev/'));
 }
@@ -154,7 +154,7 @@ async function readZipJsonl(zipFile: string, entry: string): Promise<StoreRecord
       } catch (error) {
         failed = true;
         child.kill('SIGTERM');
-        reject(new Error(\`Invalid JSONL in \${entry}: \${String(error)}\`));
+        reject(new Error(`Invalid JSONL in ${entry}: ${String(error)}`));
       }
     });
 
@@ -170,7 +170,7 @@ async function readZipJsonl(zipFile: string, entry: string): Promise<StoreRecord
       if (failed) return;
       if (code !== 0) {
         failed = true;
-        reject(new Error(\`unzip failed for \${entry} (exit \${code}): \${stderr.trim()}\`));
+        reject(new Error(`unzip failed for ${entry} (exit ${code}): ${stderr.trim()}`));
         return;
       }
       resolve(rows);
@@ -200,7 +200,7 @@ class AveritecStoreSource implements CorpusSource {
   private async getAllDocs(id: number): Promise<RawDocument[]> {
     const cached = this.cache.get(id);
     if (cached) return cached;
-    const records = await readZipJsonl(this.zipFile, \`\${this.entryPrefix}output_dev/\${id}.json\`);
+    const records = await readZipJsonl(this.zipFile, `${this.entryPrefix}output_dev/${id}.json`);
     const docs = recordsToDocs(records, id, this.retrievalTimestamp);
     this.cache.set(id, docs);
     return docs;
@@ -210,7 +210,7 @@ class AveritecStoreSource implements CorpusSource {
     if (this.activeClaimId === null) throw new Error('AVeriTeC source has no active claim id.');
     const all = await this.getAllDocs(this.activeClaimId);
     if (all.length === 0) return [];
-    const searchable = all.map(d => ({ id: d.id, text: \`\${d.title} \${d.snippet}\` }));
+    const searchable = all.map(d => ({ id: d.id, text: `${d.title} ${d.snippet}` }));
     const hits = bm25Search(query, searchable, Math.min(this.coarseBm25K, searchable.length));
     const keep = new Set(hits.map(hit => hit.id));
     return all.filter(doc => keep.has(doc.id));
@@ -229,7 +229,7 @@ function evidenceFor(result: Awaited<ReturnType<typeof verifyClaimV2>>): string[
     .slice()
     .sort((a, b) => b.rerank_score - a.rerank_score)
     .slice(0, 10)
-    .map(e => e.exact_passage.replace(/\\s+/g, ' ').trim())
+    .map(e => e.exact_passage.replace(/\s+/g, ' ').trim())
     .filter(Boolean);
 }
 
@@ -243,14 +243,14 @@ async function main(): Promise<void> {
   const claims = JSON.parse(fs.readFileSync(claimsPath, 'utf8')) as Claim[];
   if (!Array.isArray(claims) || claims.length !== 500) throw new Error('AVeriTeC dev split must contain exactly 500 claims.');
   const claimsSha = await sha256FileAsync(claimsPath);
-  if (claimsSha !== DATA_SHA256) throw new Error(\`AVeriTeC dev SHA-256 mismatch: \${claimsSha}\`);
+  if (claimsSha !== DATA_SHA256) throw new Error(`AVeriTeC dev SHA-256 mismatch: ${claimsSha}`);
   const storeSha = await sha256FileAsync(zipFile);
-  if (storeSha !== STORE_SHA256) throw new Error(\`AVeriTeC evidence-store SHA-256 mismatch: \${storeSha}\`);
+  if (storeSha !== STORE_SHA256) throw new Error(`AVeriTeC evidence-store SHA-256 mismatch: ${storeSha}`);
 
   const modelDir = getV2ModelDir();
   for (const manifest of ALL_MODEL_MANIFESTS) {
     const verified = await verifyModelHashes(modelDir, manifest);
-    if (!verified.ok) throw new Error(\`Model seal verification failed for \${manifest.id}: \${verified.mismatches.join('; ')}\`);
+    if (!verified.ok) throw new Error(`Model seal verification failed for ${manifest.id}: ${verified.mismatches.join('; ')}`);
   }
 
   const maxClaims = Math.max(1, Math.min(Number(arg('max-claims') || 500), 500));
@@ -297,7 +297,7 @@ async function main(): Promise<void> {
           'Temporal filtering was not enforced because the baseline url2text evidence-store records do not expose per-sentence publication timestamps.'
         ]
       });
-      if ((id + 1) % 10 === 0 || id + 1 === maxClaims) console.log(\`processed \${id + 1}/\${maxClaims}\`);
+      if ((id + 1) % 10 === 0 || id + 1 === maxClaims) console.log(`processed ${id + 1}/${maxClaims}`);
     }
 
     const fullRun = maxClaims === 500;
@@ -306,7 +306,7 @@ async function main(): Promise<void> {
       generated_at: new Date().toISOString(),
       benchmark: 'AVeriTeC',
       split: 'dev',
-      evaluation_scope: fullRun ? 'full_500_claim_dev' : \`smoke_\${maxClaims}_claims\`,
+      evaluation_scope: fullRun ? 'full_500_claim_dev' : `smoke_${maxClaims}_claims`,
       official_data_url: OFFICIAL_DATA_URL,
       official_repo_commit: OFFICIAL_REPO_COMMIT,
       claims_sha256: DATA_SHA256,
@@ -340,13 +340,13 @@ async function main(): Promise<void> {
       claims: rows
     };
 
-    fs.writeFileSync(path.join(outputDir, 'predictions.json'), JSON.stringify(predictions, null, 2) + '\\n');
-    fs.writeFileSync(path.join(outputDir, 'provenance.json'), JSON.stringify(metadata, null, 2) + '\\n');
+    fs.writeFileSync(path.join(outputDir, 'predictions.json'), JSON.stringify(predictions, null, 2) + '\n');
+    fs.writeFileSync(path.join(outputDir, 'provenance.json'), JSON.stringify(metadata, null, 2) + '\n');
     const bundleDigest = crypto.createHash('sha256')
       .update(fs.readFileSync(path.join(outputDir, 'predictions.json')))
       .update(fs.readFileSync(path.join(outputDir, 'provenance.json')))
       .digest('hex');
-    fs.writeFileSync(path.join(outputDir, 'bundle-sha256.txt'), bundleDigest + '\\n');
+    fs.writeFileSync(path.join(outputDir, 'bundle-sha256.txt'), bundleDigest + '\n');
     console.log(JSON.stringify({ ok: true, evaluated_claims: maxClaims, bundle_sha256: bundleDigest }, null, 2));
   } finally {
     await disposeMlWorker();
