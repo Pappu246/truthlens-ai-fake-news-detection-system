@@ -8,9 +8,9 @@ const OUT = process.env.AUTONOMOUS_SQUAD_OUT || path.join(ROOT, "autonomous-squa
 
 const RUNNER_CANDIDATES = {
   scifact: ["eval:v2-scifact-e2e"],
-  fever_v1: ["eval:v3-fever-e2e", "eval:fever-e2e"],
-  feverous: ["eval:v3-feverous-e2e", "eval:feverous-e2e"],
-  averitec: ["eval:v2-averitec-e2e", "eval:v3-averitec-e2e"],
+  fever_v1: ["scripts/benchmarks/v3FeverEvaluate.ts", "scripts/benchmarks/v3FeverOfficialEvaluate.mjs", "eval:v3-fever-e2e", "eval:fever-e2e"],
+  feverous: ["scripts/benchmarks/v3FeverousEvaluate.ts", "scripts/benchmarks/v3FeverousOfficialEvaluate.mjs", "eval:v3-feverous-e2e", "eval:feverous-e2e"],
+  averitec: ["scripts/benchmarks/v3AveritecTruthLensEvaluate.ts", "scripts/benchmarks/v3AveritecOfficialEvaluate.mjs", "eval:v2-averitec-e2e", "eval:v3-averitec-e2e"],
   truthlens_open_web_v1: []
 };
 
@@ -18,7 +18,16 @@ async function readJson(file) {
   return JSON.parse(await fs.readFile(file, "utf8"));
 }
 
-function planFor(benchmark, scripts) {
+async function fileExists(relativePath) {
+  try {
+    await fs.access(path.join(ROOT, relativePath));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function planFor(benchmark, scripts) {
   const status = String(benchmark.status || "");
   if (status === "FROZEN_AND_BASELINED") {
     return { state: "VERIFIED_BASELINE", action: "retain-baseline", runners: [] };
@@ -28,7 +37,10 @@ function planFor(benchmark, scripts) {
   }
 
   const candidates = RUNNER_CANDIDATES[benchmark.id] || [];
-  const available = candidates.filter((name) => typeof scripts[name] === "string");
+  const available = [];
+  for (const name of candidates) {
+    if (typeof scripts[name] === "string" || await fileExists(name)) available.push(name);
+  }
   if (available.length) {
     return { state: "RUNNABLE", action: "execute-runner", runners: available };
   }
@@ -46,11 +58,14 @@ async function main() {
     readJson(path.join(ROOT, "package.json"))
   ]);
 
-  const benchmarks = (manifest.benchmarks || []).map((benchmark) => ({
-    id: benchmark.id,
-    status: benchmark.status,
-    ...planFor(benchmark, pkg.scripts || {})
-  }));
+  const benchmarks = [];
+  for (const benchmark of manifest.benchmarks || []) {
+    benchmarks.push({
+      id: benchmark.id,
+      status: benchmark.status,
+      ...(await planFor(benchmark, pkg.scripts || {}))
+    });
+  }
 
   const plan = {
     schema_version: 1,
