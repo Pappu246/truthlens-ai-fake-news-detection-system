@@ -1,6 +1,9 @@
 name: Phase 2 AVeriTeC End-to-End Benchmark
 
 on:
+  push:
+    branches:
+      - research/phase2-averitec-scoring-current
   pull_request:
     branches:
       - main
@@ -20,7 +23,7 @@ on:
         default: '2000'
 
 concurrency:
-  group: truthlens-phase2-averitec-${{ github.event.pull_request.number || github.ref_name }}
+  group: truthlens-phase2-averitec-current
   cancel-in-progress: true
 
 permissions:
