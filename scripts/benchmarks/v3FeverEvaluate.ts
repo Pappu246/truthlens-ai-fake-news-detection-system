@@ -107,7 +107,8 @@ async function main() {
       id: row.id,
       label: row.label,
       predicted_label: predicted,
-      evidence: row.gold_evidence,
+      evidence: evidence,
+      gold_evidence: row.gold_evidence,
       predicted_evidence: evidence
     });
   }
@@ -137,7 +138,7 @@ async function main() {
       configuration_sha256: arg('config-sha256') || 'PIN_REQUIRED'
     },
     scorer_input: predictions,
-    interpretation: 'This file is a TruthLens adapter artifact. Run the official FEVER scorer on scorer_input for the shared-task strict score and evidence metrics.'
+    interpretation: 'The official-scoring evidence field contains only TruthLens-predicted evidence. Gold evidence is retained only under gold_evidence for audit and is never passed as predicted evidence.'
   };
 
   const out = path.resolve(arg('output') || 'artifacts/v3/fever/truthlens-adapter-report.json');
