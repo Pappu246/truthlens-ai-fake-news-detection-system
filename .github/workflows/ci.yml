@@ -41,6 +41,12 @@ jobs:
       - name: Production build
         run: npm run build
 
+      - name: Article model safety regression
+        run: npm run test:model-safety
+
+      - name: Existing verdict regression suite
+        run: npm run test:verdicts
+
       - name: Contract tests
         run: npm run test:contracts
 

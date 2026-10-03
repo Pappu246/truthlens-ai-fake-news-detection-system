@@ -375,6 +375,30 @@ def main():
     mean_platt_a = float(np.mean(platt_a_list)) if platt_a_list else -1.0
     mean_platt_b = float(np.mean(platt_b_list)) if platt_b_list else 0.0
 
+    # IMPORTANT: the Node runtime must reproduce sklearn's CalibratedClassifierCV
+    # exactly. Each calibrated member has its own LinearSVC coefficients and
+    # sigmoid (a_, b_) parameters; averaging coefficients or calibration
+    # parameters does NOT reproduce calibrated predict_proba().
+    calibrated_members = []
+    for member in final_svm_calibrated.calibrated_classifiers_:
+        estimator = getattr(member, "estimator", None)
+        calibrators = getattr(member, "calibrators", None)
+        if estimator is None or not calibrators:
+            raise RuntimeError("Unexpected CalibratedClassifierCV structure; refusing to export an approximate runtime artifact.")
+        calibrator = calibrators[0]
+        calibrated_members.append({
+            "weights": estimator.coef_[0].tolist(),
+            "bias": float(estimator.intercept_[0]),
+            "plattA": float(calibrator.a_),
+            "plattB": float(calibrator.b_)
+        })
+
+    if len(calibrated_members) != 3:
+        raise RuntimeError(
+            f"Expected 3 calibrated ensemble members, found {len(calibrated_members)}. "
+            "Refusing to export a non-equivalent production inference artifact."
+        )
+
     print(f"\nCalibrated Probability Parameters (Platt Sigmoid): a={mean_platt_a:.4f}, b={mean_platt_b:.4f}")
 
     # Save Model Artifacts
@@ -391,7 +415,7 @@ def main():
     metrics_payload = {
         "status": "success",
         "dataset_name": "ISOT Fake News Dataset",
-        "model_version": "3.0.0-isot",
+        "model_version": "3.1.0-isot",
         "trained_at": datetime.utcnow().isoformat() + "Z",
         "is_demo": False,
         "dataset_status": "ISOT BENCHMARK DATASET",
@@ -475,7 +499,7 @@ def main():
         },
         "best_model": {
             "name": selected_model_name,
-            "model_version": "3.0.0-isot",
+            "model_version": "3.1.0-isot",
             "selection_criterion": "Stratified 5-Fold Cross-Validation F1-score",
             "selection_reason": selection_reason,
             "calibration_method": "Platt Sigmoid (CalibratedClassifierCV)",
@@ -502,10 +526,13 @@ def main():
         weights = final_lr.coef_[0].tolist()
         bias = float(final_lr.intercept_[0])
 
+    runtime_inference_mode = "calibrated_ensemble" if selected_model_name.startswith("Linear SVM") else "legacy_single_svm"
+    runtime_members = calibrated_members if selected_model_name.startswith("Linear SVM") else []
+
     runtime_artifact = {
         "model_name": selected_model_name,
         "model_type": selected_model_name,
-        "model_version": "3.0.0-isot",
+        "model_version": "3.1.0-isot",
         "trained_at": metrics_payload["trained_at"],
         "is_demo": False,
         "dataset_status": "ISOT BENCHMARK DATASET",
@@ -524,10 +551,12 @@ def main():
         "idf": final_vectorizer.idf_.tolist(),
         "selected_model": {
             "name": selected_model_name,
+            "inference_mode": runtime_inference_mode,
             "weights": weights,
             "bias": bias,
             "plattA": mean_platt_a,
-            "plattB": mean_platt_b
+            "plattB": mean_platt_b,
+            "members": runtime_members
         },
         "logistic_regression": {
             "weights": final_lr.coef_[0].tolist(),
