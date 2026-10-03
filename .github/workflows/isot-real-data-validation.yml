@@ -7,6 +7,11 @@ on:
   pull_request:
     branches:
       - main
+    paths:
+      - 'scripts/isot_*.py'
+      - 'data/Fake.csv'
+      - 'data/True.csv'
+      - '.github/workflows/isot-real-data-validation.yml'
   workflow_dispatch:
 
 jobs:
