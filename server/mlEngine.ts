@@ -1772,7 +1772,11 @@ export class TruthLensMLEngine {
       model_name: bestModelName,
       model_version: modelVersion,
       model_architecture: bestModelName.toLowerCase().includes("svm")
-        ? "CalibratedClassifierCV(LinearSVC) with Platt Scaling (Sigmoid)"
+        ? this.inferenceMode === 'calibrated_ensemble'
+          ? "CalibratedClassifierCV(LinearSVC) with exact 3-member Platt ensemble"
+          : this.inferenceMode === 'single_calibrated_svm'
+            ? "LinearSVC with exact single Platt calibrator fitted on disjoint validation"
+            : "LinearSVC with legacy uncalibrated safety scoring"
         : "Logistic Regression (L2 regularized, sklearn)",
       is_demo: this.metrics.is_demo,
       dataset_status: this.metrics.dataset_status,
