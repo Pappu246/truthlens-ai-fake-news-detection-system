@@ -1583,13 +1583,15 @@ export class TruthLensMLEngine {
         `The calibrated model probability (P(FAKE)=${fakeProb}) falls inside the configured uncertainty zone (${tReal} - ${tFake}); the model does not have sufficient certainty to classify this text as real or fake.`;
     }
 
-    const probabilityCaveat = demoModel
-      ? (fakeProb >= 0.9 || realProb >= 0.9
-        ? 'The active model was trained on a small demo dataset; extreme scores are not statistically supported and must not be treated as verified truth.'
-        : undefined)
-      : legacySafetyMode
-        ? 'Legacy model artifact safety mode is active. No calibrated probability or confidence percentage is exposed. The verdict uses conservative SVM decision-margin bands until a v3.1 calibrated ensemble artifact is promoted.'
-        : undefined;
+    const probabilityCaveat = limitedContentSource
+      ? 'Only partial article content is available (headline/RSS summary or extraction-blocked fallback). TruthLens withholds probability/confidence from the classification panel until full article text or independent evidence is available.'
+      : demoModel
+        ? (fakeProb >= 0.9 || realProb >= 0.9
+          ? 'The active model was trained on a small demo dataset; extreme scores are not statistically supported and must not be treated as verified truth.'
+          : undefined)
+        : legacySafetyMode
+          ? 'Legacy model artifact safety mode is active. No calibrated probability or confidence percentage is exposed. The verdict uses conservative SVM decision-margin bands until a validated replacement artifact is promoted.'
+          : undefined;
 
     const confidenceScore = confidence !== null && predictionDetails.calibrated && !limitedContentSource
       ? Math.round(confidence * 100)
@@ -1635,9 +1637,12 @@ export class TruthLensMLEngine {
 
     summaryReasons.push(
       predictionDetails.calibrated
-        ? `Model inference: exact calibrated SVM ensemble (3 fold members); vocabulary coverage ${Math.round(predictionDetails.coverage_ratio * 100)}%.`
+        ? `Model inference: exact calibrated runtime; vocabulary coverage ${Math.round(predictionDetails.coverage_ratio * 100)}%.`
         : `Model inference: legacy raw-margin safety mode; vocabulary coverage ${Math.round(predictionDetails.coverage_ratio * 100)}%. The score is not a calibrated factual probability.`
     );
+    if (limitedContentSource) {
+      summaryReasons.push('Content-source policy: partial or headline-only content cannot establish a reliable real/fake classification, so the verdict is withheld.');
+    }
 
     if (verdictReason) {
       summaryReasons.push(verdictReason);
