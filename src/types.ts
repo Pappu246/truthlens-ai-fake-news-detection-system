@@ -94,7 +94,17 @@ export interface AnalysisResult {
   /** NULL means the confidence is not meaningful for this verdict (render N/A). */
   confidence_score: number | null;
   model_score?: number | null;
+  /** Raw SVM decision strength when calibration is unavailable. */
+  decision_strength?: number | null;
   uncertainty_score?: number | null;
+  model_inference_mode?: 'calibrated_ensemble' | 'legacy_single_svm' | string;
+  calibration_status?: 'EXACT_CALIBRATED_ENSEMBLE' | 'LEGACY_UNCALIBRATED_MARGIN' | string;
+  vocabulary_coverage?: {
+    ratio: number;
+    matched_terms: number;
+    candidate_terms: number;
+  };
+
   model_used: string;
   model_reliability?: string;
   probability_caveat?: string;
