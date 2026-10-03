@@ -10,6 +10,7 @@ on:
       - "scripts/isot_data_pipeline.py"
       - "server/mlEngine.ts"
       - "package.json"
+      - "requirements-model.txt"
       - ".github/workflows/runtime-model-candidate.yml"
   workflow_dispatch:
 
