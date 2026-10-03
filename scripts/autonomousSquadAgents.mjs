@@ -61,11 +61,18 @@ async function main() {
 
   agents.push(await executeRole("model-scout", async () => {
     const registry = await readJson(path.join(ROOT, "research", "research-intelligence-registry.json"));
+    const intelligencePath = path.join(OUT, "research-intelligence", "research-intelligence.json");
     const queries = (registry.model_search || []).map((x) => x.query).filter(Boolean);
     if (!queries.length) throw new Error("model discovery contract contains no search queries");
+    let discoveredModels = null;
+    try {
+      const discovery = await readJson(intelligencePath);
+      discoveredModels = Array.isArray(discovery.models) ? discovery.models.length : null;
+    } catch {}
     return {
-      action: "identify-candidates",
+      action: "identify-model-candidates",
       query_count: queries.length,
+      discovered_models: discoveredModels,
       automatic_model_promotion: false
     };
   }));
