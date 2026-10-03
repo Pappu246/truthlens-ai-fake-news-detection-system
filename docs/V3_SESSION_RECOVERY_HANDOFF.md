@@ -32,10 +32,15 @@ Purpose:
 
 Production mutation, automatic merge, automatic deployment, and automatic PR creation remain disabled.
 
-Latest known completed Squad CI success:
+Latest completed Squad CI success on the previous research line:
 - workflow: TruthLens Autonomous Research Squad
-- run: #33
-- successful head: a3226b8c22c645067c44cb82ac4b2f06368fcb62
+- run: #39
+- successful head: d80e7915ee817d537a6eeeed4e3e031a4431346f
+
+Current-main PR #49:
+- latest workflow: #44
+- status: queued
+- current head is not yet runtime-verified on CI
 
 Later commits improved runner detection, recovery metadata, concurrency, and artifact retention to 90 days. The latest head must be re-verified before merge.
 
