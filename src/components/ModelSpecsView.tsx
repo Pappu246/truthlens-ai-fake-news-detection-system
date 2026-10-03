@@ -29,7 +29,8 @@ export const ModelSpecsView: React.FC<ModelSpecsViewProps> = ({ metrics, onRetra
   const [minTextLength, setMinTextLength] = useState<number>(60);
   const [thresholdSavedMsg, setThresholdSavedMsg] = useState<string>('');
   const [runtimeDiagnostics, setRuntimeDiagnostics] = useState<any>(null);
-  const productionLocked = runtimeDiagnostics?.decision_policy?.mode === 'LEGACY_MARGIN_GATED';
+  const productionLocked = runtimeDiagnostics?.production_model_locked === true
+    || runtimeDiagnostics?.decision_policy?.mode === 'LEGACY_MARGIN_GATED';
 
   useEffect(() => {
     // Fetch live dataset audit
