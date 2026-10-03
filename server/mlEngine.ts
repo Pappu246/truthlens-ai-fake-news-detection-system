@@ -1679,7 +1679,11 @@ export class TruthLensMLEngine {
       uncertainty_score: uncertaintyScore,
       risk_level: riskLevel,
       model_inference_mode: this.inferenceMode,
-      calibration_status: predictionDetails.calibrated ? 'EXACT_CALIBRATED_ENSEMBLE' : 'LEGACY_UNCALIBRATED_MARGIN',
+      calibration_status: this.inferenceMode === 'calibrated_ensemble'
+        ? 'EXACT_CALIBRATED_ENSEMBLE'
+        : this.inferenceMode === 'single_calibrated_svm'
+          ? 'EXACT_SINGLE_CALIBRATED_SVM'
+          : 'LEGACY_UNCALIBRATED_MARGIN',
       vocabulary_coverage: {
         ratio: Math.round(predictionDetails.coverage_ratio * 10000) / 10000,
         matched_terms: predictionDetails.matched_term_count,
@@ -1729,9 +1733,11 @@ export class TruthLensMLEngine {
       model_reliability: this.modelReliabilityLabel(),
       probability_caveat: probabilityCaveat,
       model_version: this.metrics?.model_version || 'unknown',
-      calibration: predictionDetails.calibrated
-        ? 'CalibratedClassifierCV (exact fold-ensemble Platt scaling via Sigmoid)'
-        : 'LEGACY: uncalibrated SVM decision-strength score (Platt parameters not used)',
+      calibration: this.inferenceMode === 'calibrated_ensemble'
+        ? 'CalibratedClassifierCV (exact 3-member fold-ensemble Platt scaling via Sigmoid)'
+        : this.inferenceMode === 'single_calibrated_svm'
+          ? 'Platt scaling (exact single SVM + disjoint validation calibrator)'
+          : 'LEGACY: uncalibrated SVM decision-strength score (Platt parameters not used)',
       vectorizer: 'TF-IDF (1-2 ngrams, sublinear tf)',
       source_info: sourceInfo,
       evidence_verification: {
