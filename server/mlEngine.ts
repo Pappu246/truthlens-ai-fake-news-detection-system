@@ -93,7 +93,7 @@ export interface ModelArtifacts {
     bias: number;
     plattA: number;
     plattB: number;
-    inference_mode?: 'calibrated_ensemble' | 'legacy_single_svm';
+    inference_mode?: 'calibrated_ensemble' | 'single_calibrated_svm' | 'legacy_single_svm';
     members?: Array<{
       weights: number[];
       bias: number;
@@ -320,7 +320,7 @@ export class TruthLensMLEngine {
     plattA: number;
     plattB: number;
   }> = [];
-  private inferenceMode: 'calibrated_ensemble' | 'legacy_single_svm' = 'legacy_single_svm';
+  private inferenceMode: 'calibrated_ensemble' | 'single_calibrated_svm' | 'legacy_single_svm' = 'legacy_single_svm';
   private isTrained = false;
   private trainedAt: string = new Date().toISOString();
   private metrics: any = null;
@@ -430,13 +430,25 @@ export class TruthLensMLEngine {
           Number.isFinite(member.plattB)
         );
 
+      const singleCalibratedValid =
+        artifact.selected_model.inference_mode === 'single_calibrated_svm' &&
+        Array.isArray(artifact.selected_model.weights) &&
+        artifact.selected_model.weights.length === vocabSize &&
+        Number.isFinite(artifact.selected_model.bias) &&
+        Number.isFinite(artifact.selected_model.plattA) &&
+        Number.isFinite(artifact.selected_model.plattB);
+
       this.calibrationMembers = membersValid ? members!.map(member => ({
         weights: member.weights,
         bias: member.bias,
         plattA: member.plattA,
         plattB: member.plattB
       })) : [];
-      this.inferenceMode = membersValid ? 'calibrated_ensemble' : 'legacy_single_svm';
+      this.inferenceMode = membersValid
+        ? 'calibrated_ensemble'
+        : singleCalibratedValid
+          ? 'single_calibrated_svm'
+          : 'legacy_single_svm';
 
       this.metrics = artifact.metrics;
       this.trainedAt = artifact.trained_at;
@@ -1284,6 +1296,23 @@ export class TruthLensMLEngine {
       return 1.0 / (1.0 + Math.exp(-bounded));
     };
 
+    if (this.inferenceMode === 'single_calibrated_svm') {
+      let z = this.bias;
+      for (const [idx, val] of details.vector) {
+        z += this.weights[idx] * val;
+      }
+      const exponent = Math.max(-50, Math.min(50, this.plattA * z + this.plattB));
+      const probability = 1.0 / (1.0 + Math.exp(exponent));
+      return {
+        probability: Math.min(Math.max(probability, 0.0001), 0.9999),
+        decision_margin: z,
+        candidate_term_count: details.candidate_term_count,
+        matched_term_count: details.matched_term_count,
+        coverage_ratio: details.coverage_ratio,
+        calibrated: true
+      };
+    }
+
     if (this.inferenceMode === 'calibrated_ensemble' && this.calibrationMembers.length === 3) {
       const memberMargins: number[] = [];
       const memberProbabilities: number[] = [];
@@ -1752,11 +1781,17 @@ export class TruthLensMLEngine {
       real_dataset_required_notice: this.metrics.real_dataset_required_notice,
       inference_mode: this.inferenceMode,
       calibration: {
-        method: this.inferenceMode === 'calibrated_ensemble' ? "sigmoid (Platt scaling, exact 3-member ensemble)" : "legacy raw SVM margin",
-        is_calibrated: this.inferenceMode === 'calibrated_ensemble',
+        method: this.inferenceMode === 'calibrated_ensemble'
+          ? "sigmoid (Platt scaling, exact 3-member ensemble)"
+          : this.inferenceMode === 'single_calibrated_svm'
+            ? "sigmoid (Platt scaling, exact single SVM + disjoint validation calibrator)"
+            : "legacy raw SVM margin",
+        is_calibrated: this.inferenceMode === 'calibrated_ensemble' || this.inferenceMode === 'single_calibrated_svm',
         description: this.inferenceMode === 'calibrated_ensemble'
           ? "Runtime mirrors sklearn CalibratedClassifierCV by calculating each fold member's calibrated probability and averaging the three probabilities."
-          : "Legacy artifact does not contain the fold calibrators needed for exact probability reproduction; runtime uses a conservative raw SVM margin score and abstains on low-vocabulary inputs."
+          : this.inferenceMode === 'single_calibrated_svm'
+            ? "Runtime applies the exact single SVM decision margin and Platt calibrator serialized by the canonical runtime candidate pipeline."
+            : "Legacy artifact does not contain the fold calibrators needed for exact probability reproduction; runtime uses a conservative raw SVM margin score and abstains on low-vocabulary inputs."
       },
       dataset_size: {
         total_samples: totalSamples,
