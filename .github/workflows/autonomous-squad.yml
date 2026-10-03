@@ -1,0 +1,49 @@
+name: TruthLens Autonomous Research Squad
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "research/v3-*"
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  checkpoint:
+    name: Generate autonomous research checkpoint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Validate JSON contracts
+        run: |
+          node -e "JSON.parse(require('fs').readFileSync('research/autonomous-squad-config.json', 'utf8')); console.log('Squad config: OK')"
+          node -e "JSON.parse(require('fs').readFileSync('research/multibenchmark-manifest.json', 'utf8')); console.log('Benchmark manifest: OK')"
+          node --check scripts/autonomousSquad.mjs
+          node --check scripts/autonomousSquadTests.mjs
+
+      - name: Run governance invariants
+        run: node scripts/autonomousSquadTests.mjs
+
+      - name: Generate deterministic checkpoint
+        run: node scripts/autonomousSquad.mjs
+
+      - name: Upload resumable checkpoint
+        uses: actions/upload-artifact@v4
+        with:
+          name: truthlens-autonomous-squad-checkpoint-\${{ github.run_number }}
+          path: autonomous-squad-output/
+          if-no-files-found: error
+          retention-days: 30
