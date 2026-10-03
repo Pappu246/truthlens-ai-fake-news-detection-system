@@ -49,7 +49,7 @@ async function main() {
     reason: "Phase 2 exit conditions are not globally satisfied."
   })));
 
-  agents.push(executeRole("research-scout", () => {
+  agents.push(await executeRole("research-scout", () => {
     const registryPath = path.join(ROOT, "research", "research-intelligence-registry.json");
     return fs.access(registryPath).then(() => ({
       action: "consume-discovery-contract",
@@ -59,7 +59,7 @@ async function main() {
     }));
   }));
 
-  agents.push(executeRole("model-scout", async () => {
+  agents.push(await executeRole("model-scout", async () => {
     const registry = await readJson(path.join(ROOT, "research", "research-intelligence-registry.json"));
     const queries = (registry.model_search || []).map((x) => x.query).filter(Boolean);
     if (!queries.length) throw new Error("model discovery contract contains no search queries");
@@ -70,7 +70,7 @@ async function main() {
     };
   }));
 
-  agents.push(executeRole("benchmark-agent", () => {
+  agents.push(await executeRole("benchmark-agent", () => {
     const ready = byStatus("FROZEN_AND_MATERIALIZED");
     const baseline = byStatus("FROZEN_AND_BASELINED");
     const human = byStatus("PLANNED_EXTERNAL_COLLECTION");
@@ -83,7 +83,7 @@ async function main() {
     };
   }));
 
-  agents.push(executeRole("evaluator", () => {
+  agents.push(await executeRole("evaluator", () => {
     const readyBenchmarks = benchmarks.filter((b) => b.status === "FROZEN_AND_MATERIALIZED");
     const missingContracts = readyBenchmarks
       .filter((b) => !b.evaluation && !(Array.isArray(b.metrics) && b.metrics.length))
@@ -96,13 +96,13 @@ async function main() {
     };
   }));
 
-  agents.push(executeRole("red-team", () => ({
+  agents.push(await executeRole("red-team", () => ({
     action: "hold-until-phase-5",
     executed: false,
     reason: "Phase ordering blocks reliability/adversarial execution during Phase 2."
   })));
 
-  agents.push(executeRole("gatekeeper", () => {
+  agents.push(await executeRole("gatekeeper", () => {
     requireTrue(config.human_approval_required_for_promotion === true, "promotion must remain human-gated");
     requireTrue(config.promotion_rules.automatic_pr_creation === false, "automatic PR creation must remain disabled");
     requireTrue(config.promotion_rules.automatic_merge === false, "automatic merge must remain disabled");
