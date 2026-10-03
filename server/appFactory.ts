@@ -91,6 +91,9 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
       service: 'TruthLens ML Engine',
       model: 'Linear SVM (Calibrated)',
       model_trained: modelTrained,
+      article_model_version: mlEngine.getMetrics()?.model_version || null,
+      article_inference_mode: mlEngine.getInferenceMode(),
+      article_calibration_exact: mlEngine.isCalibrationExact(),
       // The article model and the claim model are separate systems and are
       // reported separately. They are never combined into one number.
       components: {
@@ -98,7 +101,10 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
           role: 'article_model',
           dataset: 'ISOT',
           ready: modelTrained,
-          status: modelTrained ? 'READY' : 'DEGRADED'
+          status: modelTrained ? 'READY' : 'DEGRADED',
+          model_version: mlEngine.getMetrics()?.model_version || null,
+          inference_mode: mlEngine.getInferenceMode(),
+          calibration_exact: mlEngine.isCalibrationExact()
         },
         claim_model: {
           role: 'claim_model',
