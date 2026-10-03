@@ -2,12 +2,15 @@ name: V3 Phase 2 Scoring Recovery
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - research/v3-phase2-scoring-current
   pull_request:
     branches:
       - main
 
 concurrency:
-  group: truthlens-v3-phase2-scoring-recovery-${{ github.ref }}
+  group: truthlens-v3-phase2-scoring-recovery-current
   cancel-in-progress: true
 
 permissions:
