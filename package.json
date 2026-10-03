@@ -17,6 +17,7 @@
     "test:verdicts": "tsx scripts/regressionVerdictTests.ts",
     "test:model-safety": "tsx scripts/articleModelSafetyTests.ts",
     "test:runtime-model-parity": "tsx scripts/runtimeModelParityTests.ts",
+    "test:article-pipeline-safety": "tsx scripts/articlePipelineSafetyTests.ts",
     "train:claim": "python3 scripts/train_liar_claim.py",
     "test:claim": "tsx scripts/claimModelTests.ts",
     "test:claim-parity": "tsx scripts/claimParity.ts",
