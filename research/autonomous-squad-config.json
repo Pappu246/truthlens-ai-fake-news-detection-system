@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "name": "TruthLens Autonomous Research Squad",
+  "purpose": "Research-control-plane orchestration for evidence-grounded verification work.",
+  "production_mutation_allowed": false,
+  "auto_merge": false,
+  "auto_deploy": false,
+  "human_approval_required_for_promotion": true,
+  "checkpoint_policy": {
+    "deterministic": true,
+    "persist_run_manifest": true,
+    "persist_input_hashes": true,
+    "resume_from_previous_checkpoint": true
+  },
+  "agents": [
+    {
+      "id": "supervisor",
+      "role": "Supervisor / Orchestrator",
+      "responsibility": "Select the next legal research action and maintain phase ordering."
+    },
+    {
+      "id": "research-scout",
+      "role": "Research Scout",
+      "responsibility": "Consume discovery artifacts and identify candidate papers, models, and benchmark changes."
+    },
+    {
+      "id": "benchmark-agent",
+      "role": "Benchmark Agent",
+      "responsibility": "Prepare and execute only frozen, reproducible benchmark lanes."
+    },
+    {
+      "id": "model-scout",
+      "role": "Model Scout",
+      "responsibility": "Identify candidate retrieval/NLI/embedding models for later benchmark evaluation."
+    },
+    {
+      "id": "evaluator",
+      "role": "Evaluator",
+      "responsibility": "Produce benchmark-specific metrics, artifacts, hashes, and limitations."
+    },
+    {
+      "id": "red-team",
+      "role": "Reliability / Red-Team Agent",
+      "responsibility": "Run adversarial and reliability checks only after the relevant research phase is unlocked."
+    },
+    {
+      "id": "gatekeeper",
+      "role": "Gatekeeper",
+      "responsibility": "Enforce phase gates, metric separation, production boundary, and promotion policy."
+    },
+    {
+      "id": "reporter",
+      "role": "Evidence Report Agent",
+      "responsibility": "Assemble auditable research reports and PR-ready evidence without auto-merging."
+    }
+  ],
+  "lifecycle": [
+    "DISCOVER",
+    "QUEUE",
+    "EVALUATE",
+    "VERIFY",
+    "REPORT",
+    "HUMAN_REVIEW",
+    "PROMOTE"
+  ],
+  "promotion_rules": {
+    "candidate_discovery": true,
+    "automatic_benchmark_execution": true,
+    "automatic_pr_creation": false,
+    "automatic_merge": false,
+    "automatic_deploy": false,
+    "production_model_write_requires_human_approval": true
+  }
+}
