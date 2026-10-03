@@ -2,6 +2,8 @@ name: TruthLens Autonomous Research Squad
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "45 4 * * 0"
   push:
     branches:
       - "research/v3-*"
@@ -41,6 +43,12 @@ jobs:
 
       - name: Run governance invariants
         run: node scripts/autonomousSquadTests.mjs
+
+      - name: Refresh research intelligence
+        run: node scripts/researchIntelligence.mjs
+        continue-on-error: true
+        env:
+          RESEARCH_INTELLIGENCE_OUT: autonomous-squad-output/research-intelligence
 
       - name: Generate deterministic checkpoint
         run: node scripts/autonomousSquad.mjs
