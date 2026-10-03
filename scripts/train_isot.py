@@ -548,10 +548,12 @@ def main():
         "idf": final_vectorizer.idf_.tolist(),
         "selected_model": {
             "name": selected_model_name,
+            "inference_mode": "calibrated_ensemble",
             "weights": weights,
             "bias": bias,
             "plattA": mean_platt_a,
-            "plattB": mean_platt_b
+            "plattB": mean_platt_b,
+            "members": calibrated_members
         },
         "logistic_regression": {
             "weights": final_lr.coef_[0].tolist(),
