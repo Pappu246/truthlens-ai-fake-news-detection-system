@@ -1771,6 +1771,7 @@ export class TruthLensMLEngine {
     const modelVersion = this.metrics.model_version || "unknown";
     return {
       status: "operational",
+      production_model_locked: process.env.NODE_ENV === 'production',
       model_type: bestModelName,
       model_name: bestModelName,
       model_version: modelVersion,
