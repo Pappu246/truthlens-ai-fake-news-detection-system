@@ -59,6 +59,7 @@ const DEMO_REAL_ZONE_BOUND = 0.40;
 const LEGACY_MIN_VOCAB_COVERAGE = 0.10;
 const LEGACY_FAKE_MARGIN = 1.50;
 const LEGACY_REAL_MARGIN = -1.50;
+const LIMITED_CONTENT_SOURCES = new Set(['RSS_SUMMARY_ONLY', 'HEADLINE_ONLY', 'EXTRACTION_BLOCKED']);
 
 
 export interface ModelArtifacts {
@@ -1521,6 +1522,7 @@ export class TruthLensMLEngine {
     const tReal = zone.real_threshold;
     const demoModel = this.isDemoModel();
     const lowVocabularyCoverage = predictionDetails.coverage_ratio < LEGACY_MIN_VOCAB_COVERAGE;
+    const limitedContentSource = LIMITED_CONTENT_SOURCES.has(options?.contentSource || '');
     const legacySafetyMode = !predictionDetails.calibrated;
 
     // 4. Verdict contract (backend = single source of truth).
@@ -1533,7 +1535,13 @@ export class TruthLensMLEngine {
     let confidence: number | null;
     let verdictReason: string | null = null;
 
-    if (lowVocabularyCoverage) {
+    if (limitedContentSource) {
+      prediction = VERDICT_NEEDS_MORE_CONTEXT;
+      riskLevel = 'UNDETERMINED';
+      confidence = null;
+      verdictReason =
+        'The available content is a headline/RSS summary or an extraction-blocked fallback rather than the full article body. TruthLens withholds a forced real/fake verdict until fuller article context or independent evidence is available.';
+    } else if (lowVocabularyCoverage) {
       prediction = VERDICT_NEEDS_MORE_CONTEXT;
       riskLevel = 'UNDETERMINED';
       confidence = null;
@@ -1583,10 +1591,10 @@ export class TruthLensMLEngine {
         ? 'Legacy model artifact safety mode is active. No calibrated probability or confidence percentage is exposed. The verdict uses conservative SVM decision-margin bands until a v3.1 calibrated ensemble artifact is promoted.'
         : undefined;
 
-    const confidenceScore = confidence !== null && predictionDetails.calibrated
+    const confidenceScore = confidence !== null && predictionDetails.calibrated && !limitedContentSource
       ? Math.round(confidence * 100)
       : null;
-    const uncertaintyScore = lowVocabularyCoverage || legacySafetyMode
+    const uncertaintyScore = limitedContentSource || lowVocabularyCoverage || legacySafetyMode
       ? null
       : Math.round((1.0 - Math.abs(fakeProb - realProb)) * 10000) / 10000;
 
@@ -1646,8 +1654,8 @@ export class TruthLensMLEngine {
       // Keep persisted history semantically aligned with the public response:
       // legacy/abstained inputs never store an uncalibrated score as a
       // probability that can later be rendered as 96–100% confidence.
-      fake_probability: predictionDetails.calibrated && !lowVocabularyCoverage ? fakeProb : null,
-      real_probability: predictionDetails.calibrated && !lowVocabularyCoverage ? realProb : null,
+      fake_probability: predictionDetails.calibrated && !lowVocabularyCoverage && !limitedContentSource ? fakeProb : null,
+      real_probability: predictionDetails.calibrated && !lowVocabularyCoverage && !limitedContentSource ? realProb : null,
       risk_level: riskLevel,
       model_name: 'Linear SVM (Calibrated)',
       source_url: sourceUrl || options?.originalUrl || '',
@@ -1673,8 +1681,8 @@ export class TruthLensMLEngine {
       // Public probabilities are only exposed when the exact calibrated
       // ensemble is active. Legacy raw-margin scores are decision strength,
       // not probabilities, and must never be rendered as 96–100% confidence.
-      fake_probability: predictionDetails.calibrated && !lowVocabularyCoverage ? fakeProb : null,
-      real_probability: predictionDetails.calibrated && !lowVocabularyCoverage ? realProb : null,
+      fake_probability: predictionDetails.calibrated && !lowVocabularyCoverage && !limitedContentSource ? fakeProb : null,
+      real_probability: predictionDetails.calibrated && !lowVocabularyCoverage && !limitedContentSource ? realProb : null,
       confidence,
       confidence_score: confidenceScore,
       model_score: confidenceScore,
