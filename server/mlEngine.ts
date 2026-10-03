@@ -1478,14 +1478,15 @@ export class TruthLensMLEngine {
     }
 
     // 3. Dynamic ML Prediction strictly from text (Source URL is completely decoupled)
-    const fakeProbRaw = this.predictProbability(cleaned);
-    const fakeProb = Math.round(fakeProbRaw * 10000) / 10000;
+    const predictionDetails = this.predictProbabilityDetailed(cleaned);
+    const fakeProb = Math.round(predictionDetails.probability * 10000) / 10000;
     const realProb = Math.round((1.0 - fakeProb) * 10000) / 10000;
 
     const zone = this.effectiveDecisionZone();
     const tFake = zone.fake_threshold;
     const tReal = zone.real_threshold;
     const demoModel = this.isDemoModel();
+    const lowVocabularyCoverage = predictionDetails.coverage_ratio < LEGACY_MIN_VOCAB_COVERAGE;
 
     // 4. Verdict contract (backend = single source of truth):
     //    LIKELY REAL | LIKELY FAKE | NEEDS MORE CONTEXT
@@ -1494,7 +1495,13 @@ export class TruthLensMLEngine {
     let confidence: number | null;
     let verdictReason: string | null = null;
 
-    if (fakeProb >= tFake) {
+    if (lowVocabularyCoverage) {
+      prediction = VERDICT_NEEDS_MORE_CONTEXT;
+      riskLevel = 'UNDETERMINED';
+      confidence = null;
+      verdictReason =
+        `Only ${predictionDetails.matched_term_count}/${predictionDetails.candidate_term_count} candidate vocabulary terms matched the active training space (${Math.round(predictionDetails.coverage_ratio * 100)}% coverage). This input is outside the model's learned vocabulary, so the classifier abstains rather than guessing.`;
+    } else if (fakeProb >= tFake) {
       prediction = VERDICT_LIKELY_FAKE;
       riskLevel = 'HIGH';
       confidence = fakeProb;
@@ -1506,14 +1513,17 @@ export class TruthLensMLEngine {
       prediction = VERDICT_NEEDS_MORE_CONTEXT;
       riskLevel = 'UNDETERMINED';
       confidence = null;
-      verdictReason = `The model probability (P(FAKE)=${fakeProb}) falls inside the configured uncertainty zone (${tReal} - ${tFake}); the model does not have sufficient certainty to classify this text as real or fake.` +
+      verdictReason = `The model score (P(FAKE)=${fakeProb}) falls inside the configured uncertainty zone (${tReal} - ${tFake}); the model does not have sufficient certainty to classify this text as real or fake.` +
         (zone.widened_for_demo ? ' The uncertainty zone is widened because the active model was trained on a small demo dataset.' : '');
     }
 
-    // Overconfident scores from demo models are not statistically supported
-    const probabilityCaveat = demoModel && (fakeProb >= 0.9 || realProb >= 0.9)
-      ? `The active model was trained on a small demo dataset; extreme probabilities are not statistically supported and must not be treated as verified truth.`
-      : undefined;
+    const probabilityCaveat = demoModel
+      ? (fakeProb >= 0.9 || realProb >= 0.9
+        ? 'The active model was trained on a small demo dataset; extreme scores are not statistically supported and must not be treated as verified truth.'
+        : undefined)
+      : !predictionDetails.calibrated
+        ? 'Legacy model artifact safety mode is active. The displayed score is a monotonic SVM decision-strength score, not a calibrated factual probability. A calibrated v3.1 ensemble artifact is required for calibrated probabilities.'
+        : undefined;
 
     const confidenceScore = confidence !== null ? Math.round(confidence * 100) : null;
     const uncertaintyScore = Math.round((1.0 - Math.abs(fakeProb - realProb)) * 10000) / 10000;
