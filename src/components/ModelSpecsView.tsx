@@ -28,6 +28,9 @@ export const ModelSpecsView: React.FC<ModelSpecsViewProps> = ({ metrics, onRetra
   const [realThreshold, setRealThreshold] = useState<number>(0.35);
   const [minTextLength, setMinTextLength] = useState<number>(60);
   const [thresholdSavedMsg, setThresholdSavedMsg] = useState<string>('');
+  const [runtimeDiagnostics, setRuntimeDiagnostics] = useState<any>(null);
+  const productionLocked = runtimeDiagnostics?.production_model_locked === true
+    || runtimeDiagnostics?.decision_policy?.mode === 'LEGACY_MARGIN_GATED';
 
   useEffect(() => {
     // Fetch live dataset audit
@@ -40,10 +43,16 @@ export const ModelSpecsView: React.FC<ModelSpecsViewProps> = ({ metrics, onRetra
     fetch('/api/model/thresholds')
       .then(res => res.json())
       .then(data => {
-        if (data.fake_threshold) setFakeThreshold(data.fake_threshold);
-        if (data.real_threshold) setRealThreshold(data.real_threshold);
-        if (data.min_text_length) setMinTextLength(data.min_text_length);
+        if (data.fake_threshold !== undefined) setFakeThreshold(data.fake_threshold);
+        if (data.real_threshold !== undefined) setRealThreshold(data.real_threshold);
+        if (data.min_text_length !== undefined) setMinTextLength(data.min_text_length);
       })
+      .catch(() => {});
+
+    // Read the authoritative runtime calibration/inference mode from the backend.
+    fetch('/api/model/diagnostics')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => setRuntimeDiagnostics(data))
       .catch(() => {});
   }, []);
 
@@ -60,6 +69,11 @@ export const ModelSpecsView: React.FC<ModelSpecsViewProps> = ({ metrics, onRetra
   };
 
   const handleSaveThresholds = async () => {
+    if (productionLocked) {
+      setThresholdSavedMsg('Production model is locked; use the audited promotion workflow to change thresholds.');
+      setTimeout(() => setThresholdSavedMsg(''), 5000);
+      return;
+    }
     if (realThreshold >= fakeThreshold) {
       alert('Real threshold must be strictly lower than Fake threshold.');
       return;
@@ -95,7 +109,11 @@ export const ModelSpecsView: React.FC<ModelSpecsViewProps> = ({ metrics, onRetra
         <div>
           <div className="flex flex-wrap items-center gap-2 mb-1">
             <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase tracking-wider rounded">
-              {metrics.is_demo ? 'DEMO MODEL (NOT FOR PRODUCTION)' : 'Production Model: Linear SVM (Calibrated)'}
+              {metrics.is_demo
+                ? 'DEMO MODEL (NOT FOR PRODUCTION)'
+                : runtimeDiagnostics?.inference_mode === 'legacy_single_svm'
+                  ? 'Production Model: LEGACY SAFETY MODE'
+                  : 'Production Model: Linear SVM (Calibrated)'}
             </span>
             <span className="px-2.5 py-0.5 bg-blue-100 text-blue-800 text-[10px] font-black uppercase tracking-wider rounded">
               Runtime Features: {(metrics.vocabulary_size || metrics.total_samples ? (metrics.vocabulary_size || '—') : '2,910')} TF-IDF terms
@@ -114,11 +132,11 @@ export const ModelSpecsView: React.FC<ModelSpecsViewProps> = ({ metrics, onRetra
 
         <button
           onClick={handleRetrain}
-          disabled={retraining}
+          disabled={retraining || productionLocked}
           className="bg-slate-900 text-white font-black px-5 py-3 rounded-lg uppercase tracking-wider text-xs hover:bg-slate-800 transition-all shadow-md flex items-center gap-2 cursor-pointer disabled:opacity-50"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${retraining ? 'animate-spin' : ''}`} />
-          <span>{retraining ? 'Running Pipeline...' : 'Retrain & Re-evaluate'}</span>
+          <span>{retraining ? 'Running Pipeline...' : productionLocked ? 'Production Model Locked' : 'Retrain & Re-evaluate'}</span>
         </button>
       </div>
 
@@ -139,8 +157,14 @@ export const ModelSpecsView: React.FC<ModelSpecsViewProps> = ({ metrics, onRetra
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-xs font-mono mb-4">
           <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
             <span className="text-[10px] text-slate-400 uppercase font-sans block mb-1">Production Runtime Model</span>
-            <strong className="text-slate-900 block text-sm">{metrics.best_model === 'linear_svm' ? 'Linear SVM (Calibrated)' : 'Logistic Regression'}</strong>
-            <span className="text-[10px] text-slate-500 font-sans mt-0.5 block">Platt Sigmoid (CalibratedClassifierCV)</span>
+            <strong className="text-slate-900 block text-sm">{metrics.best_model === 'linear_svm' ? 'Linear SVM' : 'Logistic Regression'}</strong>
+            <span className="text-[10px] text-slate-500 font-sans mt-0.5 block">
+              {runtimeDiagnostics?.inference_mode === 'single_calibrated_svm'
+                ? 'Exact Platt scaling (single calibrated runtime candidate)'
+                : runtimeDiagnostics?.inference_mode === 'calibrated_ensemble'
+                  ? 'Exact 3-member Platt ensemble'
+                  : 'Legacy raw-margin safety scoring — calibrated probability withheld'}
+            </span>
           </div>
 
           <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
@@ -161,8 +185,16 @@ export const ModelSpecsView: React.FC<ModelSpecsViewProps> = ({ metrics, onRetra
 
           <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
             <span className="text-[10px] text-slate-400 uppercase font-sans block mb-1">Model Reliability</span>
-            <strong className="text-slate-900 block text-sm">{metrics.is_demo ? 'DEMO — UNRELIABLE' : 'VALIDATED / BENCHMARK'}</strong>
-            <span className="text-[10px] text-slate-500 font-sans mt-0.5 block">{metrics.evaluation_status || 'Evaluated on genuine 20% held-out test split'}</span>
+            <strong className="text-slate-900 block text-sm">
+              {metrics.is_demo
+                ? 'DEMO — UNRELIABLE'
+                : runtimeDiagnostics?.inference_mode === 'legacy_single_svm'
+                  ? 'LEGACY SAFETY MODE'
+                  : 'VALIDATED / BENCHMARK'}
+            </strong>
+            <span className="text-[10px] text-slate-500 font-sans mt-0.5 block">
+              {runtimeDiagnostics?.legacy_artifact_warning || metrics.evaluation_status || 'Evaluated on genuine 20% held-out test split'}
+            </span>
           </div>
         </div>
 
@@ -175,12 +207,28 @@ export const ModelSpecsView: React.FC<ModelSpecsViewProps> = ({ metrics, onRetra
               </>
             ) : (
               <>
-                <strong>Production Artifact Integrity:</strong> The Node.js runtime is loading <code className="font-mono bg-white px-1 py-0.5 rounded border">data/saved_model_artifacts.json</code> with {(metrics.vocabulary_size || 8000).toLocaleString()} vocabulary terms, matching IDF length, weight count and finite Platt parameters. The offline <code className="font-mono bg-white px-1 py-0.5 rounded border">backend/models/*.joblib</code> artifacts are Python-serialized copies used for research scripts; the runtime uses only the JSON artifact.
+                <strong>Production Artifact Integrity:</strong> The Node.js runtime is loading <code className="font-mono bg-white px-1 py-0.5 rounded border">data/saved_model_artifacts.json</code> with {(metrics.vocabulary_size || 8000).toLocaleString()} vocabulary terms. {runtimeDiagnostics?.inference_mode === 'legacy_single_svm'
+                  ? 'The legacy artifact is deliberately running in conservative safety mode: its invalid averaged Platt reconstruction is disabled and fake/real probability output is withheld.'
+                  : 'The active runtime artifact has a validated calibration contract.'} The offline <code className="font-mono bg-white px-1 py-0.5 rounded border">backend/models/*.joblib</code> artifacts are Python-serialized copies used for research scripts; the runtime uses only the JSON artifact.
               </>
             )}
           </div>
         </div>
       </div>
+
+      {runtimeDiagnostics?.inference_mode === 'legacy_single_svm' && (
+        <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-3 text-amber-950">
+          <ShieldCheck className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+          <div className="text-xs leading-relaxed">
+            <strong className="font-black uppercase tracking-wide block mb-1 text-amber-900">
+              Production Probability Safety Lock
+            </strong>
+            The currently promoted artifact predates the exact calibration export. TruthLens has disabled its
+            legacy probability mapping, withholds fake/real percentages, and uses conservative decision-margin
+            gates until a validated replacement artifact is promoted.
+          </div>
+        </div>
+      )}
 
       {/* Domain Scope & Limitations Notice */}
       <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-3 text-amber-950">

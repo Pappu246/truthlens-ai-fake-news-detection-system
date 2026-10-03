@@ -30,6 +30,29 @@ def main():
     m=json.loads(manifest.read_text()); ext=json.loads(liar.read_text())
     if m.get("model_version")!=args.model_version: raise SystemExit("Promotion blocked: manifest/model version mismatch.")
     if not m.get("dataset_fingerprint"): raise SystemExit("Promotion blocked: missing dataset fingerprint.")
+
+    candidate = json.loads(artifact.read_text())
+    selected = candidate.get("selected_model", {})
+    inference_mode = selected.get("inference_mode")
+    if inference_mode not in ("single_calibrated_svm", "calibrated_ensemble"):
+        raise SystemExit(
+            "Promotion blocked: candidate runtime inference mode is not an exact calibrated contract."
+        )
+    if not (isinstance(selected.get("weights"), list) and isinstance(candidate.get("vocabulary"), dict)
+            and isinstance(candidate.get("idf"), list)
+            and len(selected["weights"]) == len(candidate["vocabulary"]) == len(candidate["idf"])):
+        raise SystemExit("Promotion blocked: candidate vocabulary / IDF / weight dimensions do not match.")
+    candidate_metrics = candidate.get("metrics", {})
+    if not candidate_metrics.get("test") or not candidate_metrics.get("temporal_test"):
+        raise SystemExit("Promotion blocked: untouched test and temporal-test metrics are required.")
+    ext_metrics = ext.get("metrics", {})
+    balanced = ext_metrics.get("balanced_accuracy")
+    if not isinstance(balanced, (int, float)):
+        raise SystemExit("Promotion blocked: LIAR balanced accuracy is required.")
+    if balanced <= 0.50:
+        raise SystemExit(
+            f"Promotion blocked: out-of-domain LIAR balanced accuracy {balanced:.4f} is not above chance."
+        )
     # NOTE: the unconditional gate above already guarantees args.approve is
     # True by this point (execution cannot reach here otherwise), which
     # makes this specific check currently unreachable. Kept intentionally

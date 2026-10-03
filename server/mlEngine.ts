@@ -59,6 +59,7 @@ const DEMO_REAL_ZONE_BOUND = 0.40;
 const LEGACY_MIN_VOCAB_COVERAGE = 0.10;
 const LEGACY_FAKE_MARGIN = 1.50;
 const LEGACY_REAL_MARGIN = -1.50;
+const LIMITED_CONTENT_SOURCES = new Set(['RSS_SUMMARY_ONLY', 'HEADLINE_ONLY', 'EXTRACTION_BLOCKED']);
 
 
 export interface ModelArtifacts {
@@ -93,7 +94,7 @@ export interface ModelArtifacts {
     bias: number;
     plattA: number;
     plattB: number;
-    inference_mode?: 'calibrated_ensemble' | 'legacy_single_svm';
+    inference_mode?: 'calibrated_ensemble' | 'single_calibrated_svm' | 'legacy_single_svm';
     members?: Array<{
       weights: number[];
       bias: number;
@@ -320,7 +321,7 @@ export class TruthLensMLEngine {
     plattA: number;
     plattB: number;
   }> = [];
-  private inferenceMode: 'calibrated_ensemble' | 'legacy_single_svm' = 'legacy_single_svm';
+  private inferenceMode: 'calibrated_ensemble' | 'single_calibrated_svm' | 'legacy_single_svm' = 'legacy_single_svm';
   private isTrained = false;
   private trainedAt: string = new Date().toISOString();
   private metrics: any = null;
@@ -430,13 +431,25 @@ export class TruthLensMLEngine {
           Number.isFinite(member.plattB)
         );
 
+      const singleCalibratedValid =
+        artifact.selected_model.inference_mode === 'single_calibrated_svm' &&
+        Array.isArray(artifact.selected_model.weights) &&
+        artifact.selected_model.weights.length === vocabSize &&
+        Number.isFinite(artifact.selected_model.bias) &&
+        Number.isFinite(artifact.selected_model.plattA) &&
+        Number.isFinite(artifact.selected_model.plattB);
+
       this.calibrationMembers = membersValid ? members!.map(member => ({
         weights: member.weights,
         bias: member.bias,
         plattA: member.plattA,
         plattB: member.plattB
       })) : [];
-      this.inferenceMode = membersValid ? 'calibrated_ensemble' : 'legacy_single_svm';
+      this.inferenceMode = membersValid
+        ? 'calibrated_ensemble'
+        : singleCalibratedValid
+          ? 'single_calibrated_svm'
+          : 'legacy_single_svm';
 
       this.metrics = artifact.metrics;
       this.trainedAt = artifact.trained_at;
@@ -515,6 +528,14 @@ export class TruthLensMLEngine {
    */
   public isModelTrained(): boolean {
     return this.isTrained;
+  }
+
+  public getInferenceMode(): 'calibrated_ensemble' | 'single_calibrated_svm' | 'legacy_single_svm' {
+    return this.inferenceMode;
+  }
+
+  public isCalibrationExact(): boolean {
+    return this.inferenceMode === 'calibrated_ensemble' || this.inferenceMode === 'single_calibrated_svm';
   }
 
   public getThresholds(): Thresholds {
@@ -1284,6 +1305,23 @@ export class TruthLensMLEngine {
       return 1.0 / (1.0 + Math.exp(-bounded));
     };
 
+    if (this.inferenceMode === 'single_calibrated_svm') {
+      let z = this.bias;
+      for (const [idx, val] of details.vector) {
+        z += this.weights[idx] * val;
+      }
+      const exponent = Math.max(-50, Math.min(50, this.plattA * z + this.plattB));
+      const probability = 1.0 / (1.0 + Math.exp(exponent));
+      return {
+        probability: Math.min(Math.max(probability, 0.0001), 0.9999),
+        decision_margin: z,
+        candidate_term_count: details.candidate_term_count,
+        matched_term_count: details.matched_term_count,
+        coverage_ratio: details.coverage_ratio,
+        calibrated: true
+      };
+    }
+
     if (this.inferenceMode === 'calibrated_ensemble' && this.calibrationMembers.length === 3) {
       const memberMargins: number[] = [];
       const memberProbabilities: number[] = [];
@@ -1492,6 +1530,7 @@ export class TruthLensMLEngine {
     const tReal = zone.real_threshold;
     const demoModel = this.isDemoModel();
     const lowVocabularyCoverage = predictionDetails.coverage_ratio < LEGACY_MIN_VOCAB_COVERAGE;
+    const limitedContentSource = LIMITED_CONTENT_SOURCES.has(options?.contentSource || '');
     const legacySafetyMode = !predictionDetails.calibrated;
 
     // 4. Verdict contract (backend = single source of truth).
@@ -1504,7 +1543,13 @@ export class TruthLensMLEngine {
     let confidence: number | null;
     let verdictReason: string | null = null;
 
-    if (lowVocabularyCoverage) {
+    if (limitedContentSource) {
+      prediction = VERDICT_NEEDS_MORE_CONTEXT;
+      riskLevel = 'UNDETERMINED';
+      confidence = null;
+      verdictReason =
+        'The available content is a headline/RSS summary or an extraction-blocked fallback rather than the full article body. TruthLens withholds a forced real/fake verdict until fuller article context or independent evidence is available.';
+    } else if (lowVocabularyCoverage) {
       prediction = VERDICT_NEEDS_MORE_CONTEXT;
       riskLevel = 'UNDETERMINED';
       confidence = null;
@@ -1546,18 +1591,20 @@ export class TruthLensMLEngine {
         `The calibrated model probability (P(FAKE)=${fakeProb}) falls inside the configured uncertainty zone (${tReal} - ${tFake}); the model does not have sufficient certainty to classify this text as real or fake.`;
     }
 
-    const probabilityCaveat = demoModel
-      ? (fakeProb >= 0.9 || realProb >= 0.9
-        ? 'The active model was trained on a small demo dataset; extreme scores are not statistically supported and must not be treated as verified truth.'
-        : undefined)
-      : legacySafetyMode
-        ? 'Legacy model artifact safety mode is active. No calibrated probability or confidence percentage is exposed. The verdict uses conservative SVM decision-margin bands until a v3.1 calibrated ensemble artifact is promoted.'
-        : undefined;
+    const probabilityCaveat = limitedContentSource
+      ? 'Only partial article content is available (headline/RSS summary or extraction-blocked fallback). TruthLens withholds probability/confidence from the classification panel until full article text or independent evidence is available.'
+      : demoModel
+        ? (fakeProb >= 0.9 || realProb >= 0.9
+          ? 'The active model was trained on a small demo dataset; extreme scores are not statistically supported and must not be treated as verified truth.'
+          : undefined)
+        : legacySafetyMode
+          ? 'Legacy model artifact safety mode is active. No calibrated probability or confidence percentage is exposed. The verdict uses conservative SVM decision-margin bands until a validated replacement artifact is promoted.'
+          : undefined;
 
-    const confidenceScore = confidence !== null && predictionDetails.calibrated
+    const confidenceScore = confidence !== null && predictionDetails.calibrated && !limitedContentSource
       ? Math.round(confidence * 100)
       : null;
-    const uncertaintyScore = lowVocabularyCoverage || legacySafetyMode
+    const uncertaintyScore = limitedContentSource || lowVocabularyCoverage || legacySafetyMode
       ? null
       : Math.round((1.0 - Math.abs(fakeProb - realProb)) * 10000) / 10000;
 
@@ -1598,9 +1645,12 @@ export class TruthLensMLEngine {
 
     summaryReasons.push(
       predictionDetails.calibrated
-        ? `Model inference: exact calibrated SVM ensemble (3 fold members); vocabulary coverage ${Math.round(predictionDetails.coverage_ratio * 100)}%.`
+        ? `Model inference: exact calibrated runtime; vocabulary coverage ${Math.round(predictionDetails.coverage_ratio * 100)}%.`
         : `Model inference: legacy raw-margin safety mode; vocabulary coverage ${Math.round(predictionDetails.coverage_ratio * 100)}%. The score is not a calibrated factual probability.`
     );
+    if (limitedContentSource) {
+      summaryReasons.push('Content-source policy: partial or headline-only content cannot establish a reliable real/fake classification, so the verdict is withheld.');
+    }
 
     if (verdictReason) {
       summaryReasons.push(verdictReason);
@@ -1614,8 +1664,11 @@ export class TruthLensMLEngine {
       full_text: textTrimmed,
       prediction,
       confidence,
-      fake_probability: fakeProb,
-      real_probability: realProb,
+      // Keep persisted history semantically aligned with the public response:
+      // legacy/abstained inputs never store an uncalibrated score as a
+      // probability that can later be rendered as 96–100% confidence.
+      fake_probability: predictionDetails.calibrated && !lowVocabularyCoverage && !limitedContentSource ? fakeProb : null,
+      real_probability: predictionDetails.calibrated && !lowVocabularyCoverage && !limitedContentSource ? realProb : null,
       risk_level: riskLevel,
       model_name: 'Linear SVM (Calibrated)',
       source_url: sourceUrl || options?.originalUrl || '',
@@ -1641,8 +1694,8 @@ export class TruthLensMLEngine {
       // Public probabilities are only exposed when the exact calibrated
       // ensemble is active. Legacy raw-margin scores are decision strength,
       // not probabilities, and must never be rendered as 96–100% confidence.
-      fake_probability: predictionDetails.calibrated && !lowVocabularyCoverage ? fakeProb : null,
-      real_probability: predictionDetails.calibrated && !lowVocabularyCoverage ? realProb : null,
+      fake_probability: predictionDetails.calibrated && !lowVocabularyCoverage && !limitedContentSource ? fakeProb : null,
+      real_probability: predictionDetails.calibrated && !lowVocabularyCoverage && !limitedContentSource ? realProb : null,
       confidence,
       confidence_score: confidenceScore,
       model_score: confidenceScore,
@@ -1650,7 +1703,11 @@ export class TruthLensMLEngine {
       uncertainty_score: uncertaintyScore,
       risk_level: riskLevel,
       model_inference_mode: this.inferenceMode,
-      calibration_status: predictionDetails.calibrated ? 'EXACT_CALIBRATED_ENSEMBLE' : 'LEGACY_UNCALIBRATED_MARGIN',
+      calibration_status: this.inferenceMode === 'calibrated_ensemble'
+        ? 'EXACT_CALIBRATED_ENSEMBLE'
+        : this.inferenceMode === 'single_calibrated_svm'
+          ? 'EXACT_SINGLE_CALIBRATED_SVM'
+          : 'LEGACY_UNCALIBRATED_MARGIN',
       vocabulary_coverage: {
         ratio: Math.round(predictionDetails.coverage_ratio * 10000) / 10000,
         matched_terms: predictionDetails.matched_term_count,
@@ -1700,9 +1757,11 @@ export class TruthLensMLEngine {
       model_reliability: this.modelReliabilityLabel(),
       probability_caveat: probabilityCaveat,
       model_version: this.metrics?.model_version || 'unknown',
-      calibration: predictionDetails.calibrated
-        ? 'CalibratedClassifierCV (exact fold-ensemble Platt scaling via Sigmoid)'
-        : 'LEGACY: uncalibrated SVM decision-strength score (Platt parameters not used)',
+      calibration: this.inferenceMode === 'calibrated_ensemble'
+        ? 'CalibratedClassifierCV (exact 3-member fold-ensemble Platt scaling via Sigmoid)'
+        : this.inferenceMode === 'single_calibrated_svm'
+          ? 'Platt scaling (exact single SVM + disjoint validation calibrator)'
+          : 'LEGACY: uncalibrated SVM decision-strength score (Platt parameters not used)',
       vectorizer: 'TF-IDF (1-2 ngrams, sublinear tf)',
       source_info: sourceInfo,
       evidence_verification: {
@@ -1733,11 +1792,16 @@ export class TruthLensMLEngine {
     const modelVersion = this.metrics.model_version || "unknown";
     return {
       status: "operational",
+      production_model_locked: process.env.NODE_ENV === 'production',
       model_type: bestModelName,
       model_name: bestModelName,
       model_version: modelVersion,
       model_architecture: bestModelName.toLowerCase().includes("svm")
-        ? "CalibratedClassifierCV(LinearSVC) with Platt Scaling (Sigmoid)"
+        ? this.inferenceMode === 'calibrated_ensemble'
+          ? "CalibratedClassifierCV(LinearSVC) with exact 3-member Platt ensemble"
+          : this.inferenceMode === 'single_calibrated_svm'
+            ? "LinearSVC with exact single Platt calibrator fitted on disjoint validation"
+            : "LinearSVC with legacy uncalibrated safety scoring"
         : "Logistic Regression (L2 regularized, sklearn)",
       is_demo: this.metrics.is_demo,
       dataset_status: this.metrics.dataset_status,
@@ -1752,11 +1816,17 @@ export class TruthLensMLEngine {
       real_dataset_required_notice: this.metrics.real_dataset_required_notice,
       inference_mode: this.inferenceMode,
       calibration: {
-        method: this.inferenceMode === 'calibrated_ensemble' ? "sigmoid (Platt scaling, exact 3-member ensemble)" : "legacy raw SVM margin",
-        is_calibrated: this.inferenceMode === 'calibrated_ensemble',
+        method: this.inferenceMode === 'calibrated_ensemble'
+          ? "sigmoid (Platt scaling, exact 3-member ensemble)"
+          : this.inferenceMode === 'single_calibrated_svm'
+            ? "sigmoid (Platt scaling, exact single SVM + disjoint validation calibrator)"
+            : "legacy raw SVM margin",
+        is_calibrated: this.inferenceMode === 'calibrated_ensemble' || this.inferenceMode === 'single_calibrated_svm',
         description: this.inferenceMode === 'calibrated_ensemble'
           ? "Runtime mirrors sklearn CalibratedClassifierCV by calculating each fold member's calibrated probability and averaging the three probabilities."
-          : "Legacy artifact does not contain the fold calibrators needed for exact probability reproduction; runtime uses a conservative raw SVM margin score and abstains on low-vocabulary inputs."
+          : this.inferenceMode === 'single_calibrated_svm'
+            ? "Runtime applies the exact single SVM decision margin and Platt calibrator serialized by the canonical runtime candidate pipeline."
+            : "Legacy artifact does not contain the fold calibrators needed for exact probability reproduction; runtime uses a conservative raw SVM margin score and abstains on low-vocabulary inputs."
       },
       dataset_size: {
         total_samples: totalSamples,
