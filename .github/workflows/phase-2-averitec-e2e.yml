@@ -38,6 +38,7 @@ jobs:
       AV_STORE_SHA256: '021e258cd6fb5fe6d627a4667d663e95c184c966939c15124df9206142fc2212'
       AV_OFFICIAL_COMMIT: '7c62d1ec8df3fb560d6efe2b85fa191135636f81'
       NODE_OPTIONS: '--max-old-space-size=4096'
+      TRUTHLENS_V2_ML_CALL_TIMEOUT_MS: '600000'
 
     steps:
       - name: Checkout
@@ -63,6 +64,9 @@ jobs:
 
       - name: Install Node dependencies
         run: npm ci
+
+      - name: Provision research-only Transformers.js runtime
+        run: npm install --no-save --package-lock=false @huggingface/transformers@4.3.0
 
       - name: Provision sealed TruthLens V2 pretrained models
         run: npm run download:v2-models
