@@ -289,6 +289,26 @@ async function httpContracts(): Promise<void> {
     assert(analyzed.json?.evidence_verification?.security?.evidence_treated_as === 'UNTRUSTED_DATA',
       '/api/analyze declares retrieved evidence as untrusted data');
 
+    if (analyzed.json?.calibration_status === 'LEGACY_UNCALIBRATED_MARGIN') {
+      assert(analyzed.json?.fake_probability === null,
+        'legacy production analysis withholds fake probability');
+      assert(analyzed.json?.real_probability === null,
+        'legacy production analysis withholds real probability');
+      assert(analyzed.json?.confidence_score === null,
+        'legacy production analysis withholds confidence');
+    }
+
+    const history = await call('GET', '/api/history?limit=1');
+    assert(history.status === 200, '/api/history returns 200');
+    if (analyzed.json?.calibration_status === 'LEGACY_UNCALIBRATED_MARGIN' && history.json?.[0]) {
+      assert(history.json[0].fake_probability === null,
+        'legacy probability is not persisted into history');
+      assert(history.json[0].real_probability === null,
+        'legacy real probability is not persisted into history');
+      assert(history.json[0].confidence_score === null,
+        'legacy confidence is not persisted into history');
+    }
+
     const evShort = await call('POST', '/api/evidence/verify', { claim: 'taxes rose' });
     assert(evShort.json?.status === 'NEEDS_MORE_CONTEXT',
       '/api/evidence/verify returns NEEDS_MORE_CONTEXT for an unusable claim',
