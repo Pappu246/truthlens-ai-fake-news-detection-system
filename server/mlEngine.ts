@@ -530,6 +530,14 @@ export class TruthLensMLEngine {
     return this.isTrained;
   }
 
+  public getInferenceMode(): 'calibrated_ensemble' | 'single_calibrated_svm' | 'legacy_single_svm' {
+    return this.inferenceMode;
+  }
+
+  public isCalibrationExact(): boolean {
+    return this.inferenceMode === 'calibrated_ensemble' || this.inferenceMode === 'single_calibrated_svm';
+  }
+
   public getThresholds(): Thresholds {
     return { ...this.thresholds };
   }
