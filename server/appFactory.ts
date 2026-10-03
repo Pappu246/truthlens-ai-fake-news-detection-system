@@ -54,6 +54,17 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
   const includeVite = options?.includeVite ?? !isProduction;
 
   const app = express();
+  const productionModelLocked = isProduction || process.env.NODE_ENV === 'production';
+  const productionMutationBlocked = (res: express.Response, operation: string): boolean => {
+    if (!productionModelLocked) return false;
+    res.status(403).json({
+      error: 'Production model is locked.',
+      code: 'PRODUCTION_MODEL_LOCKED',
+      operation,
+      detail: 'Model training, dataset replacement, threshold mutation, and demo reset are disabled on production deployments. Promote a verified candidate artifact through the audited model-governance workflow instead.'
+    });
+    return true;
+  };
 
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true }));
@@ -510,6 +521,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
   });
 
   app.post('/api/dataset/import', (req, res) => {
+    if (productionMutationBlocked(res, 'dataset-import')) return;
     try {
       const csvContent = req.body.csv_content || '';
       const filename = req.body.filename || 'imported_dataset.csv';
@@ -535,6 +547,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
   });
 
   app.post('/api/dataset/reset-demo', (req, res) => {
+    if (productionMutationBlocked(res, 'reset-demo')) return;
     try {
       const backupPath = path.join(process.cwd(), 'data', 'news_demo_backup.csv');
       const activePath = path.join(process.cwd(), 'data', 'news.csv');
@@ -709,6 +722,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
   });
 
   app.post('/api/model/thresholds', (req, res) => {
+    if (productionMutationBlocked(res, 'threshold-update')) return;
     try {
       const { fake_threshold, real_threshold, min_text_length } = req.body;
       const fake = typeof fake_threshold === 'number' ? fake_threshold : parseFloat(fake_threshold);
@@ -722,6 +736,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
   });
 
   app.post('/api/train', (req, res) => {
+    if (productionMutationBlocked(res, 'train')) return;
     try {
       const results = mlEngine.train();
       res.json({ status: 'success', results });
