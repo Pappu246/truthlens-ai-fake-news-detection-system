@@ -1,0 +1,105 @@
+name: V3 Phase 2 Scoring Recovery
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - research/v3-phase2-scoring-recovery
+
+concurrency:
+  group: truthlens-v3-phase2-scoring-recovery-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  syntax:
+    name: Benchmark scoring syntax and protocol
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: npm ci
+      - name: Validate recovered scoring scripts
+        run: |
+          node --check scripts/benchmarks/v3MaterializeScoringAssets.mjs
+          node --check scripts/benchmarks/v3FeverOfficialEvaluate.mjs
+          node --check scripts/benchmarks/v3FeverousOfficialEvaluate.mjs
+          npx tsc --noEmit
+          python3 -m py_compile scripts/benchmarks/v3FeverPrepareCandidates.py scripts/benchmarks/v3FeverousPrepareCandidates.py
+          npm run check:phase2-protocol
+
+  fever-pilot:
+    name: FEVER 100-claim pilot
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    needs: syntax
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - name: Materialize exact FEVER inputs
+        run: node scripts/benchmarks/v3MaterializeScoringAssets.mjs --benchmark=fever
+      - name: Extract FEVER corpus
+        run: unzip -q artifacts/v3/benchmark-assets/fever/wiki-pages.zip -d artifacts/v3/benchmark-assets/fever/wiki-pages
+      - name: Locate FEVER shard
+        id: locate
+        run: echo "wiki_dir=$(dirname "$(find artifacts/v3/benchmark-assets/fever/wiki-pages -name 'wiki-*.jsonl' -print -quit)")" >> "$GITHUB_OUTPUT"
+      - name: Prepare candidates
+        run: python3 scripts/benchmarks/v3FeverPrepareCandidates.py --wiki-dir="${{ steps.locate.outputs.wiki_dir }}" --claims=artifacts/v3/benchmark-assets/fever/shared_task_dev.jsonl --db=artifacts/v3/benchmark-assets/fever/fever-sentences.sqlite --output=artifacts/v3/fever/candidates.jsonl --build-index --top-k=100
+      - name: Run TruthLens FEVER pilot
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+        run: npx tsx scripts/benchmarks/v3FeverEvaluate.ts --input=artifacts/v3/fever/candidates.jsonl --max-claims=100 --output=artifacts/v3/fever/truthlens-adapter-report.json --predictions-output=artifacts/v3/fever/truthlens-predictions.json --claims-sha256="$(jq -r '.files[] | select(.name=="shared_task_dev.jsonl") | .sha256' artifacts/v3/benchmark-assets/fever/asset-manifest.json)" --corpus-sha256="$(jq -r '.files[] | select(.name=="wiki-pages.zip") | .sha256' artifacts/v3/benchmark-assets/fever/asset-manifest.json)" --commit-sha="$GITHUB_SHA" --config-sha256="$(sha256sum research/multibenchmark-manifest.json | cut -d' ' -f1)"
+      - name: Run official FEVER scorer
+        run: |
+          python3 -m pip install --disable-pip-version-check --no-input six
+          node scripts/benchmarks/v3FeverOfficialEvaluate.mjs --predictions=artifacts/v3/fever/truthlens-predictions.json --actual=artifacts/v3/benchmark-assets/fever/shared_task_dev.jsonl --output=artifacts/v3/fever/official-scorer-run.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: truthlens-v3-fever-100-recovery-pilot-${{ github.run_number }}
+          path: artifacts/v3/fever/
+          if-no-files-found: error
+          retention-days: 30
+
+  feverous-pilot:
+    name: FEVEROUS 100-claim pilot
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    needs: syntax
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - name: Materialize exact FEVEROUS inputs
+        run: node scripts/benchmarks/v3MaterializeScoringAssets.mjs --benchmark=feverous
+      - name: Extract FEVEROUS database
+        run: unzip -q artifacts/v3/benchmark-assets/feverous/feverous-wiki-pages-db.zip -d artifacts/v3/benchmark-assets/feverous/wiki-db
+      - name: Locate FEVEROUS database
+        id: locate
+        run: echo "db_path=$(find artifacts/v3/benchmark-assets/feverous/wiki-db -name '*.db' -print -quit)" >> "$GITHUB_OUTPUT"
+      - name: Prepare candidates
+        run: python3 scripts/benchmarks/v3FeverousPrepareCandidates.py --db="${{ steps.locate.outputs.db_path }}" --claims=artifacts/v3/benchmark-assets/feverous/dev.jsonl --output=artifacts/v3/feverous/candidates.jsonl --max-claims=100
+      - name: Run TruthLens FEVEROUS pilot
+        run: npx tsx scripts/benchmarks/v3FeverousEvaluate.ts --input=artifacts/v3/feverous/candidates.jsonl --max-claims=100 --output=artifacts/v3/feverous/truthlens-predictions.jsonl --report=artifacts/v3/feverous/truthlens-adapter-report.json
+      - name: Run official FEVEROUS scorer
+        run: node scripts/benchmarks/v3FeverousOfficialEvaluate.mjs --input=artifacts/v3/feverous/truthlens-predictions.jsonl --output=artifacts/v3/feverous/official-scorer-run.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: truthlens-v3-feverous-100-recovery-pilot-${{ github.run_number }}
+          path: artifacts/v3/feverous/
+          if-no-files-found: error
+          retention-days: 30
