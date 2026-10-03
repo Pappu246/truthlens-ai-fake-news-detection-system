@@ -249,6 +249,23 @@ function evidenceFor(result: Awaited<ReturnType<typeof verifyClaimV2>>): string[
     .filter(Boolean);
 }
 
+function macroF1(gold: string[], predicted: string[], labels: string[]) {
+  const perClass = labels.map(label => {
+    let tp = 0, fp = 0, fn = 0;
+    for (let i = 0; i < gold.length; i++) {
+      if (gold[i] === label && predicted[i] === label) tp++;
+      else if (gold[i] !== label && predicted[i] === label) fp++;
+      else if (gold[i] === label && predicted[i] !== label) fn++;
+    }
+    const precision = tp + fp ? tp / (tp + fp) : 0;
+    const recall = tp + fn ? tp / (tp + fn) : 0;
+    const f1 = precision + recall ? (2 * precision * recall) / (precision + recall) : 0;
+    return { label, precision, recall, f1, support: tp + fn };
+  });
+  const accuracy = gold.length ? gold.reduce((n, g, i) => n + Number(g === predicted[i]), 0) / gold.length : 0;
+  return { accuracy, macro_f1: perClass.reduce((s, x) => s + x.f1, 0) / labels.length, per_class: perClass };
+}
+
 async function main(): Promise<void> {
   const dataDir = path.resolve(arg('data-dir') || 'data/external/averitec');
   const claimsPath = path.join(dataDir, 'dev.json');
@@ -278,6 +295,9 @@ async function main(): Promise<void> {
   const source = new AveritecStoreSource(zipFile, coarseBm25K);
   const predictions: Array<{ label: string; string_evidence: string[]; justification: string }> = [];
   const rows: Record<string, unknown>[] = [];
+  const goldLabels: string[] = [];
+  const benchmarkLabels: string[] = [];
+  const productionLabels: string[] = [];
 
   try {
     for (let id = 0; id < maxClaims; id++) {
@@ -297,6 +317,9 @@ async function main(): Promise<void> {
       const label = benchmarkLabel(result);
       const production = productionLabel(result.provenance.final_verdict);
       predictions.push({ label, string_evidence: evidence, justification: evidence.join(' ') });
+      goldLabels.push(claim.label);
+      benchmarkLabels.push(label);
+      productionLabels.push(production);
       rows.push({
         id,
         gold_label: claim.label,
@@ -318,6 +341,12 @@ async function main(): Promise<void> {
     }
 
     const fullRun = maxClaims === 500;
+    const labels = ['Supported', 'Refuted', 'Not Enough Evidence', 'Conflicting Evidence/Cherrypicking'];
+    const benchmarkMetrics = macroF1(goldLabels, benchmarkLabels, labels);
+    const productionMetrics = macroF1(goldLabels, productionLabels, labels);
+    const productionAbstentionRate = productionLabels.length
+      ? productionLabels.filter(label => label === 'Not Enough Evidence' || label === 'Conflicting Evidence/Cherrypicking').length / productionLabels.length
+      : 0;
     const metadata = {
       protocol_version: 'truthlens-v2-averitec-e2e-v1',
       generated_at: new Date().toISOString(),
@@ -341,6 +370,13 @@ async function main(): Promise<void> {
       models: {
         nli: { name: nliAdapter.modelName, version: nliAdapter.modelVersion },
         embedding: { name: embeddingModel.name, version: embeddingModel.version }
+      },
+      research_metrics: {
+        benchmark_directional: benchmarkMetrics,
+        production_policy_mapped: {
+          ...productionMetrics,
+          abstention_or_conflict_rate: productionAbstentionRate
+        }
       },
       prediction_contract: {
         label_key: 'label',
