@@ -57,6 +57,8 @@ const DEMO_REAL_ZONE_BOUND = 0.40;
 // center it at the classifier decision boundary, and gate low-vocabulary
 // inputs to NEEDS MORE CONTEXT.
 const LEGACY_MIN_VOCAB_COVERAGE = 0.10;
+const LEGACY_FAKE_MARGIN = 1.50;
+const LEGACY_REAL_MARGIN = -1.50;
 
 
 export interface ModelArtifacts {
@@ -1488,9 +1490,13 @@ export class TruthLensMLEngine {
     const tReal = zone.real_threshold;
     const demoModel = this.isDemoModel();
     const lowVocabularyCoverage = predictionDetails.coverage_ratio < LEGACY_MIN_VOCAB_COVERAGE;
+    const legacySafetyMode = !predictionDetails.calibrated;
 
-    // 4. Verdict contract (backend = single source of truth):
-    //    LIKELY REAL | LIKELY FAKE | NEEDS MORE CONTEXT
+    // 4. Verdict contract (backend = single source of truth).
+    // Exact calibrated v3.1 artifacts use the configured probability zones.
+    // The old v3.0 artifact does not have a mathematically valid probability
+    // calibration in the runtime, so use conservative raw-margin bands and
+    // never expose that score as a percentage "confidence".
     let prediction: string;
     let riskLevel: 'LOW' | 'MODERATE' | 'HIGH' | 'UNDETERMINED';
     let confidence: number | null;
@@ -1502,6 +1508,26 @@ export class TruthLensMLEngine {
       confidence = null;
       verdictReason =
         `Only ${predictionDetails.matched_term_count}/${predictionDetails.candidate_term_count} candidate vocabulary terms matched the active training space (${Math.round(predictionDetails.coverage_ratio * 100)}% coverage). This input is outside the model's learned vocabulary, so the classifier abstains rather than guessing.`;
+    } else if (legacySafetyMode) {
+      if (predictionDetails.decision_margin >= LEGACY_FAKE_MARGIN) {
+        prediction = VERDICT_LIKELY_FAKE;
+        riskLevel = 'HIGH';
+        confidence = null;
+        verdictReason =
+          `The legacy SVM decision margin (${predictionDetails.decision_margin.toFixed(3)}) exceeds the conservative FAKE safety boundary (+${LEGACY_FAKE_MARGIN.toFixed(2)}). This is a decision-strength signal, not a calibrated probability.`;
+      } else if (predictionDetails.decision_margin <= LEGACY_REAL_MARGIN) {
+        prediction = VERDICT_LIKELY_REAL;
+        riskLevel = 'LOW';
+        confidence = null;
+        verdictReason =
+          `The legacy SVM decision margin (${predictionDetails.decision_margin.toFixed(3)}) is below the conservative REAL safety boundary (${LEGACY_REAL_MARGIN.toFixed(2)}). This is a decision-strength signal, not a calibrated probability.`;
+      } else {
+        prediction = VERDICT_NEEDS_MORE_CONTEXT;
+        riskLevel = 'UNDETERMINED';
+        confidence = null;
+        verdictReason =
+          `The legacy SVM decision margin (${predictionDetails.decision_margin.toFixed(3)}) is inside the conservative safety band (${LEGACY_REAL_MARGIN.toFixed(2)} to +${LEGACY_FAKE_MARGIN.toFixed(2)}), so the system abstains instead of guessing.`;
+      }
     } else if (fakeProb >= tFake) {
       prediction = VERDICT_LIKELY_FAKE;
       riskLevel = 'HIGH';
@@ -1514,20 +1540,22 @@ export class TruthLensMLEngine {
       prediction = VERDICT_NEEDS_MORE_CONTEXT;
       riskLevel = 'UNDETERMINED';
       confidence = null;
-      verdictReason = `The model score (P(FAKE)=${fakeProb}) falls inside the configured uncertainty zone (${tReal} - ${tFake}); the model does not have sufficient certainty to classify this text as real or fake.` +
-        (zone.widened_for_demo ? ' The uncertainty zone is widened because the active model was trained on a small demo dataset.' : '');
+      verdictReason =
+        `The calibrated model probability (P(FAKE)=${fakeProb}) falls inside the configured uncertainty zone (${tReal} - ${tFake}); the model does not have sufficient certainty to classify this text as real or fake.`;
     }
 
     const probabilityCaveat = demoModel
       ? (fakeProb >= 0.9 || realProb >= 0.9
         ? 'The active model was trained on a small demo dataset; extreme scores are not statistically supported and must not be treated as verified truth.'
         : undefined)
-      : !predictionDetails.calibrated
-        ? 'Legacy model artifact safety mode is active. The displayed score is a monotonic SVM decision-strength score, not a calibrated factual probability. A calibrated v3.1 ensemble artifact is required for calibrated probabilities.'
+      : legacySafetyMode
+        ? 'Legacy model artifact safety mode is active. No calibrated probability or confidence percentage is exposed. The verdict uses conservative SVM decision-margin bands until a v3.1 calibrated ensemble artifact is promoted.'
         : undefined;
 
-    const confidenceScore = confidence !== null ? Math.round(confidence * 100) : null;
-    const uncertaintyScore = lowVocabularyCoverage
+    const confidenceScore = confidence !== null && predictionDetails.calibrated
+      ? Math.round(confidence * 100)
+      : null;
+    const uncertaintyScore = lowVocabularyCoverage || legacySafetyMode
       ? null
       : Math.round((1.0 - Math.abs(fakeProb - realProb)) * 10000) / 10000;
 
@@ -1608,14 +1636,15 @@ export class TruthLensMLEngine {
       verdict: prediction,
       prediction,
       reason: verdictReason,
-      // Never expose a misleading 96–100% class score when the input is
-      // outside the model vocabulary. The raw diagnostic remains available
-      // internally, while the public verdict contract abstains.
-      fake_probability: lowVocabularyCoverage ? null : fakeProb,
-      real_probability: lowVocabularyCoverage ? null : realProb,
+      // Public probabilities are only exposed when the exact calibrated
+      // ensemble is active. Legacy raw-margin scores are decision strength,
+      // not probabilities, and must never be rendered as 96–100% confidence.
+      fake_probability: predictionDetails.calibrated && !lowVocabularyCoverage ? fakeProb : null,
+      real_probability: predictionDetails.calibrated && !lowVocabularyCoverage ? realProb : null,
       confidence,
       confidence_score: confidenceScore,
       model_score: confidenceScore,
+      decision_strength: Math.round(predictionDetails.decision_margin * 10000) / 10000,
       uncertainty_score: uncertaintyScore,
       risk_level: riskLevel,
       model_inference_mode: this.inferenceMode,
