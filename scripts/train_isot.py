@@ -415,7 +415,7 @@ def main():
     metrics_payload = {
         "status": "success",
         "dataset_name": "ISOT Fake News Dataset",
-        "model_version": "3.0.0-isot",
+        "model_version": "3.1.0-isot",
         "trained_at": datetime.utcnow().isoformat() + "Z",
         "is_demo": False,
         "dataset_status": "ISOT BENCHMARK DATASET",
@@ -499,7 +499,7 @@ def main():
         },
         "best_model": {
             "name": selected_model_name,
-            "model_version": "3.0.0-isot",
+            "model_version": "3.1.0-isot",
             "selection_criterion": "Stratified 5-Fold Cross-Validation F1-score",
             "selection_reason": selection_reason,
             "calibration_method": "Platt Sigmoid (CalibratedClassifierCV)",
