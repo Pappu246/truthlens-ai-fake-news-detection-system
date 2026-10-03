@@ -1,0 +1,87 @@
+name: Runtime Model Candidate Validation
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "scripts/train_isot_runtime_candidate.py"
+      - "scripts/runtimeModelParityTests.ts"
+      - "scripts/isot_data_pipeline.py"
+      - "server/mlEngine.ts"
+      - "package.json"
+      - ".github/workflows/runtime-model-candidate.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  candidate:
+    name: Build and validate exact runtime candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python ML dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install numpy pandas scikit-learn datasketch
+
+      - name: Download and verify official ISOT release assets
+        env:
+          FAKE_URL: https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/releases/download/isot-data-v1/Fake.csv
+          REAL_URL: https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/releases/download/isot-data-v1/True.csv
+          FAKE_SHA256: bebf8bcfe95678bf2c732bf413a2ce5f621af0102c82bf08083b2e5d3c693d0c
+          REAL_SHA256: ba0844414a65dc6ae7402b8eee5306da24b6b56488d6767135af466c7dcb2775
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --retry-delay 2 "$FAKE_URL" -o data/Fake.csv
+          curl --fail --location --retry 3 --retry-delay 2 "$REAL_URL" -o data/True.csv
+          echo "$FAKE_SHA256  data/Fake.csv" | sha256sum --check -
+          echo "$REAL_SHA256  data/True.csv" | sha256sum --check -
+
+      - name: Rebuild verified Phase 2 splits
+        run: python scripts/isot_data_pipeline.py
+
+      - name: Train exact compact runtime candidate
+        run: python scripts/train_isot_runtime_candidate.py
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Type-check
+        run: npm run lint
+
+      - name: Runtime artifact Python-to-Node parity
+        run: npm run test:runtime-model-parity
+
+      - name: Existing article model safety regression
+        run: npm run test:model-safety
+
+      - name: Existing verdict regression
+        run: npm run test:verdicts
+
+      - name: Upload runtime candidate evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: truthlens-runtime-model-candidate
+          path: |
+            artifacts/models/**
+            data/isot_prepared/stats.json
+          if-no-files-found: error
