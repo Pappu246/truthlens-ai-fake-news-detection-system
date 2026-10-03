@@ -12,9 +12,13 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: truthlens-autonomous-squad-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   checkpoint:
-    name: Generate autonomous research checkpoint
+    name: Generate autonomous research checkpoint and agent report
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
