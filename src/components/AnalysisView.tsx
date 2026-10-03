@@ -6,9 +6,11 @@ import { TruthLensVerificationSection } from './TruthLensVerificationSection';
 interface AnalysisViewProps {
   result: AnalysisResult | null;
   metrics: ModelComparisonData;
+  /** Full article text currently shown in the input panel. */
+  articleText?: string;
 }
 
-export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics }) => {
+export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, articleText }) => {
   const activeModelMetrics = metrics.best_model === 'linear_svm'
     ? metrics.linear_svm
     : metrics.logistic_regression;
@@ -528,7 +530,7 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics }) =
       <TruthLensVerificationSection
         initialVerification={result.verification}
         articleTitle={result.article_title}
-        articleContent={result.text_snippet}
+        articleContent={(articleText || result.text_snippet || '').trim()}
         sourceUrl={result.canonical_url || result.source_url}
         mlRiskLevel={result.risk_level as any}
         analysisId={result.id}
