@@ -526,6 +526,9 @@ def main():
         weights = final_lr.coef_[0].tolist()
         bias = float(final_lr.intercept_[0])
 
+    runtime_inference_mode = "calibrated_ensemble" if selected_model_name.startswith("Linear SVM") else "legacy_single_svm"
+    runtime_members = calibrated_members if selected_model_name.startswith("Linear SVM") else []
+
     runtime_artifact = {
         "model_name": selected_model_name,
         "model_type": selected_model_name,
@@ -548,12 +551,12 @@ def main():
         "idf": final_vectorizer.idf_.tolist(),
         "selected_model": {
             "name": selected_model_name,
-            "inference_mode": "calibrated_ensemble",
+            "inference_mode": runtime_inference_mode,
             "weights": weights,
             "bias": bias,
             "plattA": mean_platt_a,
             "plattB": mean_platt_b,
-            "members": calibrated_members
+            "members": runtime_members
         },
         "logistic_regression": {
             "weights": final_lr.coef_[0].tolist(),
