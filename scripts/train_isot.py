@@ -529,7 +529,7 @@ def main():
     runtime_artifact = {
         "model_name": selected_model_name,
         "model_type": selected_model_name,
-        "model_version": "3.0.0-isot",
+        "model_version": "3.1.0-isot",
         "trained_at": metrics_payload["trained_at"],
         "is_demo": False,
         "dataset_status": "ISOT BENCHMARK DATASET",
