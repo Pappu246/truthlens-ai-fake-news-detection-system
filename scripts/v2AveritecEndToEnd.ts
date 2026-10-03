@@ -267,6 +267,7 @@ async function main(): Promise<void> {
     for (let id = 0; id < maxClaims; id++) {
       const claim = claims[id];
       const built = buildClaim(claim.claim);
+      source.setActiveClaimId(id);
       const result = await verifyClaimV2(built.normalizedText, {
         corpus: source,
         nliAdapter,
@@ -277,7 +278,6 @@ async function main(): Promise<void> {
         claimDate: claim.claim_date || null,
         enforceTemporalEvidence: false
       });
-      source.setActiveClaimId(id);
       const evidence = evidenceFor(result);
       const label = mapVerdict(result.provenance.final_verdict);
       predictions.push({ label, string_evidence: evidence, justification: evidence.join(' ') });
