@@ -1203,7 +1203,12 @@ export class TruthLensMLEngine {
     }
   }
 
-  public vectorize(cleanedText: string): [number, number][] {
+  private vectorizeWithCoverage(cleanedText: string): {
+    vector: [number, number][];
+    candidate_term_count: number;
+    matched_term_count: number;
+    coverage_ratio: number;
+  } {
     const words = cleanedText.split(' ');
     const counts: Map<string, number> = new Map();
 
@@ -1221,10 +1226,12 @@ export class TruthLensMLEngine {
 
     const vector: [number, number][] = [];
     let normSq = 0;
+    let matchedTermCount = 0;
 
     for (const [term, count] of counts.entries()) {
       const idx = this.vocabulary.get(term);
       if (idx !== undefined) {
+        matchedTermCount++;
         // Sublinear TF * IDF
         const tf = 1.0 + Math.log(count);
         const tfidf = tf * this.idf[idx];
@@ -1233,20 +1240,96 @@ export class TruthLensMLEngine {
       }
     }
 
-    // L2 Normalize
+    // L2 Normalize, matching the exported sklearn vectorizer contract.
     const norm = Math.sqrt(normSq) || 1.0;
-    return vector.map(([idx, val]) => [idx, val / norm]);
+    const normalized = vector.map(([idx, val]) => [idx, val / norm] as [number, number]);
+    const candidateTermCount = counts.size;
+
+    return {
+      vector: normalized,
+      candidate_term_count: candidateTermCount,
+      matched_term_count: matchedTermCount,
+      coverage_ratio: candidateTermCount > 0 ? matchedTermCount / candidateTermCount : 0
+    };
+  }
+
+  public vectorize(cleanedText: string): [number, number][] {
+    return this.vectorizeWithCoverage(cleanedText).vector;
+  }
+
+  /**
+   * Return the model score plus OOD/familiarity diagnostics.
+   *
+   * v3.1+ artifacts contain the exact three calibrated sklearn members.
+   * The runtime mirrors sklearn by averaging each member's calibrated
+   * probability. Older artifacts are explicitly marked legacy and do not
+   * reuse the invalid "average calibration parameters + full SVM" shortcut.
+   */
+  public predictProbabilityDetailed(cleanedText: string): {
+    probability: number;
+    decision_margin: number;
+    candidate_term_count: number;
+    matched_term_count: number;
+    coverage_ratio: number;
+    calibrated: boolean;
+  } {
+    const details = this.vectorizeWithCoverage(cleanedText);
+    const sigmoid = (value: number): number => {
+      const bounded = Math.max(-50, Math.min(50, value));
+      return 1.0 / (1.0 + Math.exp(-bounded));
+    };
+
+    if (this.inferenceMode === 'calibrated_ensemble' && this.calibrationMembers.length === 3) {
+      const memberMargins: number[] = [];
+      const memberProbabilities: number[] = [];
+
+      for (const member of this.calibrationMembers) {
+        let z = member.bias;
+        for (const [idx, val] of details.vector) {
+          z += member.weights[idx] * val;
+        }
+        memberMargins.push(z);
+        // sklearn Sigmoid calibration uses 1 / (1 + exp(a * f + b)).
+        const exponent = Math.max(-50, Math.min(50, member.plattA * z + member.plattB));
+        memberProbabilities.push(1.0 / (1.0 + Math.exp(exponent)));
+      }
+
+      const probability = memberProbabilities.reduce((a, b) => a + b, 0) / memberProbabilities.length;
+      const decisionMargin = memberMargins.reduce((a, b) => a + b, 0) / memberMargins.length;
+      return {
+        probability: Math.min(Math.max(probability, 0.0001), 0.9999),
+        decision_margin: decisionMargin,
+        candidate_term_count: details.candidate_term_count,
+        matched_term_count: details.matched_term_count,
+        coverage_ratio: details.coverage_ratio,
+        calibrated: true
+      };
+    }
+
+    // Legacy artifact safety mode:
+    // do NOT apply the averaged Platt parameters from v3.0.0. They were
+    // learned for fold-specific estimators, not the exported full-training
+    // estimator. A plain sigmoid of the raw SVM margin is monotonic and
+    // centered on z=0, so the empty/unknown-feature case no longer starts
+    // near 99% FAKE. It is an uncalibrated decision score, not a probability
+    // that should be interpreted as factual certainty.
+    let z = this.bias;
+    for (const [idx, val] of details.vector) {
+      z += this.weights[idx] * val;
+    }
+
+    return {
+      probability: Math.min(Math.max(sigmoid(z), 0.0001), 0.9999),
+      decision_margin: z,
+      candidate_term_count: details.candidate_term_count,
+      matched_term_count: details.matched_term_count,
+      coverage_ratio: details.coverage_ratio,
+      calibrated: false
+    };
   }
 
   public predictProbability(cleanedText: string): number {
-    const tfidf = this.vectorize(cleanedText);
-    let z = this.bias;
-    for (const [idx, val] of tfidf) {
-      z += this.weights[idx] * val;
-    }
-    // Platt Sigmoid scaling: P(y=1) = 1 / (1 + exp(A * z + B))
-    const probFake = 1.0 / (1.0 + Math.exp(this.plattA * z + this.plattB));
-    return Math.min(Math.max(probFake, 0.0001), 0.9999);
+    return this.predictProbabilityDetailed(cleanedText).probability;
   }
 
   public getFeatureAttributions(cleanedText: string, topK = 8): FeatureAttribution[] {
