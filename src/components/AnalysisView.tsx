@@ -144,6 +144,8 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics }) =
 
   const tFake = result.thresholds?.fake_threshold ?? 0.65;
   const tReal = result.thresholds?.real_threshold ?? 0.35;
+  const legacySafetyMode = result.calibration_status === 'LEGACY_UNCALIBRATED_MARGIN'
+    || result.model_inference_mode === 'legacy_single_svm';
 
   return (
     <section className="flex-1 p-6 lg:p-10 bg-slate-50 overflow-y-auto space-y-8">
@@ -187,6 +189,11 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics }) =
           <div className="text-left md:text-right">
             <span className="text-[10px] font-mono text-slate-400">
               Model: {result.model_used}
+              {legacySafetyMode && (
+                <span className="block text-amber-600 font-semibold mt-1">
+                  Legacy safety mode — calibrated probability withheld
+                </span>
+              )}
             </span>
           </div>
         </div>
@@ -208,7 +215,7 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics }) =
               {confidenceDisplay}
             </span>
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mt-1">
-              Model Confidence Score
+{legacySafetyMode ? 'Confidence Withheld' : 'Model Confidence Score'}
             </span>
           </div>
         </div>
@@ -222,14 +229,39 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics }) =
         )}
       </div>
 
+      {legacySafetyMode && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 shadow-sm">
+          <div className="flex items-start gap-3">
+            <ShieldAlert className="w-5 h-5 text-amber-700 mt-0.5 shrink-0" />
+            <div>
+              <h3 className="text-sm font-black uppercase tracking-wide text-amber-800">
+                Probability Safety Mode Active
+              </h3>
+              <p className="text-xs text-amber-700 leading-relaxed mt-1">
+                This deployment is running the legacy model artifact. Its old Platt parameters cannot
+                be reproduced exactly at runtime, so TruthLens does not display a fake confidence
+                percentage. The verdict is based on conservative SVM decision-strength bands and may
+                return <strong>NEEDS MORE CONTEXT</strong> rather than guess.
+              </p>
+              {result.vocabulary_coverage && (
+                <p className="text-[11px] font-mono text-amber-800 mt-2">
+                  Vocabulary coverage: {Math.round(result.vocabulary_coverage.ratio * 100)}%
+                  ({result.vocabulary_coverage.matched_terms}/{result.vocabulary_coverage.candidate_terms} terms)
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* SECTION 2: MODEL SCORE / CALIBRATED PROBABILITY */}
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
         <div className="flex items-center justify-between mb-4">
           <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
-            2. Model Score & Calibrated Probability
+            2. Model Score & {legacySafetyMode ? 'Decision Strength' : 'Calibrated Probability'}
           </span>
           <span className="text-[11px] font-mono text-slate-500">
-            Platt Sigmoid Mapping
+{legacySafetyMode ? 'Conservative SVM margin bands' : 'Platt Sigmoid Mapping'}
           </span>
         </div>
 
