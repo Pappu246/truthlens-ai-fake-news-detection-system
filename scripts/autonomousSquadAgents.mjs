@@ -16,9 +16,9 @@ function requireTrue(value, message) {
   if (value !== true) throw new Error("Agent gate failed: " + message);
 }
 
-function executeRole(id, fn) {
+async function executeRole(id, fn) {
   try {
-    return { agent: id, status: "PASS", ...fn() };
+    return { agent: id, status: "PASS", ...(await fn()) };
   } catch (error) {
     return { agent: id, status: "FAIL", error: error instanceof Error ? error.message : String(error) };
   }
@@ -42,7 +42,7 @@ async function main() {
   const byStatus = (status) => benchmarks.filter((b) => b.status === status).map((b) => b.id);
 
   const agents = [];
-  agents.push(executeRole("supervisor", () => ({
+  agents.push(await executeRole("supervisor", async () => ({
     action: "enforce-phase-order",
     phase: manifest.phase,
     next_phase_authorized: false,
