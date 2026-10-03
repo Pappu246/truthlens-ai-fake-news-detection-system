@@ -51,17 +51,17 @@ async function main() {
 
   agents.push(executeRole("research-scout", () => {
     const registryPath = path.join(ROOT, "research", "research-intelligence-registry.json");
-    return {
+    return fs.access(registryPath).then(() => ({
       action: "consume-discovery-contract",
       registry_present: true,
       source_path: path.relative(ROOT, registryPath),
       execution_mode: "discovery-only"
-    };
+    }));
   }));
 
-  agents.push(executeRole("model-scout", () => {
-    const registry = JSON.parse(require("node:fs").readFileSync(path.join(ROOT, "research", "research-intelligence-registry.json"), "utf8"));
-    const queries = (registry.model_search || []).map((x) => x.query);
+  agents.push(executeRole("model-scout", async () => {
+    const registry = await readJson(path.join(ROOT, "research", "research-intelligence-registry.json"));
+    const queries = (registry.model_search || []).map((x) => x.query).filter(Boolean);
     if (!queries.length) throw new Error("model discovery contract contains no search queries");
     return {
       action: "identify-candidates",
