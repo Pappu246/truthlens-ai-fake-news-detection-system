@@ -25,6 +25,7 @@ const DATA_SHA256 = '499793726b4a5406780928a3d9dedc48d6dd53de778f22437d129cacdb0
 const STORE_SHA256 = '021e258cd6fb5fe6d627a4667d663e95c184c966939c15124df9206142fc2212';
 const STORE_REVISION = '26238ae';
 const OFFICIAL_REPO_COMMIT = '7c62d1ec8df3fb560d6efe2b85fa191135636f81';
+const DATA_URL = 'https://raw.githubusercontent.com/MichSchli/AVeriTeC/7c62d1ec8df3fb560d6efe2b85fa191135636f81/data/dev.json';
 const STORE_URL = 'https://huggingface.co/chenxwh/AVeriTeC/resolve/26238ae/data_store/knowledge_store/dev_knowledge_store.zip';
 
 type Claim = { claim: string; label: string; claim_date?: string | null };
@@ -308,7 +309,7 @@ async function main(): Promise<void> {
       benchmark: 'AVeriTeC',
       split: 'dev',
       evaluation_scope: fullRun ? 'full_500_claim_dev' : `smoke_${maxClaims}_claims`,
-      official_data_url: STORE_URL.replace('/data_store/knowledge_store/dev_knowledge_store.zip', '/../../MichSchli/AVeriTeC@7c62d1ec8df3fb560d6efe2b85fa191135636f81/data/dev.json'),
+      official_data_url: DATA_URL,
       official_repo_commit: OFFICIAL_REPO_COMMIT,
       claims_sha256: DATA_SHA256,
       evidence_store: { source: STORE_URL, pinned_revision: STORE_REVISION, sha256: STORE_SHA256 },
