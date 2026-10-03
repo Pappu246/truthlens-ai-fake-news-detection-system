@@ -15,7 +15,8 @@ import { verifyClaimV2 } from '../server/v2/pipeline.js';
 import { TransformerEmbeddingModel } from '../server/v2/retrieval/transformerEmbeddingModel.js';
 import { PretrainedNliAdapter } from '../server/v2/nli/pretrainedNliAdapter.js';
 import { bm25Search } from '../server/v2/retrieval/bm25.js';
-import { CorpusSource, RawDocument } from '../server/v2/types.js';
+import { RawDocument } from '../server/v2/types.js';
+import { CorpusSource } from '../server/v2/retrieval/corpusSource.js';
 import { buildClaim } from '../server/v2/queryExpansion.js';
 import { ALL_MODEL_MANIFESTS, getV2ModelDir, verifyModelHashes } from '../server/v2/ml/modelManifest.js';
 import { disposeMlWorker } from '../server/v2/ml/mlWorkerClient.js';
@@ -307,7 +308,7 @@ async function main(): Promise<void> {
       benchmark: 'AVeriTeC',
       split: 'dev',
       evaluation_scope: fullRun ? 'full_500_claim_dev' : `smoke_${maxClaims}_claims`,
-      official_data_url: OFFICIAL_DATA_URL,
+      official_data_url: STORE_URL.replace('/data_store/knowledge_store/dev_knowledge_store.zip', '/../../MichSchli/AVeriTeC@7c62d1ec8df3fb560d6efe2b85fa191135636f81/data/dev.json'),
       official_repo_commit: OFFICIAL_REPO_COMMIT,
       claims_sha256: DATA_SHA256,
       evidence_store: { source: STORE_URL, pinned_revision: STORE_REVISION, sha256: STORE_SHA256 },
