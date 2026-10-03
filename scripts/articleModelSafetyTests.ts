@@ -67,6 +67,32 @@ assert(fake.prediction !== 'LIKELY REAL',
   'Clearly fabricated article is never LIKELY REAL',
   JSON.stringify({ prediction: fake.prediction, fake_probability: fake.fake_probability }));
 
+const rssSummary = {
+  text: 'Officials announced today that consumer prices rose in March, according to data published by the national statistics office. ' +
+    'The report said the change was in line with forecasts and that officials would review the figures at the next scheduled meeting. ' +
+    'Analysts said the release would be followed by additional economic data later this month.',
+  inputType: 'live_news' as const,
+  contentSource: 'RSS_SUMMARY_ONLY' as const
+};
+const rss = mlEngine.analyzeArticle(rssSummary.text, 'https://example.com/news', rssSummary);
+assert(rss.prediction === 'NEEDS MORE CONTEXT',
+  'RSS summary never receives a forced real/fake verdict',
+  JSON.stringify({ prediction: rss.prediction, content_source: rss.content_source }));
+assert(rss.fake_probability === null && rss.real_probability === null,
+  'RSS summary withholds fake/real probabilities',
+  JSON.stringify({ fake_probability: rss.fake_probability, real_probability: rss.real_probability }));
+assert(rss.confidence_score === null,
+  'RSS summary withholds confidence',
+  JSON.stringify(rss.confidence_score));
+
+const blocked = mlEngine.analyzeArticle(rssSummary.text, 'https://example.com/news', {
+  inputType: 'live_news',
+  contentSource: 'EXTRACTION_BLOCKED'
+});
+assert(blocked.prediction === 'NEEDS MORE CONTEXT',
+  'Extraction-blocked content never receives a forced verdict',
+  JSON.stringify(blocked.prediction));
+
 const artifactPath = path.join(process.cwd(), 'data', 'saved_model_artifacts.json');
 if (fs.existsSync(artifactPath)) {
   const artifact = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
