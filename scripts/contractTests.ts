@@ -301,6 +301,30 @@ async function httpContracts(): Promise<void> {
       '/api/evidence/verify reports SEARCH_UNAVAILABLE rather than a fabricated verdict');
     assert(evOff.json?.evidence?.length === 0,
       '/api/evidence/verify returns no citations when retrieval is unavailable');
+
+    const trainBlocked = await call('POST', '/api/train', {});
+    assert(trainBlocked.status === 403,
+      '/api/train is blocked on production to protect the promoted model artifact',
+      JSON.stringify(trainBlocked.json));
+    assert(trainBlocked.json?.code === 'PRODUCTION_MODEL_LOCKED',
+      '/api/train returns the production model lock code');
+
+    const thresholdBlocked = await call('POST', '/api/model/thresholds',
+      { fake_threshold: 0.9, real_threshold: 0.1 });
+    assert(thresholdBlocked.status === 403,
+      '/api/model/thresholds mutation is blocked on production',
+      JSON.stringify(thresholdBlocked.json));
+
+    const importBlocked = await call('POST', '/api/dataset/import',
+      { filename: 'malicious.csv', csv_content: 'title,text,subject,date\nX,Y,Z,January 1, 2020' });
+    assert(importBlocked.status === 403,
+      '/api/dataset/import is blocked on production',
+      JSON.stringify(importBlocked.json));
+
+    const resetBlocked = await call('POST', '/api/dataset/reset-demo', {});
+    assert(resetBlocked.status === 403,
+      '/api/dataset/reset-demo is blocked on production',
+      JSON.stringify(resetBlocked.json));
   } finally {
     await new Promise<void>(resolve => server.close(() => resolve()));
   }
