@@ -492,7 +492,9 @@ export class TruthLensMLEngine {
   }
 
   private modelReliabilityLabel(): string {
-    return this.isDemoModel() ? 'DEMO_DATASET' : 'VALIDATED';
+    if (this.isDemoModel()) return 'DEMO_DATASET';
+    if (this.inferenceMode === 'legacy_single_svm') return 'LEGACY_SAFETY_MODE';
+    return 'VALIDATED';
   }
 
   private saveThresholds() {
@@ -1677,6 +1679,19 @@ export class TruthLensMLEngine {
         suspicious_zone: `${tReal} - ${tFake}`,
         widened_for_demo: zone.widened_for_demo
       },
+      decision_policy: legacySafetyMode
+        ? {
+            mode: 'LEGACY_MARGIN_GATED',
+            fake_margin: LEGACY_FAKE_MARGIN,
+            real_margin: LEGACY_REAL_MARGIN,
+            probability_output: 'WITHHELD'
+          }
+        : {
+            mode: 'CALIBRATED_PROBABILITY',
+            fake_threshold: tFake,
+            real_threshold: tReal,
+            probability_output: 'AVAILABLE'
+          },
       indicators,
       explanation: summaryReasons,
       feature_attributions: featureAttributions,
@@ -1769,6 +1784,19 @@ export class TruthLensMLEngine {
         linear_svm_metrics: this.metrics.models.linear_svm.metrics
       },
       thresholds: this.thresholds,
+      decision_policy: this.inferenceMode === 'legacy_single_svm'
+        ? {
+            mode: 'LEGACY_MARGIN_GATED',
+            fake_margin: LEGACY_FAKE_MARGIN,
+            real_margin: LEGACY_REAL_MARGIN,
+            probability_output: 'WITHHELD'
+          }
+        : {
+            mode: 'CALIBRATED_PROBABILITY',
+            fake_threshold: this.thresholds.fake_threshold,
+            real_threshold: this.thresholds.real_threshold,
+            probability_output: 'AVAILABLE'
+          },
       trained_at: this.trainedAt
     };
   }
