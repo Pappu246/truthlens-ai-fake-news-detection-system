@@ -33,12 +33,16 @@ jobs:
           node -e "JSON.parse(require('fs').readFileSync('research/multibenchmark-manifest.json', 'utf8')); console.log('Benchmark manifest: OK')"
           node --check scripts/autonomousSquad.mjs
           node --check scripts/autonomousSquadTests.mjs
+          node --check scripts/autonomousSquadAgents.mjs
 
       - name: Run governance invariants
         run: node scripts/autonomousSquadTests.mjs
 
       - name: Generate deterministic checkpoint
         run: node scripts/autonomousSquad.mjs
+
+      - name: Execute squad role checks
+        run: node scripts/autonomousSquadAgents.mjs
 
       - name: Upload resumable checkpoint
         uses: actions/upload-artifact@v4
