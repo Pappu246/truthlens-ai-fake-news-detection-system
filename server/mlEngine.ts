@@ -1643,8 +1643,11 @@ export class TruthLensMLEngine {
       full_text: textTrimmed,
       prediction,
       confidence,
-      fake_probability: fakeProb,
-      real_probability: realProb,
+      // Keep persisted history semantically aligned with the public response:
+      // legacy/abstained inputs never store an uncalibrated score as a
+      // probability that can later be rendered as 96–100% confidence.
+      fake_probability: predictionDetails.calibrated && !lowVocabularyCoverage ? fakeProb : null,
+      real_probability: predictionDetails.calibrated && !lowVocabularyCoverage ? realProb : null,
       risk_level: riskLevel,
       model_name: 'Linear SVM (Calibrated)',
       source_url: sourceUrl || options?.originalUrl || '',
