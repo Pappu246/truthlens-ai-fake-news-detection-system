@@ -24,7 +24,7 @@ The squad is research-only.
 | Benchmark Agent | Runs only frozen/reproducible benchmark lanes. |
 | Model Scout | Identifies candidate retrieval/NLI/embedding models for later evaluation. |
 | Evaluator | Produces metrics, artifacts, hashes, and limitations. |
-| Reliability / Red-Team | Tests adversarial and reliability failure modes when the relevant phase is unlocked. |
+| Reliability / Red-Team | Tests adversarial and reliability failure modes when the relevant phase is unlocked; reports DEFERRED before Phase 5 rather than PASS. |
 | Gatekeeper | Enforces governance, metric separation, and promotion rules. |
 | Evidence Reporter | Packages auditable reports and PR-ready evidence. |
 
