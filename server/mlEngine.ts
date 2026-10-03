@@ -1121,6 +1121,7 @@ export class TruthLensMLEngine {
       idf: this.idf,
       selected_model: {
         name: bestName,
+        inference_mode: 'legacy_single_svm',
         weights: this.weights,
         bias: this.bias,
         plattA: this.plattA,
@@ -1563,6 +1564,12 @@ export class TruthLensMLEngine {
       summaryReasons.push('Source provenance: No source URL supplied. Evaluation is based strictly on text content.');
     }
 
+    summaryReasons.push(
+      predictionDetails.calibrated
+        ? `Model inference: exact calibrated SVM ensemble (3 fold members); vocabulary coverage ${Math.round(predictionDetails.coverage_ratio * 100)}%.`
+        : `Model inference: legacy raw-margin safety mode; vocabulary coverage ${Math.round(predictionDetails.coverage_ratio * 100)}%. The score is not a calibrated factual probability.`
+    );
+
     if (verdictReason) {
       summaryReasons.push(verdictReason);
     }
@@ -1606,6 +1613,14 @@ export class TruthLensMLEngine {
       model_score: confidenceScore,
       uncertainty_score: uncertaintyScore,
       risk_level: riskLevel,
+      model_inference_mode: this.inferenceMode,
+      calibration_status: predictionDetails.calibrated ? 'EXACT_CALIBRATED_ENSEMBLE' : 'LEGACY_UNCALIBRATED_MARGIN',
+      vocabulary_coverage: {
+        ratio: Math.round(predictionDetails.coverage_ratio * 10000) / 10000,
+        matched_terms: predictionDetails.matched_term_count,
+        candidate_terms: predictionDetails.candidate_term_count
+      },
+      decision_margin: Math.round(predictionDetails.decision_margin * 10000) / 10000,
       input_type: effectiveInputType,
       original_url: options?.originalUrl || sourceUrl || undefined,
       canonical_url: options?.canonicalUrl || undefined,
@@ -1635,8 +1650,10 @@ export class TruthLensMLEngine {
       model_used: 'Linear SVM (Calibrated)',
       model_reliability: this.modelReliabilityLabel(),
       probability_caveat: probabilityCaveat,
-      model_version: '2.2.0',
-      calibration: 'CalibratedClassifierCV (Platt Scaling via Sigmoid)',
+      model_version: this.metrics?.model_version || 'unknown',
+      calibration: predictionDetails.calibrated
+        ? 'CalibratedClassifierCV (exact fold-ensemble Platt scaling via Sigmoid)'
+        : 'LEGACY: uncalibrated SVM decision-strength score (Platt parameters not used)',
       vectorizer: 'TF-IDF (1-2 ngrams, sublinear tf)',
       source_info: sourceInfo,
       evidence_verification: {
@@ -1679,11 +1696,18 @@ export class TruthLensMLEngine {
       evaluation_status: this.metrics.evaluation_status,
       strong_warning: this.metrics.strong_warning,
       why_misleading_accuracy: this.metrics.why_misleading_accuracy,
+      legacy_artifact_safety_mode: this.inferenceMode === 'legacy_single_svm',
+      legacy_artifact_warning: this.inferenceMode === 'legacy_single_svm'
+        ? 'The loaded artifact predates the exact calibrated ensemble export. Production verdicts use conservative raw-margin scoring until a v3.1 calibrated ensemble artifact is promoted.'
+        : undefined,
       real_dataset_required_notice: this.metrics.real_dataset_required_notice,
+      inference_mode: this.inferenceMode,
       calibration: {
-        method: "sigmoid (Platt scaling)",
-        is_calibrated: true,
-        description: "Linear SVM decision margins are mapped to well-calibrated posterior probabilities via Platt scaling."
+        method: this.inferenceMode === 'calibrated_ensemble' ? "sigmoid (Platt scaling, exact 3-member ensemble)" : "legacy raw SVM margin",
+        is_calibrated: this.inferenceMode === 'calibrated_ensemble',
+        description: this.inferenceMode === 'calibrated_ensemble'
+          ? "Runtime mirrors sklearn CalibratedClassifierCV by calculating each fold member's calibrated probability and averaging the three probabilities."
+          : "Legacy artifact does not contain the fold calibrators needed for exact probability reproduction; runtime uses a conservative raw SVM margin score and abstains on low-vocabulary inputs."
       },
       dataset_size: {
         total_samples: totalSamples,
