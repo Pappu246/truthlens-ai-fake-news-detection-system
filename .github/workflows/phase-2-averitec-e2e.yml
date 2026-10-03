@@ -4,23 +4,6 @@ on:
   push:
     branches:
       - research/phase2-averitec-scoring-current
-  pull_request:
-    branches:
-      - main
-    paths:
-      - 'server/v2/**'
-      - 'scripts/v2AveritecEndToEnd.ts'
-      - '.github/workflows/phase-2-averitec-e2e.yml'
-  workflow_dispatch:
-    inputs:
-      max_claims:
-        description: 'Number of dev claims (1-500); pull requests use a small smoke, manual dispatch may use 500'
-        required: false
-        default: '20'
-      coarse_bm25_k:
-        description: 'Coarse BM25 candidate cap per expanded query'
-        required: false
-        default: '2000'
 
 concurrency:
   group: truthlens-phase2-averitec-current
