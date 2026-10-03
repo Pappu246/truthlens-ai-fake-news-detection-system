@@ -299,6 +299,12 @@ export async function executeNewsAnalysis(
     fake_probability: typeof backendData.fake_probability === 'number' ? backendData.fake_probability : null,
     real_probability: typeof backendData.real_probability === 'number' ? backendData.real_probability : null,
     confidence_score: backendConfidenceScore,
+    decision_strength: typeof backendData.decision_strength === 'number'
+      ? backendData.decision_strength
+      : (typeof backendData.decision_margin === 'number' ? backendData.decision_margin : null),
+    model_inference_mode: backendData.model_inference_mode,
+    calibration_status: backendData.calibration_status,
+    vocabulary_coverage: backendData.vocabulary_coverage,
     model_used: backendData.model || backendData.model_used || 'Linear SVM (Calibrated)',
     model_reliability: backendData.model_reliability,
     probability_caveat: backendData.probability_caveat,
@@ -444,6 +450,12 @@ export async function analyzeUrlApi(url: string, fallbackTitle?: string): Promis
     fake_probability: typeof backendData.fake_probability === 'number' ? backendData.fake_probability : null,
     real_probability: typeof backendData.real_probability === 'number' ? backendData.real_probability : null,
     confidence_score: backendConfidenceScoreUrl,
+    decision_strength: typeof backendData.decision_strength === 'number'
+      ? backendData.decision_strength
+      : (typeof backendData.decision_margin === 'number' ? backendData.decision_margin : null),
+    model_inference_mode: backendData.model_inference_mode,
+    calibration_status: backendData.calibration_status,
+    vocabulary_coverage: backendData.vocabulary_coverage,
     model_used: backendData.model || backendData.model_used || 'Linear SVM (Calibrated)',
     model_reliability: backendData.model_reliability,
     probability_caveat: backendData.probability_caveat,
