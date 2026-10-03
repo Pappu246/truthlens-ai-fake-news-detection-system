@@ -84,6 +84,8 @@ async function main() {
     schema_version: 1,
     generated_at: new Date().toISOString(),
     checkpoint_id: checkpointId,
+    git_sha: process.env.GITHUB_SHA || null,
+    workflow_run_id: process.env.GITHUB_RUN_ID || null,
     phase: 2,
     production_mutation_allowed: false,
     next_legal_actions: [
