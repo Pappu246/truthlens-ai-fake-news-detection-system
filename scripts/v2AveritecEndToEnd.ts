@@ -17,7 +17,6 @@ import { PretrainedNliAdapter } from '../server/v2/nli/pretrainedNliAdapter.js';
 import { bm25Search } from '../server/v2/retrieval/bm25.js';
 import { RawDocument } from '../server/v2/types.js';
 import { CorpusSource } from '../server/v2/retrieval/corpusSource.js';
-import { buildClaim } from '../server/v2/queryExpansion.js';
 import { ALL_MODEL_MANIFESTS, getV2ModelDir, verifyModelHashes } from '../server/v2/ml/modelManifest.js';
 import { disposeMlWorker } from '../server/v2/ml/mlWorkerClient.js';
 
@@ -219,11 +218,26 @@ class AveritecStoreSource implements CorpusSource {
   }
 }
 
-function mapVerdict(verdict: string): string {
+function productionLabel(verdict: string): string {
   if (verdict === 'VERIFIED') return 'Supported';
   if (verdict === 'REFUTED') return 'Refuted';
   if (verdict === 'CONFLICTED') return 'Conflicting Evidence/Cherrypicking';
   return 'Not Enough Evidence';
+}
+
+function benchmarkLabel(result: Awaited<ReturnType<typeof verifyClaimV2>>): string {
+  let support = 0;
+  let refute = 0;
+  for (const evidence of result.provenance.evidence) {
+    const vote = evidence.nli_label === 'SUPPORTS' ? 1 : evidence.nli_label === 'REFUTES' ? -1 : 0;
+    if (!vote) continue;
+    const duplicatePenalty = evidence.is_duplicate_cluster ? 0.35 : 1;
+    const weight = evidence.nli_confidence * evidence.rerank_score * duplicatePenalty;
+    if (vote > 0) support += weight;
+    else refute += weight;
+  }
+  if (support <= 0 && refute <= 0) return 'Not Enough Evidence';
+  return support > refute ? 'Supported' : refute > support ? 'Refuted' : 'Not Enough Evidence';
 }
 
 function evidenceFor(result: Awaited<ReturnType<typeof verifyClaimV2>>): string[] {
@@ -268,9 +282,8 @@ async function main(): Promise<void> {
   try {
     for (let id = 0; id < maxClaims; id++) {
       const claim = claims[id];
-      const built = buildClaim(claim.claim);
       source.setActiveClaimId(id);
-      const result = await verifyClaimV2(built.normalizedText, {
+      const result = await verifyClaimV2(claim.claim, {
         corpus: source,
         nliAdapter,
         nliConcurrency: 8,
@@ -281,12 +294,14 @@ async function main(): Promise<void> {
         enforceTemporalEvidence: false
       });
       const evidence = evidenceFor(result);
-      const label = mapVerdict(result.provenance.final_verdict);
+      const label = benchmarkLabel(result);
+      const production = productionLabel(result.provenance.final_verdict);
       predictions.push({ label, string_evidence: evidence, justification: evidence.join(' ') });
       rows.push({
         id,
         gold_label: claim.label,
         prediction_label: label,
+        production_prediction_label: production,
         claim_date: claim.claim_date || null,
         truthlens_verdict: result.provenance.final_verdict,
         confidence: result.provenance.final_confidence,
@@ -332,6 +347,7 @@ async function main(): Promise<void> {
         evidence_key: 'string_evidence',
         max_evidence_items: 10,
         label_mapping: {
+          benchmark_policy: 'weighted single-direction evidence vote (mirrors the SciFact research evaluator; production two-independent-source policy is reported separately)',
           VERIFIED: 'Supported',
           REFUTED: 'Refuted',
           INSUFFICIENT_EVIDENCE: 'Not Enough Evidence',
