@@ -41,7 +41,8 @@
     "test:phase2-protocol": "tsx scripts/multiBenchmarkProtocolTests.ts",
     "test:phase2-adapters": "tsx scripts/phase2BenchmarkAdaptersTests.ts",
     "materialize:phase2": "tsx scripts/materializePhase2Benchmarks.ts",
-    "test:phase2-materialization": "tsx scripts/phase2MaterializationTests.ts"
+    "test:phase2-materialization": "tsx scripts/phase2MaterializationTests.ts",
+    "eval:v2-averitec-e2e": "tsx scripts/v2AveritecEndToEnd.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
