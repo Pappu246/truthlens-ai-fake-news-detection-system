@@ -48,6 +48,17 @@ export const VERDICT_NEEDS_MORE_CONTEXT = 'NEEDS MORE CONTEXT';
 const DEMO_FAKE_ZONE_BOUND = 0.75;
 const DEMO_REAL_ZONE_BOUND = 0.40;
 
+// Production safety for pre-v3.1 artifacts:
+// the old artifact stored a single full-training SVM plus an average of
+// three fold calibration parameters. That reconstruction is NOT equivalent
+// to sklearn CalibratedClassifierCV.predict_proba() and can saturate near
+// 100% FAKE on unfamiliar inputs. Until an exact calibrated ensemble is
+// present, use the raw SVM decision margin as an uncalibrated score,
+// center it at the classifier decision boundary, and gate low-vocabulary
+// inputs to NEEDS MORE CONTEXT.
+const LEGACY_MIN_VOCAB_COVERAGE = 0.10;
+
+
 export interface ModelArtifacts {
   model_name: string;
   model_type: string;
@@ -80,6 +91,13 @@ export interface ModelArtifacts {
     bias: number;
     plattA: number;
     plattB: number;
+    inference_mode?: 'calibrated_ensemble' | 'legacy_single_svm';
+    members?: Array<{
+      weights: number[];
+      bias: number;
+      plattA: number;
+      plattB: number;
+    }>;
   };
   logistic_regression: {
     weights: number[];
@@ -294,6 +312,13 @@ export class TruthLensMLEngine {
   // Platt Sigmoid Calibration parameters: P(FAKE) = 1 / (1 + exp(A * z + B))
   private plattA = -1.88;
   private plattB = 0.0;
+  private calibrationMembers: Array<{
+    weights: number[];
+    bias: number;
+    plattA: number;
+    plattB: number;
+  }> = [];
+  private inferenceMode: 'calibrated_ensemble' | 'legacy_single_svm' = 'legacy_single_svm';
   private isTrained = false;
   private trainedAt: string = new Date().toISOString();
   private metrics: any = null;
@@ -389,6 +414,28 @@ export class TruthLensMLEngine {
       this.bias = artifact.selected_model.bias;
       this.plattA = artifact.selected_model.plattA;
       this.plattB = artifact.selected_model.plattB;
+
+      const members = artifact.selected_model.members;
+      const membersValid =
+        artifact.selected_model.inference_mode === 'calibrated_ensemble' &&
+        Array.isArray(members) &&
+        members.length === 3 &&
+        members.every(member =>
+          Array.isArray(member.weights) &&
+          member.weights.length === vocabSize &&
+          Number.isFinite(member.bias) &&
+          Number.isFinite(member.plattA) &&
+          Number.isFinite(member.plattB)
+        );
+
+      this.calibrationMembers = membersValid ? members!.map(member => ({
+        weights: member.weights,
+        bias: member.bias,
+        plattA: member.plattA,
+        plattB: member.plattB
+      })) : [];
+      this.inferenceMode = membersValid ? 'calibrated_ensemble' : 'legacy_single_svm';
+
       this.metrics = artifact.metrics;
       this.trainedAt = artifact.trained_at;
       if (artifact.thresholds) {
@@ -403,6 +450,10 @@ export class TruthLensMLEngine {
 
       console.log(`[MLEngine] Successfully loaded trained model artifact from ${filePath}`);
       console.log(`[MLEngine] Model: ${artifact.selected_model.name} | Vocab Size: ${this.vocabulary.size}`);
+      console.log(`[MLEngine] Inference mode: ${this.inferenceMode}`);
+      if (this.inferenceMode === 'legacy_single_svm') {
+        console.warn('[MLEngine] Legacy artifact detected: exact CalibratedClassifierCV ensemble is absent. Using conservative raw-margin safety mode until a v3.1 artifact is promoted.');
+      }
       return true;
     } catch (err) {
       console.error('[MLEngine] Failed to load model artifact, falling back to training', err);
