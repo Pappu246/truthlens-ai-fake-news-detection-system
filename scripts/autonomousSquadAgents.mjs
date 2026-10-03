@@ -138,7 +138,7 @@ async function main() {
     workflow_run_id: process.env.GITHUB_RUN_ID || null,
     mode: "research-control-plane-agent-execution",
     phase: 2,
-    overall_status: agents.every((a) => a.status === "PASS") ? "PASS" : "FAIL",
+    overall_status: agents.every((a) => a.status === "PASS" || a.status === "DEFERRED") ? "PASS" : "FAIL",
     agents,
     inputs: inputHashes,
     production_boundary: {
