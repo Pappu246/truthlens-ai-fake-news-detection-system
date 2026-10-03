@@ -91,8 +91,8 @@ jobs:
       - name: Run AVeriTeC V2 benchmark
         shell: bash
         env:
-          MAX_CLAIMS: ${ github.event.inputs.max_claims || '500' }}
-          COARSE_BM25_K: ${ github.event.inputs.coarse_bm25_k || '2000' }}
+          MAX_CLAIMS: ${{ github.event.inputs.max_claims || '500' }}
+          COARSE_BM25_K: ${{ github.event.inputs.coarse_bm25_k || '2000' }}
         run: |
           set -euo pipefail
           npm run eval:v2-averitec-e2e -- \
@@ -199,13 +199,13 @@ jobs:
         id: upload
         uses: actions/upload-artifact@v4
         with:
-          name: truthlens-phase2-averitec-e2e-${ github.run_id }}
+          name: truthlens-phase2-averitec-e2e-${{ github.run_id }}
           path: artifacts/v2-averitec-e2e/
           if-no-files-found: error
           retention-days: 30
 
       - name: Record artifact digest
         run: |
-          echo "GitHub artifact digest: ${ steps.upload.outputs.artifact-digest }}" | tee artifacts/phase2-averitec-artifact-digest.txt
-          echo "Artifact id: ${ steps.upload.outputs.artifact-id }}" | tee -a artifacts/phase2-averitec-artifact-digest.txt
+          echo "GitHub artifact digest: ${{ steps.upload.outputs.artifact-digest }}" | tee artifacts/phase2-averitec-artifact-digest.txt
+          echo "Artifact id: ${{ steps.upload.outputs.artifact-id }}" | tee -a artifacts/phase2-averitec-artifact-digest.txt
           cat artifacts/phase2-averitec-artifact-digest.txt
