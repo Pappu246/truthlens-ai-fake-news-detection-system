@@ -5,7 +5,17 @@ type Benchmark = {
   id: string;
   status: string;
   dataset_hashes?: Record<string, string>;
-  evidence_collection?: { required?: boolean; status?: string; sha256?: string; pinned_revision?: string };
+  evidence_collection?: {
+    required?: boolean;
+    status?: string;
+    sha256?: string;
+    pinned_revision?: string;
+    materialization?: {
+      workflow_run?: number;
+      artifact_digest?: string;
+      verified_sha256?: string;
+    };
+  };
 };
 
 const file = join(process.cwd(), 'research', 'multibenchmark-manifest.json');
