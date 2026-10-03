@@ -72,6 +72,7 @@ The squad does not authorize Phase 3, 4, 5, 6, 7, or 8 while Phase 2 exit condit
 3. Deterministic checkpoint generation exists.
 4. Governance invariants fail closed.
 5. CI can generate and retain a resumable checkpoint.
-6. Production mutation and promotion remain human-gated.
+6. CI executes each specialist role check and records an auditable agent report.
+7. Production mutation and promotion remain human-gated.
 
 The next implementation layer is actual benchmark execution through the Benchmark Agent and Evaluator contracts, beginning with FEVER v1, FEVEROUS, and AVeriTeC while preserving the frozen Phase 2 protocol.
