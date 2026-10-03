@@ -40,6 +40,7 @@ jobs:
           node --check scripts/autonomousSquad.mjs
           node --check scripts/autonomousSquadTests.mjs
           node --check scripts/autonomousSquadAgents.mjs
+          node --check scripts/autonomousBenchmarkPlanner.mjs
 
       - name: Run governance invariants
         run: node scripts/autonomousSquadTests.mjs
@@ -55,6 +56,9 @@ jobs:
 
       - name: Execute squad role checks
         run: node scripts/autonomousSquadAgents.mjs
+
+      - name: Plan benchmark runner states
+        run: node scripts/autonomousBenchmarkPlanner.mjs
 
       - name: Upload resumable checkpoint
         uses: actions/upload-artifact@v4
