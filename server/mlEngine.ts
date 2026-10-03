@@ -1527,7 +1527,9 @@ export class TruthLensMLEngine {
         : undefined;
 
     const confidenceScore = confidence !== null ? Math.round(confidence * 100) : null;
-    const uncertaintyScore = Math.round((1.0 - Math.abs(fakeProb - realProb)) * 10000) / 10000;
+    const uncertaintyScore = lowVocabularyCoverage
+      ? null
+      : Math.round((1.0 - Math.abs(fakeProb - realProb)) * 10000) / 10000;
 
     // 5. Claim Extraction (Phase 9)
     const claimInfo = extractPrimaryClaim(textTrimmed);
@@ -1606,8 +1608,11 @@ export class TruthLensMLEngine {
       verdict: prediction,
       prediction,
       reason: verdictReason,
-      fake_probability: fakeProb,
-      real_probability: realProb,
+      // Never expose a misleading 96–100% class score when the input is
+      // outside the model vocabulary. The raw diagnostic remains available
+      // internally, while the public verdict contract abstains.
+      fake_probability: lowVocabularyCoverage ? null : fakeProb,
+      real_probability: lowVocabularyCoverage ? null : realProb,
       confidence,
       confidence_score: confidenceScore,
       model_score: confidenceScore,
