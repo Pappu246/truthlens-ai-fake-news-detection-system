@@ -15,6 +15,7 @@
     "test:contracts": "tsx scripts/contractTests.ts",
     "test:vercel-sim": "tsx scripts/vercel-sim.ts",
     "test:verdicts": "tsx scripts/regressionVerdictTests.ts",
+    "test:model-safety": "tsx scripts/articleModelSafetyTests.ts",
     "train:claim": "python3 scripts/train_liar_claim.py",
     "test:claim": "tsx scripts/claimModelTests.ts",
     "test:claim-parity": "tsx scripts/claimParity.ts",
