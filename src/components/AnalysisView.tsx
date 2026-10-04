@@ -23,7 +23,7 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
             <Info className="w-8 h-8" />
           </div>
           <h2 className="text-4xl font-black uppercase tracking-tight text-slate-900 mb-3">
-            Ready for Live ML Inference
+            Ready for Safety-Gated ML Inference
           </h2>
           <p className="text-slate-600 text-base max-w-lg mx-auto mb-8 leading-relaxed">
             Select a quick test sample or paste a news article, then click <strong>Analyze Article</strong> to run it through the production runtime safety and calibration policy.
@@ -484,15 +484,16 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
           <div className={`p-3 rounded-xl border mb-4 text-xs ${
             result.content_source === 'FULL_ARTICLE_EXTRACTED'
               ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
-              : result.content_source === 'RSS_SUMMARY_ONLY' || result.content_source === 'EXTRACTION_BLOCKED'
+              : result.content_source === 'PARTIAL_ARTICLE_EXTRACTED' || result.content_source === 'RSS_SUMMARY_ONLY' || result.content_source === 'EXTRACTION_BLOCKED'
               ? 'bg-amber-50 border-amber-200 text-amber-900'
               : 'bg-red-50 border-red-200 text-red-900'
           }`}>
             <div className="font-black uppercase tracking-wider text-[10px] mb-1">Classification Basis</div>
             <div className="font-bold text-sm">
               {result.content_source === 'FULL_ARTICLE_EXTRACTED' && 'Analysis used the FULL extracted article body.'}
-              {result.content_source === 'RSS_SUMMARY_ONLY' && 'Analysis used the RSS SUMMARY only — full article was not retrieved. Verdict reliability may be reduced.'}
-              {result.content_source === 'EXTRACTION_BLOCKED' && 'The publisher blocked automated article extraction (HTTP 403). Analysis used available RSS summary only.'}
+              {result.content_source === 'PARTIAL_ARTICLE_EXTRACTED' && 'Only part of the webpage was extracted. TruthLens withholds the ML verdict because incomplete article content is not sufficient for a reliable classification.'}
+              {result.content_source === 'RSS_SUMMARY_ONLY' && 'Analysis used the RSS SUMMARY only — full article was not retrieved. Verdict is withheld pending fuller context.'}
+              {result.content_source === 'EXTRACTION_BLOCKED' && 'The publisher blocked automated article extraction (HTTP 403). Analysis is withheld unless sufficient article content is provided.'}
               {result.content_source === 'HEADLINE_ONLY' && 'Only a headline was available — verdict was WITHHELD (NEEDS MORE CONTEXT). No forced prediction was made.'}
               {result.content_source === 'TEXT_DIRECT' && 'Text was provided directly by the user.'}
             </div>
