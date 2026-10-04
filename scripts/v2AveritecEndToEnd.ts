@@ -339,7 +339,7 @@ async function main(): Promise<void> {
         enableFullTextEnrichment: false,
         minCandidatesExpectedWarning: 0,
         claimDate: claim.claim_date || null,
-        enforceTemporalEvidence: false
+        enforceTemporalEvidence: true
       });
       const evidence = evidenceFor(result);
       const label = benchmarkLabel(result);
@@ -362,7 +362,7 @@ async function main(): Promise<void> {
         evidence: result.provenance.evidence,
         limitations: [
           ...result.provenance.limitations,
-          'Temporal filtering was not enforced because the baseline url2text evidence-store records do not expose per-sentence publication timestamps.'
+          'Temporal filtering is enforced when evidence records expose a parseable published_at/publishedAt/date field; records without a parseable publication timestamp remain eligible and are explicitly reported in provenance.'
         ]
       });
       if ((id + 1) % 10 === 0 || id + 1 === maxClaims) console.log(`processed ${id + 1}/${maxClaims}`);
@@ -394,7 +394,7 @@ async function main(): Promise<void> {
         embedding_batch_size: embeddingBatchSize,
         retrieval_channels: ['LEXICAL_BM25', 'DENSE_EMBEDDING'],
         nli_concurrency: 8,
-        temporal_filtering: 'NOT_ENFORCED_BASELINE_STORE_HAS_NO_PER_SENTENCE_PUBLICATION_TIMESTAMPS'
+        temporal_filtering: 'ENFORCED_WHEN_RECORD_TIMESTAMP_AVAILABLE_MISSING_OR_UNPARSEABLE_TIMESTAMPS_REMAIN_ELIGIBLE'
       },
       models: {
         nli: { name: nliAdapter.modelName, version: nliAdapter.modelVersion },
