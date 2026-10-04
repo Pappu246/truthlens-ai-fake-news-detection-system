@@ -46,6 +46,7 @@ async function main() {
       protocol_version: "truthlens-v3-benchmark-protocol-v1",
       evaluator_source: "https://github.com/Raldir/FEVEROUS/blob/32b68ce4e33c53f34ae2e6d88b51cd073ab85ab6/src/feverous/evaluation/evaluate.py",
       input,
+      evaluation_count: predictedLines.length,
       metrics,
       scorer_stdout: scorerRun.stdout,
       scorer_stderr: scorerRun.stderr,
