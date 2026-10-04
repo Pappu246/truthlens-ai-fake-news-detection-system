@@ -47,7 +47,7 @@ The Phase 2 scoring branch is additive and contains:
 2. FEVEROUS official scoring artifact is not yet present in the repository/CI artifacts.
 3. AVeriTeC official evaluation artifact is not yet complete/verified on the current branch.
 4. The Open-Web 100-claim human-labelled blind holdout has not been sealed.
-5. Vercel preview deployment quota has been exhausted, so research PR preview checks can report api-deployments-free-per-day even though production main remains healthy.
+5. Vercel project is configured to skip deployments for research/* branches via an Ignored Build Step; production main remains eligible for normal deployment.
 
 No benchmark result is treated as valid until its complete official scorer/evaluator artifact and provenance are available.
 
