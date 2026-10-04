@@ -40,7 +40,7 @@ Local contract verification covered empty input, a sub-threshold description, th
 
 ### Article model — ISOT benchmark
 
-The production article model is the calibrated Linear SVM artifact `v3.0.0-isot`, trained and evaluated on the ISOT Fake News Dataset. The benchmark is a genuine held-out split, not a claim-model result.
+The production article model is the ISOT-trained Linear SVM artifact `v3.0.0-isot`. The held-out ISOT benchmark is genuine, but the currently deployed runtime uses a **safety-gated legacy inference mode** because the deployed artifact does not contain the exact calibrated runtime ensemble required for faithful probability output. Production fake/real probability percentages are therefore withheld until an exact calibrated artifact is formally promoted.
 
 - Dataset after cleaning: **38,656** samples
 - Held-out test split: **7,732** samples
@@ -130,14 +130,15 @@ The workflow covered health, article and claim metrics, claim prediction with an
 3. The five LIAR credit-history fields require careful de-leakage; the raw-credit result is diagnostic-only.
 4. Evidence relation is inferred from retrieved headlines/snippets and is not proof of truth. Network restrictions can correctly produce `SEARCH_UNAVAILABLE`.
 5. RSS summaries are not full article bodies. Headline-only input is withheld as `NEEDS_MORE_CONTEXT` rather than forced into a binary prediction.
-6. Two moderate `qs`/Express dependency advisories remain open.
-7. The current task created the requested clean README documentation separately from the merged PR #23 application fix. Historical progress notes outside the README may still describe earlier phases; they are not used as the current release metrics.
+6. The exact calibrated runtime candidate passed its dedicated validation run, but its LIAR out-of-domain accuracy was **43.1646%**; it is therefore not production-promoted.
+7. Production live HTTP smoke cannot be independently re-run from this environment because outbound DNS/network access is unavailable; Vercel deployment state and GitHub/Vercel checks were verified through connected integrations.
+8. Historical progress notes outside this report may still describe earlier phases; they are not used as the current release metrics.
 
 ## Release decision
 
 **Functional release status: ready for the verified scope.** PR #23 is merged, the current main checks are green, local contract/security/model-separation suites pass, and the post-merge production smoke is 55/55.
 
-**Security caveat: not security-clean under a zero-known-advisory policy.** The two moderate dependency findings remain unresolved and should be triaged in a separate dependency-maintenance change. No experimental model-improvement phase was started, no labels or metrics were manipulated, and no article and claim benchmark numbers were combined.
+**Security status:** the previously tracked Express/`qs` advisories were addressed in the merged dependency-maintenance change; current CI's dependency audit passes with no reported vulnerabilities. No experimental model-improvement phase was started, no labels or metrics were manipulated, and no article and claim benchmark numbers were combined.
 
 ## Documentation promotion
 

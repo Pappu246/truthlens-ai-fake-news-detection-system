@@ -38,7 +38,7 @@
 | **Project type** | B.Tech TDP / Academic Project |
 | **Frontend** | React + Vite |
 | **Backend** | Node.js + Express |
-| **Production ML** | Calibrated Linear SVM |
+| **Production ML** | ISOT Linear SVM — safety-gated legacy runtime |
 | **Article benchmark** | ISOT |
 | **Claim benchmark** | LIAR |
 | **Evidence layer** | Retrieval + provenance + abstention |
@@ -54,7 +54,7 @@ TruthLens is not just a **FAKE / REAL** classifier.
 
 The project combines several parts into one application:
 
-- **Article analysis** using an ISOT-trained calibrated Linear SVM.
+- **Article analysis** using the ISOT-trained Linear SVM. Production currently runs in a safety-gated legacy mode; calibrated probability output is withheld until the exact calibrated runtime artifact is formally promoted.
 - **Claim analysis** using a separate LIAR-based model.
 - **Article URL extraction** with SSRF-safe fetching and redirect validation.
 - **Evidence verification** with retrieval, source provenance, and explicit abstention.
@@ -107,7 +107,7 @@ flowchart LR
 
 ### 1. Article analysis
 
-The production article classifier is a **calibrated Linear SVM** trained on the ISOT Fake News dataset.
+The production article classifier is the ISOT-trained Linear SVM. The currently deployed artifact is running in **safety-gated legacy mode** because it does not contain the exact calibrated runtime ensemble required for faithful probability output. TruthLens therefore withholds fake/real probability percentages in production until a formally promoted exact-calibrated artifact is available.
 
 | Metric | Held-out ISOT result |
 |---|---:|
@@ -117,7 +117,7 @@ The production article classifier is a **calibrated Linear SVM** trained on the 
 | Recall | **99.66%** |
 | F1-score | **99.54%** |
 
-The production model is served as a separate article-analysis component and is not mixed with claim-model metrics.
+The production model is served as a separate article-analysis component and is not mixed with claim-model metrics. The benchmark figures above describe the underlying ISOT model evaluation; they do not imply that calibrated probabilities are currently exposed in production.
 
 ---
 
@@ -214,7 +214,7 @@ This prevents a headline-only item from being silently treated as a full article
 flowchart TB
     F[React / Vite Frontend] --> API[Node / Express API]
 
-    API --> M1[Article Model<br/>ISOT + Calibrated Linear SVM]
+    API --> M1[Article Model<br/>ISOT Linear SVM + safety gate]
     API --> M2[Claim Model<br/>LIAR]
     API --> EX[Secure URL Extractor]
     API --> EV[Evidence Engine]
@@ -268,13 +268,15 @@ flowchart TB
 
 The current production line has been verified after the latest extraction compatibility fix:
 
-- **GitHub CI:** ✅ passed
-- **Production Smoke Test:** ✅ passed
-- **Production smoke assertions:** **53 passed, 0 failed**
-- **Vercel production:** ✅ READY
-- **Article model artifact:** ✅ loaded successfully
-- **Claim model:** ✅ READY
-- **Live news endpoint:** ✅ responding
+- **GitHub CI:** ✅ passed on main (CI run #634; all listed jobs/steps successful)
+- **Vercel production:** ✅ READY on deployment `dpl_92AnaRPHETdToqnWyTXCeY2KLiz9`
+- **Production commit:** `8c8ef1d7aa4c567f7e6c97002c1fedd2f5633aa7`
+- **Production runtime:** `legacy_single_svm` with probability output withheld
+- **Article safety regressions:** ✅ passed (12/12 assertions)
+- **Verdict regressions:** ✅ passed (24/24 assertions)
+- **Runtime parity candidate:** ✅ passed (20/20 fixtures)
+- **Exact calibrated candidate benchmark:** 99.7773% held-out ISOT accuracy; 99.9377% temporal accuracy; 43.1646% LIAR OOD accuracy — **research evidence only, not production-promoted**
+- **Direct live HTTP smoke:** not independently executable from this environment because outbound DNS/network access is unavailable; Vercel deployment state and GitHub/Vercel checks were verified instead.
 
 The latest extraction compatibility change updates the outgoing public-page request headers while keeping the existing SSRF and redirect protections in place.
 
@@ -385,7 +387,7 @@ Phase 7  → independent benchmark audit
 Phase 8  → controlled promotion
 ```
 
-Research results are kept separate from production accuracy claims.
+Research results are kept separate from production accuracy claims. In particular, the exact calibrated runtime candidate has not been promoted because its LIAR out-of-domain result is 43.16%, so there is no evidence-based justification for calling the production runtime 100% accurate.
 
 ---
 
