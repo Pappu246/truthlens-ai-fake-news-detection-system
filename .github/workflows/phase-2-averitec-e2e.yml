@@ -3,6 +3,7 @@ name: Phase 2 AVeriTeC End-to-End Benchmark
 on:
   push:
     branches:
+      - research/phase2-averitec-final
       - research/phase2-averitec-scoring-current
     paths:
       - 'scripts/v2AveritecEndToEnd.ts'
