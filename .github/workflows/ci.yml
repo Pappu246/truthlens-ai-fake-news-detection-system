@@ -70,6 +70,9 @@ jobs:
       - name: Existing verdict regression suite
         run: npm run test:verdicts
 
+      - name: Article pipeline and extraction safety
+        run: npm run test:article-pipeline-safety
+
       - name: Contract tests
         run: npm run test:contracts
 
