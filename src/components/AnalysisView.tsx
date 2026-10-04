@@ -26,16 +26,16 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
             Ready for Live ML Inference
           </h2>
           <p className="text-slate-600 text-base max-w-lg mx-auto mb-8 leading-relaxed">
-            Select one of the quick test samples or paste any news article into the input panel on the left, then click <strong>Analyze Article</strong> to run inference through the calibrated model.
+            Select a quick test sample or paste a news article, then click <strong>Analyze Article</strong> to run it through the production runtime safety and calibration policy.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-xl mx-auto text-left">
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
               <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block mb-1">Active Model</span>
-              <span className="text-sm font-bold text-slate-900">Linear SVM (Calibrated)</span>
+              <span className="text-sm font-bold text-slate-900">Linear SVM / Safety-Gated Runtime</span>
             </div>
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
               <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block mb-1">Calibration</span>
-              <span className="text-sm font-bold text-slate-900">Platt Sigmoid Scaling</span>
+              <span className="text-sm font-bold text-slate-900">Backend Calibration Status</span>
             </div>
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
               <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block mb-1">Verdict Contract</span>
