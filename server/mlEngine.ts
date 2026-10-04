@@ -59,7 +59,7 @@ const DEMO_REAL_ZONE_BOUND = 0.40;
 const LEGACY_MIN_VOCAB_COVERAGE = 0.10;
 const LEGACY_FAKE_MARGIN = 1.50;
 const LEGACY_REAL_MARGIN = -1.50;
-const LIMITED_CONTENT_SOURCES = new Set(['RSS_SUMMARY_ONLY', 'HEADLINE_ONLY', 'EXTRACTION_BLOCKED']);
+const LIMITED_CONTENT_SOURCES = new Set(['RSS_SUMMARY_ONLY', 'PARTIAL_ARTICLE_EXTRACTED', 'HEADLINE_ONLY', 'EXTRACTION_BLOCKED']);
 
 
 export interface ModelArtifacts {
@@ -1419,6 +1419,7 @@ export class TruthLensMLEngine {
       isHeadlineOnly?: boolean;
       contentSource?:
         | 'FULL_ARTICLE_EXTRACTED'
+        | 'PARTIAL_ARTICLE_EXTRACTED'
         | 'RSS_SUMMARY_ONLY'
         | 'HEADLINE_ONLY'
         | 'EXTRACTION_BLOCKED'

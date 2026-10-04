@@ -411,10 +411,14 @@ export const ModelSpecsView: React.FC<ModelSpecsViewProps> = ({ metrics, onRetra
             Primary Production Model
           </span>
           <h3 className="text-2xl lg:text-3xl font-black text-slate-900 uppercase tracking-tight mb-2">
-            Linear SVM (Calibrated)
+            {runtimeDiagnostics?.inference_mode === 'legacy_single_svm'
+              ? 'Linear SVM — Safety-Gated Legacy Runtime'
+              : 'Linear SVM (Calibrated)'}
           </h3>
           <p className="text-xs text-slate-500 mb-3 leading-relaxed">
-            Support Vector Machine maximizing geometric margin in {(metrics.vocabulary_size || 8000).toLocaleString()}-dimensional TF-IDF space with Platt Sigmoid calibration (CalibratedClassifierCV) providing reliable probability estimates.
+            {runtimeDiagnostics?.inference_mode === 'legacy_single_svm'
+              ? 'Production is using the legacy Linear SVM artifact with conservative decision-strength bands. Calibrated probability output is withheld until an exact calibrated runtime artifact is formally promoted.'
+              : 'Support Vector Machine with exact Platt sigmoid calibration. Probability estimates are exposed only when the loaded runtime artifact contains the exact calibration parameters required for faithful reproduction.'}
           </p>
 
           <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-[11px] font-mono">
