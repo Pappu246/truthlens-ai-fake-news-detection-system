@@ -7,6 +7,13 @@ on:
   pull_request:
     branches:
       - main
+    paths:
+      - 'scripts/benchmark_isot.py'
+      - 'scripts/isot_*.py'
+      - 'scripts/train_isot_canonical.py'
+      - 'data/Fake.csv'
+      - 'data/True.csv'
+      - '.github/workflows/isot-phase7-benchmark.yml'
   workflow_dispatch:
 
 permissions:

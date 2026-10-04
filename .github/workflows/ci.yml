@@ -10,6 +10,29 @@ on:
   pull_request:
     branches:
       - main
+    paths:
+      - 'src/**'
+      - 'server/**'
+      - 'api/**'
+      - 'backend/**'
+      - 'scripts/productionSmokeTest.ts'
+      - 'scripts/contractTests.ts'
+      - 'scripts/vercel-sim.ts'
+      - 'scripts/regressionVerdictTests.ts'
+      - 'scripts/claimModelTests.ts'
+      - 'scripts/claimParity.ts'
+      - 'scripts/evidenceTests.ts'
+      - 'scripts/gate14RemainingTests.ts'
+      - 'scripts/evidenceBenchmark.ts'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vite.config.ts'
+      - 'tsconfig.json'
+      - 'vercel.json'
+      - 'render.yaml'
+      - 'index.html'
+      - 'metadata.json'
+      - '.github/workflows/ci.yml'
 
 permissions:
   contents: read
@@ -46,6 +69,9 @@ jobs:
 
       - name: Existing verdict regression suite
         run: npm run test:verdicts
+
+      - name: Article pipeline and extraction safety
+        run: npm run test:article-pipeline-safety
 
       - name: Contract tests
         run: npm run test:contracts
