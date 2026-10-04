@@ -38,6 +38,12 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           )}
         </div>
 
+        {history.length > 0 && (
+          <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-950 leading-relaxed">
+            <strong className="font-black uppercase tracking-wide">Historical record notice:</strong> older entries may contain confidence values written before the production probability safety lock. Those values are audit history, not a guarantee of the current runtime. Use <strong>Re-test</strong> to run the article through the current safety policy.
+          </div>
+        )}
+
         {history.length === 0 ? (
           <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center max-w-md mx-auto my-12">
             <h3 className="text-xl font-black uppercase tracking-tight text-slate-900 mb-2">
@@ -120,7 +126,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                           : `${item.confidence_score}%`}
                       </span>
                       <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                        Confidence
+                        Recorded Confidence
                       </span>
                     </div>
 

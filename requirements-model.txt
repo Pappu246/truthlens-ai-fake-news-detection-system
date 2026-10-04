@@ -1,0 +1,10 @@
+# Reproducible Python environment for TruthLens model training/evaluation.
+# Python runtime used by the verified Phase 9 candidate run: 3.11.16.
+# Keep these pins aligned with the CI environment before promoting a model.
+
+numpy==2.4.6
+pandas==3.0.6
+scikit-learn==1.9.1
+scipy==1.17.1
+joblib==1.6.0
+datasketch==2.0.0
