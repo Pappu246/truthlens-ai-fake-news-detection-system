@@ -70,6 +70,7 @@ export interface EvidenceVerificationInfo {
  */
 export type ContentSource =
   | 'FULL_ARTICLE_EXTRACTED'
+  | 'PARTIAL_ARTICLE_EXTRACTED'
   | 'RSS_SUMMARY_ONLY'
   | 'HEADLINE_ONLY'
   | 'EXTRACTION_BLOCKED'
