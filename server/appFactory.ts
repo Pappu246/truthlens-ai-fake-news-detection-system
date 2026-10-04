@@ -197,7 +197,8 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
     }
   });
 
-  // 1d. TRUTHLENS V2 RESEARCH STACK (EXPERIMENTAL, ADDITIVE):  //     CLAIM -> QUERY EXPANSION -> HYBRID RETRIEVAL (lexical + dense)
+  // 1d. TRUTHLENS V2 RESEARCH STACK (EXPERIMENTAL, ADDITIVE):
+  //     CLAIM -> QUERY EXPANSION -> HYBRID RETRIEVAL (lexical + dense)
   //           -> RERANKING -> NLI EVIDENCE CLASSIFICATION
   //           -> AGGREGATION/ABSTENTION -> PROVENANCE
   //     This is the first vertical slice of the V2 evidence-grounded
@@ -397,6 +398,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
         enabled: includeEvidence,
         timeBudgetMs: Number(req.body.evidence_time_budget_ms) || 10000
       });
+
       res.json(analysis);
     } catch (err: any) {
       const message: string = err.message || 'Failed to analyze article from URL.';
@@ -474,7 +476,9 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
           role: 'article_model',
           task: 'full-article real/fake classification',
           dataset: 'ISOT',
-          model_name: articleMetrics?.best_model?.name || 'Linear SVM (Safety-Gated Legacy)',
+          model_name: mlEngine.getInferenceMode() === 'legacy_single_svm'
+            ? 'Linear SVM (Safety-Gated Legacy)'
+            : (articleMetrics?.best_model?.name || 'Linear SVM (Calibrated)'),
           model_version: articleMetrics?.model_version,
           metrics: articleMetrics?.best_model?.metrics || null,
           thresholds: articleMetrics?.thresholds || null,
@@ -487,7 +491,9 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
                 'measure different tasks and must not be combined into a single headline number.'
         },
         separation_policy: {
-          article_model: 'ISOT calibrated Linear SVM',
+          article_model: mlEngine.getInferenceMode() === 'legacy_single_svm'
+            ? 'ISOT Linear SVM (safety-gated legacy runtime)'
+            : 'ISOT calibrated Linear SVM',
           claim_model: 'LIAR specialist (calibrated Linear SVM)',
           evidence_engine: 'external retrieval-based support/contradiction signal',
           rule: 'Never merged into one accuracy figure.'
@@ -595,7 +601,8 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
       const verification = await verifyClaim(text, sourceUrl);
       res.json(verification);
     } catch (err: any) {
-      res.status(400).json({ detail: err.message });    }
+      res.status(400).json({ detail: err.message });
+    }
   });
 
   // PHASE 4: CLAIM EXTRACTION & EVIDENCE ENDPOINTS
@@ -794,7 +801,8 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
   });
 
   app.get('/api/examples', (req, res) => {
-    res.json(DEMO_EXAMPLES);  });
+    res.json(DEMO_EXAMPLES);
+  });
 
   app.get('/api/dataset/info', (req, res) => {
     const diag = mlEngine.getDiagnostics();
