@@ -2,10 +2,9 @@ name: V3 Phase 2 Scoring Recovery
 
 on:
   workflow_dispatch:
-  push:
+  pull_request:
     branches:
-      - research/v3-phase2-final
-      - research/v3-phase2-scoring-current
+      - main
     paths:
       - 'scripts/benchmarks/**'
       - 'scripts/v3Phase2ResumableCoordinator.mjs'
@@ -14,7 +13,7 @@ on:
       - '.github/workflows/v3-phase2-scoring-recovery.yml'
 
 concurrency:
-  group: truthlens-v3-phase2-scoring-recovery-current
+  group: truthlens-v3-phase2-scoring-recovery-pr-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
