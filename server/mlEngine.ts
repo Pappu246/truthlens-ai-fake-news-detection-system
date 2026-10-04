@@ -1419,6 +1419,7 @@ export class TruthLensMLEngine {
       isHeadlineOnly?: boolean;
       contentSource?:
         | 'FULL_ARTICLE_EXTRACTED'
+        | 'PARTIAL_ARTICLE_EXTRACTED'
         | 'RSS_SUMMARY_ONLY'
         | 'HEADLINE_ONLY'
         | 'EXTRACTION_BLOCKED'
