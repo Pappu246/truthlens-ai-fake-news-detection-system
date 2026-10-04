@@ -24,6 +24,7 @@ Only current-main Phase 2 research PRs remain active: #54 and #55.
 - AVeriTeC's pinned dev evidence store has already been materialized and hash-verified; end-to-end scoring is still required.
 - The AVeriTeC runner has a research-only chunked embedding adapter to avoid the prior worker response-buffer overflow.
 - The Phase 2 resumable coordinator now reads frozen inputs from artifacts/v3/benchmark-assets/<benchmark> and writes benchmark outputs under artifacts/v3/<benchmark>.
+- Recovery checkpoints distinguish 100-claim PILOT_COMPLETE from full-split COMPLETE, so a pilot can never suppress the required full benchmark run.
 
 ## Current blockers
 
