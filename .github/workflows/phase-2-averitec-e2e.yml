@@ -95,6 +95,26 @@ jobs:
             --coarse-bm25-k="$COARSE_BM25_K" \
             --embedding-batch=64
 
+      - name: Require complete 500-claim benchmark output
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          provenance = json.loads(Path("artifacts/v2-averitec-e2e/provenance.json").read_text())
+          predictions = json.loads(Path("artifacts/v2-averitec-e2e/predictions.json").read_text())
+
+          evaluated = len(predictions)
+          scope = provenance.get("evaluation_scope")
+          if evaluated != 500:
+              raise SystemExit(f"Expected 500 predictions, got {evaluated}")
+          if scope != "full_500_claim_dev":
+              raise SystemExit(f"Expected full_500_claim_dev scope, got {scope!r}")
+          print(json.dumps({"evaluated_claims": evaluated, "evaluation_scope": scope}))
+          PY
+
       - name: Fetch pinned official AVeriTeC evaluator
         shell: bash
         run: |
