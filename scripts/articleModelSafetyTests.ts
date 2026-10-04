@@ -53,6 +53,11 @@ assert(ood.fake_probability === null && ood.real_probability === null,
 assert(ood.confidence_score === null, 'Zero-vocabulary confidence is withheld');
 
 const real = mlEngine.analyzeArticle(REAL_ARTICLE);
+if (real.model_inference_mode === 'legacy_single_svm') {
+  assert(real.model === 'Linear SVM (Safety-Gated Legacy)' && real.model_used === 'Linear SVM (Safety-Gated Legacy)',
+    'Legacy article result names the actual safety-gated runtime',
+    JSON.stringify({ model: real.model, model_used: real.model_used }));
+}
 assert(real.prediction !== 'LIKELY FAKE',
   'Reuters-style real article is never LIKELY FAKE',
   JSON.stringify({ prediction: real.prediction, fake_probability: real.fake_probability, margin: real.decision_margin }));
@@ -112,6 +117,21 @@ assert(
   'Diagnostics expose recognized inference mode',
   String(diag.inference_mode)
 );
+if (diag.inference_mode === 'legacy_single_svm') {
+  assert(
+    diag.model_name === 'Linear SVM (Safety-Gated Legacy)' &&
+      diag.model_type === 'Linear SVM (Safety-Gated Legacy)' &&
+      diag.calibration?.is_calibrated === false &&
+      diag.decision_policy?.probability_output === 'WITHHELD',
+    'Legacy diagnostics label matches the non-calibrated safety runtime',
+    JSON.stringify({
+      model_name: diag.model_name,
+      model_type: diag.model_type,
+      is_calibrated: diag.calibration?.is_calibrated,
+      probability_output: diag.decision_policy?.probability_output
+    })
+  );
+}
 
 const externalPath = path.join(process.cwd(), 'data', 'external_validation.json');
 if (fs.existsSync(externalPath)) {
