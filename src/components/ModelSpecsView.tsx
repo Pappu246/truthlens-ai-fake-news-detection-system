@@ -314,7 +314,7 @@ export const ModelSpecsView: React.FC<ModelSpecsViewProps> = ({ metrics, onRetra
         <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
           <span>Feature Input: <code className="font-bold text-slate-900 font-mono">title + text</code> (subject & date strictly excluded)</span>
           <span>Leakage Safeguard: <code className="font-bold text-emerald-700 font-mono">TF-IDF fitted strictly on training data only</code></span>
-          <span>Probability Calibration: <code className="font-bold text-blue-700 font-mono">CalibratedClassifierCV (Platt Sigmoid)</code></span>
+          <span>Probability Calibration: <code className="font-bold text-blue-700 font-mono">{runtimeDiagnostics?.calibration?.is_calibrated ? runtimeDiagnostics.calibration.method : 'WITHHELD — LEGACY SAFETY MODE'}</code></span>
         </div>
       </div>
 
