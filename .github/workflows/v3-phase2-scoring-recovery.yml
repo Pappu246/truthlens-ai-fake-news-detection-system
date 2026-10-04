@@ -5,6 +5,12 @@ on:
   push:
     branches:
       - research/v3-phase2-scoring-current
+    paths:
+      - 'scripts/benchmarks/**'
+      - 'scripts/v3Phase2ResumableCoordinator.mjs'
+      - 'scripts/phase2ExitGate.mjs'
+      - 'research/multibenchmark-manifest.json'
+      - '.github/workflows/v3-phase2-scoring-recovery.yml'
 
 concurrency:
   group: truthlens-v3-phase2-scoring-recovery-current
