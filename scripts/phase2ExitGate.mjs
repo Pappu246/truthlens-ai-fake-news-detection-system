@@ -27,7 +27,7 @@ async function sha256(file) {
   return crypto.createHash("sha256").update(await fs.readFile(file)).digest("hex");
 }
 
-async function checkArtifact(label, file, expectedBenchmarkId) {
+async function checkArtifact(label, file, expectedBenchmarkId, expectedEvaluationCount = null) {
   const ok = await exists(file);
   checks.push({ label, file, exists: ok });
   if (!ok) {
@@ -38,6 +38,9 @@ async function checkArtifact(label, file, expectedBenchmarkId) {
     const artifact = await readJson(file);
     if (artifact.benchmark_id !== expectedBenchmarkId) {
       failures.push(label + ": benchmark_id mismatch (" + artifact.benchmark_id + ")");
+    }
+    if (expectedEvaluationCount !== null && artifact.evaluation_count !== expectedEvaluationCount) {
+      failures.push(label + ": evaluation_count mismatch (" + artifact.evaluation_count + ", expected " + expectedEvaluationCount + ")");
     }
     if (!artifact.metrics || typeof artifact.metrics !== "object") {
       failures.push(label + ": metrics payload missing");
@@ -77,19 +80,22 @@ if (!(await exists(scifactBaseline))) failures.push("SciFact protocol record mis
 await checkArtifact(
   "FEVER official score",
   "artifacts/v3/fever/official-scorer-run.json",
-  "fever"
+  "fever",
+  manifest.benchmarks.find((item) => item.id === "fever_v1")?.expected_evaluation_claims ?? null
 );
 
 await checkArtifact(
   "FEVEROUS official score",
   "artifacts/v3/feverous/official-scorer-run.json",
-  "feverous"
+  "feverous",
+  manifest.benchmarks.find((item) => item.id === "feverous")?.expected_evaluation_claims ?? null
 );
 
 await checkArtifact(
   "AVeriTeC official score",
   "artifacts/v2-averitec-e2e/official-evaluation.json",
-  "averitec"
+  "averitec",
+  manifest.benchmarks.find((item) => item.id === "averitec")?.expected_evaluation_claims ?? null
 );
 
 const openWebHoldout = "research/open-web-v1-holdout.jsonl";
