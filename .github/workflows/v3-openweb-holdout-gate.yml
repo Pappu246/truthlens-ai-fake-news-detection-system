@@ -1,0 +1,53 @@
+name: TruthLens Open-Web V1 Holdout Gate
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'research/open-web-v1-holdout.jsonl'
+      - 'research/open-web-v1-holdout-schema.json'
+      - 'scripts/validateOpenWebHoldout.mjs'
+      - '.github/workflows/v3-openweb-holdout-gate.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: Validate sealed human-labelled holdout
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check holdout presence
+        id: presence
+        shell: bash
+        run: |
+          if [ -f research/open-web-v1-holdout.jsonl ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Validate sealed holdout
+        if: steps.presence.outputs.present == 'true'
+        run: node scripts/validateOpenWebHoldout.mjs --input=research/open-web-v1-holdout.jsonl
+      - name: Record human-label gate as deferred
+        if: steps.presence.outputs.present != 'true'
+        run: |
+          mkdir -p artifacts/v3/open-web-v1
+          cat > artifacts/v3/open-web-v1/holdout-gate.json <<'EOF'
+          {
+            "benchmark_id": "truthlens_open_web_v1",
+            "status": "DEFERRED",
+            "reason": "The human-labelled blind holdout has not been sealed yet.",
+            "production_evaluation_allowed": false
+          }
+          EOF
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: truthlens-open-web-v1-holdout-gate-${{ github.run_number }}
+          path: artifacts/v3/open-web-v1/
+          if-no-files-found: error
+          retention-days: 90
