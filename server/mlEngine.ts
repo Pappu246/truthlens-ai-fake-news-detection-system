@@ -1313,7 +1313,7 @@ export class TruthLensMLEngine {
       const exponent = Math.max(-50, Math.min(50, this.plattA * z + this.plattB));
       const probability = 1.0 / (1.0 + Math.exp(exponent));
       return {
-        probability: Math.min(Math.max(probability, 0.0001), 0.9999),
+                probability,
         decision_margin: z,
         candidate_term_count: details.candidate_term_count,
         matched_term_count: details.matched_term_count,
@@ -1340,7 +1340,7 @@ export class TruthLensMLEngine {
       const probability = memberProbabilities.reduce((a, b) => a + b, 0) / memberProbabilities.length;
       const decisionMargin = memberMargins.reduce((a, b) => a + b, 0) / memberMargins.length;
       return {
-        probability: Math.min(Math.max(probability, 0.0001), 0.9999),
+                probability,
         decision_margin: decisionMargin,
         candidate_term_count: details.candidate_term_count,
         matched_term_count: details.matched_term_count,
