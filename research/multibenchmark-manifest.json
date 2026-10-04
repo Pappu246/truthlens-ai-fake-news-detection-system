@@ -54,6 +54,7 @@
       ],
       "dataset_release": "FEVER v1.0",
       "expected_claims_total": 185445,
+      "expected_evaluation_claims": 37566,
       "evaluation": {
         "primary": "official FEVER score",
         "secondary": [
@@ -88,6 +89,7 @@
         "NOT ENOUGH INFO"
       ],
       "expected_claims_total": 87026,
+      "expected_evaluation_claims": 7890,
       "evaluation": {
         "primary": "official FEVEROUS score",
         "secondary": [
