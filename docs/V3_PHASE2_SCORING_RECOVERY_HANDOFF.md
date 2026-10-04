@@ -16,8 +16,8 @@ Only current-main Phase 2 research PRs remain active: #54 and #55.
 
 ## Verified baseline state
 
-- Production main is dca9117c813dfec1df28eff320e3abc1cdcbdc1c.
-- Main's production Vercel deployment is READY for that exact SHA.
+- Production main is 8c8ef1d7aa4c567f7e6c97002c1fedd2f5633aa7.
+- Main's production Vercel deployment for that exact SHA is READY.
 - No production model, threshold, source policy, or runtime artifact is changed by the Phase 2 research branches.
 - SciFact is an existing frozen/baselined lane and is not recomputed by the recovery coordinator.
 - FEVER and FEVEROUS inputs have frozen SHA-256 expectations and materialization workflows.
@@ -31,7 +31,7 @@ Only current-main Phase 2 research PRs remain active: #54 and #55.
 2. FEVEROUS official scoring artifact is not yet present in the repository/CI artifacts.
 3. AVeriTeC official evaluation artifact is not yet complete/verified on the current branch.
 4. The Open-Web 100-claim human-labelled blind holdout has not been sealed.
-5. Vercel project is configured to skip deployments for research/* branches via an Ignored Build Step; production main remains eligible for normal deployment.
+5. Vercel research preview deployment guard is configured; production main remains eligible for normal deployment.
 
 No benchmark result is treated as valid until its complete official scorer/evaluator artifact and provenance are available.
 
@@ -52,7 +52,7 @@ Default operation:
 
 After interruption:
 1. Read this handoff.
-2. Check PR #50 and PR #51 latest heads and newest completed benchmark workflows.
+2. Check PR #54 and PR #55 latest heads and newest completed benchmark workflows.
 3. Read the Phase 2 coordinator checkpoint if present.
 4. Re-run only incomplete benchmark states.
 5. Never recompute the verified SciFact baseline.
