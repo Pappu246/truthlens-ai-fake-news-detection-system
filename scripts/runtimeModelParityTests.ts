@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { TruthLensMLEngine } from "../server/mlEngine";
+import { TruthLensMLEngine, cleanText } from "../server/mlEngine";
 
 const ROOT = process.cwd();
 const modelsDir = path.join(ROOT, "artifacts", "models");
@@ -44,7 +44,7 @@ if (!fixtures.length) fail("Parity fixture set is empty.");
 const engine = new TruthLensMLEngine(artifactPath);
 let passed = 0;
 for (const fixture of fixtures) {
-  const actual = engine.predictProbabilityDetailed(fixture.text);
+  const actual = engine.predictProbabilityDetailed(cleanText(fixture.text));
   const probabilityDrift = Math.abs(actual.probability - fixture.expected_fake_probability);
   const candidateDelta = actual.candidate_term_count - fixture.candidate_terms;
   const matchedDelta = actual.matched_term_count - fixture.matched_terms;
