@@ -365,6 +365,15 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
         });
       }
 
+      // Preserve the actual extraction state. A partial webpage must never be
+      // mislabeled as a full article, because the ML safety policy abstains on
+      // incomplete content rather than turning it into a confident verdict.
+      const contentSource = extracted.isHeadlineOnly || extracted.wordCount < 40
+        ? 'HEADLINE_ONLY'
+        : extracted.extractionStatus === 'PARTIAL'
+          ? 'PARTIAL_ARTICLE_EXTRACTED'
+          : 'FULL_ARTICLE_EXTRACTED';
+
       const analysis = mlEngine.analyzeArticle(extracted.content, extracted.url, {
         inputType: 'url',
         originalUrl: rawUrl,
@@ -377,7 +386,17 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
         extractionStatus: extracted.extractionStatus,
         warnings: extracted.warnings,
         isHeadlineOnly: extracted.isHeadlineOnly,
-        contentSource: 'FULL_ARTICLE_EXTRACTED'
+        contentSource
+      });
+
+      // URL analysis gets the same evidence-grounded verification layer as
+      // direct text analysis. Evidence failure remains an abstention state;
+      // it is never converted into FAKE.
+      const includeEvidence = req.body.include_evidence !== false;
+      const evidenceClaim = (analysis.detected_claim || extracted.title || extracted.content || '').toString();
+      analysis.evidence_verification = await evidenceEngine.verifyClaim(evidenceClaim, {
+        enabled: includeEvidence,
+        timeBudgetMs: Number(req.body.evidence_time_budget_ms) || 10000
       });
 
       res.json(analysis);
