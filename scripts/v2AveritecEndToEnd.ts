@@ -423,6 +423,23 @@ async function main(): Promise<void> {
       claims: rows
     };
 
+    const allowedLabels = new Set(['Supported', 'Refuted', 'Not Enough Evidence']);
+    if (predictions.length !== maxClaims) {
+      throw new Error(`Prediction count mismatch: ${predictions.length}; expected ${maxClaims}.`);
+    }
+    if (fullRun !== (predictions.length === 500)) {
+      throw new Error('Full-run scope and prediction count are inconsistent.');
+    }
+    for (const [index, prediction] of predictions.entries()) {
+      if (!allowedLabels.has(prediction.label)) throw new Error(`Unsupported benchmark label at row ${index}: ${prediction.label}`);
+      if (!Array.isArray(prediction.string_evidence) || prediction.string_evidence.length > 10) {
+        throw new Error(`Invalid evidence payload at row ${index}.`);
+      }
+      if (typeof prediction.justification !== 'string') {
+        throw new Error(`Invalid justification payload at row ${index}.`);
+      }
+    }
+
     fs.writeFileSync(path.join(outputDir, 'predictions.json'), JSON.stringify(predictions, null, 2) + '\n');
     fs.writeFileSync(path.join(outputDir, 'provenance.json'), JSON.stringify(metadata, null, 2) + '\n');
     const bundleDigest = crypto.createHash('sha256')
