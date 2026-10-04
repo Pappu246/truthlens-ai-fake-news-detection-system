@@ -16,11 +16,7 @@
       "id": "scifact",
       "status": "FROZEN_AND_BASELINED",
       "task": "scientific claim verification with evidence",
-      "labels": [
-        "SUPPORT",
-        "CONTRADICT",
-        "NOT_ENOUGH_INFO"
-      ],
+      "labels": ["SUPPORT", "CONTRADICT", "NOT_ENOUGH_INFO"],
       "split": "dev",
       "claims": 300,
       "corpus_documents": 5183,
@@ -47,20 +43,13 @@
       "id": "fever_v1",
       "status": "FROZEN_AND_MATERIALIZED",
       "task": "Wikipedia claim verification",
-      "labels": [
-        "SUPPORTS",
-        "REFUTES",
-        "NOT ENOUGH INFO"
-      ],
+      "labels": ["SUPPORTS", "REFUTES", "NOT ENOUGH INFO"],
       "dataset_release": "FEVER v1.0",
       "expected_claims_total": 185445,
       "expected_evaluation_claims": 37566,
       "evaluation": {
         "primary": "official FEVER score",
-        "secondary": [
-          "label_accuracy",
-          "evidence_recall"
-        ]
+        "secondary": ["label_accuracy", "evidence_recall"]
       },
       "data_requirements": [
         "labelled development split",
@@ -83,19 +72,12 @@
       "id": "feverous",
       "status": "FROZEN_AND_MATERIALIZED",
       "task": "verification over unstructured and structured Wikipedia information",
-      "labels": [
-        "SUPPORTS",
-        "REFUTES",
-        "NOT ENOUGH INFO"
-      ],
+      "labels": ["SUPPORTS", "REFUTES", "NOT ENOUGH INFO"],
       "expected_claims_total": 87026,
       "expected_evaluation_claims": 7890,
       "evaluation": {
         "primary": "official FEVEROUS score",
-        "secondary": [
-          "label_accuracy",
-          "evidence_recall"
-        ]
+        "secondary": ["label_accuracy", "evidence_recall"]
       },
       "data_requirements": [
         "development split",
@@ -125,13 +107,10 @@
         "CONFLICTING_EVIDENCE/CHERRY_PICKING"
       ],
       "expected_claims_total": 4568,
+      "expected_evaluation_claims": 500,
       "evaluation": {
         "primary": "official AVeriTeC score",
-        "secondary": [
-          "verdict_accuracy",
-          "evidence_recall",
-          "evidence_quality"
-        ]
+        "secondary": ["verdict_accuracy", "evidence_recall", "evidence_quality"]
       },
       "data_requirements": [
         "fixed train/dev release",
@@ -167,12 +146,7 @@
       "id": "truthlens_open_web_v1",
       "status": "PLANNED_EXTERNAL_COLLECTION",
       "task": "fresh open-web fact verification",
-      "labels": [
-        "SUPPORTED",
-        "REFUTED",
-        "INSUFFICIENT_EVIDENCE",
-        "CONFLICTED"
-      ],
+      "labels": ["SUPPORTED", "REFUTED", "INSUFFICIENT_EVIDENCE", "CONFLICTED"],
       "target_claims": 100,
       "collection_rules": [
         "human-labelled before system evaluation",
@@ -184,15 +158,8 @@
         "blind holdout released only after protocol freeze"
       ],
       "evaluation": {
-        "primary": [
-          "verdict_macro_f1",
-          "selective_accuracy"
-        ],
-        "secondary": [
-          "coverage",
-          "abstention_rate",
-          "calibration_ece"
-        ]
+        "primary": ["verdict_macro_f1", "selective_accuracy"],
+        "secondary": ["coverage", "abstention_rate", "calibration_ece"]
       },
       "source": "TruthLens-controlled external evaluation set; collection and labels are not yet frozen"
     }
