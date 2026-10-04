@@ -162,7 +162,9 @@ jobs:
           from pathlib import Path
 
           text = Path("artifacts/v2-averitec-e2e/official-evaluation.txt").read_text()
+          predictions = json.loads(Path("artifacts/v2-averitec-e2e/predictions.json").read_text())
           out = {
+              "evaluation_count": len(predictions),
               "benchmark_id": "averitec",
               "protocol_version": "truthlens-v3-benchmark-protocol-v1",
               "evaluation_scope": "dev_500_claims",
