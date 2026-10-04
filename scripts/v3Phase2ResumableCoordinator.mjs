@@ -62,6 +62,12 @@ function findBenchmark(manifest, id) {
   return benchmark;
 }
 
+function expectedEvaluationCount(benchmark) {
+  return Number.isInteger(benchmark.expected_evaluation_claims)
+    ? benchmark.expected_evaluation_claims
+    : null;
+}
+
 async function checkpoint(state) {
   await fsp.mkdir(OUT, { recursive: true });
   state.updated_at = new Date().toISOString();
@@ -191,7 +197,10 @@ async function main() {
   try {
     for (const id of benchmarkIds) {
       const prior = state.checkpoints[id];
-      if (prior && ["COMPLETE", "SKIPPED_BASELINE", "HUMAN_REQUIRED", "BLOCKED"].includes(prior.status)) {
+      if (prior && ["SKIPPED_BASELINE", "HUMAN_REQUIRED", "BLOCKED"].includes(prior.status)) {
+        continue;
+      }
+      if (prior?.status === "COMPLETE" && prior.evaluation_count && prior.expected_evaluation_claims && prior.evaluation_count >= prior.expected_evaluation_claims) {
         continue;
       }
       const benchmark = findBenchmark(manifest, id);
@@ -211,7 +220,11 @@ async function main() {
         continue;
       }
 
-      state.checkpoints[id] = { status: "RUNNING", max_claims: maxClaims };
+      state.checkpoints[id] = {
+        status: "RUNNING",
+        max_claims: maxClaims,
+        expected_evaluation_claims: expectedEvaluationCount(benchmark)
+      };
       await checkpoint(state);
 
       const artifact = id === "fever_v1"
@@ -232,9 +245,19 @@ async function main() {
       const report = await readJson(artifact);
       if (report.benchmark_id !== id) throw new Error(id + " scorer artifact benchmark_id mismatch");
 
+      const evaluationCount =
+        Number.isInteger(report.evaluation_count)
+          ? report.evaluation_count
+          : Number.isInteger(report.dataset?.evaluation_count)
+            ? report.dataset.evaluation_count
+            : maxClaims;
+      const expectedCount = expectedEvaluationCount(benchmark);
+      const fullEvaluation = expectedCount === null || evaluationCount >= expectedCount;
       state.checkpoints[id] = {
-        status: "COMPLETE",
+        status: fullEvaluation ? "COMPLETE" : "PILOT_COMPLETE",
         max_claims: maxClaims,
+        evaluation_count: evaluationCount,
+        expected_evaluation_claims: expectedCount,
         artifact,
         artifact_sha256: await sha256File(artifact),
         metrics: report.metrics || {},
@@ -243,9 +266,13 @@ async function main() {
       await checkpoint(state);
     }
 
-    state.overall_status = Object.values(state.checkpoints).every((x) =>
-      x.status === "COMPLETE" || x.status === "SKIPPED_BASELINE" || x.status === "HUMAN_REQUIRED" || x.status === "BLOCKED"
-    ) ? "PASS_WITH_DECLARED_BLOCKERS" : "INCOMPLETE";
+    const requiredFullBenchmarksComplete = ["fever_v1", "feverous", "averitec"].every((id) => {
+      const checkpoint = state.checkpoints[id];
+      return checkpoint?.status === "COMPLETE";
+    });
+    state.overall_status = requiredFullBenchmarksComplete
+      ? "FULL_BENCHMARKS_COMPLETE_PENDING_OPEN_WEB"
+      : "RECOVERY_PROGRESS_RECORDED";
     await checkpoint(state);
 
     console.log(JSON.stringify(state, null, 2));
