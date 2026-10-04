@@ -73,6 +73,35 @@ async function main(): Promise<void> {
   check('diagnostics returns 200', diag.status === 200, String(diag.status));
   check('diagnostics names the loaded artifact',
     Boolean(diag.json?.model_version || diag.json?.best_model));
+  check('diagnostics exposes a recognized inference mode',
+    ['calibrated_ensemble', 'single_calibrated_svm', 'legacy_single_svm'].includes(diag.json?.inference_mode),
+    String(diag.json?.inference_mode));
+  if (diag.json?.inference_mode === 'legacy_single_svm') {
+    check('legacy safety policy withholds probability output',
+      diag.json?.decision_policy?.probability_output === 'WITHHELD',
+      JSON.stringify(diag.json?.decision_policy));
+  }
+
+  section('/api/article-model safety contract');
+  const realArticle =
+    'WASHINGTON (Reuters) - The U.S. Department of Education announced a new digital learning initiative today. ' +
+    'Senior officials said the program will expand broadband access in public schools and provide online learning resources. ' +
+    'The department said the program will be evaluated using published enrollment and usage data.';
+  const analysis = await req('POST', '/api/analyze', { text: realArticle, include_evidence: false });
+  check('article analyze returns 200', analysis.status === 200, String(analysis.status));
+  if (diag.json?.inference_mode === 'legacy_single_svm') {
+    check('legacy analyze does not expose fake probability', analysis.json?.fake_probability === null,
+      JSON.stringify(analysis.json));
+    check('legacy analyze does not expose confidence', analysis.json?.confidence_score === null,
+      JSON.stringify(analysis.json));
+    check('legacy analyze surfaces the safety policy', analysis.json?.decision_policy?.mode === 'LEGACY_MARGIN_GATED',
+      JSON.stringify(analysis.json?.decision_policy));
+  }
+
+  const trainBlocked = await req('POST', '/api/train', {});
+  check('production /api/train is locked', trainBlocked.status === 403, String(trainBlocked.status));
+  check('production mutation guard code is surfaced',
+    trainBlocked.json?.code === 'PRODUCTION_MODEL_LOCKED', JSON.stringify(trainBlocked.json));
 
   section('/api/claim/metrics');
   const cm = await req('GET', '/api/claim/metrics');

@@ -173,7 +173,7 @@ export default function App() {
 
         {/* Right Side: Tabbed Views */}
         {activeTab === 'analyze' && (
-          <AnalysisView result={analysisResult} metrics={metrics} />
+          <AnalysisView result={analysisResult} metrics={metrics} articleText={articleText} />
         )}
 
         {activeTab === 'history' && (
