@@ -89,7 +89,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
     res.json({
       status: modelTrained ? 'ok' : 'degraded',
       service: 'TruthLens ML Engine',
-      model: 'Linear SVM (Calibrated)',
+      model: 'Linear SVM (Safety-Gated Legacy)',
       model_trained: modelTrained,
       article_model_version: mlEngine.getMetrics()?.model_version || null,
       article_inference_mode: mlEngine.getInferenceMode(),
@@ -197,8 +197,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
     }
   });
 
-  // 1d. TRUTHLENS V2 RESEARCH STACK (EXPERIMENTAL, ADDITIVE):
-  //     CLAIM -> QUERY EXPANSION -> HYBRID RETRIEVAL (lexical + dense)
+  // 1d. TRUTHLENS V2 RESEARCH STACK (EXPERIMENTAL, ADDITIVE):  //     CLAIM -> QUERY EXPANSION -> HYBRID RETRIEVAL (lexical + dense)
   //           -> RERANKING -> NLI EVIDENCE CLASSIFICATION
   //           -> AGGREGATION/ABSTENTION -> PROVENANCE
   //     This is the first vertical slice of the V2 evidence-grounded
@@ -398,7 +397,6 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
         enabled: includeEvidence,
         timeBudgetMs: Number(req.body.evidence_time_budget_ms) || 10000
       });
-
       res.json(analysis);
     } catch (err: any) {
       const message: string = err.message || 'Failed to analyze article from URL.';
@@ -476,7 +474,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
           role: 'article_model',
           task: 'full-article real/fake classification',
           dataset: 'ISOT',
-          model_name: articleMetrics?.best_model?.name || 'Linear SVM (Calibrated)',
+          model_name: articleMetrics?.best_model?.name || 'Linear SVM (Safety-Gated Legacy)',
           model_version: articleMetrics?.model_version,
           metrics: articleMetrics?.best_model?.metrics || null,
           thresholds: articleMetrics?.thresholds || null,
@@ -597,8 +595,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
       const verification = await verifyClaim(text, sourceUrl);
       res.json(verification);
     } catch (err: any) {
-      res.status(400).json({ detail: err.message });
-    }
+      res.status(400).json({ detail: err.message });    }
   });
 
   // PHASE 4: CLAIM EXTRACTION & EVIDENCE ENDPOINTS
@@ -797,8 +794,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
   });
 
   app.get('/api/examples', (req, res) => {
-    res.json(DEMO_EXAMPLES);
-  });
+    res.json(DEMO_EXAMPLES);  });
 
   app.get('/api/dataset/info', (req, res) => {
     const diag = mlEngine.getDiagnostics();
