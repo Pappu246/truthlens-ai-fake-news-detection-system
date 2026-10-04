@@ -182,6 +182,18 @@ async function main() {
     JSON.stringify(rss)
   );
 
+
+  const partial = engine.analyzeArticle(limitedText, 'https://safe.test/partial', {
+    inputType: 'url',
+    contentSource: 'PARTIAL_ARTICLE_EXTRACTED'
+  });
+  check('partial extracted article content is also withheld',
+    partial.prediction === 'NEEDS MORE CONTEXT' &&
+    partial.fake_probability === null &&
+    partial.real_probability === null &&
+    partial.confidence_score === null,
+    JSON.stringify(partial)
+  );
   console.log('\nARTICLE PIPELINE TESTS: ' + passed + ' passed, ' + failed + ' failed');
   if (failed) process.exit(1);
 }
