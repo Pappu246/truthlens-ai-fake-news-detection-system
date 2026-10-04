@@ -1,6 +1,7 @@
 name: Phase 2 AVeriTeC End-to-End Benchmark
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - research/phase2-averitec-final
@@ -87,8 +88,8 @@ jobs:
       - name: Run AVeriTeC V2 benchmark
         shell: bash
         env:
-          MAX_CLAIMS: ${{ github.event_name == 'pull_request' && '20' || github.event.inputs.max_claims || '500' }}
-          COARSE_BM25_K: ${{ github.event_name == 'pull_request' && '1000' || github.event.inputs.coarse_bm25_k || '2000' }}
+          MAX_CLAIMS: '500'
+          COARSE_BM25_K: '2000'
         run: |
           set -euo pipefail
           npx tsx scripts/v2AveritecEndToEnd.ts \
@@ -214,7 +215,7 @@ jobs:
             "truthlens_git_sha": "$GITHUB_SHA",
             "workflow_run_id": "$GITHUB_RUN_ID",
             "production_boundary": "research_only_no_production_model_threshold_or_runtime_change",
-            "temporal_integrity": "NOT_ENFORCED_BASELINE_STORE_HAS_NO_PER_SENTENCE_PUBLICATION_TIMESTAMPS",
+            "temporal_integrity": "ENFORCED_WHEN_RECORD_TIMESTAMP_IS_PARSEABLE_UNTIMESTAMPED_RECORDS_REMAIN_ELIGIBLE_AND_ARE_REPORTED",
             "gold_evidence_in_retrieval": false
           }
           EOF
