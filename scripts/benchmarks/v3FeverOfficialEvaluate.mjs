@@ -39,6 +39,7 @@ async function main() {
       scorer_revision: "4801615100fbf6327f8e99b5dbaefe5dd890e869",
       predictions,
       actual,
+      evaluation_count: Array.isArray(predictions) ? predictions.length : 0,
       metrics,
       scorer_stdout: scorerRun.stdout,
       scorer_stderr: scorerRun.stderr,
