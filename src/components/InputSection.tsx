@@ -121,6 +121,7 @@ export const InputSection: React.FC<InputSectionProps> = ({
     const mapUrlContentSource = (a: ExtractedArticle): ContentSource => {
       if (a.extractionStatus === 'FAILED') return 'EXTRACTION_BLOCKED';
       if (a.isHeadlineOnly || a.wordCount < 40) return 'HEADLINE_ONLY';
+      if (a.extractionStatus === 'PARTIAL') return 'PARTIAL_ARTICLE_EXTRACTED';
       return 'FULL_ARTICLE_EXTRACTED';
     };
     if (extractedData && extractedData.content) {
@@ -244,7 +245,7 @@ export const InputSection: React.FC<InputSectionProps> = ({
       const isHeadlineOnly = Boolean(article.isHeadlineOnly) || article.wordCount < 40;
       let contentSource: ContentSource = 'FULL_ARTICLE_EXTRACTED';
       if (isHeadlineOnly) contentSource = 'HEADLINE_ONLY';
-      else if (article.extractionStatus === 'PARTIAL') contentSource = 'RSS_SUMMARY_ONLY';
+      else if (article.extractionStatus === 'PARTIAL') contentSource = 'PARTIAL_ARTICLE_EXTRACTED';
 
       onTextChange(article.content);
       onSourceUrlChange(article.url);

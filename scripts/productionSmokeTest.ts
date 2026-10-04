@@ -208,7 +208,7 @@ async function main(): Promise<void> {
   const articles = news.json?.articles || news.json?.items || [];
   console.log(`  INFO  ${articles.length} live item(s) returned`);
   if (articles.length) {
-    const labels = ['FULL_ARTICLE_EXTRACTED', 'RSS_SUMMARY_ONLY', 'HEADLINE_ONLY', 'EXTRACTION_BLOCKED'];
+    const labels = ['FULL_ARTICLE_EXTRACTED', 'PARTIAL_ARTICLE_EXTRACTED', 'RSS_SUMMARY_ONLY', 'HEADLINE_ONLY', 'EXTRACTION_BLOCKED'];
     check('every item carries a content_source label',
       articles.every((x: any) => labels.includes(x.content_source || x.contentSource)),
       JSON.stringify(articles.slice(0, 2).map((x: any) => x.content_source || x.contentSource)));
