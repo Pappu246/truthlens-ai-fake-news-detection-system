@@ -89,7 +89,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
     res.json({
       status: modelTrained ? 'ok' : 'degraded',
       service: 'TruthLens ML Engine',
-      model: 'Linear SVM (Calibrated)',
+      model: 'Linear SVM (Safety-Gated Legacy)',
       model_trained: modelTrained,
       article_model_version: mlEngine.getMetrics()?.model_version || null,
       article_inference_mode: mlEngine.getInferenceMode(),
@@ -476,7 +476,9 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
           role: 'article_model',
           task: 'full-article real/fake classification',
           dataset: 'ISOT',
-          model_name: articleMetrics?.best_model?.name || 'Linear SVM (Calibrated)',
+          model_name: mlEngine.getInferenceMode() === 'legacy_single_svm'
+            ? 'Linear SVM (Safety-Gated Legacy)'
+            : (articleMetrics?.best_model?.name || 'Linear SVM (Calibrated)'),
           model_version: articleMetrics?.model_version,
           metrics: articleMetrics?.best_model?.metrics || null,
           thresholds: articleMetrics?.thresholds || null,
@@ -489,7 +491,9 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
                 'measure different tasks and must not be combined into a single headline number.'
         },
         separation_policy: {
-          article_model: 'ISOT calibrated Linear SVM',
+          article_model: mlEngine.getInferenceMode() === 'legacy_single_svm'
+            ? 'ISOT Linear SVM (safety-gated legacy runtime)'
+            : 'ISOT calibrated Linear SVM',
           claim_model: 'LIAR specialist (calibrated Linear SVM)',
           evidence_engine: 'external retrieval-based support/contradiction signal',
           rule: 'Never merged into one accuracy figure.'
