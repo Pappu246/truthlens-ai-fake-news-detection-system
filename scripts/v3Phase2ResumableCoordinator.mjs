@@ -73,8 +73,9 @@ async function checkpoint(state) {
 
 async function runFever(benchmark, maxClaims) {
   const root = path.resolve("artifacts/v3/fever");
+  const assetRoot = path.resolve("artifacts/v3/benchmark-assets/fever");
   await run("node", ["scripts/benchmarks/v3MaterializeScoringAssets.mjs", "--benchmark=fever"]);
-  await run("unzip", ["-q", path.join(root, "wiki-pages.zip"), "-d", path.join(root, "wiki-pages")]);
+  await run("unzip", ["-q", path.join(assetRoot, "wiki-pages.zip"), "-d", path.join(root, "wiki-pages")]);
 
   const shard = (await run("bash", ["-lc", "find " + JSON.stringify(root + "/wiki-pages") + " -name 'wiki-*.jsonl' -print -quit"], { capture: true })).stdout.trim();
   if (!shard) throw new Error("FEVER wiki shard not found");
@@ -83,7 +84,7 @@ async function runFever(benchmark, maxClaims) {
   await run("python3", [
     "scripts/benchmarks/v3FeverPrepareCandidates.py",
     "--wiki-dir=" + wikiDir,
-    "--claims=" + path.join(root, "shared_task_dev.jsonl"),
+    "--claims=" + path.join(assetRoot, "shared_task_dev.jsonl"),
     "--db=" + path.join(root, "fever-sentences.sqlite"),
     "--output=" + path.join(root, "candidates.jsonl"),
     "--build-index",
@@ -91,8 +92,8 @@ async function runFever(benchmark, maxClaims) {
   ]);
 
   const configSha = await sha256File(MANIFEST);
-  const claimsSha = (await readJson(path.join(root, "asset-manifest.json"))).files.find((f) => f.name === "shared_task_dev.jsonl")?.sha256;
-  const corpusSha = (await readJson(path.join(root, "asset-manifest.json"))).files.find((f) => f.name === "wiki-pages.zip")?.sha256;
+  const claimsSha = (await readJson(path.join(assetRoot, "asset-manifest.json"))).files.find((f) => f.name === "shared_task_dev.jsonl")?.sha256;
+  const corpusSha = (await readJson(path.join(assetRoot, "asset-manifest.json"))).files.find((f) => f.name === "wiki-pages.zip")?.sha256;
 
   await run("npx", [
     "tsx", "scripts/benchmarks/v3FeverEvaluate.ts",
@@ -119,8 +120,9 @@ async function runFever(benchmark, maxClaims) {
 
 async function runFeverous(benchmark, maxClaims) {
   const root = path.resolve("artifacts/v3/feverous");
+  const assetRoot = path.resolve("artifacts/v3/benchmark-assets/feverous");
   await run("node", ["scripts/benchmarks/v3MaterializeScoringAssets.mjs", "--benchmark=feverous"]);
-  await run("unzip", ["-q", path.join(root, "feverous-wiki-pages-db.zip"), "-d", path.join(root, "wiki-db")]);
+  await run("unzip", ["-q", path.join(assetRoot, "feverous-wiki-pages-db.zip"), "-d", path.join(root, "wiki-db")]);
 
   const dbPath = (await run("bash", ["-lc", "find " + JSON.stringify(root + "/wiki-db") + " -name '*.db' -print -quit"], { capture: true })).stdout.trim();
   if (!dbPath) throw new Error("FEVEROUS SQLite database not found");
@@ -128,7 +130,7 @@ async function runFeverous(benchmark, maxClaims) {
   await run("python3", [
     "scripts/benchmarks/v3FeverousPrepareCandidates.py",
     "--db=" + dbPath,
-    "--claims=" + path.join(root, "dev.jsonl"),
+    "--claims=" + path.join(assetRoot, "dev.jsonl"),
     "--output=" + path.join(root, "candidates.jsonl"),
     "--max-claims=" + maxClaims
   ]);
