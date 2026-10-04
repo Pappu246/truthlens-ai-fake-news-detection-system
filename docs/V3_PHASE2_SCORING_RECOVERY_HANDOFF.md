@@ -18,7 +18,9 @@ Phase 2 is still in progress. Phase 0 and Phase 1 are complete. Phase 3+ remain 
 - PR #51 — AVeriTeC end-to-end scoring on the current production baseline
 
 Phase 2 scoring branch: research/v3-phase2-scoring-current
+Current Phase 2 branch head: be08815e64a6addb34bc341255edae6f5b9a0be1
 AVeriTeC scoring branch: research/phase2-averitec-scoring-current
+Current AVeriTeC branch head: 608cdb8c2c16e51193174f2c595985d35e8584fe
 
 The Phase 2 scoring branch is additive and contains:
 - FEVER open-retrieval candidate preparation and TruthLens evaluation;
@@ -40,6 +42,7 @@ The Phase 2 scoring branch is additive and contains:
 - FEVER and FEVEROUS inputs have frozen SHA-256 expectations and materialization workflows.
 - AVeriTeC's pinned dev evidence store has already been materialized and hash-verified; end-to-end scoring is still required.
 - The AVeriTeC runner has a research-only chunked embedding adapter to avoid the prior worker response-buffer overflow.
+- The Phase 2 resumable coordinator now reads frozen inputs from artifacts/v3/benchmark-assets/<benchmark> and writes benchmark outputs under artifacts/v3/<benchmark>.
 
 ## Current blockers
 
