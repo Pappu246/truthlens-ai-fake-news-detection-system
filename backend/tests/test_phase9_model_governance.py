@@ -28,3 +28,16 @@ def test_fingerprint_is_stable():
     f1=hashlib.sha256(json.dumps(payload,sort_keys=True).encode()).hexdigest()
     f2=hashlib.sha256(json.dumps(payload,sort_keys=True).encode()).hexdigest()
     assert f1==f2
+
+def test_promotion_requires_exact_calibrated_runtime_contract():
+    source=PROMOTE.read_text()
+    assert "single_calibrated_svm" in source
+    assert "calibrated_ensemble" in source
+    assert "candidate runtime inference mode is not an exact calibrated contract" in source
+
+
+def test_promotion_rejects_below_chance_ood_validation():
+    source=PROMOTE.read_text()
+    assert "LIAR balanced accuracy is required" in source
+    assert "is not above chance" in source
+    assert "balanced <= 0.50" in source

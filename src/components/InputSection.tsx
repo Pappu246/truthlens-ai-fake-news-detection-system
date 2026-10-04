@@ -340,7 +340,7 @@ export const InputSection: React.FC<InputSectionProps> = ({
           TruthLens AI
         </h1>
         <p className="text-slate-500 text-xs leading-relaxed">
-          Calibrated Linear SVM verification engine for news content, safe web URL extraction, and live RSS wire feeds.
+          Production-safe Linear SVM verification engine with URL extraction, live RSS feeds, and evidence-aware abstention.
         </p>
       </div>
 
