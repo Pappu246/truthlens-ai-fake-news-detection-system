@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - research/phase2-averitec-scoring-current
+    paths:
+      - 'scripts/v2AveritecEndToEnd.ts'
+      - '.github/workflows/phase-2-averitec-e2e.yml'
 
 concurrency:
   group: truthlens-phase2-averitec-current
@@ -140,8 +143,14 @@ jobs:
 
           text = Path("artifacts/v2-averitec-e2e/official-evaluation.txt").read_text()
           out = {
+              "benchmark_id": "averitec",
+              "protocol_version": "truthlens-v3-benchmark-protocol-v1",
+              "evaluation_scope": "dev_500_claims",
               "evaluator": {"repository": "MichSchli/AVeriTeC", "commit": "7c62d1ec8df3fb560d6efe2b85fa191135636f81"},
               "metrics": {"veracity_f1": {}, "averitec_veracity": {}, "averitec_justification": {}},
+              "generated_at": __import__("datetime").datetime.utcnow().isoformat() + "Z",
+              "truthlens_git_sha": __import__("os").environ.get("GITHUB_SHA"),
+              "workflow_run_id": __import__("os").environ.get("GITHUB_RUN_ID"),
           }
 
           section = None
