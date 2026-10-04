@@ -39,6 +39,22 @@ async function checkArtifact(label, file, expectedBenchmarkId) {
     if (artifact.benchmark_id !== expectedBenchmarkId) {
       failures.push(label + ": benchmark_id mismatch (" + artifact.benchmark_id + ")");
     }
+    if (!artifact.metrics || typeof artifact.metrics !== "object") {
+      failures.push(label + ": metrics payload missing");
+    } else if (expectedBenchmarkId === "fever" || expectedBenchmarkId === "feverous") {
+      for (const key of ["strict_score", "label_accuracy", "evidence_precision", "evidence_recall", "evidence_f1"]) {
+        if (typeof artifact.metrics[key] !== "number" || !Number.isFinite(artifact.metrics[key])) {
+          failures.push(label + ": metric " + key + " missing or non-numeric");
+        }
+      }
+    } else if (expectedBenchmarkId === "averitec") {
+      const groups = ["veracity_f1", "averitec_veracity", "averitec_justification"];
+      for (const group of groups) {
+        if (!artifact.metrics[group] || typeof artifact.metrics[group] !== "object" || Object.keys(artifact.metrics[group]).length === 0) {
+          failures.push(label + ": metric group " + group + " missing or empty");
+        }
+      }
+    }
     checks[checks.length - 1].sha256 = await sha256(file);
   } catch (error) {
     failures.push(label + ": invalid JSON (" + String(error) + ")");
