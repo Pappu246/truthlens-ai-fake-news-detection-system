@@ -1671,7 +1671,7 @@ export class TruthLensMLEngine {
       fake_probability: predictionDetails.calibrated && !lowVocabularyCoverage && !limitedContentSource ? fakeProb : null,
       real_probability: predictionDetails.calibrated && !lowVocabularyCoverage && !limitedContentSource ? realProb : null,
       risk_level: riskLevel,
-      model_name: 'Linear SVM (Calibrated)',
+      model_name: legacySafetyMode ? 'Linear SVM (Safety-Gated Legacy)' : 'Linear SVM (Calibrated)',
       source_url: sourceUrl || options?.originalUrl || '',
       detected_claim: claimInfo.detected_claim,
       input_type: effectiveInputType,
@@ -1753,8 +1753,8 @@ export class TruthLensMLEngine {
       indicators,
       explanation: summaryReasons,
       feature_attributions: featureAttributions,
-      model: 'Linear SVM (Calibrated)',
-      model_used: 'Linear SVM (Calibrated)',
+      model: legacySafetyMode ? 'Linear SVM (Safety-Gated Legacy)' : 'Linear SVM (Calibrated)',
+      model_used: legacySafetyMode ? 'Linear SVM (Safety-Gated Legacy)' : 'Linear SVM (Calibrated)',
       model_reliability: this.modelReliabilityLabel(),
       probability_caveat: probabilityCaveat,
       model_version: this.metrics?.model_version || 'unknown',
@@ -1771,7 +1771,9 @@ export class TruthLensMLEngine {
         message: 'Evidence verification is not currently available.',
         reason: 'External search indexes and live fact-checking APIs are not configured in this runtime.'
       },
-      disclaimer: 'Model prediction is probabilistic and is not proof that a claim is true or false.'
+      disclaimer: legacySafetyMode
+        ? 'Model prediction is not proof that a claim is true or false. Legacy safety mode intentionally withholds calibrated probability percentages.'
+        : 'Model prediction is probabilistic and is not proof that a claim is true or false.'
     };
   }
 
@@ -1790,12 +1792,15 @@ export class TruthLensMLEngine {
     const fakeSamples = datasetInfo.fake_samples;
 
     const bestModelName = this.metrics.best_model?.name || "Linear SVM (Calibrated)";
+    const displayModelName = this.inferenceMode === 'legacy_single_svm' && bestModelName.toLowerCase().includes('svm')
+      ? "Linear SVM (Safety-Gated Legacy)"
+      : bestModelName;
     const modelVersion = this.metrics.model_version || "unknown";
     return {
       status: "operational",
       production_model_locked: process.env.NODE_ENV === 'production',
-      model_type: bestModelName,
-      model_name: bestModelName,
+      model_type: displayModelName,
+      model_name: displayModelName,
       model_version: modelVersion,
       model_architecture: bestModelName.toLowerCase().includes("svm")
         ? this.inferenceMode === 'calibrated_ensemble'
