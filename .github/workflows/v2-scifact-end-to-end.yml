@@ -7,7 +7,7 @@ on:
       - main
     paths:
       - 'server/v2/**'
-      - 'scripts/v2*.ts'
+      - 'scripts/v2ScifactEndToEnd.ts'
       - 'data/v2/**'
       - 'package.json'
       - 'package-lock.json'
