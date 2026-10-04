@@ -4,6 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
+      - research/v3-phase2-final
       - research/v3-phase2-scoring-current
     paths:
       - 'scripts/benchmarks/**'
