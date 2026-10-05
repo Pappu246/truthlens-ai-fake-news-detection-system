@@ -58,7 +58,7 @@ const specs = {
       {
         name: "dev.jsonl",
         url: "https://zenodo.org/records/4911508/files/dev.jsonl?download=1",
-        expected_sha256: "1ac8cfd964d4dcedc5de3375850fe3f93d39b89a73a475734bde864da1701f8f"
+        expected_sha256: "97dc8e2be8982774b0cbb1dc04c0fd5b0966e711e93c8ea01b234ab64356f234"
       },
       {
         name: "feverous-wiki-pages-db.zip",
