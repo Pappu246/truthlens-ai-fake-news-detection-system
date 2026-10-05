@@ -211,8 +211,8 @@ class AveritecStoreSource implements CorpusSource {
   private readonly zipFile: string;
   private readonly entryPrefix: string;
   private readonly coarseBm25K: number;
-  private readonly cache = new Map<number, RawDocument[]>();
   private activeClaimId: number | null = null;
+  private activeCache: { id: number; docs: RawDocument[] } | null = null;
   private readonly retrievalTimestamp = new Date().toISOString();
 
   constructor(zipFile: string, coarseBm25K: number) {
@@ -222,15 +222,19 @@ class AveritecStoreSource implements CorpusSource {
   }
 
   public setActiveClaimId(id: number): void {
+    if (this.activeClaimId !== id) this.activeCache = null;
     this.activeClaimId = id;
   }
 
+  public clearActiveCache(): void {
+    this.activeCache = null;
+  }
+
   private async getAllDocs(id: number): Promise<RawDocument[]> {
-    const cached = this.cache.get(id);
-    if (cached) return cached;
+    if (this.activeCache?.id === id) return this.activeCache.docs;
     const records = await readZipJsonl(this.zipFile, `${this.entryPrefix}output_dev/${id}.json`);
     const docs = recordsToDocs(records, id, this.retrievalTimestamp);
-    this.cache.set(id, docs);
+    this.activeCache = { id, docs };
     return docs;
   }
 
@@ -365,7 +369,12 @@ async function main(): Promise<void> {
           'Temporal filtering is enforced when evidence records expose a parseable published_at/publishedAt/date field; records without a parseable publication timestamp remain eligible and are explicitly reported in provenance.'
         ]
       });
-      if ((id + 1) % 10 === 0 || id + 1 === maxClaims) console.log(`processed ${id + 1}/${maxClaims}`);
+      source.clearActiveCache();
+      if ((id + 1) % 10 === 0 || id + 1 === maxClaims) {
+        console.log(`processed ${id + 1}/${maxClaims}`);
+        const forceGc = (globalThis as typeof globalThis & { gc?: () => void }).gc;
+        forceGc?.();
+      }
     }
 
     const fullRun = maxClaims === 500;
