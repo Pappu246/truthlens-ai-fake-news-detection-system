@@ -29,7 +29,7 @@ jobs:
       AV_STORE_URL: 'https://huggingface.co/chenxwh/AVeriTeC/resolve/26238ae/data_store/knowledge_store/dev_knowledge_store.zip'
       AV_STORE_SHA256: '021e258cd6fb5fe6d627a4667d663e95c184c966939c15124df9206142fc2212'
       AV_OFFICIAL_COMMIT: '7c62d1ec8df3fb560d6efe2b85fa191135636f81'
-      NODE_OPTIONS: '--max-old-space-size=4096'
+      NODE_OPTIONS: '--max-old-space-size=6144 --expose-gc'
       TRUTHLENS_V2_ML_CALL_TIMEOUT_MS: '600000'
 
     steps:
