@@ -45,14 +45,24 @@ jobs:
           echo "holdout_id=$holdout_id" >> "$GITHUB_OUTPUT"
           printf 'Latest successful workflow ids: recovery=%s averitec=%s holdout=%s\n' "$recovery_id" "$averitec_id" "$holdout_id"
 
-      - name: Download FEVER and FEVEROUS artifacts
+      - name: Download FEVER artifact
         if: steps.resolve.outputs.recovery_id != ''
         uses: actions/download-artifact@v4
         with:
           github-token: ${{ github.token }}
           run-id: ${{ steps.resolve.outputs.recovery_id }}
-          pattern: truthlens-v3-*
-          path: artifacts/v3
+          pattern: truthlens-v3-fever-full-*
+          path: artifacts/v3/fever
+          merge-multiple: true
+
+      - name: Download FEVEROUS artifact
+        if: steps.resolve.outputs.recovery_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.resolve.outputs.recovery_id }}
+          pattern: truthlens-v3-feverous-full-*
+          path: artifacts/v3/feverous
           merge-multiple: true
 
       - name: Download AVeriTeC official artifact
