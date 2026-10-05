@@ -4,7 +4,7 @@ Updated: 2026-10-04 23:18 IST
 
 Repository: Pappu246/truthlens-ai-fake-news-detection-system
 
-GitHub `main` ref currently resolves to `8c8ef1d7aa4c567f7e6c97002c1fedd2f5633aa7`. Vercel's newest READY production deployment is docs-only commit `4f677654e3a8d0d69c6ea73561f2e9f29095a6bb`, whose content records `8c8ef1d7aa4c567f7e6c97002c1fedd2f5633aa7` as the production code commit. No Phase 2 research code is deployed to production.
+GitHub `main` ref currently resolves to `10ed0487a6aec07b546965877d75b9c456ad9e9c`. Vercel's newest READY production deployment is the docs-only `main` deployment for that exact SHA. No Phase 2 research code is deployed to production.
 
 ## Active research state
 
@@ -16,13 +16,13 @@ Only current-main Phase 2 research PRs remain active: #54 and #55.
 
 ## Verified baseline state
 
-- Production main is 8c8ef1d7aa4c567f7e6c97002c1fedd2f5633aa7.
+- Production main is 10ed0487a6aec07b546965877d75b9c456ad9e9c.
 - Main's production Vercel deployment for that exact SHA is READY.
 - No production model, threshold, source policy, or runtime artifact is changed by the Phase 2 research branches.
 - SciFact is an existing frozen/baselined lane and is not recomputed by the recovery coordinator.
 - FEVER and FEVEROUS inputs have frozen SHA-256 expectations and materialization workflows.
-- #54 now runs explicit full-split FEVER (37,566 claims) and FEVEROUS (7,890 claims) jobs; pilot output cannot satisfy the exit gate.
-- #55 now runs an explicit full 500-claim AVeriTeC job and retains the research-only chunked embedding fix.
+- #54 runs explicit full-split FEVER (37,566 claims) and FEVEROUS (7,890 claims) jobs; pilot output cannot satisfy the exit gate.
+- #55 now runs an explicit full 500-claim AVeriTeC job, retains the research-only chunked embedding fix, and now bounds the per-claim evidence cache plus enables opportunistic GC with a larger research-only Node heap.
 - AVeriTeC's pinned dev evidence store has already been materialized and hash-verified; end-to-end scoring is still required.
 - The AVeriTeC runner has a research-only chunked embedding adapter to avoid the prior worker response-buffer overflow.
 - The Phase 2 resumable coordinator now reads frozen inputs from artifacts/v3/benchmark-assets/<benchmark> and writes benchmark outputs under artifacts/v3/<benchmark>.
@@ -30,9 +30,9 @@ Only current-main Phase 2 research PRs remain active: #54 and #55.
 
 ## Current blockers
 
-1. The newly triggered full FEVER/FEVEROUS/AVeriTeC benchmark workflows have not yet produced verified official score artifacts visible through the connected GitHub run interface.
-2. The Open-Web 100-claim human-labelled blind holdout has not been sealed; this remains a genuine human-only gate.
-3. Vercel research preview deployment guard is configured; production main remains eligible for normal deployment.
+1. A prior CI recovery run failed before producing official FEVEROUS/AVeriTeC score artifacts: FEVEROUS was a stale expected SHA versus the exact Zenodo file, and AVeriTeC hit Node heap OOM after 10 claims. Both are now patched on the research branches.
+2. The newest #54/#55 pull-request workflow runs are pending; they must complete successfully and produce the official score artifacts.
+3. The Open-Web 100-claim human-labelled blind holdout has not been sealed; this remains a human-only gate.
 4. Phase 2 cannot exit until `scripts/phase2ExitGate.mjs` validates all full benchmark artifacts plus the sealed Open-Web holdout.
 
 No benchmark result is treated as valid until its complete official scorer/evaluator artifact and provenance are available.
@@ -52,7 +52,7 @@ Default operation:
 
 ## Latest CI-trigger note
 
-The previous PR-associated benchmark/materialization jobs were queued. The current changes on #54 and #55 trigger the intended full benchmark workflows on their actual research branches. Their Vercel checks are SUCCESS while research deployments are intentionally skipped/canceled.
+The previous PR-associated benchmark/materialization jobs were queued. The current changes on #54 and #55 trigger the intended full benchmark workflows on their actual research branches. The latest observed runs are pending while GitHub provisions the jobs. Their Vercel checks are SUCCESS while research deployments are intentionally skipped/canceled.
 
 ## Recovery rule
 
@@ -75,3 +75,10 @@ scripts/phase2ExitGate.mjs is fail-closed. It requires:
 - intact Phase 2 protocol and production immutability rules.
 
 The gate status is BLOCKED until all requirements are satisfied. This is a research gate, not a production deployment gate.
+
+### Current CI heads
+
+- PR #54 head: `976d8691ea5d9b02e92ac3580e974d00d66bfdbe`
+- PR #55 head: `956efe8b7ca41a78622f0d1fda3c524cbaf57f1c`
+- Latest recovery run: `37299586065` (pending)
+- Latest AVeriTeC E2E run: `37299569376` (pending)
