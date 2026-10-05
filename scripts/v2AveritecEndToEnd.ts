@@ -322,9 +322,14 @@ async function main(): Promise<void> {
   const finalTopK = Math.max(5, Math.min(Number(arg('final-k') || 10), 20));
   const embeddingBatchSize = Math.max(1, Math.min(Number(arg('embedding-batch') || 64), 256));
 
-  const embeddingModel = new ChunkedEmbeddingModel(new TransformerEmbeddingModel(), embeddingBatchSize);
-  const nliAdapter = new PretrainedNliAdapter({ embeddingModel });
+  let embeddingModel = new ChunkedEmbeddingModel(new TransformerEmbeddingModel(), embeddingBatchSize);
+  let nliAdapter = new PretrainedNliAdapter({ embeddingModel });
   const source = new AveritecStoreSource(zipFile, coarseBm25K);
+  // Long AVeriTeC runs can accumulate native/JS inference allocations inside
+  // Transformers.js + ONNX Runtime. Recycle the research-only worker at a
+  // fixed cadence so memory usage stays bounded while model bytes remain
+  // exactly the same.
+  const workerRecycleEvery = Math.max(1, Math.min(Number(arg('worker-recycle-every') || 10), 50));
   const predictions: Array<{ label: string; string_evidence: string[]; justification: string }> = [];
   const rows: Record<string, unknown>[] = [];
   const goldLabels: string[] = [];
@@ -334,11 +339,19 @@ async function main(): Promise<void> {
   try {
     for (let id = 0; id < maxClaims; id++) {
       const claim = claims[id];
+
+      if (id > 0 && id % workerRecycleEvery === 0) {
+        await disposeMlWorker();
+        embeddingModel = new ChunkedEmbeddingModel(new TransformerEmbeddingModel(), embeddingBatchSize);
+        nliAdapter = new PretrainedNliAdapter({ embeddingModel });
+        console.log(`recycled V2 ML worker after ${id} claims`);
+      }
+
       source.setActiveClaimId(id);
       const result = await verifyClaimV2(claim.claim, {
         corpus: source,
         nliAdapter,
-        nliConcurrency: 8,
+        nliConcurrency: 4,
         retrieval: { embeddingModel, perQueryTopK: 15, finalTopK },
         enableFullTextEnrichment: false,
         minCandidatesExpectedWarning: 0,
@@ -371,9 +384,11 @@ async function main(): Promise<void> {
       });
       source.clearActiveCache();
       if ((id + 1) % 10 === 0 || id + 1 === maxClaims) {
-        console.log(`processed ${id + 1}/${maxClaims}`);
         const forceGc = (globalThis as typeof globalThis & { gc?: () => void }).gc;
         forceGc?.();
+        const heapMb = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+        const rssMb = Math.round(process.memoryUsage().rss / 1024 / 1024);
+        console.log(`processed ${id + 1}/${maxClaims} (heap=${heapMb}MB rss=${rssMb}MB)`);
       }
     }
 
@@ -402,7 +417,8 @@ async function main(): Promise<void> {
         final_top_k: finalTopK,
         embedding_batch_size: embeddingBatchSize,
         retrieval_channels: ['LEXICAL_BM25', 'DENSE_EMBEDDING'],
-        nli_concurrency: 8,
+        nli_concurrency: 4,
+        worker_recycle_every: workerRecycleEvery,
         temporal_filtering: 'ENFORCED_WHEN_RECORD_TIMESTAMP_AVAILABLE_MISSING_OR_UNPARSEABLE_TIMESTAMPS_REMAIN_ELIGIBLE'
       },
       models: {
