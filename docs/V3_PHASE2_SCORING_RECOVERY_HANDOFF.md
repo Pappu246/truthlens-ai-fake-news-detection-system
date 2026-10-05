@@ -78,7 +78,7 @@ The gate status is BLOCKED until all requirements are satisfied. This is a resea
 
 ### Current CI heads
 
-- PR #54 head: `976d8691ea5d9b02e92ac3580e974d00d66bfdbe`
-- PR #55 head: `956efe8b7ca41a78622f0d1fda3c524cbaf57f1c`
-- Latest recovery run: `37299586065` (pending)
-- Latest AVeriTeC E2E run: `37299569376` (pending)
+- PR #54 head: `1dcc53730f66f91c2e473ea45ce5ba1042d23d69`
+- PR #55 head: `5a6ab9a5690ba76547fb54bb5b84f28089d2ba54`
+- Latest recovery run: `37299696221` (in progress) (pending)
+- Latest AVeriTeC E2E run: `37299740093` (pending; latest runner includes bounded cache, worker recycling, and reduced NLI concurrency) (pending)
