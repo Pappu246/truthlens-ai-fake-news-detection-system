@@ -92,6 +92,7 @@ def build_index(db_path, index_path):
     cursor = src.execute("SELECT id, data FROM wiki")
     batch = []
     count = 0
+    dst.execute('BEGIN')
     for page_id, raw in cursor:
         try:
             page = JSON_LOADS(raw)
@@ -104,15 +105,14 @@ def build_index(db_path, index_path):
         batch.append((page_id, page_text))
         if len(batch) >= 2000:
             dst.executemany("INSERT OR REPLACE INTO pages(page_id,text) VALUES(?,?)", batch)
-            dst.commit()
             batch.clear()
             count += 2000
             if count % 10000 == 0:
                 print(f"Indexed FEVEROUS pages: {count}", flush=True)
     if batch:
         dst.executemany("INSERT OR REPLACE INTO pages(page_id,text) VALUES(?,?)", batch)
-        dst.commit()
         count += len(batch)
+    dst.commit()
     dst.execute("INSERT INTO pages_fts(pages_fts) VALUES('rebuild')")
     dst.commit()
     check = dst.execute("PRAGMA integrity_check").fetchone()[0]
