@@ -131,6 +131,8 @@ jobs:
           db_path="$(find artifacts/v3/benchmark-assets/feverous/wiki-db -name '*.db' -print -quit)"
           test -n "$db_path"
           echo "db_path=$db_path" >> "$GITHUB_OUTPUT"
+      - name: Provision fast FEVEROUS JSON parser
+        run: python3 -m pip install --disable-pip-version-check --no-input orjson
       - name: Prepare full FEVEROUS candidates
         run: |
           python3 scripts/benchmarks/v3FeverousPrepareCandidates.py             --db="${{ steps.locate.outputs.db_path }}"             --claims=artifacts/v3/benchmark-assets/feverous/dev.jsonl             --output=artifacts/v3/feverous/candidates.jsonl             --max-claims=7890
