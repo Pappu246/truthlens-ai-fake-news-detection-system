@@ -221,3 +221,5 @@ jobs:
         run: |
           echo "GitHub artifact digest: ${{ steps.upload.outputs.artifact-digest }}" | tee artifacts/phase2-averitec-artifact-digest.txt
           echo "Artifact id: ${{ steps.upload.outputs.artifact-id }}" | tee -a artifacts/phase2-averitec-artifact-digest.txt
+
+# Triggered after deterministic shard hardening; research-only workflow.
