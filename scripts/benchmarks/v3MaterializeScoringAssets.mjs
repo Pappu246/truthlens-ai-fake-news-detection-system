@@ -108,8 +108,7 @@ for (const file of spec.files) {
 
 await fsp.writeFile(
   path.join(outDir, "asset-manifest.json"),
-  JSON.stringify(manifest, null, 2) + "
-",
+  JSON.stringify(manifest, null, 2) + "\n",
   "utf8"
 );
 
