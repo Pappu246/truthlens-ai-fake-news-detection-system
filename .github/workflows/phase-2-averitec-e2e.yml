@@ -107,6 +107,8 @@ jobs:
     env:
       AV_DATA_URL: https://raw.githubusercontent.com/MichSchli/AVeriTeC/7c62d1ec8df3fb560d6efe2b85fa191135636f81/data/dev.json
       AV_DATA_SHA256: 499793726b4a5406780928a3d9dedc48d6dd53de778f22437d129cacdb08e300
+      AV_STORE_REVISION: 26238ae
+      AV_STORE_SHA256: 021e258cd6fb5fe6d627a4667d663e95c184c966939c15124df9206142fc2212
       AV_OFFICIAL_COMMIT: 7c62d1ec8df3fb560d6efe2b85fa191135636f81
     steps:
       - uses: actions/checkout@v4
@@ -135,17 +137,30 @@ jobs:
           from pathlib import Path
           roots = sorted(Path('artifacts/averitec-shards').glob('*/predictions.json'))
           if len(roots) != 4: raise SystemExit(f'expected 4 shards, got {len(roots)}')
-          rows, manifests = [], []
+          bundles = []
           for p in roots:
               root = p.parent
-              rows += json.loads(p.read_text())
-              manifests.append(json.loads((root/'provenance.json').read_text()))
-          rows.sort(key=lambda x: int(x['id']))
-          if [int(x['id']) for x in rows] != list(range(500)): raise SystemExit('combined ids are not 0..499')
-          starts = sorted(int((m.get('shard') or {}).get('start_claim')) for m in manifests)
+              pred = json.loads(p.read_text())
+              prov = json.loads((root/'provenance.json').read_text())
+              shard = prov.get('shard') or {}
+              bundles.append((int(shard.get('start_claim', -1)), pred, prov))
+          bundles.sort(key=lambda x: x[0])
+          starts = [b[0] for b in bundles]
           if starts != [0,125,250,375]: raise SystemExit(f'unexpected shard starts {starts}')
+          rows, manifests = [], []
+          expected_start = 0
+          for start, pred, prov in bundles:
+              shard = prov.get('shard') or {}
+              count = int(shard.get('evaluated_claims', -1))
+              if start != expected_start or count != 125: raise SystemExit('shard range/count mismatch')
+              if len(pred) != count: raise SystemExit('shard prediction count mismatch')
+              rows.extend(pred)
+              manifests.append(prov)
+              expected_start += count
+          if len(rows) != 500 or expected_start != 500: raise SystemExit('combined prediction count mismatch')
           out = Path('artifacts/v2-averitec-e2e')
           (out/'predictions.json').write_text(json.dumps(rows, indent=2)+'\n')
+          first = manifests[0]
           combined = {
               'protocol_version':'truthlens-v2-averitec-e2e-v1',
               'generated_at':__import__('datetime').datetime.utcnow().isoformat()+'Z',
@@ -153,6 +168,9 @@ jobs:
               'official_data_url':os.environ['AV_DATA_URL'],
               'official_repo_commit':os.environ['AV_OFFICIAL_COMMIT'],
               'claims_sha256':os.environ['AV_DATA_SHA256'],
+              'evidence_store':{'pinned_revision':os.environ['AV_STORE_REVISION'],'sha256':os.environ['AV_STORE_SHA256']},
+              'models':first.get('models'),
+              'runner':first.get('runner'),
               'shards':[m.get('shard') for m in manifests],
               'production_boundary':'research_only_no_production_model_threshold_or_runtime_change',
               'claims':rows
