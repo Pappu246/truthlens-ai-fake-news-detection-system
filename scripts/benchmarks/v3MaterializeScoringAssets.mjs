@@ -24,8 +24,9 @@ function sha256File(file) {
 function download(url, destination) {
   return new Promise((resolve, reject) => {
     const child = spawn("curl", [
-      "--fail", "--location", "--retry", "5", "--retry-all-errors",
-      "--connect-timeout", "30", "--max-time", "1800",
+      "--fail", "--location", "--retry", "8", "--retry-all-errors",
+      "--retry-delay", "5", "--connect-timeout", "30",
+      "--continue-at", "-", "--max-time", "7200",
       "--output", destination, url
     ], { stdio: "inherit" });
     child.on("error", reject);
@@ -107,7 +108,8 @@ for (const file of spec.files) {
 
 await fsp.writeFile(
   path.join(outDir, "asset-manifest.json"),
-  JSON.stringify(manifest, null, 2) + "\n",
+  JSON.stringify(manifest, null, 2) + "
+",
   "utf8"
 );
 
