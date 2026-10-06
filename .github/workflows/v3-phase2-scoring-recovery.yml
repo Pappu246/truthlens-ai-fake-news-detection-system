@@ -32,6 +32,8 @@ jobs:
         with:
           python-version: '3.11'
       - run: npm ci
+      - name: Install research-only fast JSON parser
+        run: python3 -m pip install --disable-pip-version-check --no-input orjson
       - name: Validate recovered scoring scripts
         run: |
           node --check scripts/benchmarks/v3MaterializeScoringAssets.mjs
@@ -66,6 +68,8 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      - name: Install research-only fast JSON parser
+        run: python3 -m pip install --disable-pip-version-check --no-input orjson
       - name: Materialize exact FEVER inputs
         run: node scripts/benchmarks/v3MaterializeScoringAssets.mjs --benchmark=fever
       - name: Extract FEVER corpus
@@ -121,6 +125,8 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      - name: Install research-only fast JSON parser
+        run: python3 -m pip install --disable-pip-version-check --no-input orjson
       - name: Materialize exact FEVEROUS inputs
         run: node scripts/benchmarks/v3MaterializeScoringAssets.mjs --benchmark=feverous
       - name: Extract FEVEROUS database

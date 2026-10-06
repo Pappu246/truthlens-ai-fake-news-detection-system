@@ -12,9 +12,14 @@ import json
 import re
 import sqlite3
 from pathlib import Path
+try:
+    import orjson
+except ImportError:
+    orjson = None
 from typing import Iterable
 
 TOKEN = re.compile(r"[A-Za-z0-9_]+")
+JSON_LOADS = orjson.loads if orjson is not None else json.loads
 
 def parse_line(raw: str):
     raw = raw.rstrip("\n")
@@ -32,7 +37,7 @@ def iter_pages(wiki_dir: Path) -> Iterable[tuple[str, str, int, str]]:
             for line in fh:
                 if not line.strip():
                     continue
-                obj = json.loads(line)
+                obj = JSON_LOADS(line)
                 page = obj.get("id") or obj.get("title")
                 if not page:
                     continue
@@ -47,8 +52,10 @@ def iter_pages(wiki_dir: Path) -> Iterable[tuple[str, str, int, str]]:
 def build_index(wiki_dir: Path, db_path: Path) -> None:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(db_path)
-    con.execute("PRAGMA journal_mode=WAL")
-    con.execute("PRAGMA synchronous=NORMAL")
+    con.execute("PRAGMA journal_mode=OFF")
+    con.execute("PRAGMA synchronous=OFF")
+    con.execute("PRAGMA temp_store=MEMORY")
+    con.execute("PRAGMA cache_size=-262144")
     con.execute("DROP TABLE IF EXISTS sentences")
     con.execute("DROP TABLE IF EXISTS sentences_fts")
     con.execute("""
@@ -83,6 +90,8 @@ def build_index(wiki_dir: Path, db_path: Path) -> None:
             con.commit()
             total += len(batch)
             batch.clear()
+            if total and total % 100000 == 0:
+                print(f"Indexed FEVER rows: {total}", flush=True)
     if batch:
         con.executemany(
             "INSERT OR IGNORE INTO sentences(page,line_id,text) VALUES(?,?,?)",
@@ -92,7 +101,9 @@ def build_index(wiki_dir: Path, db_path: Path) -> None:
         total += len(batch)
     con.execute("INSERT INTO sentences_fts(sentences_fts) VALUES('rebuild')")
     con.commit()
-    con.execute("VACUUM")
+    check = con.execute("PRAGMA integrity_check").fetchone()[0]
+    if check != "ok":
+        raise RuntimeError(f"FEVER SQLite integrity check failed: {check}")
     con.close()
     print(f"Built FEVER sentence index: rows={total} db={db_path}")
 
@@ -122,7 +133,7 @@ def make_candidates(claims_path: Path, db_path: Path, output: Path, top_k: int):
             for raw in fh:
                 if not raw.strip():
                     continue
-                claim = json.loads(raw)
+                claim = JSON_LOADS(raw)
                 q = fts_query(claim.get("claim", ""))
                 hits = []
                 if q:

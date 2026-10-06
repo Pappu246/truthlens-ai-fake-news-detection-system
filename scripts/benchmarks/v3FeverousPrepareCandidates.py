@@ -6,8 +6,13 @@ import json
 import re
 import sqlite3
 from pathlib import Path
+try:
+    import orjson
+except ImportError:
+    orjson = None
 
 TOKEN = re.compile(r"[A-Za-z0-9_]+")
+JSON_LOADS = orjson.loads if orjson is not None else json.loads
 
 def text_value(value):
     if isinstance(value, str):
@@ -64,6 +69,10 @@ def fts_query(text):
 def build_index(db_path, index_path):
     src = sqlite3.connect(db_path)
     dst = sqlite3.connect(index_path)
+    dst.execute("PRAGMA journal_mode=OFF")
+    dst.execute("PRAGMA synchronous=OFF")
+    dst.execute("PRAGMA temp_store=MEMORY")
+    dst.execute("PRAGMA cache_size=-262144")
     dst.execute("DROP TABLE IF EXISTS pages")
     dst.execute("DROP TABLE IF EXISTS pages_fts")
     dst.execute("""
@@ -85,7 +94,7 @@ def build_index(db_path, index_path):
     count = 0
     for page_id, raw in cursor:
         try:
-            page = json.loads(raw)
+            page = JSON_LOADS(raw)
             pieces = [text for _, text, _ in extract_elements(page)]
             page_text = "\\n".join(pieces)
         except Exception:
@@ -98,12 +107,17 @@ def build_index(db_path, index_path):
             dst.commit()
             batch.clear()
             count += 2000
+            if count % 10000 == 0:
+                print(f"Indexed FEVEROUS pages: {count}", flush=True)
     if batch:
         dst.executemany("INSERT OR REPLACE INTO pages(page_id,text) VALUES(?,?)", batch)
         dst.commit()
         count += len(batch)
     dst.execute("INSERT INTO pages_fts(pages_fts) VALUES('rebuild')")
     dst.commit()
+    check = dst.execute("PRAGMA integrity_check").fetchone()[0]
+    if check != "ok":
+        raise RuntimeError(f"FEVEROUS SQLite integrity check failed: {check}")
     dst.close()
     src.close()
     print(f"FEVEROUS page index built: pages={count}")
@@ -116,12 +130,12 @@ def load_claims(path, limit):
                 continue
             if i == 0:
                 try:
-                    header = json.loads(line)
+                    header = JSON_LOADS(line)
                     if "claim" not in header and "label" not in header:
                         continue
                 except Exception:
                     pass
-            rows.append(json.loads(line))
+            rows.append(JSON_LOADS(line))
             if limit and len(rows) >= limit:
                 break
     return rows
