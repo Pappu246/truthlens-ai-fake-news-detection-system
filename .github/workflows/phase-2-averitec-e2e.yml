@@ -17,180 +17,201 @@ permissions:
   contents: read
 
 jobs:
-  averitec-e2e:
-    name: AVeriTeC V2 end-to-end scoring
+  averitec-shards:
+    name: AVeriTeC V2 shard ${{ matrix.shard_index }}
     runs-on: ubuntu-latest
-    timeout-minutes: 360
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { shard_index: 0, start_claim: 0, count: 125 }
+          - { shard_index: 1, start_claim: 125, count: 125 }
+          - { shard_index: 2, start_claim: 250, count: 125 }
+          - { shard_index: 3, start_claim: 375, count: 125 }
     env:
-      AV_DATA_COMMIT: '7c62d1ec8df3fb560d6efe2b85fa191135636f81'
-      AV_DATA_URL: 'https://raw.githubusercontent.com/MichSchli/AVeriTeC/7c62d1ec8df3fb560d6efe2b85fa191135636f81/data/dev.json'
-      AV_DATA_SHA256: '499793726b4a5406780928a3d9dedc48d6dd53de778f22437d129cacdb08e300'
-      AV_STORE_REVISION: '26238ae'
-      AV_STORE_URL: 'https://huggingface.co/chenxwh/AVeriTeC/resolve/26238ae/data_store/knowledge_store/dev_knowledge_store.zip'
-      AV_STORE_SHA256: '021e258cd6fb5fe6d627a4667d663e95c184c966939c15124df9206142fc2212'
-      AV_OFFICIAL_COMMIT: '7c62d1ec8df3fb560d6efe2b85fa191135636f81'
-      NODE_OPTIONS: '--max-old-space-size=6144 --expose-gc'
+      AV_DATA_URL: https://raw.githubusercontent.com/MichSchli/AVeriTeC/7c62d1ec8df3fb560d6efe2b85fa191135636f81/data/dev.json
+      AV_DATA_SHA256: 499793726b4a5406780928a3d9dedc48d6dd53de778f22437d129cacdb08e300
+      AV_STORE_URL: https://huggingface.co/chenxwh/AVeriTeC/resolve/26238ae/data_store/knowledge_store/dev_knowledge_store.zip
+      AV_STORE_SHA256: 021e258cd6fb5fe6d627a4667d663e95c184c966939c15124df9206142fc2212
+      NODE_OPTIONS: --max-old-space-size=6144 --expose-gc
       TRUTHLENS_V2_ML_CALL_TIMEOUT_MS: '600000'
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Check runner disk before large materialization
-        shell: bash
-        run: |
-          set -euo pipefail
-          df -h .
-          free -h
-      - name: Install Node dependencies
-        run: npm ci
-      - name: Provision research-only Transformers.js runtime
-        run: npm install --no-save --package-lock=false @huggingface/transformers@4.3.0
-      - name: Provision sealed TruthLens V2 pretrained models
-        run: npm run download:v2-models
-      - name: Materialize AVeriTeC dev claims
+      - run: df -h . && free -h
+      - run: npm ci
+      - run: npm install --no-save --package-lock=false @huggingface/transformers@4.3.0
+      - run: npm run download:v2-models
+      - name: Materialize exact AVeriTeC claims
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p data/external/averitec artifacts/phase2/averitec
           curl --fail --retry 4 --retry-all-errors --location --connect-timeout 30 --max-time 600 "$AV_DATA_URL" -o data/external/averitec/dev.json
-          ACTUAL="$(sha256sum data/external/averitec/dev.json | cut -d' ' -f1)"
-          test "$ACTUAL" = "$AV_DATA_SHA256"
+          test "$(sha256sum data/external/averitec/dev.json | cut -d' ' -f1)" = "$AV_DATA_SHA256"
           test "$(node -e "const d=require('./data/external/averitec/dev.json'); process.stdout.write(String(d.length))")" = "500"
-      - name: Download pinned AVeriTeC dev evidence store
+      - name: Download pinned AVeriTeC evidence store
         shell: bash
         run: |
           set -euo pipefail
           curl --fail --retry 4 --retry-all-errors --location --connect-timeout 30 --max-time 10800 "$AV_STORE_URL" -o artifacts/phase2/averitec/dev_knowledge_store.zip
-          ACTUAL="$(sha256sum artifacts/phase2/averitec/dev_knowledge_store.zip | cut -d' ' -f1)"
-          test "$ACTUAL" = "$AV_STORE_SHA256"
-      - name: Verify benchmark runner TypeScript build
-        run: npx tsc --noEmit --pretty false
-      - name: Run AVeriTeC V2 benchmark
-        shell: bash
+          test "$(sha256sum artifacts/phase2/averitec/dev_knowledge_store.zip | cut -d' ' -f1)" = "$AV_STORE_SHA256"
+      - run: npx tsc --noEmit --pretty false
+      - name: Run AVeriTeC shard
         env:
-          MAX_CLAIMS: '500'
-          COARSE_BM25_K: '2000'
-        run: |
-          set -euo pipefail
-          npx tsx scripts/v2AveritecEndToEnd.ts             --max-claims="$MAX_CLAIMS"             --coarse-bm25-k="$COARSE_BM25_K"             --embedding-batch=64
-      - name: Require complete 500-claim benchmark output
+          START_CLAIM: ${{ matrix.start_claim }}
+          SHARD_COUNT: ${{ matrix.count }}
+          SHARD_INDEX: ${{ matrix.shard_index }}
         shell: bash
         run: |
           set -euo pipefail
+          out="artifacts/v2-averitec-e2e/shard-${SHARD_INDEX}"
+          npx tsx scripts/v2AveritecEndToEnd.ts --start-claim="$START_CLAIM" --max-claims="$SHARD_COUNT" --coarse-bm25-k=2000 --embedding-batch=64 --output-dir="$out"
+      - name: Validate shard
+        env:
+          START_CLAIM: ${{ matrix.start_claim }}
+          SHARD_COUNT: ${{ matrix.count }}
+          SHARD_INDEX: ${{ matrix.shard_index }}
+        shell: bash
+        run: |
           python - <<'PY'
-          import json
+          import json, os
           from pathlib import Path
-          provenance = json.loads(Path("artifacts/v2-averitec-e2e/provenance.json").read_text())
-          predictions = json.loads(Path("artifacts/v2-averitec-e2e/predictions.json").read_text())
-          evaluated = len(predictions)
-          scope = provenance.get("evaluation_scope")
-          if evaluated != 500:
-              raise SystemExit(f"Expected 500 predictions, got {evaluated}")
-          if scope != "full_500_claim_dev":
-              raise SystemExit(f"Expected full_500_claim_dev scope, got {scope!r}")
-          print(json.dumps({"evaluated_claims": evaluated, "evaluation_scope": scope}))
+          root = Path(f"artifacts/v2-averitec-e2e/shard-{os.environ['SHARD_INDEX']}")
+          p = json.loads((root/'predictions.json').read_text())
+          m = json.loads((root/'provenance.json').read_text())
+          if len(p) != int(os.environ['SHARD_COUNT']): raise SystemExit('prediction count mismatch')
+          s = m.get('shard') or {}
+          if s.get('start_claim') != int(os.environ['START_CLAIM']): raise SystemExit('start_claim mismatch')
+          if s.get('evaluated_claims') != int(os.environ['SHARD_COUNT']): raise SystemExit('evaluated_claims mismatch')
           PY
-      - name: Fetch pinned official AVeriTeC evaluator
+      - uses: actions/upload-artifact@v4
+        with:
+          name: truthlens-phase2-averitec-shard-${{ matrix.shard_index }}-${{ github.run_id }}
+          path: artifacts/v2-averitec-e2e/shard-${{ matrix.shard_index }}/
+          if-no-files-found: error
+          retention-days: 90
+
+  averitec-combine-and-score:
+    name: AVeriTeC combine and official score
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    needs: averitec-shards
+    env:
+      AV_DATA_URL: https://raw.githubusercontent.com/MichSchli/AVeriTeC/7c62d1ec8df3fb560d6efe2b85fa191135636f81/data/dev.json
+      AV_DATA_SHA256: 499793726b4a5406780928a3d9dedc48d6dd53de778f22437d129cacdb08e300
+      AV_OFFICIAL_COMMIT: 7c62d1ec8df3fb560d6efe2b85fa191135636f81
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Materialize exact AVeriTeC claims
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p data/external/averitec
+          curl --fail --retry 4 --retry-all-errors --location --connect-timeout 30 --max-time 600 "$AV_DATA_URL" -o data/external/averitec/dev.json
+          test "$(sha256sum data/external/averitec/dev.json | cut -d' ' -f1)" = "$AV_DATA_SHA256"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: truthlens-phase2-averitec-shard-*-${{ github.run_id }}
+          path: artifacts/averitec-shards
+          merge-multiple: false
+      - name: Combine exact 500 predictions
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/v2-averitec-e2e
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          roots = sorted(Path('artifacts/averitec-shards').glob('*/predictions.json'))
+          if len(roots) != 4: raise SystemExit(f'expected 4 shards, got {len(roots)}')
+          rows, manifests = [], []
+          for p in roots:
+              root = p.parent
+              rows += json.loads(p.read_text())
+              manifests.append(json.loads((root/'provenance.json').read_text()))
+          rows.sort(key=lambda x: int(x['id']))
+          if [int(x['id']) for x in rows] != list(range(500)): raise SystemExit('combined ids are not 0..499')
+          starts = sorted(int((m.get('shard') or {}).get('start_claim')) for m in manifests)
+          if starts != [0,125,250,375]: raise SystemExit(f'unexpected shard starts {starts}')
+          out = Path('artifacts/v2-averitec-e2e')
+          (out/'predictions.json').write_text(json.dumps(rows, indent=2)+'\n')
+          combined = {
+              'protocol_version':'truthlens-v2-averitec-e2e-v1',
+              'generated_at':__import__('datetime').datetime.utcnow().isoformat()+'Z',
+              'benchmark':'AVeriTeC','split':'dev','evaluation_scope':'full_500_claim_dev',
+              'official_data_url':os.environ['AV_DATA_URL'],
+              'official_repo_commit':os.environ['AV_OFFICIAL_COMMIT'],
+              'claims_sha256':os.environ['AV_DATA_SHA256'],
+              'shards':[m.get('shard') for m in manifests],
+              'production_boundary':'research_only_no_production_model_threshold_or_runtime_change',
+              'claims':rows
+          }
+          (out/'provenance.json').write_text(json.dumps(combined, indent=2)+'\n')
+          PY
+      - name: Fetch pinned official evaluator
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p artifacts/v2-averitec-e2e/official-evaluator
           curl --fail --location "https://raw.githubusercontent.com/MichSchli/AVeriTeC/$AV_OFFICIAL_COMMIT/eval.py" -o artifacts/v2-averitec-e2e/official-evaluator/eval.py
           curl --fail --location "https://raw.githubusercontent.com/MichSchli/AVeriTeC/$AV_OFFICIAL_COMMIT/utils.py" -o artifacts/v2-averitec-e2e/official-evaluator/utils.py
-          cat > artifacts/v2-averitec-e2e/official-evaluator/source.json <<EOF
-          {
-            "repository": "https://github.com/MichSchli/AVeriTeC",
-            "commit": "$AV_OFFICIAL_COMMIT",
-            "eval_path": "eval.py",
-            "utils_path": "utils.py"
-          }
-          EOF
-      - name: Install minimal official-evaluator dependencies
+      - name: Install official evaluator dependencies
         run: |
-          python -m pip install --disable-pip-version-check             "numpy==2.1.3" "scipy==1.14.1" "scikit-learn==1.5.2" "nltk==3.9.1" "leven==1.0.4"
+          python -m pip install --disable-pip-version-check numpy==2.1.3 scipy==1.14.1 scikit-learn==1.5.2 nltk==3.9.1 leven==1.0.4
           python -m nltk.downloader punkt punkt_tab wordnet
-      - name: Run official AVeriTeC evaluator
+      - name: Run official evaluator
         shell: bash
         run: |
           set -euo pipefail
-          python artifacts/v2-averitec-e2e/official-evaluator/eval.py             --predictions artifacts/v2-averitec-e2e/predictions.json             --references data/external/averitec/dev.json             > artifacts/v2-averitec-e2e/official-evaluation.txt
+          python artifacts/v2-averitec-e2e/official-evaluator/eval.py --predictions artifacts/v2-averitec-e2e/predictions.json --references data/external/averitec/dev.json > artifacts/v2-averitec-e2e/official-evaluation.txt
           grep -q "AVeriTeC evaluation:" artifacts/v2-averitec-e2e/official-evaluation.txt
           grep -q "Averitec scores:" artifacts/v2-averitec-e2e/official-evaluation.txt
-      - name: Parse official AVeriTeC metrics
+      - name: Parse official metrics
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
-          import json, re, os
+          import json, os, re
           from pathlib import Path
-          text = Path("artifacts/v2-averitec-e2e/official-evaluation.txt").read_text()
-          predictions = json.loads(Path("artifacts/v2-averitec-e2e/predictions.json").read_text())
-          out = {
-              "evaluation_count": len(predictions),
-              "benchmark_id": "averitec",
-              "protocol_version": "truthlens-v3-benchmark-protocol-v1",
-              "evaluation_scope": "dev_500_claims",
-              "evaluator": {"repository": "MichSchli/AVeriTeC", "commit": os.environ.get("AV_OFFICIAL_COMMIT")},
-              "metrics": {"veracity_f1": {}, "averitec_veracity": {}, "averitec_justification": {}},
-              "generated_at": __import__("datetime").datetime.utcnow().isoformat() + "Z",
-              "truthlens_git_sha": os.environ.get("GITHUB_SHA"),
-              "workflow_run_id": os.environ.get("GITHUB_RUN_ID")
-          }
-          section = None
+          text = Path('artifacts/v2-averitec-e2e/official-evaluation.txt').read_text()
+          preds = json.loads(Path('artifacts/v2-averitec-e2e/predictions.json').read_text())
+          out={'evaluation_count':len(preds),'benchmark_id':'averitec','protocol_version':'truthlens-v3-benchmark-protocol-v1','evaluation_scope':'dev_500_claims','evaluator':{'repository':'MichSchli/AVeriTeC','commit':os.environ['AV_OFFICIAL_COMMIT']},'metrics':{'veracity_f1':{},'averitec_veracity':{},'averitec_justification':{}},'generated_at':__import__('datetime').datetime.utcnow().isoformat()+'Z','truthlens_git_sha':os.environ.get('GITHUB_SHA'),'workflow_run_id':os.environ.get('GITHUB_RUN_ID')}
+          section=None
           for line in text.splitlines():
-              line = line.strip()
-              if line == "Veracity F1 scores:":
-                  section = "veracity_f1"; continue
-              if line == "Averitec scores:":
-                  section = "averitec"; continue
-              m = re.match(r"\*\s*(.+?):\s*([0-9.eE+-]+)$", line)
+              line=line.strip()
+              if line=='Veracity F1 scores:': section='veracity_f1'; continue
+              if line=='Averitec scores:': section='averitec'; continue
+              m=re.match(r'\*\s*(.+?):\s*([0-9.eE+-]+)$',line)
               if not m: continue
-              key, value = m.group(1), float(m.group(2))
-              if section == "veracity_f1":
-                  out["metrics"]["veracity_f1"][key] = value
-              elif section == "averitec":
-                  mm = re.match(r"(Veracity|Justification) scores \(meteor @ ([0-9.]+)\)", key, re.I)
-                  if mm:
-                      bucket = "averitec_veracity" if mm.group(1).lower() == "veracity" else "averitec_justification"
-                      out["metrics"][bucket][mm.group(2)] = value
-          for group in ("veracity_f1", "averitec_veracity", "averitec_justification"):
-              if not out["metrics"][group]:
-                  raise SystemExit("official AVeriTeC metric group is empty: " + group)
-          Path("artifacts/v2-averitec-e2e/official-evaluation.json").write_text(json.dumps(out, indent=2) + "\n")
+              k,v=m.group(1),float(m.group(2))
+              if section=='veracity_f1': out['metrics']['veracity_f1'][k]=v
+              elif section=='averitec':
+                  mm=re.match(r'(Veracity|Justification) scores \(meteor @ ([0-9.]+)\)',k,re.I)
+                  if mm: out['metrics']['averitec_veracity' if mm.group(1).lower()=='veracity' else 'averitec_justification'][mm.group(2)]=v
+          for g in ('veracity_f1','averitec_veracity','averitec_justification'):
+              if not out['metrics'][g]: raise SystemExit('empty metric group '+g)
+          Path('artifacts/v2-averitec-e2e/official-evaluation.json').write_text(json.dumps(out,indent=2)+'\n')
           PY
       - name: Write reproducibility manifest
         shell: bash
         run: |
-          set -euo pipefail
           cat > artifacts/v2-averitec-e2e/reproducibility-manifest.json <<EOF
-          {
-            "benchmark": "AVeriTeC",
-            "split": "dev",
-            "claims": 500,
-            "claims_sha256": "$AV_DATA_SHA256",
-            "official_data_commit": "$AV_DATA_COMMIT",
-            "evidence_store_revision": "$AV_STORE_REVISION",
-            "evidence_store_sha256": "$AV_STORE_SHA256",
-            "truthlens_git_sha": "$GITHUB_SHA",
-            "workflow_run_id": "$GITHUB_RUN_ID",
-            "production_boundary": "research_only_no_production_model_threshold_or_runtime_change",
-            "temporal_integrity": "ENFORCED_WHEN_RECORD_TIMESTAMP_IS_PARSEABLE_UNTIMESTAMPED_RECORDS_REMAIN_ELIGIBLE_AND_ARE_REPORTED",
-            "gold_evidence_in_retrieval": false
-          }
+          {"benchmark":"AVeriTeC","split":"dev","claims":500,"claims_sha256":"$AV_DATA_SHA256","official_data_commit":"$AV_OFFICIAL_COMMIT","sharding":{"count":4,"claims_per_shard":125},"truthlens_git_sha":"$GITHUB_SHA","workflow_run_id":"$GITHUB_RUN_ID","production_boundary":"research_only_no_production_model_threshold_or_runtime_change","temporal_integrity":"ENFORCED_WHEN_RECORD_TIMESTAMP_IS_PARSEABLE_UNTIMESTAMPED_RECORDS_REMAIN_ELIGIBLE_AND_ARE_REPORTED","gold_evidence_in_retrieval":false}
           EOF
           sha256sum artifacts/v2-averitec-e2e/*.json artifacts/v2-averitec-e2e/*.txt | sort > artifacts/v2-averitec-e2e/artifact-file-sha256.txt
-      - name: Upload complete AVeriTeC score artifact
+      - uses: actions/upload-artifact@v4
         id: upload
-        uses: actions/upload-artifact@v4
         with:
           name: truthlens-phase2-averitec-e2e-${{ github.run_id }}
           path: artifacts/v2-averitec-e2e/
@@ -200,4 +221,3 @@ jobs:
         run: |
           echo "GitHub artifact digest: ${{ steps.upload.outputs.artifact-digest }}" | tee artifacts/phase2-averitec-artifact-digest.txt
           echo "Artifact id: ${{ steps.upload.outputs.artifact-id }}" | tee -a artifacts/phase2-averitec-artifact-digest.txt
-          cat artifacts/phase2-averitec-artifact-digest.txt
