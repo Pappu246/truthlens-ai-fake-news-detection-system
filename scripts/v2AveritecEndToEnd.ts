@@ -204,6 +204,10 @@ class ChunkedEmbeddingModel implements EmbeddingModel {
     }
     return vectors;
   }
+
+  public clearCache(): void {
+    this.base.clearCache();
+  }
 }
 
 class AveritecStoreSource implements CorpusSource {
@@ -383,6 +387,7 @@ async function main(): Promise<void> {
         ]
       });
       source.clearActiveCache();
+      embeddingModel.clearCache();
       if ((id + 1) % 10 === 0 || id + 1 === maxClaims) {
         const forceGc = (globalThis as typeof globalThis & { gc?: () => void }).gc;
         forceGc?.();
