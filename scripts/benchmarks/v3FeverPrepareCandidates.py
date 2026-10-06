@@ -78,6 +78,7 @@ def build_index(wiki_dir: Path, db_path: Path) -> None:
     """)
     batch = []
     total = 0
+    con.execute('BEGIN')
     for page, _title, line_id, text in iter_pages(wiki_dir):
         if not text.strip():
             continue
@@ -87,7 +88,6 @@ def build_index(wiki_dir: Path, db_path: Path) -> None:
                 "INSERT OR IGNORE INTO sentences(page,line_id,text) VALUES(?,?,?)",
                 batch
             )
-            con.commit()
             total += len(batch)
             batch.clear()
             if total and total % 100000 == 0:
@@ -97,8 +97,8 @@ def build_index(wiki_dir: Path, db_path: Path) -> None:
             "INSERT OR IGNORE INTO sentences(page,line_id,text) VALUES(?,?,?)",
             batch
         )
-        con.commit()
         total += len(batch)
+    con.commit()
     con.execute("INSERT INTO sentences_fts(sentences_fts) VALUES('rebuild')")
     con.commit()
     check = con.execute("PRAGMA integrity_check").fetchone()[0]
