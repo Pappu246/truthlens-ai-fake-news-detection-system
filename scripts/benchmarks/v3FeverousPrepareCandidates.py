@@ -7,6 +7,12 @@ import re
 import sqlite3
 from pathlib import Path
 
+try:
+    import orjson
+    JSON_LOADS = orjson.loads
+except ImportError:
+    JSON_LOADS = json.loads
+
 TOKEN = re.compile(r"[A-Za-z0-9_]+")
 
 def text_value(value):
@@ -64,6 +70,13 @@ def fts_query(text):
 def build_index(db_path, index_path):
     src = sqlite3.connect(db_path)
     dst = sqlite3.connect(index_path)
+    # Temporary benchmark-only index: optimize SQLite for bulk construction.
+    # This does not alter source data or candidate-selection semantics.
+    dst.execute("PRAGMA journal_mode=OFF")
+    dst.execute("PRAGMA synchronous=OFF")
+    dst.execute("PRAGMA temp_store=MEMORY")
+    dst.execute("PRAGMA cache_size=-262144")
+    dst.execute("PRAGMA locking_mode=EXCLUSIVE")
     dst.execute("DROP TABLE IF EXISTS pages")
     dst.execute("DROP TABLE IF EXISTS pages_fts")
     dst.execute("""
@@ -85,7 +98,7 @@ def build_index(db_path, index_path):
     count = 0
     for page_id, raw in cursor:
         try:
-            page = json.loads(raw)
+            page = JSON_LOADS(raw)
             pieces = [text for _, text, _ in extract_elements(page)]
             page_text = "\\n".join(pieces)
         except Exception:
@@ -93,7 +106,7 @@ def build_index(db_path, index_path):
         if not page_text.strip():
             continue
         batch.append((page_id, page_text))
-        if len(batch) >= 2000:
+        if len(batch) >= 20000:
             dst.executemany("INSERT OR REPLACE INTO pages(page_id,text) VALUES(?,?)", batch)
             dst.commit()
             batch.clear()
@@ -133,6 +146,10 @@ def make_candidates(claims_path, db_path, output, top_pages, per_page_elements, 
 
     db = sqlite3.connect(db_path)
     idx = sqlite3.connect(index_path)
+    db.execute("PRAGMA query_only=ON")
+    db.execute("PRAGMA cache_size=-131072")
+    idx.execute("PRAGMA temp_store=MEMORY")
+    idx.execute("PRAGMA cache_size=-131072")
     output.parent.mkdir(parents=True, exist_ok=True)
 
     with output.open("w", encoding="utf-8") as out:
