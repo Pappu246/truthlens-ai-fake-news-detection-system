@@ -34,25 +34,82 @@ export class TransformerEmbeddingModel implements EmbeddingModel {
   public readonly version = EMBEDDING_MODEL_VERSION;
   public readonly dimensions = EMBEDDING_MODEL_DIMENSIONS;
 
+  private readonly cache = new Map<string, number[]>();
+
   constructor(private client: MlWorkerClient = getMlWorkerClient()) {}
 
   public embed(text: string): number[] {
     const input = (text || '').trim();
     if (!input) return new Array(this.dimensions).fill(0);
+
+    const cached = this.cache.get(input);
+    if (cached) return cached.slice();
+
     const res = this.client.call<{ vector: number[] }>('embed', { text: input });
-    return this.normalizeVector(res.vector);
+    const normalized = this.normalizeVector(res.vector);
+    this.cache.set(input, normalized);
+    return normalized.slice();
   }
 
   public embedBatch(texts: string[]): number[][] {
     if (texts.length === 0) return [];
+
     const normalizedInputs = texts.map(text => (text || '').trim());
-    const res = this.client.embedBatch(normalizedInputs);
-    if (!Array.isArray(res) || res.length !== texts.length) {
-      throw new Error(
-        `TransformerEmbeddingModel: worker returned ${Array.isArray(res) ? res.length : 'non-array'} vectors for ${texts.length} inputs.`
-      );
+    const results: Array<number[] | null> = new Array(normalizedInputs.length).fill(null);
+    const missingTexts: string[] = [];
+    const missingSeen = new Map<string, number[]>();
+
+    for (let i = 0; i < normalizedInputs.length; i++) {
+      const input = normalizedInputs[i];
+      const cached = this.cache.get(input);
+      if (cached) {
+        results[i] = cached.slice();
+        continue;
+      }
+
+      const priorMissing = missingSeen.get(input);
+      if (priorMissing) {
+        priorMissing.push(i);
+      } else {
+        missingSeen.set(input, [i]);
+        missingTexts.push(input);
+      }
     }
-    return res.map(vector => this.normalizeVector(vector));
+
+    if (missingTexts.length > 0) {
+      const vectors = this.client.embedBatch(missingTexts);
+      if (!Array.isArray(vectors) || vectors.length !== missingTexts.length) {
+        throw new Error(
+          `TransformerEmbeddingModel: worker returned ${Array.isArray(vectors) ? vectors.length : 'non-array'} vectors for ${missingTexts.length} uncached inputs.`
+        );
+      }
+
+      for (let i = 0; i < missingTexts.length; i++) {
+        const normalized = this.normalizeVector(vectors[i]);
+        const input = missingTexts[i];
+        this.cache.set(input, normalized);
+        for (const outputIndex of missingSeen.get(input) ?? []) {
+          results[outputIndex] = normalized.slice();
+        }
+      }
+    }
+
+    return results.map((vector, index) => {
+      if (!vector) {
+        throw new Error(`TransformerEmbeddingModel: missing cached/worker vector at index ${index}.`);
+      }
+      return vector;
+    });
+  }
+
+  /**
+   * Clears only the in-process embedding cache. The sealed model and worker
+   * remain unchanged. Research benchmarks use this between claims so cached
+   * vectors accelerate repeated retrieval/NLI passes for the current claim
+   * without retaining the full benchmark corpus in memory.
+   */
+  public clearCache(): void {
+    this.cache.clear();
   }
 
   private normalizeVector(vector: number[]): number[] {
