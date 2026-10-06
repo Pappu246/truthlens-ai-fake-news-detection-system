@@ -266,19 +266,22 @@ flowchart TB
 
 ## Production verification
 
-The current production line has been verified after the latest extraction compatibility fix:
+The current production line is separated from the research benchmark track.
 
-- **GitHub CI:** ✅ passed on main (CI run #634; all listed jobs/steps successful)
-- **Vercel production:** ✅ READY on deployment `dpl_92AnaRPHETdToqnWyTXCeY2KLiz9`
-- **Production commit:** `8c8ef1d7aa4c567f7e6c97002c1fedd2f5633aa7`
-- **Production runtime:** `legacy_single_svm` with probability output withheld
-- **Article safety regressions:** ✅ passed (12/12 assertions)
-- **Verdict regressions:** ✅ passed (24/24 assertions)
-- **Runtime parity candidate:** ✅ passed (20/20 fixtures)
-- **Exact calibrated candidate benchmark:** 99.7773% held-out ISOT accuracy; 99.9377% temporal accuracy; 43.1646% LIAR OOD accuracy — **research evidence only, not production-promoted**
-- **Direct live HTTP smoke:** not independently executable from this environment because outbound DNS/network access is unavailable; Vercel deployment state and GitHub/Vercel checks were verified instead.
+- **Production commit:** `b899cf265349f8ba215aaf8219aef4a139eca851` — merged through security PR #61.
+- **Vercel production deployment:** `dpl_GZ5Z981mR6Rm9jZFEgPcc11KC53c`
+- **Vercel state:** `READY`
+- **Production URL:** `truthlens-ai-fake-news-detection-system-r7xo1k9t1.vercel.app`
+- **Current production branch:** `main`
+- **PR #61 CI:** passed before merge; the merge was security-only and did not alter application/model behavior.
+- **Production model boundary:** `legacy_single_svm` with probability output withheld until an exact calibrated runtime artifact is formally promoted.
+- **Research boundary:** Phase 2 benchmark work remains on a separate research branch and is not promoted into production.
 
-The latest extraction compatibility change updates the outgoing public-page request headers while keeping the existing SSRF and redirect protections in place.
+Vercel's current 24-hour aggregated runtime-error view identifies the observed `url.parse()` deprecation warnings and two article-extraction 404s on the **previous** deployment `dpl_4NNGFPPg9NsyAdJ5HyedU7zdWG1a`; those findings are not evidence that the current production deployment is failing.
+
+Direct live HTTP smoke testing is not independently executable from this environment because outbound DNS/network access is unavailable. Deployment state and connected GitHub/Vercel checks are verified through the integrations instead.
+
+The production runtime and research benchmarks must remain separate: benchmark figures are evaluation evidence, not a guarantee of real-world accuracy, and no production accuracy claim is inferred from the research track.
 
 ---
 
