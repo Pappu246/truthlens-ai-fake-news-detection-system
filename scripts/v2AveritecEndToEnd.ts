@@ -318,7 +318,9 @@ async function main(): Promise<void> {
     if (!verified.ok) throw new Error(`Model seal verification failed for ${manifest.id}: ${verified.mismatches.join('; ')}`);
   }
 
-  const maxClaims = Math.max(1, Math.min(Number(arg('max-claims') || 500), 500));
+  const startClaim = Math.max(0, Math.min(Number(arg('start-claim') || 0), 499));
+  const maxClaims = Math.max(1, Math.min(Number(arg('max-claims') || 500), 500 - startClaim));
+  if (startClaim + maxClaims > 500) throw new Error('Claim range exceeds 500');
   const coarseBm25K = Math.max(100, Math.min(Number(arg('coarse-bm25-k') || 2000), 10000));
   const finalTopK = Math.max(5, Math.min(Number(arg('final-k') || 10), 20));
   const embeddingBatchSize = Math.max(1, Math.min(Number(arg('embedding-batch') || 64), 256));
@@ -338,10 +340,11 @@ async function main(): Promise<void> {
   const productionLabels: string[] = [];
 
   try {
-    for (let id = 0; id < maxClaims; id++) {
+    for (let offset = 0; offset < maxClaims; offset++) {
+      const id = startClaim + offset;
       const claim = claims[id];
 
-      if (id > 0 && id % workerRecycleEvery === 0) {
+      if (offset > 0 && offset % workerRecycleEvery === 0) {
         await disposeMlWorker();
         embeddingModel = new ChunkedEmbeddingModel(new TransformerEmbeddingModel(), embeddingBatchSize);
         nliAdapter = new PretrainedNliAdapter({ embeddingModel });
@@ -389,11 +392,11 @@ async function main(): Promise<void> {
         forceGc?.();
         const heapMb = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
         const rssMb = Math.round(process.memoryUsage().rss / 1024 / 1024);
-        console.log(`processed ${id + 1}/${maxClaims} (heap=${heapMb}MB rss=${rssMb}MB)`);
+        console.log(`processed ${offset + 1}/${maxClaims} (global=${id + 1}/500 heap=${heapMb}MB rss=${rssMb}MB)`);
       }
     }
 
-    const fullRun = maxClaims === 500;
+    const fullRun = startClaim === 0 && maxClaims === 500;
     const labels = ['Supported', 'Refuted', 'Not Enough Evidence', 'Conflicting Evidence/Cherrypicking'];
     const benchmarkMetrics = macroF1(goldLabels, benchmarkLabels, labels);
     const productionMetrics = macroF1(goldLabels, productionLabels, labels);
@@ -405,7 +408,8 @@ async function main(): Promise<void> {
       generated_at: new Date().toISOString(),
       benchmark: 'AVeriTeC',
       split: 'dev',
-      evaluation_scope: fullRun ? 'full_500_claim_dev' : `smoke_${maxClaims}_claims`,
+      evaluation_scope: fullRun ? 'full_500_claim_dev' : `shard_${startClaim}_${startClaim + maxClaims}_of_500`,
+      claim_range: { start_claim: startClaim, claim_count: maxClaims, end_exclusive: startClaim + maxClaims },
       official_data_url: DATA_URL,
       official_repo_commit: OFFICIAL_REPO_COMMIT,
       claims_sha256: DATA_SHA256,
@@ -420,6 +424,7 @@ async function main(): Promise<void> {
         retrieval_channels: ['LEXICAL_BM25', 'DENSE_EMBEDDING'],
         nli_concurrency: 4,
         worker_recycle_every: workerRecycleEvery,
+        start_claim: startClaim,
         temporal_filtering: 'ENFORCED_WHEN_RECORD_TIMESTAMP_AVAILABLE_MISSING_OR_UNPARSEABLE_TIMESTAMPS_REMAIN_ELIGIBLE'
       },
       models: {
