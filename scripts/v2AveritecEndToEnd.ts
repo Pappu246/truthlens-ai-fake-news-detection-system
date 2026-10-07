@@ -409,6 +409,7 @@ async function main(): Promise<void> {
       benchmark: 'AVeriTeC',
       split: 'dev',
       evaluation_scope: fullRun ? 'full_500_claim_dev' : `shard_${startClaim}_${startClaim + maxClaims}_of_500`,
+      evaluation_count: maxClaims,
       claim_range: { start_claim: startClaim, claim_count: maxClaims, end_exclusive: startClaim + maxClaims },
       official_data_url: DATA_URL,
       official_repo_commit: OFFICIAL_REPO_COMMIT,
