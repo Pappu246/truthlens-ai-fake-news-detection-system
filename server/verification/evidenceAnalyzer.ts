@@ -292,6 +292,12 @@ export function classifyEvidenceRelation(
     const sentenceTokens = new Set(lower.match(/[a-z0-9]+(?:\.[0-9]+)?/g) || []);
     const anchorMatches = [...claimTokens].filter(token => sentenceTokens.has(token)).length;
     const entityMatches = claimEntities.some(entity => lower.includes(entity.toLowerCase()));
+    const matchingClaimNumber = claim.numbers.some(number => {
+      const numberTokens = number.match(/\d+(?:\.\d+)?/g) || [];
+      return numberTokens.length > 0 && numberTokens.every(token => sentenceTokens.has(token));
+    });
+    const matchingClaimDate = claim.dates.some(date => lower.includes(date.toLowerCase()));
+    const specificIdentifierMatches = entityMatches || matchingClaimNumber || matchingClaimDate;
     const predicateMatches = claimPredicates.some(pattern => pattern.test(sentence));
     const directionalOppositeMatches = applicableDirectionalPairs.some(pair => pair.evidenceOpposite.test(sentence));
     const explicitRefutation = contradictionPatterns.some(pattern => pattern.test(sentence));
@@ -299,12 +305,20 @@ export function classifyEvidenceRelation(
 
     const anchoredFact = anchorMatches >= 2 ||
       (entityMatches && anchorMatches >= 1) ||
-      ((predicateMatches || directionalOppositeMatches) && anchorMatches >= 1);
+      (predicateMatches && anchorMatches >= 1);
     const claimLinkedSignal =
       predicateMatches ||
-      directionalOppositeMatches ||
-      ((explicitRefutation || explicitMixed) && anchorMatches >= 3);
-    return anchoredFact && claimLinkedSignal;
+      (directionalOppositeMatches && (!claim.numbers.length && !claim.dates.length || specificIdentifierMatches)) ||
+      ((explicitRefutation || explicitMixed) &&
+        (anchorMatches >= 3 || (entityMatches && specificIdentifierMatches)));
+    const needsSpecificIdentifier =
+      claim.entities.length > 0 || claim.numbers.length > 0 || claim.dates.length > 0;
+
+    // For claims containing named entities, dates or figures, a related noun
+    // plus a generic opposite word is not enough. Require a match to the
+    // particular entity/number/date before any directional signal is admitted.
+    return anchoredFact && claimLinkedSignal &&
+      (!needsSpecificIdentifier || specificIdentifierMatches);
   });
 
   if (relevantSentences.length === 0) {
