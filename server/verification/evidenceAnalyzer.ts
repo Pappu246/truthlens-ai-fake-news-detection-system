@@ -202,36 +202,22 @@ export function classifyEvidenceRelation(
   claim: ExtractedClaim,
   snippet: string,
   relevanceScore: number,
-  numConsistency: { isConsistent: boolean; warning?: string }
+  _numConsistency: { isConsistent: boolean; warning?: string }
 ): ClaimEvidenceRelation {
   if (relevanceScore < 0.22) {
     return 'IRRELEVANT';
   }
 
-  const textLower = snippet.toLowerCase();
-
-  // If numerical discrepancy detected, it cannot be SUPPORTS
-  if (!numConsistency.isConsistent) {
-    return 'CONTRADICTS';
-  }
-
-  // Refutation and contradiction markers
   const contradictionPatterns = [
     /\b(?:denied|denies|debunked|false|refuted|disproved|hoax|untrue|incorrect|no evidence that|fabricated|fake|never happened|misleading|retracted)\b/i,
     /\b(?:not true|not correct|contrary to claims|disputed by|rejected claims)\b/i
   ];
-
-  for (const pat of contradictionPatterns) {
-    if (pat.test(textLower)) {
-      return 'CONTRADICTS';
-    }
-  }
-
-  // Claim-aware explicit negation. Conservative by design: a negator must be
-  // attached to a material predicate from the claim.
+  const mixedPatterns = [
+    /\b(?:partially true|mixed reports|unclear whether|contested|debated|partly true|conflicting claims|some dispute)\b/i
+  ];
   const predicatePatterns: RegExp[] = [
-    /\b(?:fall|fell|falling|decline|declined|decrease|decreased|drop|dropped|remain|remained)\b/i,
-    /\b(?:raise|raised|raising|increase|increased|increasing|hike|hiked)\b/i,
+    /\b(?:fall|falls|fell|falling|decline|declined|decrease|decreased|drop|dropped|remain|remained)\b/i,
+    /\b(?:raise|raised|raising|increase|increased|increasing|hike|hiked|cut|cuts|cutting|lower|lowered|reduce|reduced|reduction)\b/i,
     /\b(?:open|opened|opening)\b/i,
     /\b(?:find|found|finding)\b/i,
     /\b(?:publish|published|publishing|release|released)\b/i,
@@ -239,10 +225,125 @@ export function classifyEvidenceRelation(
     /\b(?:add|added|adding)\b/i,
     /\b(?:issue|issued|issuing)\b/i,
     /\b(?:recall|recalled)\b/i,
-    /\b(?:report|reported|reporting)\b/i
+    /\b(?:report|reported|reporting)\b/i,
+    /\b(?:land|lands|landed|landing)\b/i,
+    /\b(?:win|wins|won|lose|loses|lost|qualify|qualified)\b/i,
+    /\b(?:approve|approved|reject|rejected|sign|signed|pass|passed)\b/i
+  ];
+  const directionalPairs: Array<{
+    claimSide: RegExp;
+    evidenceOpposite: RegExp;
+    evidenceClaimSide: RegExp;
+  }> = [
+    {
+      claimSide: /\b(?:fall|fell|declined|decreased|dropped|below|under|less than)\b/i,
+      evidenceOpposite: /\b(?:rose|increased|grew|gained|exceeded|above|over|more than)\b/i,
+      evidenceClaimSide: /\b(?:fall|fell|declined|decreased|dropped|below|under|less than)\b/i
+    },
+    {
+      claimSide: /\b(?:raised|raise|increased|hiked|increase|increasing)\b/i,
+      evidenceOpposite: /\b(?:cut|cutting|lowered|lower|decreased|reduced|reduction)\b/i,
+      evidenceClaimSide: /\b(?:raised|raise|increased|hiked|increase|increasing)\b/i
+    },
+    {
+      claimSide: /\b(?:convicted|conviction|guilty)\b/i,
+      evidenceOpposite: /\b(?:acquitted|acquittal|not guilty)\b/i,
+      evidenceClaimSide: /\b(?:convicted|conviction|guilty)\b/i
+    },
+    {
+      claimSide: /\b(?:opened|open|launched|launch|landed|land)\b/i,
+      evidenceOpposite: /\b(?:closed|shut|delayed|postponed|cancelled|canceled|did not land|never landed)\b/i,
+      evidenceClaimSide: /\b(?:opened|open|launched|launch|landed|land)\b/i
+    },
+    {
+      claimSide: /\b(?:added|add|introduced)\b/i,
+      evidenceOpposite: /\b(?:removed|remove|did not add|no new)\b/i,
+      evidenceClaimSide: /\b(?:added|add|introduced)\b/i
+    }
   ];
 
-  const hasNegatedPredicate = predicatePatterns.some(predicate => {
+  // Generic words like "false", "denied", or a mismatching number can occur
+  // anywhere in a long publisher page. Only classify a sentence directionally
+  // when it overlaps the claim's actual content and contains a claim predicate,
+  // a known directional opposite, or a strongly anchored explicit refutation.
+  const stopWords = new Set([
+    'the', 'and', 'for', 'with', 'from', 'that', 'this', 'these', 'those',
+    'was', 'were', 'are', 'is', 'has', 'have', 'had', 'did', 'does', 'do',
+    'not', 'but', 'its', 'their', 'they', 'them', 'there', 'here', 'into',
+    'onto', 'over', 'under', 'than', 'then', 'when', 'where', 'what', 'which',
+    'who', 'why', 'how', 'all', 'any', 'some', 'more', 'most', 'less', 'very',
+    'in', 'on', 'at', 'by', 'to', 'of', 'as', 'an', 'a', 'or', 'be', 'been',
+    'being', 'it', 'he', 'she', 'we', 'you', 'i', 'they', 'year', 'month'
+  ]);
+  const claimTokens = new Set(
+    (claim.normalizedText.toLowerCase().match(/[a-z0-9]+(?:\.[0-9]+)?/g) || [])
+      .filter(token => token.length > 2 && !stopWords.has(token))
+  );
+  const claimEntities = claim.entities.filter(entity => entity.trim().length > 0);
+  const claimPredicates = predicatePatterns.filter(pattern => pattern.test(claim.normalizedText));
+  const applicableDirectionalPairs = directionalPairs.filter(pair => pair.claimSide.test(claim.normalizedText));
+  const sentences = snippet
+    .split(/(?<=[.!?])\s+/)
+    .map(sentence => sentence.trim())
+    .filter(Boolean);
+
+  const relevantSentences = sentences.filter(sentence => {
+    const lower = sentence.toLowerCase();
+    const sentenceTokens = new Set(lower.match(/[a-z0-9]+(?:\.[0-9]+)?/g) || []);
+    const anchorMatches = [...claimTokens].filter(token => sentenceTokens.has(token)).length;
+    const entityMatches = claimEntities.some(entity => lower.includes(entity.toLowerCase()));
+    const matchingClaimNumber = claim.numbers.some(number => {
+      const numberTokens = number.match(/\d+(?:\.\d+)?/g) || [];
+      return numberTokens.length > 0 && numberTokens.every(token => sentenceTokens.has(token));
+    });
+    const matchingClaimDate = claim.dates.some(date => lower.includes(date.toLowerCase()));
+    const specificIdentifierMatches = entityMatches || matchingClaimNumber || matchingClaimDate;
+    const predicateMatches = claimPredicates.some(pattern => pattern.test(sentence));
+    const directionalOppositeMatches = applicableDirectionalPairs.some(pair => pair.evidenceOpposite.test(sentence));
+    const explicitRefutation = contradictionPatterns.some(pattern => pattern.test(sentence));
+    const explicitMixed = mixedPatterns.some(pattern => pattern.test(sentence));
+
+    const anchoredFact = anchorMatches >= 2 ||
+      (entityMatches && anchorMatches >= 1) ||
+      (predicateMatches && anchorMatches >= 1);
+    const claimLinkedSignal =
+      predicateMatches ||
+      (directionalOppositeMatches && (!claim.numbers.length && !claim.dates.length || specificIdentifierMatches)) ||
+      ((explicitRefutation || explicitMixed) &&
+        (anchorMatches >= 3 || (entityMatches && specificIdentifierMatches)));
+    const needsSpecificIdentifier =
+      claim.entities.length > 0 || claim.numbers.length > 0 || claim.dates.length > 0;
+
+    // For claims containing named entities, dates or figures, a related noun
+    // plus a generic opposite word is not enough. Require a match to the
+    // particular entity/number/date before any directional signal is admitted.
+    return anchoredFact && claimLinkedSignal &&
+      (!needsSpecificIdentifier || specificIdentifierMatches);
+  });
+
+  if (relevantSentences.length === 0) {
+    // A title/keyword overlap alone is not evidence that the page supports or
+    // contradicts this specific assertion.
+    return 'INSUFFICIENT';
+  }
+
+  const relationText = relevantSentences.join(' ');
+  const textLower = relationText.toLowerCase();
+
+  // Re-run the numeric check on only claim-linked sentences. Numbers elsewhere
+  // in an article (for other events or years) must not refute this claim.
+  const contextualNumericalConsistency = checkNumericalConsistency(claim, relationText);
+  if (!contextualNumericalConsistency.isConsistent) {
+    return 'CONTRADICTS';
+  }
+
+  for (const pat of contradictionPatterns) {
+    if (pat.test(textLower)) {
+      return 'CONTRADICTS';
+    }
+  }
+
+  const hasNegatedPredicate = claimPredicates.some(predicate => {
     const source = predicate.source.replace(/^\\b|\\b$/g, '');
     const directNegation = new RegExp(
       '\\b(?:did|does|do|was|were|is|are|has|have|had)\\s+not\\s+(?:\\w+\\s+){0,2}' + source + '\\b',
@@ -253,61 +354,19 @@ export function classifyEvidenceRelation(
       '\\b(?:no|never)\\s+(?:\\w+\\s+){0,2}' + source + '\\b',
       'i'
     );
-    return predicate.test(claim.normalizedText) &&
-      (directNegation.test(textLower) ||
-        localNegation.test(textLower) ||
-        absoluteNegation.test(textLower));
+    return directNegation.test(textLower) ||
+      localNegation.test(textLower) ||
+      absoluteNegation.test(textLower);
   });
   if (hasNegatedPredicate) {
     return 'CONTRADICTS';
   }
 
-  // Directional antonyms invert a claim only when the evidence does not also
-  // contain the claimed direction.
-  const directionalPairs: Array<{
-    claimSide: RegExp;
-    evidenceOpposite: RegExp;
-    evidenceClaimSide: RegExp;
-  }> = [
-    {
-      claimSide: /\b(?:fell|declined|decreased|dropped|below|under|less than)\b/i,
-      evidenceOpposite: /\b(?:rose|increased|grew|gained|exceeded|above|over|more than)\b/i,
-      evidenceClaimSide: /\b(?:fell|declined|decreased|dropped|below|under|less than)\b/i
-    },
-    {
-      claimSide: /\b(?:raised|raise|increased|hiked|increase)\b/i,
-      evidenceOpposite: /\b(?:cut|cutting|lowered|lower|decreased|reduced|reduction)\b/i,
-      evidenceClaimSide: /\b(?:raised|raise|increased|hiked|increase)\b/i
-    },
-    {
-      claimSide: /\b(?:convicted|conviction|guilty)\b/i,
-      evidenceOpposite: /\b(?:acquitted|acquittal|not guilty)\b/i,
-      evidenceClaimSide: /\b(?:convicted|conviction|guilty)\b/i
-    },
-    {
-      claimSide: /\b(?:opened|open|launched|launch)\b/i,
-      evidenceOpposite: /\b(?:closed|shut|delayed|postponed|cancelled|canceled)\b/i,
-      evidenceClaimSide: /\b(?:opened|open|launched|launch)\b/i
-    },
-    {
-      claimSide: /\b(?:added|add|introduced)\b/i,
-      evidenceOpposite: /\b(?:removed|remove|did not add|no new)\b/i,
-      evidenceClaimSide: /\b(?:added|add|introduced)\b/i
-    }
-  ];
-
-  for (const pair of directionalPairs) {
-    if (pair.claimSide.test(claim.normalizedText) &&
-        pair.evidenceOpposite.test(textLower) &&
-        !pair.evidenceClaimSide.test(textLower)) {
+  for (const pair of applicableDirectionalPairs) {
+    if (pair.evidenceOpposite.test(textLower) && !pair.evidenceClaimSide.test(textLower)) {
       return 'CONTRADICTS';
     }
   }
-
-  // Mixed or nuanced markers
-  const mixedPatterns = [
-    /\b(?:partially true|mixed reports|unclear whether|contested|debated|partly true|conflicting claims|some dispute)\b/i
-  ];
 
   for (const pat of mixedPatterns) {
     if (pat.test(textLower)) {
@@ -315,15 +374,12 @@ export function classifyEvidenceRelation(
     }
   }
 
-  // Supporting markers or high relevance alignment
   if (relevanceScore >= 0.40) {
     return 'SUPPORTS';
   }
-
   if (relevanceScore >= 0.25) {
     return 'MIXED';
   }
-
   return 'INSUFFICIENT';
 }
 
