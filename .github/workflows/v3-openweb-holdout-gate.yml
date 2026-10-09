@@ -10,6 +10,9 @@ on:
       - 'research/open-web-v1-holdout-schema.json'
       - 'scripts/validateOpenWebHoldout.mjs'
       - 'scripts/validateOpenWebHoldoutTests.mjs'
+      - 'research/open-web-v1-annotation-attestation.json'
+      - 'research/open-web-v1-annotation-attestation.template.json'
+      - 'research/open-web-v1-annotation-guide.md'
       - '.github/workflows/v3-openweb-holdout-gate.yml'
 
 permissions:
@@ -24,6 +27,7 @@ jobs:
       - name: Test holdout validator
         run: |
           node --check scripts/validateOpenWebHoldout.mjs
+          node --check scripts/validateOpenWebHoldoutTests.mjs
           node scripts/validateOpenWebHoldoutTests.mjs
       - name: Check holdout presence
         id: presence
@@ -36,7 +40,7 @@ jobs:
           fi
       - name: Validate sealed holdout
         if: steps.presence.outputs.present == 'true'
-        run: node scripts/validateOpenWebHoldout.mjs --input=research/open-web-v1-holdout.jsonl
+        run: node scripts/validateOpenWebHoldout.mjs --input=research/open-web-v1-holdout.jsonl --attestation=research/open-web-v1-annotation-attestation.json
       - name: Record human-label gate as deferred
         if: steps.presence.outputs.present != 'true'
         run: |
