@@ -37,16 +37,34 @@ function makeRow(index, now) {
   };
 }
 
-async function runFixture(records, expectSuccess) {
+function makeAttestation(now) {
+  const attestedAt = new Date(now).toISOString();
+  return {
+    benchmark_id: "truthlens_open_web_v1",
+    annotation_status: "COMPLETE",
+    annotators: [{ reviewer_id: "human-reviewer-a" }, { reviewer_id: "human-reviewer-b" }],
+    adjudicator_id: "independent-adjudicator",
+    blind_to_model_outputs: true,
+    labels_locked_before_model_evaluation: true,
+    temporal_cutoff_verified: true,
+    disputes_adjudicated: true,
+    attested_at: attestedAt
+  };
+}
+
+async function runFixture(records, expectSuccess, attestation = makeAttestation(Date.now())) {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), "truthlens-openweb-test-"));
   try {
     const input = path.join(temp, "holdout.jsonl");
     const output = path.join(temp, "out");
+    const attestationPath = path.join(temp, "attestation.json");
     await fs.writeFile(input, records.map((row) => JSON.stringify(row)).join("\n") + "\n", "utf8");
+    if (attestation) await fs.writeFile(attestationPath, JSON.stringify(attestation, null, 2) + "\n", "utf8");
     const result = spawnSync(process.execPath, [
       VALIDATOR,
       "--input=" + input,
       "--schema=" + SCHEMA,
+      "--attestation=" + attestationPath,
       "--output-dir=" + output
     ], { encoding: "utf8", timeout: 20_000 });
     if (expectSuccess) {
@@ -54,7 +72,9 @@ async function runFixture(records, expectSuccess) {
       const manifest = JSON.parse(await fs.readFile(path.join(output, "holdout-release-manifest.json"), "utf8"));
       assert.equal(manifest.release_state, "SEALED");
       assert.equal(manifest.evaluation_count, 100);
+      assert.equal(manifest.independent_annotator_count, 2);
       assert.match(manifest.sha256, /^[a-f0-9]{64}$/);
+      assert.match(manifest.attestation_sha256, /^[a-f0-9]{64}$/);
     } else {
       assert.notEqual(result.status, 0, "invalid holdout must fail closed");
       await assert.rejects(fs.access(path.join(output, "holdout-release-manifest.json")));
@@ -80,8 +100,13 @@ async function main() {
   const unbalancedSources = valid.map((row) => ({ ...row, claim_source_type: "PRIMARY", evidence_items: row.evidence_items.map((item) => ({ ...item })) }));
   await runFixture(unbalancedSources, false);
 
+  const nonBlindAttestation = makeAttestation(now);
+  nonBlindAttestation.blind_to_model_outputs = false;
+  await runFixture(valid, false, nonBlindAttestation);
+
+  await runFixture(valid, false, null);
   await runFixture(valid.slice(0, 99), false);
-  console.log("Open-Web holdout validator tests: PASS (valid seal + missing labels + temporal leak + unbalanced sources + row count)");
+  console.log("Open-Web holdout validator tests: PASS (valid seal + missing labels + temporal leak + unbalanced sources + attestation checks + row count)");
 }
 
 main().catch((error) => {
