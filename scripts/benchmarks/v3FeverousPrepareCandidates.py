@@ -92,28 +92,55 @@ def build_index(db_path, index_path):
     cursor = src.execute("SELECT id, data FROM wiki")
     batch = []
     count = 0
-    dst.execute('BEGIN')
+    next_report = 10000
+    last_rowid = 0
+    batches_since_commit = 0
+    dst.execute("BEGIN")
+
+    def flush_batch():
+        nonlocal count, next_report, last_rowid, batches_since_commit
+        if not batch:
+            return
+
+        # The content table is canonical. Ignore duplicate page ids and index
+        # only newly inserted rows, avoiding one expensive full FTS5 rebuild.
+        dst.executemany("INSERT OR IGNORE INTO pages(page_id,text) VALUES(?,?)", batch)
+        fresh_rows = dst.execute(
+            "SELECT rowid,page_id,text FROM pages WHERE rowid > ? ORDER BY rowid",
+            (last_rowid,),
+        ).fetchall()
+        if fresh_rows:
+            dst.executemany(
+                "INSERT INTO pages_fts(rowid,page_id,text) VALUES(?,?,?)",
+                fresh_rows,
+            )
+            last_rowid = fresh_rows[-1][0]
+            count += len(fresh_rows)
+            while count >= next_report:
+                print(f"Indexed FEVEROUS pages: {next_report}", flush=True)
+                next_report += 10000
+
+        batch.clear()
+        batches_since_commit += 1
+        if batches_since_commit >= 20:
+            dst.commit()
+            dst.execute("BEGIN")
+            batches_since_commit = 0
+
     for page_id, raw in cursor:
         try:
             page = JSON_LOADS(raw)
             pieces = [text for _, text, _ in extract_elements(page)]
-            page_text = "\\n".join(pieces)
+            page_text = "\n".join(pieces)
         except Exception:
             continue
         if not page_text.strip():
             continue
         batch.append((page_id, page_text))
         if len(batch) >= 2000:
-            dst.executemany("INSERT OR REPLACE INTO pages(page_id,text) VALUES(?,?)", batch)
-            batch.clear()
-            count += 2000
-            if count % 10000 == 0:
-                print(f"Indexed FEVEROUS pages: {count}", flush=True)
-    if batch:
-        dst.executemany("INSERT OR REPLACE INTO pages(page_id,text) VALUES(?,?)", batch)
-        count += len(batch)
-    dst.commit()
-    dst.execute("INSERT INTO pages_fts(pages_fts) VALUES('rebuild')")
+            flush_batch()
+
+    flush_batch()
     dst.commit()
     check = dst.execute("PRAGMA integrity_check").fetchone()[0]
     if check != "ok":
@@ -194,7 +221,7 @@ def make_candidates(claims_path, db_path, output, top_pages, per_page_elements, 
                 "label": row.get("label"),
                 "gold_evidence": row.get("evidence", []),
                 "candidates": candidates
-            }) + "\\n")
+            }) + "\n")
 
     db.close()
     idx.close()
