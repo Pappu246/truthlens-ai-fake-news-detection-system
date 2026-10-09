@@ -297,7 +297,9 @@ export function classifyEvidenceRelation(
     const explicitRefutation = contradictionPatterns.some(pattern => pattern.test(sentence));
     const explicitMixed = mixedPatterns.some(pattern => pattern.test(sentence));
 
-    const anchoredFact = anchorMatches >= 2 || (entityMatches && anchorMatches >= 1);
+    const anchoredFact = anchorMatches >= 2 ||
+      (entityMatches && anchorMatches >= 1) ||
+      ((predicateMatches || directionalOppositeMatches) && anchorMatches >= 1);
     const claimLinkedSignal =
       predicateMatches ||
       directionalOppositeMatches ||
