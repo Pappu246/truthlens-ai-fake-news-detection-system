@@ -28,3 +28,7 @@ Do not silently change labels. Record a reviewer note and a new review timestamp
 
 ## Release condition
 The holdout is eligible for RELEASED_FOR_EVALUATION only after all 100 rows satisfy the schema, temporal constraints, provenance requirements, and human-review fields.
+
+## Release attestation
+
+Before sealing, two distinct human annotators must complete the labels while blind to TruthLens predictions. An independent adjudicator must resolve any disagreements. Complete `research/open-web-v1-annotation-attestation.json` from the template only after these conditions are true; the validator rejects a missing or non-blind attestation. Never fill the attestation with inferred or AI-generated human-review claims.
