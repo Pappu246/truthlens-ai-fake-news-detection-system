@@ -80,6 +80,79 @@ export function verifyEvidenceProvenance(
   }
 }
 
+/**
+ * Extract publisher article text from either visible HTML or publisher-authored
+ * Schema.org JSON-LD. Some sites render the article body in JSON-LD even when
+ * their HTML body is sparse, paywalled, or client-rendered.
+ *
+ * Only application/ld+json `articleBody` fields
+ * are used as the structured-data fallback. We do not treat RSS headlines,
+ * arbitrary scripts, or generic metadata descriptions as factual evidence.
+ */
+export function extractReadableArticleText(html: string): string {
+  const $ = cheerio.load(html);
+  const structuredBodies: string[] = [];
+
+  const clean = (value: string): string =>
+    value.replace(/<[^>]*>/g, ' ').replace(/[\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim();
+
+  const collectArticleBodies = (value: unknown, depth = 0): void => {
+    if (depth > 16 || value == null) return;
+    if (Array.isArray(value)) {
+      for (const entry of value) collectArticleBodies(entry, depth + 1);
+      return;
+    }
+    if (typeof value !== 'object') return;
+
+    const record = value as Record<string, unknown>;
+    const articleBody = record.articleBody;
+    if (typeof articleBody === 'string') {
+      const normalised = clean(articleBody);
+      if (normalised.length > 0) structuredBodies.push(normalised.slice(0, 50000));
+    }
+    for (const [key, child] of Object.entries(record)) {
+      if (key !== 'articleBody') collectArticleBodies(child, depth + 1);
+    }
+  };
+
+  $('script[type="application/ld+json"]').each((_i, el) => {
+    const raw = $(el).text().trim();
+    if (!raw) return;
+    try {
+      collectArticleBodies(JSON.parse(raw));
+    } catch {
+      // A malformed structured-data block must not break ordinary HTML extraction.
+    }
+  });
+
+  $('script,style,noscript,template,nav,header,footer,aside,form,svg').remove();
+  const selectors = [
+    'article', '[itemprop="articleBody"]', 'main', '.article-body',
+    '.article__body', '.story-body', '.story__body', '.entry-content', '.post-content'
+  ];
+  let best = '';
+  for (const selector of selectors) {
+    $(selector).each((_i, el) => {
+      const text = $(el).text().replace(/\s+/g, ' ').trim();
+      if (text.length > best.length) best = text;
+    });
+    if (best.length >= 500) break;
+  }
+  if (best.length < 200) {
+    const paragraphs = $('p')
+      .map((_i, el) => $(el).text().replace(/\s+/g, ' ').trim())
+      .get()
+      .filter((p: string) => p.length >= 40);
+    const paragraphText = paragraphs.join(' ').replace(/\s+/g, ' ').trim();
+    if (paragraphText.length > best.length) best = paragraphText;
+  }
+
+  const structuredBody = structuredBodies.sort((a, b) => b.length - a.length)[0] || '';
+  // Prefer the longer candidate: this preserves existing full-text extraction
+  // while recovering structured article text from sparse publisher HTML.
+  return structuredBody.length > best.length ? structuredBody : best;
+}
+
 export class EvidenceProvider {
   private timeoutMs: number;
 
@@ -88,28 +161,7 @@ export class EvidenceProvider {
   }
 
   private extractReadableText(html: string): string {
-    const $ = cheerio.load(html);
-    $('script,style,noscript,template,nav,header,footer,aside,form,svg').remove();
-    const selectors = [
-      'article', '[itemprop="articleBody"]', 'main', '.article-body',
-      '.article__body', '.story-body', '.story__body', '.entry-content', '.post-content'
-    ];
-    let best = '';
-    for (const selector of selectors) {
-      $(selector).each((_i, el) => {
-        const text = $(el).text().replace(/\s+/g, ' ').trim();
-        if (text.length > best.length) best = text;
-      });
-      if (best.length >= 500) break;
-    }
-    if (best.length < 200) {
-      const paragraphs = $('p')
-        .map((_i, el) => $(el).text().replace(/\s+/g, ' ').trim())
-        .get()
-        .filter((p: string) => p.length >= 40);
-      best = paragraphs.join(' ').replace(/\s+/g, ' ').trim();
-    }
-    return best;
+    return extractReadableArticleText(html);
   }
 
   private selectEvidenceExcerpt(claim: ExtractedClaim, text: string, title: string): string {

@@ -19,6 +19,7 @@ import { EvidenceItem } from '../src/types';
 import { buildArticleVerification } from '../server/verification/assessmentEngine';
 import { ClaimVerificationResult } from '../src/types';
 import { extractClaimsHeuristic } from '../server/verification/claimExtractor';
+import { extractReadableArticleText } from '../server/verification/evidenceProvider';
 
 let passed = 0;
 let failed = 0;
@@ -83,6 +84,55 @@ async function main(): Promise<void> {
   console.log('='.repeat(72));
   console.log('EVIDENCE ENGINE TESTS');
   console.log('='.repeat(72));
+  section('0. Publisher article text extraction');
+
+  const structuredBody = Array.from({ length: 8 }, (_, i) =>
+    'The publisher article reports the verified historical event, explains its date and location, and gives context for readers. Section ' + (i + 1) + '.'
+  ).join(' ');
+  const jsonLdHtml = '<html><head><script type="application/ld+json">' +
+    JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'NewsArticle',
+      headline: 'Publisher report',
+      articleBody: structuredBody
+    }) +
+    '</script></head><body><div class="consent-wall">Please enable browser checks to continue.</div></body></html>';
+  const structuredExtracted = extractReadableArticleText(jsonLdHtml);
+  check('JSON-LD articleBody is recovered when visible HTML is sparse',
+    structuredExtracted === structuredBody,
+    'length=' + structuredExtracted.length);
+  check('structured publisher body meets the existing minimum evidence length',
+    structuredExtracted.length >= 120,
+    'length=' + structuredExtracted.length);
+
+  const visibleBody = Array.from({ length: 20 }, (_, i) =>
+    'The visible publisher article describes the relevant historical context and gives enough detail to evaluate the claim. Paragraph ' + (i + 1) + '.'
+  ).join(' ');
+  const visiblePreferred = extractReadableArticleText(
+    '<html><head><script type="application/ld+json">' +
+    JSON.stringify({ '@type': 'NewsArticle', articleBody: 'A short structured summary only.' }) +
+    '</script></head><body><article>' + visibleBody + '</article></body></html>'
+  );
+  check('longer visible article text remains preferred over a shorter JSON-LD summary',
+    visiblePreferred === visibleBody,
+    'length=' + visiblePreferred.length);
+
+  const malformedFallback = extractReadableArticleText(
+    '<html><head><script type="application/ld+json">{ malformed json }</script></head>' +
+    '<body><article>' + visibleBody + '</article></body></html>'
+  );
+  check('malformed JSON-LD does not break visible article extraction',
+    malformedFallback === visibleBody,
+    'length=' + malformedFallback.length);
+
+  const scriptOnly = extractReadableArticleText(
+    '<html><body><script>window.articleBody = "This is fabricated script text and is not article evidence."; </script>' +
+    '<p>Short banner</p></body></html>'
+  );
+  check('arbitrary script text is never accepted as article evidence',
+    scriptOnly === '',
+    'length=' + scriptOnly.length);
+
 
   // ---------------------------------------------------------------- inputs
   section('1. Input guards never produce a verdict');
