@@ -139,6 +139,31 @@ export function extractReadableArticleText(html: string): string {
   });
 
   $('script,style,noscript,template,nav,header,footer,aside,form,svg').remove();
+  // Wikimedia places sidebars, page navigation, table-of-contents links and
+  // article-to-article navboxes inside ordinary div/table elements. These can
+  // concatenate unrelated missions, dates and navigation labels into one long
+  // pseudo-sentence, so remove them before selecting readable article text.
+  $([
+    '#mw-panel',
+    '#mw-navigation',
+    '#mw-head',
+    '#vector-toc',
+    '#toc',
+    '#siteSub',
+    '#contentSub',
+    '.vector-toc',
+    '.vector-header-container',
+    '.vector-page-toolbar',
+    '.vector-menu',
+    '.mw-portlet',
+    '.navbox',
+    '.vertical-navbox',
+    '.sistersitebox',
+    '.portalbox',
+    '.mw-editsection',
+    '.mw-indicators',
+    '.mw-jump-link'
+  ].join(',')).remove();
   const selectors = [
     'article', '[itemprop="articleBody"]', 'main', '.article-body',
     '.article__body', '.story-body', '.story__body', '.entry-content', '.post-content'
