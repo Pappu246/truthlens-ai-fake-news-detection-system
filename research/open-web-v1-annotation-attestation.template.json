@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "benchmark_id": "truthlens_open_web_v1",
+  "annotation_status": "PENDING",
+  "annotators": [],
+  "adjudicator_id": "",
+  "blind_to_model_outputs": false,
+  "labels_locked_before_model_evaluation": false,
+  "temporal_cutoff_verified": false,
+  "disputes_adjudicated": false,
+  "attested_at": ""
+}
