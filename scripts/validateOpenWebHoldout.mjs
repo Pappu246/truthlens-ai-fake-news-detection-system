@@ -47,17 +47,25 @@ async function writeJson(file, value) {
 async function main() {
   const input = path.resolve(arg("input", "research/open-web-v1-holdout.jsonl"));
   const schemaPath = path.resolve(arg("schema", DEFAULT_SCHEMA));
+  const attestationPath = path.resolve(arg("attestation", "research/open-web-v1-annotation-attestation.json"));
   const outputDir = path.resolve(arg("output-dir", DEFAULT_OUTPUT));
   const gatePath = path.join(outputDir, "holdout-gate.json");
   const releasePath = path.join(outputDir, "holdout-release-manifest.json");
   const failures = [];
   const checks = [];
   let schema;
+  let attestation = null;
 
   try {
     schema = JSON.parse(await fs.readFile(schemaPath, "utf8"));
   } catch (error) {
     throw new Error("Unable to read holdout schema: " + String(error));
+  }
+
+  try {
+    attestation = JSON.parse(await fs.readFile(attestationPath, "utf8"));
+  } catch (error) {
+    failures.push("human annotation attestation is missing or unreadable: " + String(error));
   }
 
   if (schema.benchmark_id !== "truthlens_open_web_v1") failures.push("schema benchmark_id must be truthlens_open_web_v1");
@@ -193,6 +201,30 @@ async function main() {
     }
   }
 
+  let attestationSha256 = null;
+  let independentAnnotatorCount = 0;
+  if (attestation && typeof attestation === "object" && !Array.isArray(attestation)) {
+    const annotators = Array.isArray(attestation.annotators) ? attestation.annotators : [];
+    const annotatorIds = annotators.map((entry) => entry?.reviewer_id).filter(nonEmpty);
+    independentAnnotatorCount = new Set(annotatorIds).size;
+
+    if (attestation.benchmark_id !== "truthlens_open_web_v1") failures.push("attestation benchmark_id must be truthlens_open_web_v1");
+    if (attestation.annotation_status !== "COMPLETE") failures.push("attestation annotation_status must be COMPLETE");
+    if (independentAnnotatorCount < 2) failures.push("attestation requires at least two distinct human annotators");
+    if (!nonEmpty(attestation.adjudicator_id)) failures.push("attestation requires an independent adjudicator_id");
+    if (annotatorIds.includes(attestation.adjudicator_id)) failures.push("adjudicator_id must be independent of the two primary annotators");
+    if (attestation.blind_to_model_outputs !== true) failures.push("attestation must confirm annotators were blind to model outputs");
+    if (attestation.labels_locked_before_model_evaluation !== true) failures.push("attestation must confirm labels were locked before model evaluation");
+    if (attestation.temporal_cutoff_verified !== true) failures.push("attestation must confirm the claim-date temporal cutoff was reviewed");
+    if (attestation.disputes_adjudicated !== true) failures.push("attestation must confirm annotation disputes were adjudicated");
+    const attestedAt = parseTimestamp(attestation.attested_at);
+    if (attestedAt === null) failures.push("attestation attested_at must be an ISO timestamp with timezone");
+    else if (attestedAt > Date.now()) failures.push("attestation attested_at cannot be in the future");
+    attestationSha256 = crypto.createHash("sha256").update(JSON.stringify(attestation)).digest("hex");
+  } else {
+    failures.push("human annotation attestation must be a JSON object");
+  }
+
   checks.push(
     { label: "schema and exact claim count", pass: rows.length === 100 && !failures.some((f) => f.startsWith("record count")) },
     { label: "human labels and review timestamps", pass: rows.every((entry) => labels.has(entry.row?.human_label) && parseTimestamp(entry.row?.human_reviewed_at) !== null) },
@@ -215,6 +247,9 @@ async function main() {
     sha256: digest,
     input,
     schema: schemaPath,
+    attestation: attestationPath,
+    attestation_sha256: attestationSha256,
+    independent_annotator_count: independentAnnotatorCount,
     generated_at: new Date().toISOString(),
     checks,
     failures,
@@ -237,6 +272,9 @@ async function main() {
       claim_source_counts: sourceCounts,
       distinct_duplicate_clusters: duplicateClusters.size,
       source_file: path.basename(input),
+      attestation_file: path.basename(attestationPath),
+      attestation_sha256: attestationSha256,
+      independent_annotator_count: independentAnnotatorCount,
       generated_at: new Date().toISOString(),
       human_review_attestation_required: true,
       production_evaluation_allowed: false
