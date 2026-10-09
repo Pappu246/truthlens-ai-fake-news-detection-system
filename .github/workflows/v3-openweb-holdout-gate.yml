@@ -9,6 +9,7 @@ on:
       - 'research/open-web-v1-holdout.jsonl'
       - 'research/open-web-v1-holdout-schema.json'
       - 'scripts/validateOpenWebHoldout.mjs'
+      - 'scripts/validateOpenWebHoldoutTests.mjs'
       - '.github/workflows/v3-openweb-holdout-gate.yml'
 
 permissions:
@@ -20,6 +21,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Test holdout validator
+        run: |
+          node --check scripts/validateOpenWebHoldout.mjs
+          node scripts/validateOpenWebHoldoutTests.mjs
       - name: Check holdout presence
         id: presence
         shell: bash
