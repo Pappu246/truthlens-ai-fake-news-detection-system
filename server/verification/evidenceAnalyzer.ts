@@ -297,7 +297,23 @@ export function classifyEvidenceRelation(
       return numberTokens.length > 0 && numberTokens.every(token => sentenceTokens.has(token));
     });
     const matchingClaimDate = claim.dates.some(date => lower.includes(date.toLowerCase()));
-    const specificIdentifierMatches = entityMatches || matchingClaimNumber || matchingClaimDate;
+    // Numbered entities identify a distinct subject (e.g. Apollo 11 vs Apollo 12).
+    // Matching only the shared year, planet, or generic entity word must not let
+    // a different numbered subject generate a directional relation.
+    const numberedEntityPattern = /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2}\s+\d+\b/g;
+    // The heuristic entity extractor can turn "Apollo 11" into "The Apollo"
+    // because the numeric suffix isn't a capitalized word. Recover numbered
+    // identifiers from the original claim text as well as the entity list.
+    const numberedEntityCandidates = [
+      ...claimEntities.filter(entity => /\b[A-Za-z][A-Za-z0-9-]*\s+\d+\b/.test(entity)),
+      ...(claim.originalText.match(numberedEntityPattern) || []),
+      ...(claim.normalizedText.match(numberedEntityPattern) || [])
+    ].map(entity => entity.toLowerCase().replace(/\s+/g, ' ').trim());
+    const numberedEntities = [...new Set(numberedEntityCandidates)];
+    const exactNumberedEntityMatch = numberedEntities.some(entity => lower.includes(entity));
+    const specificIdentifierMatches = numberedEntities.length > 0
+      ? exactNumberedEntityMatch
+      : entityMatches || matchingClaimNumber || matchingClaimDate;
     const predicateMatches = claimPredicates.some(pattern => pattern.test(sentence));
     const directionalOppositeMatches = applicableDirectionalPairs.some(pair => pair.evidenceOpposite.test(sentence));
     const explicitRefutation = contradictionPatterns.some(pattern => pattern.test(sentence));

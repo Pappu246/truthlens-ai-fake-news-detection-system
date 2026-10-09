@@ -257,6 +257,36 @@ async function main(): Promise<void> {
     unrelatedApolloRelation !== 'CONTRADICTS',
     unrelatedApolloRelation);
 
+
+  const canceledMissionsExcerpt =
+    'Apollo 12 (H1) November 1969, Ocean of Storms. Apollo 13 (H2) April 1970, Fra Mauro highlands. ' +
+    'Apollo 18 would have landed at Schröter\'s Valley in February 1972. ' +
+    'Apollo 19 would have landed in the Hyginus rille region in July 1972.';
+  const canceledMissionsRelation = classifyEvidenceRelation(
+    apolloClaim,
+    canceledMissionsExcerpt,
+    0.45,
+    { isConsistent: false, warning: 'The page lists other Apollo mission numbers and dates.' }
+  );
+  check('another Apollo mission list and its year cannot refute Apollo 11',
+    canceledMissionsRelation !== 'CONTRADICTS',
+    canceledMissionsRelation);
+
+
+  const extractorApolloClaim = extractClaimsHeuristic(
+    '',
+    'The Apollo 11 mission landed on the Moon in July 1969.'
+  )[0];
+  check('real heuristic extraction still retains the exact Apollo 11 identifier',
+    Boolean(extractorApolloClaim) &&
+    classifyEvidenceRelation(
+      extractorApolloClaim,
+      canceledMissionsExcerpt,
+      0.45,
+      { isConsistent: false, warning: 'Different Apollo mission numbers share the year 1969.' }
+    ) !== 'CONTRADICTS',
+    JSON.stringify(extractorApolloClaim));
+
   const linkedApolloContradiction =
     'Mission records state Apollo 11 did not land on the Moon in July 1969.';
   const linkedApolloRelation = classifyEvidenceRelation(
