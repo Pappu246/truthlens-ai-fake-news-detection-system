@@ -20,6 +20,7 @@ import { buildArticleVerification } from '../server/verification/assessmentEngin
 import { ClaimVerificationResult } from '../src/types';
 import { extractClaimsHeuristic } from '../server/verification/claimExtractor';
 import { extractReadableArticleText, shouldSearchWikipediaForEvidence } from '../server/verification/evidenceProvider';
+import { checkNumericalConsistency, classifyEvidenceRelation } from '../server/verification/evidenceAnalyzer';
 
 let passed = 0;
 let failed = 0;
@@ -131,6 +132,68 @@ async function main(): Promise<void> {
   check('navigation-only Wikipedia text cannot be admitted as article body',
     navigationOnly === '',
     navigationOnly.slice(0, 200));
+
+  const wikipediaTableRows = extractReadableArticleText(
+    '<html><body><main><div id="mw-content-text"><div class="mw-parser-output">' +
+    '<table class="wikitable">' +
+    '<tr><th>Mission</th><th>Date</th><th>Result</th></tr>' +
+    '<tr><td>Luna 9</td><td>31 January 1966</td><td>First lunar soft landing</td></tr>' +
+    '<tr><td>Apollo 11</td><td>20 July 1969</td><td>First crewed landing on the Moon</td></tr>' +
+    '<tr><td>Apollo 12</td><td>19 November 1969</td><td>Successful crewed lunar landing</td></tr>' +
+    '</table></div></div></main></body></html>'
+  );
+  check('Wikipedia table rows retain separate text boundaries',
+    /Luna 9[^\n]*\n[^\n]*Apollo 11[^\n]*\n[^\n]*Apollo 12/.test(wikipediaTableRows),
+    wikipediaTableRows.slice(0, 320));
+
+  const apolloClaimText = 'Apollo 11 landed on the Moon on July 20, 1969.';
+  const apolloClaim = extractClaimsHeuristic('', apolloClaimText)[0];
+  const compatibleDateRange = checkNumericalConsistency(
+    { ...apolloClaim, normalizedText: apolloClaimText, originalText: apolloClaimText },
+    'Apollo 11 (July 16–24, 1969) first landed humans on the Moon.'
+  );
+  check('a compatible date range is not flagged as a numeric contradiction',
+    compatibleDateRange.isConsistent,
+    compatibleDateRange.warning || JSON.stringify(compatibleDateRange));
+
+  const apolloDateRangeRelation = classifyEvidenceRelation(
+    { ...apolloClaim, normalizedText: apolloClaimText, originalText: apolloClaimText },
+    'Apollo 11 (July 16–24, 1969) was the American spaceflight that first landed humans on the Moon.',
+    0.90,
+    compatibleDateRange
+  );
+  check('Apollo 11 date range is supporting evidence, not a contradiction',
+    apolloDateRangeRelation === 'SUPPORTS',
+    apolloDateRangeRelation);
+
+  const unrelatedMissionOnly = [
+    'Apollo 12 landed on the Moon on November 19, 1969.',
+    'Luna 9 completed the first lunar soft landing on January 31, 1966.'
+  ].join('\n');
+  const unrelatedOnlyRelation = classifyEvidenceRelation(
+    { ...apolloClaim, normalizedText: apolloClaimText, originalText: apolloClaimText },
+    unrelatedMissionOnly,
+    0.90,
+    { isConsistent: false, warning: 'These are different missions.' }
+  );
+  check('other missions alone cannot refute Apollo 11',
+    unrelatedOnlyRelation === 'INSUFFICIENT',
+    unrelatedOnlyRelation);
+
+  const missionTableExcerpt = [
+    'Apollo 11 landed on the Moon on July 20, 1969.',
+    'Apollo 12 landed on the Moon on November 19, 1969.',
+    'Luna 9 completed the first lunar soft landing on January 31, 1966.'
+  ].join('\n');
+  const missionTableRelation = classifyEvidenceRelation(
+    { ...apolloClaim, normalizedText: apolloClaimText, originalText: apolloClaimText },
+    missionTableExcerpt,
+    0.90,
+    { isConsistent: false, warning: 'Other table rows contain different mission numbers and dates.' }
+  );
+  check('another mission or date cannot refute the Apollo 11 claim',
+    missionTableRelation === 'SUPPORTS',
+    missionTableRelation);
 
   section('0b. Evidence retrieval fallback after publisher failures');
   check('Wikipedia fallback is enabled when all news publisher fetches fail',

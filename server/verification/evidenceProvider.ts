@@ -174,10 +174,25 @@ export function extractReadableArticleText(html: string): string {
     'article', '[itemprop="articleBody"]', 'main', '.article-body',
     '.article__body', '.story-body', '.story__body', '.entry-content', '.post-content'
   ];
+  const extractBlockAwareText = (element: any): string => {
+    const copy = $(element).clone();
+    // Preserve boundaries for paragraphs, list items and table rows. Otherwise
+    // facts about different missions/dates can collapse into one pseudo-sentence.
+    copy.find('p,li,dt,dd,tr,blockquote,h1,h2,h3,h4,h5,h6').each((_i, block) => {
+      $(block).prepend('\n').append('\n');
+    });
+    return copy.text()
+      .replace(/\u00a0/g, ' ')
+      .replace(/[\t\r ]+/g, ' ')
+      .replace(/ *\n */g, '\n')
+      .replace(/\n{2,}/g, '\n')
+      .trim();
+  };
+
   let best = '';
   for (const selector of selectors) {
     $(selector).each((_i, el) => {
-      const text = $(el).text().replace(/\s+/g, ' ').trim();
+      const text = extractBlockAwareText(el);
       if (text.length > best.length) best = text;
     });
     if (best.length >= 500) break;
@@ -187,7 +202,7 @@ export function extractReadableArticleText(html: string): string {
       .map((_i, el) => $(el).text().replace(/\s+/g, ' ').trim())
       .get()
       .filter((p: string) => p.length >= 40);
-    const paragraphText = paragraphs.join(' ').replace(/\s+/g, ' ').trim();
+    const paragraphText = paragraphs.join('\n').trim();
     if (paragraphText.length > best.length) best = paragraphText;
   }
 
@@ -209,7 +224,7 @@ export class EvidenceProvider {
   }
 
   private selectEvidenceExcerpt(claim: ExtractedClaim, text: string, title: string): string {
-    const sentences = text.split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(s => s.length >= 30);
+    const sentences = text.split(/(?<=[.!?])\s+|\n+/).map(s => s.trim()).filter(s => s.length >= 30);
     if (sentences.length === 0) return text.slice(0, 1600);
     const terms = [...claim.entities, ...claim.keywords, ...claim.numbers]
       .map(t => t.toLowerCase().replace(/[^a-z0-9%.-]/g, '')).filter(Boolean);
@@ -221,7 +236,7 @@ export class EvidenceProvider {
     });
     scored.sort((a, b) => b.score - a.score || a.index - b.index);
     const selected = scored.slice(0, 3).sort((a, b) => a.index - b.index).map(x => x.sentence);
-    return (selected.join(' ') || text.slice(0, 1600)).slice(0, 1800);
+    return (selected.join('\n') || text.slice(0, 1600)).slice(0, 1800);
   }
 
 
