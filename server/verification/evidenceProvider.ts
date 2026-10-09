@@ -22,6 +22,19 @@ export interface EvidenceSearchOptions {
 }
 
 /**
+ * Fall back to Wikipedia when too few Google News results survive publisher
+ * fetching and provenance verification. Search-result count alone is not
+ * usable evidence: RSS can return headlines for pages blocked to server fetch.
+ */
+export function shouldSearchWikipediaForEvidence(
+  verifiedNewsCount: number,
+  claimType: ExtractedClaim['claimType']
+): boolean {
+  return verifiedNewsCount < 3 ||
+    ['Science', 'Historical', 'Environment', 'Statistics'].includes(claimType);
+}
+
+/**
  * Per-provider retrieval outcome. This exists so the evidence engine can tell
  * the difference between "we searched and found nothing" and "the search
  * backend was unreachable". Those two cases must never produce the same
@@ -201,6 +214,14 @@ export class EvidenceProvider {
       const temporalConsistency = checkTemporalConsistency(claim, item.publishedAt);
       const lexicalRelation = classifyEvidenceRelation(claim, excerpt, score, numericalConsistency);
       const provenanceVerified = verifyEvidenceProvenance(item.sourceName, item.sourceUrl, fetched.finalUrl, item.sourceType);
+      diagnostics?.push({
+        provider: 'publisher_source_fetch',
+        query: claim.normalizedText,
+        attemptedAt: new Date().toISOString(),
+        ok: true,
+        resultCount: 1,
+        stage: 'PUBLISHER_FETCH'
+      });
 
       if (diagnostics && !provenanceVerified) {
         diagnostics.push({
@@ -376,8 +397,22 @@ export class EvidenceProvider {
                ok: false, resultCount: 0, error: err.message || 'network error', stage: 'SEARCH' });
     }
 
-    // 2. If claim is Science / Historical / Statistics or if news hits were low, check Wikipedia
-    if (results.length < 3 || ['Science', 'Historical', 'Environment', 'Statistics'].includes(claim.claimType)) {
+    // Hydrate news candidates before deciding whether Wikipedia fallback is needed.
+    // Raw RSS hit counts are not an evidence count; publisher pages can fail to fetch.
+    const newsCandidates = results.splice(0, results.length);
+    const hydratedNews: EvidenceItem[] = [];
+    for (const item of newsCandidates.slice(0, 6)) {
+      hydratedNews.push(await this.hydrateEvidenceItem(item, claim, diagnostics));
+    }
+    results.push(...hydratedNews);
+    const verifiedNewsCount = hydratedNews.filter(
+      item => item.sourceFetchStatus === 'FETCHED' && item.provenanceVerified === true
+    ).length;
+    const newsResultCount = results.length;
+
+    // Search Wikipedia when fewer than three publisher pages actually survive
+    // fetch and provenance checks, or when the claim type requires that source.
+    if (shouldSearchWikipediaForEvidence(verifiedNewsCount, claim.claimType)) {
       try {
         const wikiQuery = encodeURIComponent(query);
         const wikiUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${wikiQuery}&format=json&origin=*`;
@@ -424,7 +459,7 @@ export class EvidenceProvider {
             }
           }
           record({ provider: 'wikipedia_search', query, attemptedAt: new Date().toISOString(),
-                   ok: true, httpStatus: res.status, resultCount: results.length - newsCount, stage: 'SEARCH' });
+                   ok: true, httpStatus: res.status, resultCount: results.length - newsResultCount, stage: 'SEARCH' });
         }
       } catch (err: any) {
         console.warn(`[EvidenceProvider] Wikipedia search failed for query "${query}":`, err.message);
@@ -433,11 +468,18 @@ export class EvidenceProvider {
       }
     }
 
-    const hydrated: EvidenceItem[] = [];
-    for (const item of results.slice(0, 6)) {
-      hydrated.push(await this.hydrateEvidenceItem(item, claim, diagnostics));
+    // Only Wikipedia candidates remain unhydrated at this point. Keep the
+    // existing total candidate bound per provider while allowing fallback
+    // evidence to survive even when every news publisher fetch failed.
+    const firstUnhydratedIndex = results.findIndex(item => item.sourceFetchStatus === undefined);
+    if (firstUnhydratedIndex >= 0) {
+      const wikiCandidates = results.slice(firstUnhydratedIndex);
+      const hydratedWiki: EvidenceItem[] = [];
+      for (const item of wikiCandidates.slice(0, 6)) {
+        hydratedWiki.push(await this.hydrateEvidenceItem(item, claim, diagnostics));
+      }
+      results.splice(firstUnhydratedIndex, wikiCandidates.length, ...hydratedWiki);
     }
-    results.splice(0, results.length, ...hydrated);
 
     // Sort results by relevance score descending and source priority
     results.sort((a, b) => {
