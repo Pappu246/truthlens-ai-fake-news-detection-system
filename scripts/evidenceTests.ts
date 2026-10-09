@@ -19,7 +19,7 @@ import { EvidenceItem } from '../src/types';
 import { buildArticleVerification } from '../server/verification/assessmentEngine';
 import { ClaimVerificationResult } from '../src/types';
 import { extractClaimsHeuristic } from '../server/verification/claimExtractor';
-import { extractReadableArticleText } from '../server/verification/evidenceProvider';
+import { extractReadableArticleText, shouldSearchWikipediaForEvidence } from '../server/verification/evidenceProvider';
 
 let passed = 0;
 let failed = 0;
@@ -85,6 +85,16 @@ async function main(): Promise<void> {
   console.log('EVIDENCE ENGINE TESTS');
   console.log('='.repeat(72));
   section('0. Publisher article text extraction');
+
+  section('0b. Evidence retrieval fallback after publisher failures');
+  check('Wikipedia fallback is enabled when all news publisher fetches fail',
+    shouldSearchWikipediaForEvidence(0, 'Economics'));
+  check('Wikipedia fallback is enabled when fewer than three verified news sources survive',
+    shouldSearchWikipediaForEvidence(2, 'Politics'));
+  check('Wikipedia fallback is not required after three verified news sources for ordinary claims',
+    !shouldSearchWikipediaForEvidence(3, 'Politics'));
+  check('historical/scientific claims keep Wikipedia fallback even with three verified news sources',
+    shouldSearchWikipediaForEvidence(3, 'Historical'));
 
   const structuredBody = Array.from({ length: 8 }, (_, i) =>
     'The publisher article reports the verified historical event, explains its date and location, and gives context for readers. Section ' + (i + 1) + '.'
