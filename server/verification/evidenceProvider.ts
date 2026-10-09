@@ -22,6 +22,19 @@ export interface EvidenceSearchOptions {
 }
 
 /**
+ * Fall back to Wikipedia when too few Google News results survive publisher
+ * fetching and provenance verification. Search-result count alone is not
+ * usable evidence: RSS can return headlines for pages blocked to server fetch.
+ */
+export function shouldSearchWikipediaForEvidence(
+  verifiedNewsCount: number,
+  claimType: ExtractedClaim['claimType']
+): boolean {
+  return verifiedNewsCount < 3 ||
+    ['Science', 'Historical', 'Environment', 'Statistics'].includes(claimType);
+}
+
+/**
  * Per-provider retrieval outcome. This exists so the evidence engine can tell
  * the difference between "we searched and found nothing" and "the search
  * backend was unreachable". Those two cases must never produce the same
@@ -80,6 +93,125 @@ export function verifyEvidenceProvenance(
   }
 }
 
+/**
+ * Extract publisher article text from either visible HTML or publisher-authored
+ * Schema.org JSON-LD. Some sites render the article body in JSON-LD even when
+ * their HTML body is sparse, paywalled, or client-rendered.
+ *
+ * Only application/ld+json `articleBody` fields
+ * are used as the structured-data fallback. We do not treat RSS headlines,
+ * arbitrary scripts, or generic metadata descriptions as factual evidence.
+ */
+export function extractReadableArticleText(html: string): string {
+  const $ = cheerio.load(html);
+  const structuredBodies: string[] = [];
+
+  const clean = (value: string): string =>
+    value.replace(/<[^>]*>/g, ' ').replace(/[\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim();
+
+  const collectArticleBodies = (value: unknown, depth = 0): void => {
+    if (depth > 16 || value == null) return;
+    if (Array.isArray(value)) {
+      for (const entry of value) collectArticleBodies(entry, depth + 1);
+      return;
+    }
+    if (typeof value !== 'object') return;
+
+    const record = value as Record<string, unknown>;
+    const articleBody = record.articleBody;
+    if (typeof articleBody === 'string') {
+      const normalised = clean(articleBody);
+      if (normalised.length > 0) structuredBodies.push(normalised.slice(0, 50000));
+    }
+    for (const [key, child] of Object.entries(record)) {
+      if (key !== 'articleBody') collectArticleBodies(child, depth + 1);
+    }
+  };
+
+  $('script[type="application/ld+json"]').each((_i, el) => {
+    const raw = $(el).text().trim();
+    if (!raw) return;
+    try {
+      collectArticleBodies(JSON.parse(raw));
+    } catch {
+      // A malformed structured-data block must not break ordinary HTML extraction.
+    }
+  });
+
+  $('script,style,noscript,template,nav,header,footer,aside,form,svg').remove();
+  // Wikimedia places sidebars, page navigation, table-of-contents links and
+  // article-to-article navboxes inside ordinary div/table elements. These can
+  // concatenate unrelated missions, dates and navigation labels into one long
+  // pseudo-sentence, so remove them before selecting readable article text.
+  $([
+    '#mw-panel',
+    '#mw-navigation',
+    '#mw-head',
+    '#vector-toc',
+    '#toc',
+    '#siteSub',
+    '#contentSub',
+    '.vector-toc',
+    '.vector-header-container',
+    '.vector-page-toolbar',
+    '.vector-menu',
+    '.mw-portlet',
+    'table.sidebar',
+    '.sidebar-heading',
+    '.sidebar-content',
+    '.sidebar-list',
+    '.sidebar-above',
+    '.sidebar-below',
+    '.navbox',
+    '.vertical-navbox',
+    '.sistersitebox',
+    '.portalbox',
+    '.mw-editsection',
+    '.mw-indicators',
+    '.mw-jump-link'
+  ].join(',')).remove();
+  const selectors = [
+    'article', '[itemprop="articleBody"]', 'main', '.article-body',
+    '.article__body', '.story-body', '.story__body', '.entry-content', '.post-content'
+  ];
+  const extractBlockAwareText = (element: any): string => {
+    const copy = $(element).clone();
+    // Preserve boundaries for paragraphs, list items and table rows. Otherwise
+    // facts about different missions/dates can collapse into one pseudo-sentence.
+    copy.find('p,li,dt,dd,tr,blockquote,h1,h2,h3,h4,h5,h6').each((_i, block) => {
+      $(block).prepend('\n').append('\n');
+    });
+    return copy.text()
+      .replace(/\u00a0/g, ' ')
+      .replace(/[\t\r ]+/g, ' ')
+      .replace(/ *\n */g, '\n')
+      .replace(/\n{2,}/g, '\n')
+      .trim();
+  };
+
+  let best = '';
+  for (const selector of selectors) {
+    $(selector).each((_i, el) => {
+      const text = extractBlockAwareText(el);
+      if (text.length > best.length) best = text;
+    });
+    if (best.length >= 500) break;
+  }
+  if (best.length < 200) {
+    const paragraphs = $('p')
+      .map((_i, el) => $(el).text().replace(/\s+/g, ' ').trim())
+      .get()
+      .filter((p: string) => p.length >= 40);
+    const paragraphText = paragraphs.join('\n').trim();
+    if (paragraphText.length > best.length) best = paragraphText;
+  }
+
+  const structuredBody = structuredBodies.sort((a, b) => b.length - a.length)[0] || '';
+  // Prefer the longer candidate: this preserves existing full-text extraction
+  // while recovering structured article text from sparse publisher HTML.
+  return structuredBody.length > best.length ? structuredBody : best;
+}
+
 export class EvidenceProvider {
   private timeoutMs: number;
 
@@ -88,32 +220,11 @@ export class EvidenceProvider {
   }
 
   private extractReadableText(html: string): string {
-    const $ = cheerio.load(html);
-    $('script,style,noscript,template,nav,header,footer,aside,form,svg').remove();
-    const selectors = [
-      'article', '[itemprop="articleBody"]', 'main', '.article-body',
-      '.article__body', '.story-body', '.story__body', '.entry-content', '.post-content'
-    ];
-    let best = '';
-    for (const selector of selectors) {
-      $(selector).each((_i, el) => {
-        const text = $(el).text().replace(/\s+/g, ' ').trim();
-        if (text.length > best.length) best = text;
-      });
-      if (best.length >= 500) break;
-    }
-    if (best.length < 200) {
-      const paragraphs = $('p')
-        .map((_i, el) => $(el).text().replace(/\s+/g, ' ').trim())
-        .get()
-        .filter((p: string) => p.length >= 40);
-      best = paragraphs.join(' ').replace(/\s+/g, ' ').trim();
-    }
-    return best;
+    return extractReadableArticleText(html);
   }
 
   private selectEvidenceExcerpt(claim: ExtractedClaim, text: string, title: string): string {
-    const sentences = text.split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(s => s.length >= 30);
+    const sentences = text.split(/(?<=[.!?])\s+|\n+/).map(s => s.trim()).filter(s => s.length >= 30);
     if (sentences.length === 0) return text.slice(0, 1600);
     const terms = [...claim.entities, ...claim.keywords, ...claim.numbers]
       .map(t => t.toLowerCase().replace(/[^a-z0-9%.-]/g, '')).filter(Boolean);
@@ -125,7 +236,7 @@ export class EvidenceProvider {
     });
     scored.sort((a, b) => b.score - a.score || a.index - b.index);
     const selected = scored.slice(0, 3).sort((a, b) => a.index - b.index).map(x => x.sentence);
-    return (selected.join(' ') || text.slice(0, 1600)).slice(0, 1800);
+    return (selected.join('\n') || text.slice(0, 1600)).slice(0, 1800);
   }
 
 
@@ -149,6 +260,14 @@ export class EvidenceProvider {
       const temporalConsistency = checkTemporalConsistency(claim, item.publishedAt);
       const lexicalRelation = classifyEvidenceRelation(claim, excerpt, score, numericalConsistency);
       const provenanceVerified = verifyEvidenceProvenance(item.sourceName, item.sourceUrl, fetched.finalUrl, item.sourceType);
+      diagnostics?.push({
+        provider: 'publisher_source_fetch',
+        query: claim.normalizedText,
+        attemptedAt: new Date().toISOString(),
+        ok: true,
+        resultCount: 1,
+        stage: 'PUBLISHER_FETCH'
+      });
 
       if (diagnostics && !provenanceVerified) {
         diagnostics.push({
@@ -324,8 +443,22 @@ export class EvidenceProvider {
                ok: false, resultCount: 0, error: err.message || 'network error', stage: 'SEARCH' });
     }
 
-    // 2. If claim is Science / Historical / Statistics or if news hits were low, check Wikipedia
-    if (results.length < 3 || ['Science', 'Historical', 'Environment', 'Statistics'].includes(claim.claimType)) {
+    // Hydrate news candidates before deciding whether Wikipedia fallback is needed.
+    // Raw RSS hit counts are not an evidence count; publisher pages can fail to fetch.
+    const newsCandidates = results.splice(0, results.length);
+    const hydratedNews: EvidenceItem[] = [];
+    for (const item of newsCandidates.slice(0, 6)) {
+      hydratedNews.push(await this.hydrateEvidenceItem(item, claim, diagnostics));
+    }
+    results.push(...hydratedNews);
+    const verifiedNewsCount = hydratedNews.filter(
+      item => item.sourceFetchStatus === 'FETCHED' && item.provenanceVerified === true
+    ).length;
+    const newsResultCount = results.length;
+
+    // Search Wikipedia when fewer than three publisher pages actually survive
+    // fetch and provenance checks, or when the claim type requires that source.
+    if (shouldSearchWikipediaForEvidence(verifiedNewsCount, claim.claimType)) {
       try {
         const wikiQuery = encodeURIComponent(query);
         const wikiUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${wikiQuery}&format=json&origin=*`;
@@ -372,7 +505,7 @@ export class EvidenceProvider {
             }
           }
           record({ provider: 'wikipedia_search', query, attemptedAt: new Date().toISOString(),
-                   ok: true, httpStatus: res.status, resultCount: results.length - newsCount, stage: 'SEARCH' });
+                   ok: true, httpStatus: res.status, resultCount: results.length - newsResultCount, stage: 'SEARCH' });
         }
       } catch (err: any) {
         console.warn(`[EvidenceProvider] Wikipedia search failed for query "${query}":`, err.message);
@@ -381,11 +514,18 @@ export class EvidenceProvider {
       }
     }
 
-    const hydrated: EvidenceItem[] = [];
-    for (const item of results.slice(0, 6)) {
-      hydrated.push(await this.hydrateEvidenceItem(item, claim, diagnostics));
+    // Only Wikipedia candidates remain unhydrated at this point. Keep the
+    // existing total candidate bound per provider while allowing fallback
+    // evidence to survive even when every news publisher fetch failed.
+    const firstUnhydratedIndex = results.findIndex(item => item.sourceFetchStatus === undefined);
+    if (firstUnhydratedIndex >= 0) {
+      const wikiCandidates = results.slice(firstUnhydratedIndex);
+      const hydratedWiki: EvidenceItem[] = [];
+      for (const item of wikiCandidates.slice(0, 6)) {
+        hydratedWiki.push(await this.hydrateEvidenceItem(item, claim, diagnostics));
+      }
+      results.splice(firstUnhydratedIndex, wikiCandidates.length, ...hydratedWiki);
     }
-    results.splice(0, results.length, ...hydrated);
 
     // Sort results by relevance score descending and source priority
     results.sort((a, b) => {
