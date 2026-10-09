@@ -108,6 +108,22 @@ async function main(): Promise<void> {
     !/Apollo 13 never landed/i.test(wikipediaExtracted),
     wikipediaExtracted.slice(0, 300));
 
+  const wikipediaArticleSidebarHtml =
+    '<html><body><main>' +
+    '<table class="sidebar plainlist"><tbody><tr><td>' +
+    '<div class="sidebar-heading">United States Space Force</div>' +
+    '<div class="sidebar-list-title">Human spaceflight programs</div>' +
+    '<div class="sidebar-list-content"><ul><li>Mercury</li><li>Gemini</li>' +
+    '<li>Apollo 7 was canceled in 1968.</li></ul></div>' +
+    '</td></tr></tbody></table>' +
+    '<article><p>' + wikipediaArticleText + '</p></article>' +
+    '</main></body></html>';
+  const wikipediaSidebarExtracted = extractReadableArticleText(wikipediaArticleSidebarHtml);
+  check('Wikipedia article sidebar is removed when it is inside main content',
+    wikipediaSidebarExtracted.includes('Apollo 11 landed on the Moon') &&
+    !/Space Force|Human spaceflight programs|Apollo 7 was canceled/i.test(wikipediaSidebarExtracted),
+    wikipediaSidebarExtracted.slice(0, 300));
+
   const navigationOnly = extractReadableArticleText(
     '<html><body><div id="mw-panel">Apollo 7 was canceled in 1968.</div>' +
     '<div id="vector-toc">Apollo 13 never landed.</div></body></html>'
