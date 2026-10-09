@@ -54,10 +54,12 @@ def build_index(wiki_dir: Path, db_path: Path) -> None:
     con = sqlite3.connect(db_path)
     con.execute("PRAGMA journal_mode=OFF")
     con.execute("PRAGMA synchronous=OFF")
-    con.execute("PRAGMA temp_store=MEMORY")
+    # Keep temporary sorting/index work on disk instead of allowing a large
+    # full-corpus FTS rebuild to consume the runner's memory.
+    con.execute("PRAGMA temp_store=FILE")
     con.execute("PRAGMA cache_size=-262144")
-    con.execute("DROP TABLE IF EXISTS sentences")
     con.execute("DROP TABLE IF EXISTS sentences_fts")
+    con.execute("DROP TABLE IF EXISTS sentences")
     con.execute("""
         CREATE TABLE sentences(
           rowid INTEGER PRIMARY KEY,
@@ -77,35 +79,64 @@ def build_index(wiki_dir: Path, db_path: Path) -> None:
         )
     """)
     batch = []
-    total = 0
-    con.execute('BEGIN')
-    for page, _title, line_id, text in iter_pages(wiki_dir):
-        if not text.strip():
-            continue
-        batch.append((page, line_id, text))
-        if len(batch) >= 5000:
-            con.executemany(
-                "INSERT OR IGNORE INTO sentences(page,line_id,text) VALUES(?,?,?)",
-                batch
-            )
-            total += len(batch)
-            batch.clear()
-            if total and total % 100000 == 0:
-                print(f"Indexed FEVER rows: {total}", flush=True)
-    if batch:
+    processed_rows = 0
+    next_report = 100_000
+    last_rowid = 0
+    batches_since_commit = 0
+    con.execute("BEGIN")
+
+    def flush_batch() -> None:
+        nonlocal processed_rows, next_report, last_rowid, batches_since_commit
+        if not batch:
+            return
+
+        # Insert the canonical rows first, preserving the existing
+        # (page, line_id) deduplication contract.
         con.executemany(
             "INSERT OR IGNORE INTO sentences(page,line_id,text) VALUES(?,?,?)",
-            batch
+            batch,
         )
-        total += len(batch)
+
+        # Index only newly inserted rows, in rowid order. This keeps the FTS
+        # index incrementally in sync with the content table and avoids the
+        # multi-hour single-shot FTS5 'rebuild' seen on the full FEVER corpus.
+        fresh_rows = con.execute(
+            "SELECT rowid,page,line_id,text FROM sentences WHERE rowid > ? ORDER BY rowid",
+            (last_rowid,),
+        ).fetchall()
+        if fresh_rows:
+            con.executemany(
+                "INSERT INTO sentences_fts(rowid,page,line_id,text) VALUES(?,?,?,?)",
+                fresh_rows,
+            )
+            last_rowid = fresh_rows[-1][0]
+            processed_rows += len(fresh_rows)
+            while processed_rows >= next_report:
+                print(f"Indexed FEVER rows: {next_report}", flush=True)
+                next_report += 100_000
+
+        batch.clear()
+        batches_since_commit += 1
+        # Bound transaction growth while keeping commits infrequent enough
+        # not to turn each small input batch into a separate disk sync.
+        if batches_since_commit >= 20:
+            con.commit()
+            con.execute("BEGIN")
+            batches_since_commit = 0
+
+    for page, _title, line_id, text in iter_pages(wiki_dir):
+        if text.strip():
+            batch.append((page, line_id, text))
+        if len(batch) >= 5000:
+            flush_batch()
+    flush_batch()
     con.commit()
-    con.execute("INSERT INTO sentences_fts(sentences_fts) VALUES('rebuild')")
-    con.commit()
+
     check = con.execute("PRAGMA integrity_check").fetchone()[0]
     if check != "ok":
         raise RuntimeError(f"FEVER SQLite integrity check failed: {check}")
     con.close()
-    print(f"Built FEVER sentence index: rows={total} db={db_path}")
+    print(f"Built FEVER sentence index: rows={processed_rows} db={db_path}")
 
 def fts_query(text: str) -> str:
     tokens = TOKEN.findall(text.lower())
