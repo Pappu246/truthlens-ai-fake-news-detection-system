@@ -213,10 +213,74 @@ async function main(): Promise<void> {
     ['The unemployment rate remained below five percent.', 'The statistical bulletin shows the unemployment rate exceeded five percent during the relevant months.']
   ] as const;
   for (const [fixtureClaim, fixtureEvidence] of contradictionFixtures) {
-    const fixtureClaimObject = { ...claim, normalizedText: fixtureClaim, originalText: fixtureClaim };
+    const extractedFixture = extractClaimsHeuristic('', fixtureClaim)[0];
+    const fixtureClaimObject: ExtractedClaim = extractedFixture
+      ? { ...extractedFixture, normalizedText: fixtureClaim, originalText: fixtureClaim }
+      : {
+          ...claim,
+          normalizedText: fixtureClaim,
+          originalText: fixtureClaim,
+          entities: [],
+          dates: [],
+          numbers: [],
+          locations: [],
+          keywords: fixtureClaim.toLowerCase().match(/[a-z]{4,}/g) || [],
+          searchQueries: [fixtureClaim]
+        };
     const relation = evaluateSourceRelationForGate14(fixtureClaimObject, fixtureEvidence);
     check('explicit or directional contradiction -> CONTRADICTS', relation === 'CONTRADICTS', relation);
   }
+
+  console.log('\\n1c. Evidence relation must be claim-specific');
+  const apolloClaim: ExtractedClaim = {
+    ...claim,
+    claimId: 'apollo-specificity',
+    originalText: 'The Apollo 11 mission landed on the Moon in July 1969.',
+    normalizedText: 'The Apollo 11 mission landed on the Moon in July 1969.',
+    claimType: 'Historical',
+    entities: ['Apollo 11', 'Moon'],
+    dates: ['July 1969'],
+    numbers: ['11', '1969'],
+    locations: [],
+    keywords: ['Apollo', 'mission', 'landed', 'Moon', 'July'],
+    searchQueries: ['Apollo 11 mission Moon landing July 1969']
+  };
+  const unrelatedApolloPage =
+    'The Apollo 7 mission was canceled in 1968. A separate program was false and never happened.';
+  const unrelatedApolloRelation = classifyEvidenceRelation(
+    apolloClaim,
+    unrelatedApolloPage,
+    0.80,
+    { isConsistent: false, warning: 'An unrelated page number differed.' }
+  );
+  check('a different Apollo mission/date cannot contradict Apollo 11',
+    unrelatedApolloRelation !== 'CONTRADICTS',
+    unrelatedApolloRelation);
+
+  const linkedApolloContradiction =
+    'Mission records state Apollo 11 did not land on the Moon in July 1969.';
+  const linkedApolloRelation = classifyEvidenceRelation(
+    apolloClaim,
+    linkedApolloContradiction,
+    0.80,
+    { isConsistent: true }
+  );
+  check('a claim-linked explicit denial can still refute Apollo 11',
+    linkedApolloRelation === 'CONTRADICTS',
+    linkedApolloRelation);
+
+  const unrelatedBudgetNumber =
+    'The national unemployment rate fell to 4.1 percent in March 2024. ' +
+    'A separate housing programme had a 9.1 percent budget in 2025 and was described as false.';
+  const contextualNumberRelation = classifyEvidenceRelation(
+    claim,
+    unrelatedBudgetNumber,
+    0.80,
+    { isConsistent: false, warning: 'A number in another sentence differed.' }
+  );
+  check('numbers and negative wording from an unrelated sentence cannot refute the claim',
+    contextualNumberRelation === 'SUPPORTS',
+    contextualNumberRelation);
 
   console.log('\\n2. Production-safe telemetry');
   const originalInfo = console.info;
