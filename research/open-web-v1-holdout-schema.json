@@ -26,6 +26,9 @@
   "source_classes": ["PRIMARY", "MAJOR_NEWS", "OTHER"],
   "rules": {
     "human_label_required": true,
+    "human_blind_attestation_required": true,
+    "minimum_independent_annotators": 2,
+    "independent_adjudicator_required": true,
     "blind_holdout_required": true,
     "no_post_claim_evidence": true,
     "duplicate_syndication_cluster_required": true,
