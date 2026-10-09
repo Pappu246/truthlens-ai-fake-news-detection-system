@@ -10,6 +10,7 @@ import { buildArticleVerification } from '../server/verification/assessmentEngin
 import { refineEvidenceRelationSemantically } from '../server/verification/semanticRelation';
 import { classifyEvidenceRelation, evaluateSourceDiversity } from '../server/verification/evidenceAnalyzer';
 import { verifyEvidenceProvenance } from '../server/verification/evidenceProvider';
+import { aggregateClaimEvidenceVerdict } from '../server/verification/evidenceService';
 import { extractClaimsHeuristic } from '../server/verification/claimExtractor';
 import { ExtractedClaim, EvidenceItem, ClaimVerificationResult } from '../src/types';
 import { NliAdapter } from '../server/v2/nli/nliAdapter';
@@ -125,6 +126,21 @@ async function main(): Promise<void> {
   console.log('GATE-14 REMAINING WORK TESTS');
   console.log('='.repeat(72));
 
+  console.log('\n0. Conservative single-claim verdict aggregation');
+  check('supporting and contradicting publishers produce MIXED / CONTESTED',
+    aggregateClaimEvidenceVerdict(['SUPPORTS', 'CONTRADICTS']) === 'MIXED / CONTESTED');
+  check('explicit MIXED evidence is not overridden by CONTRADICTS',
+    aggregateClaimEvidenceVerdict(['MIXED', 'CONTRADICTS']) === 'MIXED / CONTESTED');
+  check('support-only evidence remains LIKELY SUPPORTED',
+    aggregateClaimEvidenceVerdict(['SUPPORTS', 'SUPPORTS']) === 'LIKELY SUPPORTED');
+  check('contradiction-only evidence remains LIKELY FALSE',
+    aggregateClaimEvidenceVerdict(['CONTRADICTS', 'CONTRADICTS']) === 'LIKELY FALSE');
+  check('irrelevant/insufficient evidence abstains',
+    aggregateClaimEvidenceVerdict(['IRRELEVANT', 'INSUFFICIENT']) === 'INSUFFICIENT EVIDENCE');
+  check('empty evidence abstains',
+    aggregateClaimEvidenceVerdict([]) === 'INSUFFICIENT EVIDENCE');
+
+
   console.log('\\n1. Semantic evidence relation');
   const semanticSupport = await refineEvidenceRelationSemantically(
     claim,
@@ -197,10 +213,104 @@ async function main(): Promise<void> {
     ['The unemployment rate remained below five percent.', 'The statistical bulletin shows the unemployment rate exceeded five percent during the relevant months.']
   ] as const;
   for (const [fixtureClaim, fixtureEvidence] of contradictionFixtures) {
-    const fixtureClaimObject = { ...claim, normalizedText: fixtureClaim, originalText: fixtureClaim };
+    const extractedFixture = extractClaimsHeuristic('', fixtureClaim)[0];
+    const fixtureClaimObject: ExtractedClaim = extractedFixture
+      ? { ...extractedFixture, normalizedText: fixtureClaim, originalText: fixtureClaim }
+      : {
+          ...claim,
+          normalizedText: fixtureClaim,
+          originalText: fixtureClaim,
+          entities: [],
+          dates: [],
+          numbers: [],
+          locations: [],
+          keywords: fixtureClaim.toLowerCase().match(/[a-z]{4,}/g) || [],
+          searchQueries: [fixtureClaim]
+        };
     const relation = evaluateSourceRelationForGate14(fixtureClaimObject, fixtureEvidence);
     check('explicit or directional contradiction -> CONTRADICTS', relation === 'CONTRADICTS', relation);
   }
+
+  console.log('\\n1c. Evidence relation must be claim-specific');
+  const apolloClaim: ExtractedClaim = {
+    ...claim,
+    claimId: 'apollo-specificity',
+    originalText: 'The Apollo 11 mission landed on the Moon in July 1969.',
+    normalizedText: 'The Apollo 11 mission landed on the Moon in July 1969.',
+    claimType: 'Historical',
+    entities: ['Apollo 11', 'Moon'],
+    dates: ['July 1969'],
+    numbers: ['11', '1969'],
+    locations: [],
+    keywords: ['Apollo', 'mission', 'landed', 'Moon', 'July'],
+    searchQueries: ['Apollo 11 mission Moon landing July 1969']
+  };
+  const unrelatedApolloPage =
+    'The Apollo 7 mission was canceled in 1968. A separate program was false and never happened.';
+  const unrelatedApolloRelation = classifyEvidenceRelation(
+    apolloClaim,
+    unrelatedApolloPage,
+    0.80,
+    { isConsistent: false, warning: 'An unrelated page number differed.' }
+  );
+  check('a different Apollo mission/date cannot contradict Apollo 11',
+    unrelatedApolloRelation !== 'CONTRADICTS',
+    unrelatedApolloRelation);
+
+
+  const canceledMissionsExcerpt =
+    'Apollo 12 (H1) November 1969, Ocean of Storms. Apollo 13 (H2) April 1970, Fra Mauro highlands. ' +
+    'Apollo 18 would have landed at Schröter\'s Valley in February 1972. ' +
+    'Apollo 19 would have landed in the Hyginus rille region in July 1972.';
+  const canceledMissionsRelation = classifyEvidenceRelation(
+    apolloClaim,
+    canceledMissionsExcerpt,
+    0.45,
+    { isConsistent: false, warning: 'The page lists other Apollo mission numbers and dates.' }
+  );
+  check('another Apollo mission list and its year cannot refute Apollo 11',
+    canceledMissionsRelation !== 'CONTRADICTS',
+    canceledMissionsRelation);
+
+
+  const extractorApolloClaim = extractClaimsHeuristic(
+    '',
+    'The Apollo 11 mission landed on the Moon in July 1969.'
+  )[0];
+  check('real heuristic extraction still retains the exact Apollo 11 identifier',
+    Boolean(extractorApolloClaim) &&
+    classifyEvidenceRelation(
+      extractorApolloClaim,
+      canceledMissionsExcerpt,
+      0.45,
+      { isConsistent: false, warning: 'Different Apollo mission numbers share the year 1969.' }
+    ) !== 'CONTRADICTS',
+    JSON.stringify(extractorApolloClaim));
+
+  const linkedApolloContradiction =
+    'Mission records state Apollo 11 did not land on the Moon in July 1969.';
+  const linkedApolloRelation = classifyEvidenceRelation(
+    apolloClaim,
+    linkedApolloContradiction,
+    0.80,
+    { isConsistent: true }
+  );
+  check('a claim-linked explicit denial can still refute Apollo 11',
+    linkedApolloRelation === 'CONTRADICTS',
+    linkedApolloRelation);
+
+  const unrelatedBudgetNumber =
+    'The national unemployment rate fell to 4.1 percent in March 2024. ' +
+    'A separate housing programme had a 9.1 percent budget in 2025 and was described as false.';
+  const contextualNumberRelation = classifyEvidenceRelation(
+    claim,
+    unrelatedBudgetNumber,
+    0.80,
+    { isConsistent: false, warning: 'A number in another sentence differed.' }
+  );
+  check('numbers and negative wording from an unrelated sentence cannot refute the claim',
+    contextualNumberRelation === 'SUPPORTS',
+    contextualNumberRelation);
 
   console.log('\\n2. Production-safe telemetry');
   const originalInfo = console.info;

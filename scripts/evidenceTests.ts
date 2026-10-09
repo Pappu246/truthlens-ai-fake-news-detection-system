@@ -19,6 +19,8 @@ import { EvidenceItem } from '../src/types';
 import { buildArticleVerification } from '../server/verification/assessmentEngine';
 import { ClaimVerificationResult } from '../src/types';
 import { extractClaimsHeuristic } from '../server/verification/claimExtractor';
+import { extractReadableArticleText, shouldSearchWikipediaForEvidence } from '../server/verification/evidenceProvider';
+import { checkNumericalConsistency, classifyEvidenceRelation } from '../server/verification/evidenceAnalyzer';
 
 let passed = 0;
 let failed = 0;
@@ -83,6 +85,173 @@ async function main(): Promise<void> {
   console.log('='.repeat(72));
   console.log('EVIDENCE ENGINE TESTS');
   console.log('='.repeat(72));
+  section('0. Publisher article text extraction');
+
+  section('0a. Wikipedia navigation is not evidence text');
+  const wikipediaArticleText =
+    'Apollo 11 landed on the Moon on July 20, 1969. Neil Armstrong and Buzz Aldrin walked on the lunar surface during the first crewed landing. Mission records identify the lunar module and command module used by the crew.';
+  const wikipediaPageHtml =
+    '<html><body>' +
+    '<div id="mw-panel"><div class="mw-portlet">Space Force Human spaceflight programs Apollo 7 was canceled in 1968.</div></div>' +
+    '<div id="vector-toc"><ol><li>Apollo 9 false claim in 1969.</li></ol></div>' +
+    '<div id="mw-head">Main page Talk Read View source View history</div>' +
+    '<main><article><p>' + wikipediaArticleText + '</p></article></main>' +
+    '<table class="navbox"><tr><td>Apollo 13 never landed in a separate later mission.</td></tr></table>' +
+    '</body></html>';
+  const wikipediaExtracted = extractReadableArticleText(wikipediaPageHtml);
+  check('Wikipedia article body is retained after navigation cleanup',
+    wikipediaExtracted.includes('Apollo 11 landed on the Moon'),
+    wikipediaExtracted.slice(0, 300));
+  check('Wikipedia sidebar mission numbers are excluded from evidence text',
+    !/Apollo 7|Space Force|Apollo 9 false claim/i.test(wikipediaExtracted),
+    wikipediaExtracted.slice(0, 300));
+  check('Wikipedia navbox cross-mission statements are excluded',
+    !/Apollo 13 never landed/i.test(wikipediaExtracted),
+    wikipediaExtracted.slice(0, 300));
+
+  const wikipediaArticleSidebarHtml =
+    '<html><body><main>' +
+    '<table class="sidebar plainlist"><tbody><tr><td>' +
+    '<div class="sidebar-heading">United States Space Force</div>' +
+    '<div class="sidebar-list-title">Human spaceflight programs</div>' +
+    '<div class="sidebar-list-content"><ul><li>Mercury</li><li>Gemini</li>' +
+    '<li>Apollo 7 was canceled in 1968.</li></ul></div>' +
+    '</td></tr></tbody></table>' +
+    '<article><p>' + wikipediaArticleText + '</p></article>' +
+    '</main></body></html>';
+  const wikipediaSidebarExtracted = extractReadableArticleText(wikipediaArticleSidebarHtml);
+  check('Wikipedia article sidebar is removed when it is inside main content',
+    wikipediaSidebarExtracted.includes('Apollo 11 landed on the Moon') &&
+    !/Space Force|Human spaceflight programs|Apollo 7 was canceled/i.test(wikipediaSidebarExtracted),
+    wikipediaSidebarExtracted.slice(0, 300));
+
+  const navigationOnly = extractReadableArticleText(
+    '<html><body><div id="mw-panel">Apollo 7 was canceled in 1968.</div>' +
+    '<div id="vector-toc">Apollo 13 never landed.</div></body></html>'
+  );
+  check('navigation-only Wikipedia text cannot be admitted as article body',
+    navigationOnly === '',
+    navigationOnly.slice(0, 200));
+
+  const wikipediaTableRows = extractReadableArticleText(
+    '<html><body><main><div id="mw-content-text"><div class="mw-parser-output">' +
+    '<table class="wikitable">' +
+    '<tr><th>Mission</th><th>Date</th><th>Result</th></tr>' +
+    '<tr><td>Luna 9</td><td>31 January 1966</td><td>First lunar soft landing</td></tr>' +
+    '<tr><td>Apollo 11</td><td>20 July 1969</td><td>First crewed landing on the Moon</td></tr>' +
+    '<tr><td>Apollo 12</td><td>19 November 1969</td><td>Successful crewed lunar landing</td></tr>' +
+    '</table></div></div></main></body></html>'
+  );
+  check('Wikipedia table rows retain separate text boundaries',
+    /Luna 9[^\n]*\n[^\n]*Apollo 11[^\n]*\n[^\n]*Apollo 12/.test(wikipediaTableRows),
+    wikipediaTableRows.slice(0, 320));
+
+  const apolloClaimText = 'Apollo 11 landed on the Moon on July 20, 1969.';
+  const apolloClaim = extractClaimsHeuristic('', apolloClaimText)[0];
+  const compatibleDateRange = checkNumericalConsistency(
+    { ...apolloClaim, normalizedText: apolloClaimText, originalText: apolloClaimText },
+    'Apollo 11 (July 16–24, 1969) first landed humans on the Moon.'
+  );
+  check('a compatible date range is not flagged as a numeric contradiction',
+    compatibleDateRange.isConsistent,
+    compatibleDateRange.warning || JSON.stringify(compatibleDateRange));
+
+  const apolloDateRangeRelation = classifyEvidenceRelation(
+    { ...apolloClaim, normalizedText: apolloClaimText, originalText: apolloClaimText },
+    'Apollo 11 (July 16–24, 1969) was the American spaceflight that first landed humans on the Moon.',
+    0.90,
+    compatibleDateRange
+  );
+  check('Apollo 11 date range is supporting evidence, not a contradiction',
+    apolloDateRangeRelation === 'SUPPORTS',
+    apolloDateRangeRelation);
+
+  const unrelatedMissionOnly = [
+    'Apollo 12 landed on the Moon on November 19, 1969.',
+    'Luna 9 completed the first lunar soft landing on January 31, 1966.'
+  ].join('\n');
+  const unrelatedOnlyRelation = classifyEvidenceRelation(
+    { ...apolloClaim, normalizedText: apolloClaimText, originalText: apolloClaimText },
+    unrelatedMissionOnly,
+    0.90,
+    { isConsistent: false, warning: 'These are different missions.' }
+  );
+  check('other missions alone cannot refute Apollo 11',
+    unrelatedOnlyRelation === 'INSUFFICIENT',
+    unrelatedOnlyRelation);
+
+  const missionTableExcerpt = [
+    'Apollo 11 landed on the Moon on July 20, 1969.',
+    'Apollo 12 landed on the Moon on November 19, 1969.',
+    'Luna 9 completed the first lunar soft landing on January 31, 1966.'
+  ].join('\n');
+  const missionTableRelation = classifyEvidenceRelation(
+    { ...apolloClaim, normalizedText: apolloClaimText, originalText: apolloClaimText },
+    missionTableExcerpt,
+    0.90,
+    { isConsistent: false, warning: 'Other table rows contain different mission numbers and dates.' }
+  );
+  check('another mission or date cannot refute the Apollo 11 claim',
+    missionTableRelation === 'SUPPORTS',
+    missionTableRelation);
+
+  section('0b. Evidence retrieval fallback after publisher failures');
+  check('Wikipedia fallback is enabled when all news publisher fetches fail',
+    shouldSearchWikipediaForEvidence(0, 'Economics'));
+  check('Wikipedia fallback is enabled when fewer than three verified news sources survive',
+    shouldSearchWikipediaForEvidence(2, 'Politics'));
+  check('Wikipedia fallback is not required after three verified news sources for ordinary claims',
+    !shouldSearchWikipediaForEvidence(3, 'Politics'));
+  check('historical/scientific claims keep Wikipedia fallback even with three verified news sources',
+    shouldSearchWikipediaForEvidence(3, 'Historical'));
+
+  const structuredBody = Array.from({ length: 8 }, (_, i) =>
+    'The publisher article reports the verified historical event, explains its date and location, and gives context for readers. Section ' + (i + 1) + '.'
+  ).join(' ');
+  const jsonLdHtml = '<html><head><script type="application/ld+json">' +
+    JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'NewsArticle',
+      headline: 'Publisher report',
+      articleBody: structuredBody
+    }) +
+    '</script></head><body><div class="consent-wall">Please enable browser checks to continue.</div></body></html>';
+  const structuredExtracted = extractReadableArticleText(jsonLdHtml);
+  check('JSON-LD articleBody is recovered when visible HTML is sparse',
+    structuredExtracted === structuredBody,
+    'length=' + structuredExtracted.length);
+  check('structured publisher body meets the existing minimum evidence length',
+    structuredExtracted.length >= 120,
+    'length=' + structuredExtracted.length);
+
+  const visibleBody = Array.from({ length: 20 }, (_, i) =>
+    'The visible publisher article describes the relevant historical context and gives enough detail to evaluate the claim. Paragraph ' + (i + 1) + '.'
+  ).join(' ');
+  const visiblePreferred = extractReadableArticleText(
+    '<html><head><script type="application/ld+json">' +
+    JSON.stringify({ '@type': 'NewsArticle', articleBody: 'A short structured summary only.' }) +
+    '</script></head><body><article>' + visibleBody + '</article></body></html>'
+  );
+  check('longer visible article text remains preferred over a shorter JSON-LD summary',
+    visiblePreferred === visibleBody,
+    'length=' + visiblePreferred.length);
+
+  const malformedFallback = extractReadableArticleText(
+    '<html><head><script type="application/ld+json">{ malformed json }</script></head>' +
+    '<body><article>' + visibleBody + '</article></body></html>'
+  );
+  check('malformed JSON-LD does not break visible article extraction',
+    malformedFallback === visibleBody,
+    'length=' + malformedFallback.length);
+
+  const scriptOnly = extractReadableArticleText(
+    '<html><body><script>window.articleBody = "This is fabricated script text and is not article evidence."; </script>' +
+    '<p>Short banner</p></body></html>'
+  );
+  check('arbitrary script text is never accepted as article evidence',
+    scriptOnly === '',
+    'length=' + scriptOnly.length);
+
 
   // ---------------------------------------------------------------- inputs
   section('1. Input guards never produce a verdict');
