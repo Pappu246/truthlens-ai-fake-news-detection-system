@@ -118,10 +118,25 @@ export function checkNumericalConsistency(
 
   const numberMatches = snippet.match(/(?:[\$€£₹¥]\s*[\d,.]+(?:\s*(?:billion|million|trillion|lakh|crore))?|\b\d+(?:\.\d+)?%|\b\d+(?:,\d+)*(?:\.\d+)?\s*(?:hours?|days?|months?|years?|percent|people|dollars|tonnes?|miles?|km)?\b)/gi) || [];
   const cleanSnippetNums = Array.from(new Set(numberMatches.map(n => n.trim())));
+  const dateNumbers = new Set(
+    claim.dates.flatMap(date => date.match(/\d+(?:\.\d+)?/g) || [])
+  );
+  const dateText = claim.dates.map(date => date.toLowerCase());
+  const numericIdentifiers = (
+    claim.normalizedText.match(/\b[A-Z][A-Za-z-]*(?:\s+[A-Z][A-Za-z-]*){0,2}\s+\d+\b/g) || []
+  )
+    .filter(identifier => !dateText.some(date => date.includes(identifier.toLowerCase())))
+    .map(identifier => identifier.match(/(\d+)$/)?.[1])
+    .filter((value): value is string => Boolean(value));
+  const identifierNumbers = new Set(numericIdentifiers);
 
   for (const claimNum of claim.numbers) {
     const claimRaw = claimNum.replace(/[^\d.]/g, '');
     if (!claimRaw) continue;
+    // Dates and numbered subjects are contextual identifiers rather than
+    // free-standing measurements. July 20, 1969 is compatible with July 16–24,
+    // 1969; Apollo 12 is not a numerical refutation of Apollo 11.
+    if (dateNumbers.has(claimRaw) || identifierNumbers.has(claimRaw)) continue;
 
     // Check if snippet has percentages while claim had percentages
     if (claimNum.includes('%')) {
@@ -283,7 +298,7 @@ export function classifyEvidenceRelation(
   const claimPredicates = predicatePatterns.filter(pattern => pattern.test(claim.normalizedText));
   const applicableDirectionalPairs = directionalPairs.filter(pair => pair.claimSide.test(claim.normalizedText));
   const sentences = snippet
-    .split(/(?<=[.!?])\s+/)
+    .split(/(?<=[.!?])\s+|\n+/)
     .map(sentence => sentence.trim())
     .filter(Boolean);
 
