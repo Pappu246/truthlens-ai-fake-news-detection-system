@@ -10,6 +10,7 @@ import { buildArticleVerification } from '../server/verification/assessmentEngin
 import { refineEvidenceRelationSemantically } from '../server/verification/semanticRelation';
 import { classifyEvidenceRelation, evaluateSourceDiversity } from '../server/verification/evidenceAnalyzer';
 import { verifyEvidenceProvenance } from '../server/verification/evidenceProvider';
+import { aggregateClaimEvidenceVerdict } from '../server/verification/evidenceService';
 import { extractClaimsHeuristic } from '../server/verification/claimExtractor';
 import { ExtractedClaim, EvidenceItem, ClaimVerificationResult } from '../src/types';
 import { NliAdapter } from '../server/v2/nli/nliAdapter';
@@ -124,6 +125,21 @@ async function main(): Promise<void> {
   console.log('='.repeat(72));
   console.log('GATE-14 REMAINING WORK TESTS');
   console.log('='.repeat(72));
+
+  console.log('\n0. Conservative single-claim verdict aggregation');
+  check('supporting and contradicting publishers produce MIXED / CONTESTED',
+    aggregateClaimEvidenceVerdict(['SUPPORTS', 'CONTRADICTS']) === 'MIXED / CONTESTED');
+  check('explicit MIXED evidence is not overridden by CONTRADICTS',
+    aggregateClaimEvidenceVerdict(['MIXED', 'CONTRADICTS']) === 'MIXED / CONTESTED');
+  check('support-only evidence remains LIKELY SUPPORTED',
+    aggregateClaimEvidenceVerdict(['SUPPORTS', 'SUPPORTS']) === 'LIKELY SUPPORTED');
+  check('contradiction-only evidence remains LIKELY FALSE',
+    aggregateClaimEvidenceVerdict(['CONTRADICTS', 'CONTRADICTS']) === 'LIKELY FALSE');
+  check('irrelevant/insufficient evidence abstains',
+    aggregateClaimEvidenceVerdict(['IRRELEVANT', 'INSUFFICIENT']) === 'INSUFFICIENT EVIDENCE');
+  check('empty evidence abstains',
+    aggregateClaimEvidenceVerdict([]) === 'INSUFFICIENT EVIDENCE');
+
 
   console.log('\\n1. Semantic evidence relation');
   const semanticSupport = await refineEvidenceRelationSemantically(

@@ -104,6 +104,30 @@ export async function verifyArticleContent(options: {
 }
 
 /**
+ * Collapse source-level relations into a conservative single-claim verdict.
+ * Mixed evidence or a combination of support and contradiction must abstain
+ * from a one-direction verdict.
+ */
+export type SingleClaimVerificationVerdict =
+  | 'LIKELY FALSE'
+  | 'MIXED / CONTESTED'
+  | 'LIKELY SUPPORTED'
+  | 'INSUFFICIENT EVIDENCE';
+
+export function aggregateClaimEvidenceVerdict(
+  relations: readonly EvidenceItem['relation'][]
+): SingleClaimVerificationVerdict {
+  const hasContradictions = relations.includes('CONTRADICTS');
+  const hasSupport = relations.includes('SUPPORTS');
+  const hasMixed = relations.includes('MIXED');
+
+  if (hasMixed || (hasContradictions && hasSupport)) return 'MIXED / CONTESTED';
+  if (hasContradictions) return 'LIKELY FALSE';
+  if (hasSupport) return 'LIKELY SUPPORTED';
+  return 'INSUFFICIENT EVIDENCE';
+}
+
+/**
  * Backward-compatible single claim verification helper
  */
 export async function verifyClaim(text: string, sourceUrl?: string | null): Promise<ClaimVerificationResponse> {
@@ -147,7 +171,12 @@ export async function verifyClaim(text: string, sourceUrl?: string | null): Prom
   }
 
   const results = await evidenceProvider.searchEvidenceForClaim(target);
-  const assessment = results.length
+  const verdict = aggregateClaimEvidenceVerdict(results.map(item => item.relation));
+  const conflictingSignals = verdict === 'MIXED / CONTESTED';
+
+  // Do not select a single "strongest" source when the retrieved set conflicts.
+  // A contradiction must not automatically override independently supporting evidence.
+  const assessment = results.length && !conflictingSignals
     ? results.reduce((best, item) => {
         const rank: Record<string, number> = {
           CONTRADICTS: 4, SUPPORTS: 3, MIXED: 2, INSUFFICIENT: 1, IRRELEVANT: 0
@@ -155,12 +184,6 @@ export async function verifyClaim(text: string, sourceUrl?: string | null): Prom
         return (rank[item.relation] ?? 0) > (rank[best.relation] ?? 0) ? item : best;
       }, results[0])
     : undefined;
-
-  const verdict =
-    results.some(r => r.relation === 'CONTRADICTS') ? 'LIKELY FALSE' :
-    results.some(r => r.relation === 'MIXED') ? 'MIXED / CONTESTED' :
-    results.some(r => r.relation === 'SUPPORTS') ? 'LIKELY SUPPORTED' :
-    'INSUFFICIENT EVIDENCE';
 
   const unavailable = results.length === 0;
   return {
@@ -183,8 +206,10 @@ export async function verifyClaim(text: string, sourceUrl?: string | null): Prom
     },
     status: 'COMPLETED',
     verification_verdict: verdict,
-    verification_note: assessment
-      ? `Primary evidence signal: ${assessment.relation} from ${assessment.sourceName}.`
-      : 'No evidence signal was strong enough to support a verdict.'
+    verification_note: conflictingSignals
+      ? 'Retrieved evidence is mixed or contains both supporting and contradictory signals; no single directional verdict is asserted.'
+      : assessment
+        ? `Primary evidence signal: ${assessment.relation} from ${assessment.sourceName}.`
+        : 'No evidence signal was strong enough to support a verdict.'
   };
 }
