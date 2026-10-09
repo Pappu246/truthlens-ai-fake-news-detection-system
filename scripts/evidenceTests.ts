@@ -86,6 +86,36 @@ async function main(): Promise<void> {
   console.log('='.repeat(72));
   section('0. Publisher article text extraction');
 
+  section('0a. Wikipedia navigation is not evidence text');
+  const wikipediaArticleText =
+    'Apollo 11 landed on the Moon on July 20, 1969. Neil Armstrong and Buzz Aldrin walked on the lunar surface during the first crewed landing. Mission records identify the lunar module and command module used by the crew.';
+  const wikipediaPageHtml =
+    '<html><body>' +
+    '<div id="mw-panel"><div class="mw-portlet">Space Force Human spaceflight programs Apollo 7 was canceled in 1968.</div></div>' +
+    '<div id="vector-toc"><ol><li>Apollo 9 false claim in 1969.</li></ol></div>' +
+    '<div id="mw-head">Main page Talk Read View source View history</div>' +
+    '<main><article><p>' + wikipediaArticleText + '</p></article></main>' +
+    '<table class="navbox"><tr><td>Apollo 13 never landed in a separate later mission.</td></tr></table>' +
+    '</body></html>';
+  const wikipediaExtracted = extractReadableArticleText(wikipediaPageHtml);
+  check('Wikipedia article body is retained after navigation cleanup',
+    wikipediaExtracted.includes('Apollo 11 landed on the Moon'),
+    wikipediaExtracted.slice(0, 300));
+  check('Wikipedia sidebar mission numbers are excluded from evidence text',
+    !/Apollo 7|Space Force|Apollo 9 false claim/i.test(wikipediaExtracted),
+    wikipediaExtracted.slice(0, 300));
+  check('Wikipedia navbox cross-mission statements are excluded',
+    !/Apollo 13 never landed/i.test(wikipediaExtracted),
+    wikipediaExtracted.slice(0, 300));
+
+  const navigationOnly = extractReadableArticleText(
+    '<html><body><div id="mw-panel">Apollo 7 was canceled in 1968.</div>' +
+    '<div id="vector-toc">Apollo 13 never landed.</div></body></html>'
+  );
+  check('navigation-only Wikipedia text cannot be admitted as article body',
+    navigationOnly === '',
+    navigationOnly.slice(0, 200));
+
   section('0b. Evidence retrieval fallback after publisher failures');
   check('Wikipedia fallback is enabled when all news publisher fetches fail',
     shouldSearchWikipediaForEvidence(0, 'Economics'));
