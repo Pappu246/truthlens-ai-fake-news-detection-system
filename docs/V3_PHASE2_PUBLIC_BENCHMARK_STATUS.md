@@ -6,6 +6,20 @@
 
 This document separates work that can be completed from fixed public datasets from the fresh Open-Web holdout that requires independent human annotation. It does not change the existing full Phase 2 exit gate and does not authorize production promotion.
 
+## Verified research baselines
+
+### SciFact development split — 300 claims
+
+- Open candidate recall: **60.33%**.
+- Gold evidence Recall@5: **73.40%**.
+- Benchmark directional accuracy: **34.33%**.
+- Benchmark directional macro-F1: **0.320335**.
+- Production-policy abstention: **75%**, with **25%** non-abstain coverage and **28%** accuracy on non-abstained claims.
+- Artifact: [V2 SciFact End-to-End Benchmark run #87](https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/actions/runs/36597257830), artifact ID `11051501500`.
+- Evaluation commit: `5275121a425a2b8a297c6a3dd375d98ac46fa2c7`; claims SHA-256 `86f0435d08fdb65d1aa41d1472684f57e6e71930626497bdf4d7a9ec1a632217`; corpus SHA-256 `b8d6c89624cb2ed74dee8938effc4f5d8bd2086887880af8110d64be4ceade62`.
+
+These SciFact metrics belong to the frozen dev benchmark only. Benchmark directional metrics and the production-policy view are distinct; the high abstention rate is reported rather than hidden.
+
 ## Verified official result
 
 ### AVeriTeC development split — 500 claims
