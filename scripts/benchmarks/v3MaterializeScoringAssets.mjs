@@ -44,12 +44,13 @@ const specs = {
     files: [
       {
         name: "shared_task_dev.jsonl",
-        url: "https://zenodo.org/records/4925954/files/shared_task_dev.jsonl?download=1",
+        url: "https://fever.ai/download/fever/shared_task_dev.jsonl",
         expected_sha256: "e89865bfe1b4dd054e03dd57d7241a6fde24862905f31117cf0cd719f7c78df7"
       },
       {
         name: "wiki-pages.zip",
-        url: "https://zenodo.org/records/4925954/files/wiki-pages.zip?download=1",
+        url: "https://fever.ai/download/fever/wiki-pages.zip",
+        expected_bytes: 1713485474,
         expected_sha256: "4b06d95da6adf7fe02d2796176c670dacccb21348da89cba4c50676ab99665f2"
       }
     ]
@@ -64,7 +65,7 @@ const specs = {
       },
       {
         name: "feverous-wiki-pages-db.zip",
-        url: "https://zenodo.org/records/4911508/files/feverous-wiki-pages-db.zip?download=1",
+        url: "https://fever.ai/download/feverous/feverous-wiki-pages-db.zip",
         expected_bytes: 10353775701,
         expected_sha256: "e25e034d9848c75ab3311a7a7ad8e80e769240b5a36b055da475f20071314881"
       }
@@ -94,7 +95,13 @@ for (const file of spec.files) {
   console.log("Downloading", file.name);
   let partDir = null;
   if (file.expected_bytes !== undefined) {
-    partDir = await downloadInRanges(file.url, destination, file.expected_bytes);
+    try {
+      partDir = await downloadInRanges(file.url, destination, file.expected_bytes);
+    } catch (error) {
+      if (!String(error).includes("Origin does not provide verified byte-range responses")) throw error;
+      console.warn("Verified byte ranges are unavailable; falling back to resumable curl for", file.name);
+      await download(file.url, destination);
+    }
   } else {
     await download(file.url, destination);
   }
