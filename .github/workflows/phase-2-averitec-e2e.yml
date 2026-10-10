@@ -35,6 +35,10 @@ jobs:
     name: AVeriTeC shard ${{ matrix.start }}-${{ matrix.end }}
     runs-on: ubuntu-latest
     timeout-minutes: 300
+    # GitHub-hosted runners are CPU-only. Avoid fetching the CUDA/GPU ONNX Runtime
+    # provider package from NuGet during Transformers.js postinstall.
+    env:
+      ONNXRUNTIME_PREFER_CPU: '1'
     strategy:
       fail-fast: false
       matrix:
