@@ -148,8 +148,8 @@ async function main() {
       labelCounts[row.human_label] += 1;
     }
 
-    const claimDate = parseDate(row.claim_date);
-    if (claimDate === null) failures.push("line " + line + ": claim_date must be a parseable ISO date");
+    const claimDate = parseTimestamp(row.claim_date);
+    if (claimDate === null) failures.push("line " + line + ": claim_date must be an ISO timestamp with timezone (for example 2026-10-07T09:30:00Z)");
     const claimSourceDate = parseTimestamp(row.claim_source_published_at);
     if (claimSourceDate === null) failures.push("line " + line + ": claim_source_published_at must be an ISO timestamp with timezone");
     else if (claimDate !== null && claimSourceDate > claimDate) {
