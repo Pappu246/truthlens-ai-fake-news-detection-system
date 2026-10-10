@@ -25,14 +25,14 @@ These are AVeriTeC dev-split metrics only. They must not be described as the acc
 
 | Benchmark / gate | Required evaluation | Current outcome |
 |---|---:|---|
-| FEVER v1 | 37,566 claims | Full official score artifact not yet verified; the prior scoring run did not produce a completed score artifact. |
+| FEVER v1 labeled dev | 19,998 claims | Full official score artifact not yet verified; the prior scoring run did not produce a completed score artifact. |
 | FEVEROUS | 7,890 claims | Full official score artifact not yet verified; the prior scoring run did not produce a completed score artifact. |
 | Open-Web V1 holdout | 100 human-labelled claims | Deferred: the human-labelled JSONL and truthful attestation file do not exist. |
 | Full Phase 2 exit gate | All required official artifacts plus sealed holdout | Remains blocked. |
 
 ## Download reliability work
 
-The full scoring workflow had spent extended time in dataset materialization. The scoring-only materializer has been updated to use the previously materialized FEVER source URLs and known frozen archive byte counts, verify SHA-256 after download, attempt verified range downloads, and fall back to resumable curl when an origin does not support byte ranges. The research scoring workflow runs regression tests for the download helper and the public-benchmark gate.
+The full scoring workflow had spent extended time in dataset materialization. The benchmark-count mismatch was also corrected: the frozen FEVER labeled development asset contains 19,998 rows, so scoring and gating now target 19,998 instead of the previously misconfigured 37,566. The scoring-only materializer has been updated to use the previously materialized FEVER source URLs and known frozen archive byte counts, verify SHA-256 after download, attempt verified range downloads, and fall back to resumable curl when an origin does not support byte ranges. The research scoring workflow runs regression tests for the download helper and the public-benchmark gate.
 
 ## Gate semantics
 

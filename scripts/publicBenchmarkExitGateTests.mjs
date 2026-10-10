@@ -22,7 +22,7 @@ function makeManifest() {
       complete_artifact_required_before_publishing_metrics: true
     },
     benchmarks: [
-      { id: 'fever_v1', expected_evaluation_claims: 37566 },
+      { id: 'fever_v1', expected_evaluation_claims: 19998 },
       { id: 'feverous', expected_evaluation_claims: 7890 },
       { id: 'averitec', expected_evaluation_claims: 500 }
     ]
@@ -39,12 +39,12 @@ async function makeFixtures(root) {
   await Promise.all([
     write(root, 'research/manifest.json', makeManifest()),
     write(root, 'artifacts/fever-score.json', {
-      benchmark_id: 'fever', protocol_version: 'truthlens-v3-benchmark-protocol-v1', evaluation_count: 37566, generated_at: NOW,
+      benchmark_id: 'fever', protocol_version: 'truthlens-v3-benchmark-protocol-v1', evaluation_count: 19998, generated_at: NOW,
       metrics: { strict_score: 0.3, label_accuracy: 0.4, evidence_precision: 0.5, evidence_recall: 0.6, evidence_f1: 0.55 }
     }),
     write(root, 'artifacts/fever-adapter.json', {
       benchmark_id: 'fever', protocol_version: 'truthlens-v3-benchmark-protocol-v1',
-      dataset: { evaluation_count: 37566, claims_sha256: 'a'.repeat(64), corpus_sha256: 'b'.repeat(64) },
+      dataset: { evaluation_count: 19998, claims_sha256: 'a'.repeat(64), corpus_sha256: 'b'.repeat(64) },
       provenance: { commit_sha: 'c'.repeat(40), configuration_sha256: 'd'.repeat(64) }
     }),
     write(root, 'artifacts/feverous-score.json', {
