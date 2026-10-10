@@ -10,8 +10,10 @@ const bytes = Buffer.from(Array.from({ length: 73 }, (_, index) => (index * 37 +
 let interruptedOnce = false;
 const server = createServer((req, res) => {
   if (req.url === "/ignore-range") {
-    res.writeHead(200, { "Content-Length": String(bytes.length) });
-    res.end(bytes);
+    // Simulate an origin that ignores byte ranges and would exceed curl's probe cap.
+    const oversizedBody = Buffer.alloc(2048, 17);
+    res.writeHead(200, { "Content-Length": String(oversizedBody.length) });
+    res.end(oversizedBody);
     return;
   }
   const rangeHeader = req.headers.range;
@@ -64,7 +66,7 @@ try {
     ),
     /Origin does not provide verified byte-range responses/
   );
-  console.log("Ranged download regression: PASS (exact bytes, ordered assembly, retry, and range rejection)");
+  console.log("Ranged download regression: PASS (exact bytes, ordered assembly, retry, and explicit range-rejection error including curl size-limit responses)");
 } finally {
   server.close();
   await fs.rm(tempDir, { recursive: true, force: true });
