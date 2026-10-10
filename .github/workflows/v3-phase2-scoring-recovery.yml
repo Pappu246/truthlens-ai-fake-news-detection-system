@@ -58,7 +58,7 @@ jobs:
           node - <<'NODE'
           const fs = require('fs');
           const manifest = JSON.parse(fs.readFileSync('./research/multibenchmark-manifest.json', 'utf8'));
-          const required = { fever_v1: 37566, feverous: 7890, averitec: 500 };
+          const required = { fever_v1: 19998, feverous: 7890, averitec: 500 };
           for (const [id, expected] of Object.entries(required)) {
             const item = manifest.benchmarks.find(x => x.id === id);
             if (!item || item.expected_evaluation_claims !== expected) throw new Error(id + ' expected_evaluation_claims mismatch');
@@ -67,7 +67,7 @@ jobs:
           NODE
 
   fever-full:
-    name: FEVER full 37,566-claim evaluation
+    name: FEVER labeled dev 19,998-claim evaluation
     runs-on: ubuntu-latest
     timeout-minutes: 360
     needs: syntax
@@ -94,12 +94,12 @@ jobs:
         run: |
           python3 scripts/benchmarks/v3FeverPrepareCandidates.py             --wiki-dir="${{ steps.locate.outputs.wiki_dir }}"             --claims=artifacts/v3/benchmark-assets/fever/shared_task_dev.jsonl             --db=artifacts/v3/benchmark-assets/fever/fever-sentences.sqlite             --output=artifacts/v3/fever/candidates.jsonl             --build-index             --top-k=100
       - name: Assert full FEVER candidate count
-        run: test "$(wc -l < artifacts/v3/fever/candidates.jsonl)" -eq 37566
+        run: test "$(wc -l < artifacts/v3/fever/candidates.jsonl)" -eq 19998
       - name: Run TruthLens FEVER full evaluation
         env:
           GITHUB_SHA: ${{ github.sha }}
         run: |
-          npx tsx scripts/benchmarks/v3FeverEvaluate.ts             --input=artifacts/v3/fever/candidates.jsonl             --max-claims=37566             --output=artifacts/v3/fever/truthlens-adapter-report.json             --predictions-output=artifacts/v3/fever/truthlens-predictions.json             --claims-sha256="$(jq -r '.files[] | select(.name=="shared_task_dev.jsonl") | .sha256' artifacts/v3/benchmark-assets/fever/asset-manifest.json)"             --corpus-sha256="$(jq -r '.files[] | select(.name=="wiki-pages.zip") | .sha256' artifacts/v3/benchmark-assets/fever/asset-manifest.json)"             --commit-sha="$GITHUB_SHA"             --config-sha256="$(sha256sum research/multibenchmark-manifest.json | cut -d' ' -f1)"
+          npx tsx scripts/benchmarks/v3FeverEvaluate.ts             --input=artifacts/v3/fever/candidates.jsonl             --max-claims=19998             --output=artifacts/v3/fever/truthlens-adapter-report.json             --predictions-output=artifacts/v3/fever/truthlens-predictions.json             --claims-sha256="$(jq -r '.files[] | select(.name=="shared_task_dev.jsonl") | .sha256' artifacts/v3/benchmark-assets/fever/asset-manifest.json)"             --corpus-sha256="$(jq -r '.files[] | select(.name=="wiki-pages.zip") | .sha256' artifacts/v3/benchmark-assets/fever/asset-manifest.json)"             --commit-sha="$GITHUB_SHA"             --config-sha256="$(sha256sum research/multibenchmark-manifest.json | cut -d' ' -f1)"
       - name: Run official FEVER scorer
         run: |
           python3 -m pip install --disable-pip-version-check --no-input six
@@ -110,7 +110,7 @@ jobs:
           const fs = require('fs');
           const a = JSON.parse(fs.readFileSync('artifacts/v3/fever/official-scorer-run.json','utf8'));
           if (a.benchmark_id !== 'fever') throw new Error('benchmark_id mismatch');
-          if (a.evaluation_count !== 37566) throw new Error('evaluation_count mismatch: ' + a.evaluation_count);
+          if (a.evaluation_count !== 19998) throw new Error('evaluation_count mismatch: ' + a.evaluation_count);
           for (const k of ['strict_score','label_accuracy','evidence_precision','evidence_recall','evidence_f1']) {
             if (!Number.isFinite(a.metrics?.[k])) throw new Error('missing metric: ' + k);
           }

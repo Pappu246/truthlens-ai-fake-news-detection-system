@@ -54,7 +54,7 @@
       ],
       "dataset_release": "FEVER v1.0",
       "expected_claims_total": 185445,
-      "expected_evaluation_claims": 37566,
+      "expected_evaluation_claims": 19998,
       "evaluation": {
         "primary": "official FEVER score",
         "secondary": [
@@ -77,7 +77,9 @@
         "workflow": "Phase 2 External Dataset Materialization",
         "workflow_run": 10,
         "artifact_digest": "sha256:0a98f1cf50a3ed54c17817d3a542139ea009c3cb04c752c606ec864658a0ae60"
-      }
+      },
+      "split": "shared_task_dev (labeled development split)",
+      "evaluation_scope_note": "Use the hash-verified shared_task_dev.jsonl, which contains 19,998 labeled dev claims. Do not target 37,566 claims from this file."
     },
     {
       "id": "feverous",

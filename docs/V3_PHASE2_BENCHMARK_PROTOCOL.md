@@ -55,6 +55,8 @@ The successful Phase 2 materialization workflow #10 produced the following exact
 
 Materialization artifact digest: `sha256:0a98f1cf50a3ed54c17817d3a542139ea009c3cb04c752c606ec864658a0ae60`.
 
+The hash-verified `shared_task_dev.jsonl` contains exactly **19,998 labeled development claims**. The benchmark workflow and exit gate use this actual labelled split size. The earlier configured count of 37,566 was inconsistent with the pinned labelled file and has been corrected; do not claim a 37,566-claim labeled evaluation from this input.
+
 ### FEVEROUS
 
 Status: **FROZEN_AND_MATERIALIZED**

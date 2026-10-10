@@ -26,7 +26,7 @@ const protocolPath = path.resolve(arg('protocol', 'docs/V3_PHASE2_BENCHMARK_PROT
 const outputPath = path.resolve(arg('output', 'artifacts/v3/public-benchmark-gate.json'));
 const specs = [
   {
-    id: 'fever_v1', benchmarkId: 'fever', expectedCount: 37566,
+    id: 'fever_v1', benchmarkId: 'fever', expectedCount: 19998,
     scorePath: path.resolve(arg('fever', 'artifacts/v3/fever/official-scorer-run.json')),
     adapterPath: path.resolve(arg('fever-adapter', 'artifacts/v3/fever/truthlens-adapter-report.json')),
     scoreMetrics: ['strict_score', 'label_accuracy', 'evidence_precision', 'evidence_recall', 'evidence_f1']

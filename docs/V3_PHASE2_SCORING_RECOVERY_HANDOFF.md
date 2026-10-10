@@ -1,84 +1,54 @@
 # TruthLens V3 Phase 2 Scoring Recovery Handoff
 
-Updated: 2026-10-06
+Updated: 2026-10-11
 
 Repository: Pappu246/truthlens-ai-fake-news-detection-system
 
-GitHub `main` ref currently resolves to `b899cf265349f8ba215aaf8219aef4a139eca851`. The latest production deployment for that SHA is verified READY after the security-only dependency patch. No Phase 2 research code is deployed to production.
+Research PR: [#62](https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/pull/62)
+Research branch: `research/v3-phase2-current-main`
+Current research head at handoff update: `05b398f32206a64d07afe630c1ee0e3e552dff00` (newer corrective commits may follow)
+Production baseline: `3530dead5dea67b89e8327c0994c1aeafb1fe68a`
 
-## Active research state
+## Production boundary
 
-Phase 2 is still in progress. Phase 0 and Phase 1 are complete. Phase 3+ remain locked until the Phase 2 exit gate is satisfied.
+Phase 2 changes are research-only. No production model, model weights/artifacts, thresholds, source policy, API runtime, or deployment are to be changed by this work. Keep PR #62 open and unmerged until the required benchmark artifacts and human-holdout requirements are genuinely satisfied.
 
-## Active research PRs
+## Verified public benchmark result
 
-Only current-main Phase 2 research PRs remain active: #54 and #55.
+AVeriTeC dev-500 has a completed official evaluation artifact from [GitHub Actions run #53](https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/actions/runs/38026849131):
+- Verdict accuracy: 0.522 (52.2%).
+- Veracity macro-F1: 0.2822664929 (28.23%).
+- Claims SHA-256: `499793726b4a5406780928a3d9dedc48d6dd53de778f22437d129cacdb08e300`.
+- Evidence store revision `26238ae`; SHA-256: `021e258cd6fb5fe6d627a4667d663e95c184c966939c15124df9206142fc2212`.
+- Gold evidence was not injected into retrieval. This is a research-only AVeriTeC dev result, not production/universal accuracy.
 
-## Verified baseline state
+## Frozen FEVER/FEVEROUS assets and expected evaluation sizes
 
-- Production main is `b899cf265349f8ba215aaf8219aef4a139eca851`.
-- Main's production Vercel deployment for that exact SHA is READY.
-- No production model, threshold, source policy, or runtime artifact is changed by the Phase 2 research branches.
-- SciFact is an existing frozen/baselined lane and is not recomputed by the recovery coordinator.
-- FEVER and FEVEROUS inputs have frozen SHA-256 expectations and materialization workflows.
-- #54 runs explicit full-split FEVER (37,566 claims) and FEVEROUS (7,890 claims) jobs; pilot output cannot satisfy the exit gate.
-- #55 now runs an explicit full 500-claim AVeriTeC job, retains the research-only chunked embedding fix, and now bounds the per-claim evidence cache plus enables opportunistic GC with a larger research-only Node heap.
-- AVeriTeC's pinned dev evidence store has already been materialized and hash-verified; end-to-end scoring is still required.
-- The AVeriTeC runner has a research-only chunked embedding adapter to avoid the prior worker response-buffer overflow.
-- The Phase 2 resumable coordinator now reads frozen inputs from artifacts/v3/benchmark-assets/<benchmark> and writes benchmark outputs under artifacts/v3/<benchmark>.
-- Recovery checkpoints distinguish 100-claim PILOT_COMPLETE from full-split COMPLETE, so a pilot can never suppress the required full benchmark run.
+- FEVER v1 labeled `shared_task_dev.jsonl`: SHA-256 `e89865bfe1b4dd054e03dd57d7241a6fde24862905f31117cf0cd719f7c78df7`, exactly **19,998 labeled development claims**. The former 37,566 expected count was wrong for this pinned file; workflow, manifest, public-only gate, and regression fixtures must use 19,998.
+- FEVER Wikipedia archive: SHA-256 `4b06d95da6adf7fe02d2796176c670dacccb21348da89cba4c50676ab99665f2`, 1,713,485,474 bytes.
+- FEVEROUS dev file: SHA-256 `97dc8e2be8982774b0cbb1dc04c0fd5b0966e711e93c8ea01b234ab64356f234`; expected labelled evaluation is **7,890 claims** (the downloaded JSONL includes its header).
+- FEVEROUS wiki DB archive: SHA-256 `e25e034d9848c75ab3311a7a7ad8e80e769240b5a36b055da475f20071314881`, 10,353,775,701 bytes.
 
-## Current blockers
+## Research runner and CI fixes
 
-1. A prior CI recovery run failed before producing official FEVEROUS/AVeriTeC score artifacts: FEVEROUS was a stale expected SHA versus the exact Zenodo file, and AVeriTeC hit Node heap OOM after 10 claims. Both are now patched on the research branches.
-2. The newest #54/#55 pull-request workflow runs are pending; they must complete successfully and produce the official score artifacts.
-3. The Open-Web 100-claim human-labelled blind holdout has not been sealed; this remains a human-only gate.
-4. Phase 2 cannot exit until `scripts/phase2ExitGate.mjs` validates all full benchmark artifacts plus the sealed Open-Web holdout.
+- FTS5 `rank` top-K selection with regression tests.
+- FEVEROUS JSONL/newline and incremental-index fixes with regression tests.
+- Ranged downloader validates exact byte ranges, retry and response lengths; ignored range responses now fall back to resumable curl where configured.
+- Hash-pinned source assets and archive lengths.
+- Public benchmark gate and test suite verify official artifact counts/provenance without unlocking production promotion or the human holdout.
 
-No benchmark result is treated as valid until its complete official scorer/evaluator artifact and provenance are available.
+## Current gate semantics
 
-## Resumable coordinator
+The new `scripts/publicBenchmarkExitGate.mjs` can only declare `READY_PUBLIC_BENCHMARKS_ONLY` after valid official score and provenance artifacts exist for FEVER 19,998, FEVEROUS 7,890, and AVeriTeC 500 claims. It always reports the Open-Web human holdout as deferred and keeps production promotion disabled.
 
-scripts/v3Phase2ResumableCoordinator.mjs
+The original `scripts/phase2ExitGate.mjs` remains authoritative for full Phase 2. Full Phase 2 is currently **BLOCKED** because the full public benchmark artifacts are not all verified and the fresh 100-claim blind human-labelled Open-Web holdout/attestation do not exist. AI-generated labels must never be passed off as independent human ground truth.
 
-Default operation:
-- FEVER v1 and FEVEROUS recovery evaluation; the CI branch now enforces their full evaluation sizes;
-- local coordinator default remains 100 claims for resumable recovery/pilot use; pilot state is explicitly distinct from COMPLETE;
-- writes artifacts under artifacts/v3;
-- writes artifacts/v3/phase2-coordinator/checkpoint.json;
-- resumes completed lanes from an existing compatible checkpoint;
-- never treats the human-labelled Open-Web lane as autonomous;
-- keeps production mutation disabled.
+## Current test/workflow links
 
-## Latest CI-trigger note
+- Scoring Recovery #65: https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/actions/runs/38076969327
+- AVeriTeC E2E #58: https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/actions/runs/38076969332
+- Dataset materialization #184: https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/actions/runs/38076969319
+- Open-Web holdout gate #57 (automated tests pass; holdout remains deferred): https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/actions/runs/38076969336
+- Full Phase 2 exit gate #21 (blocked, fail-closed): https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/actions/runs/38076969335
 
-The previous PR-associated benchmark/materialization jobs were queued. The current changes on #54 and #55 trigger the intended full benchmark workflows on their actual research branches. The latest observed runs are pending while GitHub provisions the jobs. Their Vercel checks are SUCCESS while research deployments are intentionally skipped/canceled.
-
-## Recovery rule
-
-After interruption:
-1. Read this handoff.
-2. Check PR #54 and PR #55 latest heads and newest completed benchmark workflows.
-3. Read the Phase 2 coordinator checkpoint if present.
-4. Re-run only incomplete benchmark states.
-5. Never recompute the verified SciFact baseline.
-6. Never merge/deploy from a queued, failed, or in-progress benchmark state.
-7. Do not treat a Vercel research-preview quota failure as a benchmark failure.
-
-## Exit gate
-
-scripts/phase2ExitGate.mjs is fail-closed. It requires:
-- a complete FEVER official score artifact;
-- a complete FEVEROUS official score artifact;
-- a complete AVeriTeC official evaluation artifact with parsed metrics;
-- a sealed 100-claim human-labelled TruthLens Open-Web holdout with matching SHA-256;
-- intact Phase 2 protocol and production immutability rules.
-
-The gate status is BLOCKED until all requirements are satisfied. This is a research gate, not a production deployment gate.
-
-### Current CI heads
-
-- PR #54 head: `1dcc53730f66f91c2e473ea45ce5ba1042d23d69`
-- PR #55 head: `5a6ab9a5690ba76547fb54bb5b84f28089d2ba54`
-- Latest recovery run: `37299696221` (in progress) (pending)
-- Latest AVeriTeC E2E run: `37299740093` (pending; latest runner includes bounded cache, worker recycling, and reduced NLI concurrency) (pending)
+Do not merge this PR or deploy research code from queued, failed, or in-progress benchmark states.
