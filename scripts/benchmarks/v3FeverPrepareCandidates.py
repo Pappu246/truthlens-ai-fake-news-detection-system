@@ -171,10 +171,10 @@ def make_candidates(claims_path: Path, db_path: Path, output: Path, top_k: int):
                     try:
                         hits = cur.execute(
                             """
-                            SELECT page, line_id, text, bm25(sentences_fts)
+                            SELECT page, line_id, text, rank
                             FROM sentences_fts
                             WHERE sentences_fts MATCH ?
-                            ORDER BY bm25(sentences_fts)
+                            ORDER BY rank
                             LIMIT ?
                             """,
                             (q, top_k)
