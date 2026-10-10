@@ -9,6 +9,8 @@ on:
       - 'scripts/benchmarks/**'
       - 'scripts/v3Phase2ResumableCoordinator.mjs'
       - 'scripts/phase2ExitGate.mjs'
+      - 'scripts/publicBenchmarkExitGate.mjs'
+      - 'scripts/publicBenchmarkExitGateTests.mjs'
       - 'research/multibenchmark-manifest.json'
       - '.github/workflows/v3-phase2-scoring-recovery.yml'
 
@@ -47,6 +49,9 @@ jobs:
           python3 -m py_compile scripts/benchmarks/v3FeverPrepareCandidates.py scripts/benchmarks/v3FeverousPrepareCandidates.py
           python3 scripts/benchmarks/v3FeverousPrepareCandidatesTests.py
           python3 scripts/benchmarks/v3FtsRankQueryTests.py
+          node --check scripts/publicBenchmarkExitGate.mjs
+          node --check scripts/publicBenchmarkExitGateTests.mjs
+          node scripts/publicBenchmarkExitGateTests.mjs
           npm run check:phase2-protocol
       - name: Assert full-split gate requirements
         run: |
