@@ -37,6 +37,9 @@ jobs:
       - name: Validate recovered scoring scripts
         run: |
           node --check scripts/benchmarks/v3MaterializeScoringAssets.mjs
+          node --check scripts/benchmarks/v3RangeDownload.mjs
+          node --check scripts/benchmarks/v3RangeDownloadTests.mjs
+          node scripts/benchmarks/v3RangeDownloadTests.mjs
           node --check scripts/benchmarks/v3FeverOfficialEvaluate.mjs
           node --check scripts/v3Phase2ResumableCoordinator.mjs
           node --check scripts/benchmarks/v3FeverousOfficialEvaluate.mjs
