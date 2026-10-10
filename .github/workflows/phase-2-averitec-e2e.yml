@@ -9,6 +9,8 @@ on:
       - 'scripts/v2AveritecEndToEnd.ts'
       - 'scripts/mergeAveritecShards.mjs'
       - '.github/workflows/phase-2-averitec-e2e.yml'
+      - 'scripts/benchmarks/v3MaterializeScoringAssets.mjs'
+      - 'scripts/benchmarks/v3RangeDownload.mjs'
 
 concurrency:
   group: truthlens-phase2-averitec-pr-${{ github.event.pull_request.number || github.ref }}
