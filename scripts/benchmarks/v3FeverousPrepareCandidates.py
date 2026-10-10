@@ -183,7 +183,7 @@ def make_candidates(claims_path, db_path, output, top_pages, per_page_elements, 
             page_hits = []
             if query:
                 page_hits = idx.execute(
-                    "SELECT page_id, bm25(pages_fts) FROM pages_fts WHERE pages_fts MATCH ? ORDER BY bm25(pages_fts) LIMIT ?",
+                    "SELECT page_id, rank FROM pages_fts WHERE pages_fts MATCH ? ORDER BY rank LIMIT ?",
                     (query, top_pages),
                 ).fetchall()
 
