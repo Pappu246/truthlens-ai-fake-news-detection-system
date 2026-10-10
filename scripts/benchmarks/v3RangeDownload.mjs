@@ -23,12 +23,22 @@ function runCurl(args, captureStdout = false) {
 }
 
 async function assertRangeSupport(url, timeoutSeconds) {
-  const result = await runCurl([
-    "--fail", "--location", "--silent", "--show-error",
-    "--connect-timeout", "30", "--max-time", String(Math.min(timeoutSeconds, 60)),
-    "--max-filesize", "1024", "--range", "0-0",
-    "--output", "/dev/null", "--write-out", "%{http_code} %{size_download}", url
-  ], true);
+  let result;
+  try {
+    result = await runCurl([
+      "--fail", "--location", "--silent", "--show-error",
+      "--connect-timeout", "30", "--max-time", String(Math.min(timeoutSeconds, 60)),
+      "--max-filesize", "1024", "--range", "0-0",
+      "--output", "/dev/null", "--write-out", "%{http_code} %{size_download}", url
+    ], true);
+  } catch (error) {
+    // curl exit 63 means the origin likely ignored Range and exceeded the probe cap.
+    // Convert it to the explicit error that lets the caller safely use its stream fallback.
+    if (String(error).includes("curl exited 63")) {
+      throw new Error("Origin does not provide verified byte-range responses (range ignored; probe size limit reached)");
+    }
+    throw error;
+  }
   const match = result.match(/(\d{3})\s+(\d+(?:\.\d+)?)/);
   if (!match || Number(match[1]) !== 206 || Number(match[2]) !== 1) {
     throw new Error("Origin does not provide verified byte-range responses (probe: " + result + ")");
