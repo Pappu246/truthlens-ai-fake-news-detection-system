@@ -14,7 +14,7 @@ on:
 
 concurrency:
   group: truthlens-phase2-averitec-pr-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -63,7 +63,29 @@ jobs:
       - name: Install Node dependencies
         run: npm ci
       - name: Provision research-only Transformers.js runtime
-        run: npm install --no-save --package-lock=false @huggingface/transformers@4.3.0
+        shell: bash
+        run: |
+          set -uo pipefail
+          log_file="${RUNNER_TEMP}/truthlens-transformers-install.log"
+          for attempt in 1 2 3; do
+            echo "Installing research-only Transformers.js runtime (attempt ${attempt}/3)"
+            if npm install --no-save --package-lock=false @huggingface/transformers@4.3.0 2>&1 | tee "${log_file}"; then
+              exit 0
+            else
+              status=$?
+            fi
+            if ! grep -Eq 'ETIMEDOUT|ENETUNREACH|ECONNRESET|EAI_AGAIN|socket hang up|network timeout' "${log_file}"; then
+              echo "Install failed for a non-transient reason; do not retry blindly."
+              exit "${status}"
+            fi
+            if [ "${attempt}" -lt 3 ]; then
+              delay=$((attempt * 20))
+              echo "::warning::External package host timed out; retrying after ${delay}s."
+              sleep "${delay}"
+            fi
+          done
+          echo "Could not install Transformers.js after transient-network retries."
+          exit 1
       - name: Provision sealed TruthLens V2 pretrained models
         run: npm run download:v2-models
       - name: Materialize AVeriTeC dev claims
