@@ -43,6 +43,7 @@ jobs:
           npx tsc --noEmit
           python3 -m py_compile scripts/benchmarks/v3FeverPrepareCandidates.py scripts/benchmarks/v3FeverousPrepareCandidates.py
           python3 scripts/benchmarks/v3FeverousPrepareCandidatesTests.py
+          python3 scripts/benchmarks/v3FtsRankQueryTests.py
           npm run check:phase2-protocol
       - name: Assert full-split gate requirements
         run: |
