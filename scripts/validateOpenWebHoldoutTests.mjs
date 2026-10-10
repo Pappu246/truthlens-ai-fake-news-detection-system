@@ -93,6 +93,10 @@ async function main() {
   missingHumanLabel[4].human_label = "";
   await runFixture(missingHumanLabel, false);
 
+  const dateOnlyClaimDate = valid.map((row) => ({ ...row }));
+  dateOnlyClaimDate[3].claim_date = new Date(now - 60_000).toISOString().slice(0, 10);
+  await runFixture(dateOnlyClaimDate, false);
+
   const postClaimEvidence = valid.map((row) => ({ ...row, evidence_items: row.evidence_items.map((item) => ({ ...item })) }));
   postClaimEvidence[8].evidence_items[0].published_at = new Date(now + 120_000).toISOString();
   await runFixture(postClaimEvidence, false);
@@ -106,7 +110,7 @@ async function main() {
 
   await runFixture(valid, false, null);
   await runFixture(valid.slice(0, 99), false);
-  console.log("Open-Web holdout validator tests: PASS (valid seal + missing labels + temporal leak + unbalanced sources + attestation checks + row count)");
+  console.log("Open-Web holdout validator tests: PASS (valid seal + timezone-aware claim cutoff + date-only rejection + missing labels + temporal leak + unbalanced sources + attestation checks + row count)");
 }
 
 main().catch((error) => {
