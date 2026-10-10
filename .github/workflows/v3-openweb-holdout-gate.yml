@@ -14,6 +14,8 @@ on:
       - 'research/open-web-v1-annotation-attestation.template.json'
       - 'research/open-web-v1-annotation-guide.md'
       - '.github/workflows/v3-openweb-holdout-gate.yml'
+      - 'scripts/benchmarks/v3MaterializeScoringAssets.mjs'
+      - 'scripts/benchmarks/v3RangeDownload.mjs'
 
 permissions:
   contents: read
