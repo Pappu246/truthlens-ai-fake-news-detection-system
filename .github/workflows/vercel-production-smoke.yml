@@ -7,6 +7,7 @@ on:
   push:
     branches:
       - main
+      - "ops/vercel-production-smoke-gate-2026-10"
   workflow_dispatch:
     inputs:
       base_url:
