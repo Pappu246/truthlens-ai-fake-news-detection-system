@@ -355,7 +355,61 @@ async function httpContracts(): Promise<void> {
   }
 }
 
-httpContracts().then(() => {
+
+async function localHistoryIdContracts(): Promise<void> {
+  const previousNodeEnv = process.env.NODE_ENV;
+  const previousHistoryOptIn = process.env.TRUTHLENS_ENABLE_LOCAL_HISTORY_API;
+  let server: Server | undefined;
+
+  process.env.NODE_ENV = 'development';
+  process.env.TRUTHLENS_ENABLE_LOCAL_HISTORY_API = 'true';
+
+  try {
+    const localApp = await createExpressApp({ isProduction: false, includeVite: false });
+    server = await new Promise<Server>(resolve => {
+      const s = localApp.listen(0, '127.0.0.1', () => resolve(s));
+    });
+    const port = (server.address() as any).port;
+    const base = `http://127.0.0.1:${port}`;
+
+    const get = async (route: string) => {
+      const response = await fetch(base + route);
+      return { status: response.status, text: await response.text() };
+    };
+    const remove = async (route: string) => {
+      const response = await fetch(base + route, { method: 'DELETE' });
+      return { status: response.status, text: await response.text() };
+    };
+
+    const numericGet = await get('/api/history/2147483647');
+    assert(numericGet.status === 404,
+      'local opt-in history route accepts numeric IDs and returns 404 for missing records',
+      `HTTP ${numericGet.status}: ${numericGet.text.slice(0, 160)}`);
+    const malformedGet = await get('/api/history/not-an-id');
+    assert(malformedGet.status === 400,
+      'local opt-in history route rejects malformed IDs with 400',
+      `HTTP ${malformedGet.status}: ${malformedGet.text.slice(0, 160)}`);
+    const numericDelete = await remove('/api/history/2147483647');
+    assert(numericDelete.status === 404,
+      'local opt-in history delete accepts numeric IDs and returns 404 for missing records',
+      `HTTP ${numericDelete.status}: ${numericDelete.text.slice(0, 160)}`);
+    const malformedDelete = await remove('/api/history/not-an-id');
+    assert(malformedDelete.status === 400,
+      'local opt-in history delete rejects malformed IDs with 400',
+      `HTTP ${malformedDelete.status}: ${malformedDelete.text.slice(0, 160)}`);
+  } catch (err: any) {
+    assert(false, 'local opt-in history ID validation tests complete', String(err?.stack || err));
+  } finally {
+    if (server) await new Promise<void>(resolve => server!.close(() => resolve()));
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnv;
+    if (previousHistoryOptIn === undefined) delete process.env.TRUTHLENS_ENABLE_LOCAL_HISTORY_API;
+    else process.env.TRUTHLENS_ENABLE_LOCAL_HISTORY_API = previousHistoryOptIn;
+  }
+}
+
+httpContracts().then(async () => {
+  await localHistoryIdContracts();
   console.log(`\n====================================================`);
   console.log(`CONTRACT TESTS SUMMARY: ${passed} PASSED, ${failed} FAILED`);
   console.log(`====================================================`);
