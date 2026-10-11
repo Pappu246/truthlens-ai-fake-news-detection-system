@@ -420,6 +420,13 @@ async function localHistoryIdContracts(): Promise<void> {
       'threshold API rejects NaN and Infinity strings',
       `HTTP ${nonNumericThreshold.status}: ${nonNumericThreshold.text.slice(0, 160)}`);
 
+    const outOfRangeThreshold = await post('/api/model/thresholds', {
+      fake_threshold: 50, real_threshold: -3
+    });
+    assert(outOfRangeThreshold.status === 400,
+      'threshold API rejects out-of-range fake/real thresholds such as 50 and -3',
+      `HTTP ${outOfRangeThreshold.status}: ${outOfRangeThreshold.text.slice(0, 160)}`);
+
     const malformedExtract = await post('/api/claims/extract', { title: {}, content: [] });
     assert(malformedExtract.status === 400,
       'claim extraction rejects object/array input with 400',
