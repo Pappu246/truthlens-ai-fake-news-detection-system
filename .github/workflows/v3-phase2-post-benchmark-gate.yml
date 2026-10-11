@@ -1,6 +1,6 @@
 name: TruthLens Phase 2 Post-Benchmark Exit Gate
 
-on:
+'on':
   pull_request:
     branches:
       - main
