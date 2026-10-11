@@ -46,7 +46,9 @@ async function main() {
     ['IPv4 CGNAT', isPrivateIPv4('100.64.0.1')],
     ['IPv4 benchmarking', isPrivateIPv4('198.18.0.1')],
     ['IPv6 loopback', isPrivateIPv6('::1')],
-    ['IPv6 mapped loopback', isPrivateIPv6('::ffff:127.0.0.1')],
+    ['IPv6 mapped loopback dotted', isPrivateIPv6('::ffff:127.0.0.1')],
+    ['IPv6 mapped loopback canonical hex', isPrivateIPv6('::ffff:7f00:1')],
+    ['IPv4-compatible IPv6 loopback', isPrivateIPv6('::7f00:1')],
     ['IPv6 ULA', isPrivateIPv6('fd00::1')],
     ['IPv6 link-local', isPrivateIPv6('fe80::1')],
   ];
