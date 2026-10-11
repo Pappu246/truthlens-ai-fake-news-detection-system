@@ -328,7 +328,7 @@ export async function safeFetchHtml(
       throw new Error(validation.error || `Security check failed for URL: ${currentUrl}`);
     }
     const parsedUrl = new URL(currentUrl);
-    const normalizedHost = parsedUrl.hostname.toLowerCase().replace(/^\\[|\\]$/g, '');
+    const normalizedHost = parsedUrl.hostname.toLowerCase().replace(/^\[|\]$/g, '');
     const validatedAddresses = (validation.resolvedIps || [])
       .map(address => ({ address, family: net.isIP(address) }))
       .filter((entry) => entry.family === 4 || entry.family === 6);
@@ -336,7 +336,7 @@ export async function safeFetchHtml(
       throw new Error(`DNS resolution failed for '${normalizedHost}': no validated public address was available.`);
     }
     const pinnedLookup = ((hostname: string, lookupOptions: any, callback: any) => {
-      const requestedHost = hostname.toLowerCase().replace(/^\\[|\\]$/g, '');
+      const requestedHost = hostname.toLowerCase().replace(/^\[|\]$/g, '');
       if (requestedHost !== normalizedHost) {
         return callback(new Error('Connection hostname differed from the validated URL.'), '', 0);
       }
