@@ -611,10 +611,27 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
       if (Buffer.byteLength(csvContent, 'utf8') > 512 * 1024) {
         return res.status(413).json({ detail: 'Dataset validation payload exceeds the 512 KiB limit.' });
       }
-      const validation = validateDatasetContent(csvContent, filename);
-      res.json(validation);
+      const validation = validateDatasetContent(csvContent, filename, '', {
+        maxRows: 10000,
+        maxColumns: 64,
+        includeParsedRecords: false
+      });
+      const MAX_DIAGNOSTICS = 100;
+      const { issues, warnings, parsed_records: _parsedRecords, ...summary } = validation;
+      res.json({
+        ...summary,
+        available_columns: summary.available_columns.map((column) => column.slice(0, 120)),
+        text_columns: summary.text_columns.map((column) => column.slice(0, 120)),
+        issues: issues.slice(0, MAX_DIAGNOSTICS),
+        warnings: warnings.slice(0, MAX_DIAGNOSTICS),
+        total_issues: issues.length,
+        total_warnings: warnings.length,
+        diagnostics_truncated: issues.length > MAX_DIAGNOSTICS || warnings.length > MAX_DIAGNOSTICS
+      });
     } catch (err: any) {
-      res.status(400).json({ detail: err.message });
+      const message = typeof err?.message === 'string' ? err.message : 'Dataset validation failed.';
+      const limitExceeded = message.startsWith('CSV exceeds the ') && message.endsWith('limit.');
+      res.status(limitExceeded ? 413 : 400).json({ detail: message });
     }
   });
 
