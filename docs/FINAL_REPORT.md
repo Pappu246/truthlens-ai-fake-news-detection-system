@@ -183,6 +183,16 @@ The repository contains candidate-only training and explicit promotion gates. Ca
 
 No production model artifact was modified in this re-verification.
 
+Candidate-only runtime calibration evaluation (workflow [38135251816](https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/actions/runs/38135251816), completed successfully):
+
+- Candidate: `isot-runtime-svm-5e86078a20bb`; artifact SHA-256 `4cbf04b40afed91fd4354ec40f0195da287f238e80ac184f6c7fdc961a9a8d25`.
+- Untouched group-aware ISOT test: accuracy **0.99777**, balanced accuracy **0.99775**, F1 **0.99783**, Brier **0.00208**.
+- Temporal test: accuracy **0.99938**, balanced accuracy **0.99929**, F1 **0.99911**, Brier **0.00060**.
+- Runtime parity, type-check, existing article-model safety tests, and verdict regressions passed in the workflow.
+- Out-of-domain LIAR evaluation (`n=790` eligible binary samples): accuracy **0.43165**, balanced accuracy **0.49859**, ROC-AUC **0.49618**, macro-F1 **0.30884**, Brier **0.54442**. This fails the existing promotion gate requiring balanced accuracy strictly above 0.50.
+- Decision: **candidate remains non-production**. The high ISOT scores do not override the failed out-of-domain gate. `data/saved_model_artifacts.json` was not modified.
+
+
 ### Release decision
 
 | Area | Status |
