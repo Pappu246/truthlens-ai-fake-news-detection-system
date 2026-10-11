@@ -1,0 +1,64 @@
+name: Vercel Production Smoke Test
+
+# Independently verify the production Vercel alias. The existing
+# production-smoke.yml targets the legacy Render host, so keep this gate
+# explicitly scoped to Vercel.
+on:
+  push:
+    branches:
+      - main
+      - "ops/vercel-production-smoke-gate-2026-10"
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: Vercel production URL to verify
+        required: false
+        default: https://truthlens-ai-fake-news-detection-sy.vercel.app
+
+permissions:
+  contents: read
+
+concurrency:
+  group: truthlens-vercel-production-smoke
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    name: Verify live Vercel deployment
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Allow the Vercel production alias to update
+        run: sleep 90
+
+      - name: Wait for Vercel API health
+        env:
+          BASE_URL: ${{ github.event.inputs.base_url || 'https://truthlens-ai-fake-news-detection-sy.vercel.app' }}
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 18); do
+            code=$(curl -sS -o /tmp/truthlens-vercel-health.json -w '%{http_code}' --max-time 30 "$BASE_URL/api/health" || true)
+            echo "Vercel health attempt $i -> HTTP $code"
+            if [ "$code" = "200" ]; then
+              cat /tmp/truthlens-vercel-health.json
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::Vercel production API health did not return HTTP 200."
+          exit 1
+
+      - name: Run production contract smoke tests against Vercel
+        env:
+          BASE_URL: ${{ github.event.inputs.base_url || 'https://truthlens-ai-fake-news-detection-sy.vercel.app' }}
+        run: npx tsx scripts/productionSmokeTest.ts "$BASE_URL"
