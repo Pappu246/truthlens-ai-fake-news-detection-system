@@ -66,15 +66,40 @@ def fts_query(text):
     tokens = [t for t in TOKEN.findall(text.lower()) if len(t) > 1][:48]
     return " OR ".join('"' + t.replace('"', '""') + '"' for t in tokens)
 
-def build_index(db_path, index_path):
+def index_is_complete(index_path, source_db_path):
+    """Only reuse an index that reached its completion marker for this source file."""
+    if not index_path.exists():
+        return False
+
+    try:
+        stat = source_db_path.stat()
+        idx = sqlite3.connect(index_path)
+        try:
+            metadata = dict(idx.execute("SELECT key, value FROM index_metadata"))
+            return (
+                metadata.get("status") == "complete"
+                and metadata.get("source_size") == str(stat.st_size)
+                and metadata.get("source_mtime_ns") == str(stat.st_mtime_ns)
+            )
+        finally:
+            idx.close()
+    except (OSError, sqlite3.Error, ValueError):
+        return False
+
+
+def build_index(db_path, index_path, batch_size=250):
     src = sqlite3.connect(db_path)
     dst = sqlite3.connect(index_path)
     dst.execute("PRAGMA journal_mode=OFF")
     dst.execute("PRAGMA synchronous=OFF")
-    dst.execute("PRAGMA temp_store=MEMORY")
-    dst.execute("PRAGMA cache_size=-262144")
-    dst.execute("DROP TABLE IF EXISTS pages")
+    # FEVEROUS pages can contain very large tables. Keep temporary work and the
+    # SQLite cache disk-backed/small so a single 2,000-page batch cannot exhaust
+    # the GitHub-hosted runner's memory while building FTS5 postings.
+    dst.execute("PRAGMA temp_store=FILE")
+    dst.execute("PRAGMA cache_size=-65536")
     dst.execute("DROP TABLE IF EXISTS pages_fts")
+    dst.execute("DROP TABLE IF EXISTS pages")
+    dst.execute("DROP TABLE IF EXISTS index_metadata")
     dst.execute("""
         CREATE TABLE pages(
           page_id TEXT PRIMARY KEY,
@@ -89,6 +114,19 @@ def build_index(db_path, index_path):
           content_rowid='rowid'
         )
     """)
+    stat = db_path.stat()
+    dst.execute("CREATE TABLE index_metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+    dst.executemany(
+        "INSERT INTO index_metadata(key, value) VALUES(?, ?)",
+        [
+            ("status", "building"),
+            ("source_size", str(stat.st_size)),
+            ("source_mtime_ns", str(stat.st_mtime_ns)),
+        ],
+    )
+    # Commit the BUILDING marker separately. If a runner is killed mid-index,
+    # the next attempt can detect and discard the partial database safely.
+    dst.commit()
     cursor = src.execute("SELECT id, data FROM wiki")
     batch = []
     count = 0
@@ -137,7 +175,7 @@ def build_index(db_path, index_path):
         if not page_text.strip():
             continue
         batch.append((page_id, page_text))
-        if len(batch) >= 2000:
+        if len(batch) >= batch_size:
             flush_batch()
 
     flush_batch()
@@ -145,9 +183,18 @@ def build_index(db_path, index_path):
     check = dst.execute("PRAGMA integrity_check").fetchone()[0]
     if check != "ok":
         raise RuntimeError(f"FEVEROUS SQLite integrity check failed: {check}")
+    # For an external-content FTS5 table, also verify postings against the
+    # canonical content table before declaring the index reusable.
+    dst.execute("INSERT INTO pages_fts(pages_fts, rank) VALUES('integrity-check', 1)")
+    page_count = dst.execute("SELECT COUNT(*) FROM pages").fetchone()[0]
+    fts_count = dst.execute("SELECT COUNT(*) FROM pages_fts").fetchone()[0]
+    if page_count != fts_count:
+        raise RuntimeError(f"FEVEROUS index count mismatch: pages={page_count}, fts={fts_count}")
+    dst.execute("UPDATE index_metadata SET value='complete' WHERE key='status'")
+    dst.commit()
     dst.close()
     src.close()
-    print(f"FEVEROUS page index built: pages={count}")
+    print(f"FEVEROUS page index built: pages={count}, batch_size={batch_size}")
 
 def load_claims(path, limit):
     rows = []
@@ -167,10 +214,16 @@ def load_claims(path, limit):
                 break
     return rows
 
-def make_candidates(claims_path, db_path, output, top_pages, per_page_elements, limit):
+def make_candidates(claims_path, db_path, output, top_pages, per_page_elements, limit, index_batch_size):
     index_path = Path(str(db_path) + ".fts.sqlite")
-    if not index_path.exists():
-        build_index(db_path, index_path)
+    if not index_is_complete(index_path, db_path):
+        # A previous forced termination may leave an index file in place but
+        # incomplete. Never treat mere file existence as proof of readiness.
+        for suffix in ("", "-journal", "-wal", "-shm"):
+            Path(str(index_path) + suffix).unlink(missing_ok=True)
+        build_index(db_path, index_path, index_batch_size)
+    else:
+        print(f"Reusing complete FEVEROUS page index: {index_path}")
 
     db = sqlite3.connect(db_path)
     idx = sqlite3.connect(index_path)
@@ -234,10 +287,14 @@ def main():
     p.add_argument("--top-pages", type=int, default=25)
     p.add_argument("--elements-per-page", type=int, default=50)
     p.add_argument("--max-claims", type=int, default=0)
+    p.add_argument("--index-batch-size", type=int, default=250)
     args = p.parse_args()
+    if args.index_batch_size < 1:
+        p.error("--index-batch-size must be at least 1")
     make_candidates(
         args.claims, args.db, args.output,
-        args.top_pages, args.elements_per_page, args.max_claims
+        args.top_pages, args.elements_per_page, args.max_claims,
+        args.index_batch_size
     )
 
 if __name__ == "__main__":
