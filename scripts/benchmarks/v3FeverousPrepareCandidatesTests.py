@@ -52,7 +52,8 @@ def main() -> None:
                 f"--claims={claims_path}",
                 f"--output={output_path}",
                 "--top-pages=5",
-                "--elements-per-page=10"
+                "--elements-per-page=10",
+                "--index-batch-size=1"
             ],
             check=True,
             capture_output=True,
@@ -66,10 +67,50 @@ def main() -> None:
         assert [row["id"] for row in records] == ["claim-1", "claim-2"]
         assert all(row["candidates"] for row in records), "FTS retrieval returned no candidates"
 
-        indexed = sqlite3.connect(f"{db_path}.fts.sqlite")
+        index_path = Path(f"{db_path}.fts.sqlite")
+        indexed = sqlite3.connect(index_path)
+        try:
+            status = indexed.execute(
+                "SELECT value FROM index_metadata WHERE key='status'"
+            ).fetchone()[0]
+            assert status == "complete", f"Expected complete index marker, found {status}"
+            indexed.execute(
+                "UPDATE index_metadata SET value='building' WHERE key='status'"
+            )
+            indexed.commit()
+        finally:
+            indexed.close()
+
+        # Simulate a runner being interrupted mid-build. A file exists, but its
+        # BUILDING marker must force a clean rebuild instead of reusing partial data.
+        subprocess.run(
+            [
+                sys.executable, str(SCRIPT),
+                f"--db={db_path}",
+                f"--claims={claims_path}",
+                f"--output={output_path}",
+                "--top-pages=5",
+                "--elements-per-page=10",
+                "--index-batch-size=1"
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=60
+        )
+        lines_after_rebuild = output_path.read_text(encoding="utf-8").splitlines()
+        assert len(lines_after_rebuild) == 2, (
+            f"Expected two records after rebuilding incomplete index, found {len(lines_after_rebuild)}"
+        )
+
+        indexed = sqlite3.connect(index_path)
         try:
             fts_count = indexed.execute("SELECT COUNT(*) FROM pages_fts").fetchone()[0]
-            assert fts_count == 2, f"Expected 2 indexed pages, found {fts_count}"
+            status = indexed.execute(
+                "SELECT value FROM index_metadata WHERE key='status'"
+            ).fetchone()[0]
+            assert fts_count == 2, f"Expected 2 indexed pages after rebuild, found {fts_count}"
+            assert status == "complete", f"Rebuild did not seal the index: {status}"
         finally:
             indexed.close()
 
