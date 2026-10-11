@@ -44,7 +44,12 @@ export interface DatasetValidationReport {
  * Robust CSV parser implementing RFC 4180
  * Handles multi-line quoted fields, escaped quotes (""), and varied line breaks.
  */
-export function parseCSV(content: string): string[][] {
+export function parseCSV(
+  content: string,
+  limits: { maxRows?: number; maxColumns?: number } = {}
+): string[][] {
+  const maxRows = limits.maxRows ?? Number.POSITIVE_INFINITY;
+  const maxColumns = limits.maxColumns ?? Number.POSITIVE_INFINITY;
   const rows: string[][] = [];
   let currentRow: string[] = [];
   let currentCell = '';
@@ -71,6 +76,9 @@ export function parseCSV(content: string): string[][] {
 
     if (!insideQuotes && char === ',') {
       currentRow.push(currentCell.trim());
+      if (currentRow.length > maxColumns) {
+        throw new Error(`CSV exceeds the ${maxColumns}-column limit.`);
+      }
       currentCell = '';
       i++;
       continue;
@@ -83,9 +91,15 @@ export function parseCSV(content: string): string[][] {
         i++;
       }
       currentRow.push(currentCell.trim());
+      if (currentRow.length > maxColumns) {
+        throw new Error(`CSV exceeds the ${maxColumns}-column limit.`);
+      }
       // Only push non-empty rows
       if (currentRow.some(cell => cell.length > 0)) {
         rows.push(currentRow);
+        if (rows.length > maxRows) {
+          throw new Error(`CSV exceeds the ${maxRows.toLocaleString('en-US')}-record limit.`);
+        }
       }
       currentRow = [];
       currentCell = '';
@@ -99,8 +113,14 @@ export function parseCSV(content: string): string[][] {
   // Flush remaining cell/row
   if (currentCell.length > 0 || currentRow.length > 0) {
     currentRow.push(currentCell.trim());
+      if (currentRow.length > maxColumns) {
+        throw new Error(`CSV exceeds the ${maxColumns}-column limit.`);
+      }
     if (currentRow.some(cell => cell.length > 0)) {
       rows.push(currentRow);
+        if (rows.length > maxRows) {
+          throw new Error(`CSV exceeds the ${maxRows.toLocaleString('en-US')}-record limit.`);
+        }
     }
   }
 
@@ -113,12 +133,16 @@ export function parseCSV(content: string): string[][] {
 export function validateDatasetContent(
   csvContent: string,
   filename = 'news.csv',
-  filePath = ''
+  filePath = '',
+  options: { maxRows?: number; maxColumns?: number; includeParsedRecords?: boolean } = {}
 ): DatasetValidationReport {
   const issues: string[] = [];
   const warnings: string[] = [];
 
-  const rawRows = parseCSV(csvContent);
+  const rawRows = parseCSV(csvContent, {
+    maxRows: options.maxRows,
+    maxColumns: options.maxColumns
+  });
   if (rawRows.length === 0) {
     return {
       status: 'ERROR',
@@ -238,7 +262,7 @@ export function validateDatasetContent(
       fakeSamples++;
     } else {
       invalidLabelsCount++;
-      issues.push(`Row ${r + 1}: Unrecognized label '${labelRaw}'. Must be 'REAL' or 'FAKE'.`);
+      issues.push(`Row ${r + 1}: Unrecognized label '${labelRaw.slice(0, 120)}${labelRaw.length > 120 ? '…' : ''}'. Must be 'REAL' or 'FAKE'.`);
       continue;
     }
 
@@ -346,7 +370,7 @@ export function validateDatasetContent(
     short_articles: shortArticles,
     issues,
     warnings,
-    parsed_records: parsedRecords
+    ...(options.includeParsedRecords === false ? {} : { parsed_records: parsedRecords })
   };
 }
 

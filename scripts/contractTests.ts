@@ -444,6 +444,43 @@ async function localHistoryIdContracts(): Promise<void> {
     assert(duplicateCategory.status === 400,
       'news endpoint rejects repeated category parameters with 400',
       `HTTP ${duplicateCategory.status}: ${duplicateCategory.text.slice(0, 160)}`);
+    const invalidDatasetCsv = \`text,label
+\${Array.from({ length: 3000 }, (_, i) =>
+      \`Article \${i} has enough content for a dataset row but uses an invalid class label.,UNKNOWN\`).join('\n')}\`;
+    const validationSummary = await post('/api/dataset/validate', {
+      filename: 'bounded-diagnostics.csv', csv_content: invalidDatasetCsv
+    });
+    const validationJson = JSON.parse(validationSummary.text);
+    assert(validationSummary.status === 200,
+      'dataset validation handles bounded input successfully',
+      \`HTTP \${validationSummary.status}: \${validationSummary.text.slice(0, 160)}\`);
+    assert(!Object.prototype.hasOwnProperty.call(validationJson, 'parsed_records'),
+      'dataset validation API does not echo the uploaded parsed dataset');
+    assert(validationJson.diagnostics_truncated === true &&
+      validationJson.issues.length === 100 && validationJson.total_issues === 3000,
+      'dataset validation caps diagnostics while reporting total issue counts');
+    assert(validationSummary.text.length < 50000,
+      'dataset validation response is bounded against response amplification',
+      \`response bytes=\${validationSummary.text.length}\`);
+
+    const tooManyDatasetRows = \`text,label
+\${Array.from({ length: 10001 }, (_, i) => \`Article \${i},UNKNOWN\`).join('\n')}\`;
+    const rowLimitResult = await post('/api/dataset/validate', {
+      filename: 'too-many-rows.csv', csv_content: tooManyDatasetRows
+    });
+    assert(rowLimitResult.status === 413,
+      'dataset validation rejects more than 10,000 CSV records',
+      \`HTTP \${rowLimitResult.status}: \${rowLimitResult.text.slice(0, 160)}\`);
+
+    const tooManyDatasetColumns = 'text,label,' + Array.from({ length: 64 }, (_, i) => \`extra\${i}\`).join(',') +
+      '\nArticle text is long enough to avoid an empty row issue,REAL';
+    const columnLimitResult = await post('/api/dataset/validate', {
+      filename: 'too-many-columns.csv', csv_content: tooManyDatasetColumns
+    });
+    assert(columnLimitResult.status === 413,
+      'dataset validation rejects CSV records with more than 64 columns',
+      \`HTTP \${columnLimitResult.status}: \${columnLimitResult.text.slice(0, 160)}\`);
+
   } catch (err: any) {
     assert(false, 'local opt-in history ID validation tests complete', String(err?.stack || err));
   } finally {
