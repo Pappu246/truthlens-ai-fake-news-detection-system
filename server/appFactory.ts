@@ -894,7 +894,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
 
   app.get('/api/history/:id', apiRateLimiter, (req, res) => {
     if (!historyApiEnabledForLocalDevelopment) return rejectUnscopedHistory(res);
-    if (!/^[1-9]\\d*$/.test(req.params.id)) return res.status(400).json({ detail: 'History ID must be a positive integer.' });
+    if (!/^[1-9]\d*$/.test(req.params.id)) return res.status(400).json({ detail: 'History ID must be a positive integer.' });
     const id = Number(req.params.id);
     if (!Number.isSafeInteger(id)) return res.status(400).json({ detail: 'History ID is outside the supported range.' });
     const item = mlEngine.getHistoryItem(id);
@@ -904,7 +904,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
 
   app.delete('/api/history/:id', apiRateLimiter, (req, res) => {
     if (!historyApiEnabledForLocalDevelopment) return rejectUnscopedHistory(res);
-    if (!/^[1-9]\\d*$/.test(req.params.id)) return res.status(400).json({ detail: 'History ID must be a positive integer.' });
+    if (!/^[1-9]\d*$/.test(req.params.id)) return res.status(400).json({ detail: 'History ID must be a positive integer.' });
     const id = Number(req.params.id);
     if (!Number.isSafeInteger(id)) return res.status(400).json({ detail: 'History ID is outside the supported range.' });
     const deleted = mlEngine.deleteHistoryItem(id);
