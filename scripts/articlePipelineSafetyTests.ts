@@ -34,8 +34,16 @@ async function main() {
       if (hostname === 'safe.test') {
         return [{ address: '93.184.216.34', family: 4 }];
       }
+      if (hostname === '2606:4700:4700::1111') {
+        return [{ address: '2606:4700:4700::1111', family: 6 }];
+      }
       throw new Error('unexpected hostname: ' + hostname);
     };
+
+    const publicIpv6 = await validateUrlSecurity('https://[2606:4700:4700::1111]/');
+    check('public IPv6 URL hostname is normalized without brackets',
+      publicIpv6.isValid && publicIpv6.resolvedIps?.includes('2606:4700:4700::1111') === true,
+      JSON.stringify(publicIpv6));
 
     let callCount = 0;
     globalThis.fetch = (async (input: RequestInfo | URL) => {
