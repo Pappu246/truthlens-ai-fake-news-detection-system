@@ -1,0 +1,81 @@
+name: One-time SQLite history purge
+
+on:
+  push:
+    branches:
+      - security/history-purge-trigger
+
+permissions:
+  contents: write
+
+concurrency:
+  group: truthlens-sqlite-history-purge
+  cancel-in-progress: false
+
+jobs:
+  purge:
+    if: github.ref == 'refs/heads/security/history-purge-trigger'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Install history rewrite tool
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes git-filter-repo
+
+      - name: Rewrite all branch and tag histories
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          REPO_URL="https://github.com/${GITHUB_REPOSITORY}.git"
+          AUTH_HEADER="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)"
+          MIRROR="${RUNNER_TEMP}/truthlens-history-mirror.git"
+
+          git -c http.extraheader="$AUTH_HEADER" clone --mirror "$REPO_URL" "$MIRROR"
+
+          git -C "$MIRROR" log --all --format='%H' -- backend/database/truthlens.db \
+            | sort -u > "${RUNNER_TEMP}/sqlite-history-before.txt"
+          if [[ ! -s "${RUNNER_TEMP}/sqlite-history-before.txt" ]]; then
+            echo "::error::Expected historical SQLite database was not found; refusing to perform a no-op rewrite."
+            exit 1
+          fi
+          echo "Historical commits containing the SQLite path: $(wc -l < "${RUNNER_TEMP}/sqlite-history-before.txt")"
+
+          git -C "$MIRROR" filter-repo --path backend/database/truthlens.db --invert-paths --force
+
+          if git -C "$MIRROR" log --all --format='%H' -- backend/database/truthlens.db | grep -q .; then
+            echo "::error::SQLite database path remains in rewritten local branch/tag refs."
+            exit 1
+          fi
+
+          # git-filter-repo removes 'origin' intentionally. Re-add a credential-free
+          # URL; credentials are supplied only through a temporary HTTP header.
+          git -C "$MIRROR" remote add origin "$REPO_URL"
+          git -C "$MIRROR" -c http.extraheader="$AUTH_HEADER" push --force origin \
+            '+refs/heads/*:refs/heads/*' \
+            '+refs/tags/*:refs/tags/*'
+
+      - name: Verify all pushable remote refs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          REPO_URL="https://github.com/${GITHUB_REPOSITORY}.git"
+          AUTH_HEADER="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)"
+          VERIFY="${RUNNER_TEMP}/truthlens-history-verify.git"
+          git -c http.extraheader="$AUTH_HEADER" clone --mirror "$REPO_URL" "$VERIFY"
+
+          # GitHub-managed refs/pull/* are read-only and cannot be pushed by users.
+          # Verify every writable branch and tag ref after the force-push.
+          while IFS= read -r ref; do
+            case "$ref" in
+              refs/pull/*) git -C "$VERIFY" update-ref -d "$ref" ;;
+            esac
+          done < <(git -C "$VERIFY" for-each-ref --format='%(refname)')
+
+          if git -C "$VERIFY" log --all --format='%H' -- backend/database/truthlens.db | grep -q .; then
+            echo "::error::SQLite database path is still reachable from a writable branch or tag."
+            exit 1
+          fi
+          echo "Verified: no writable branch or tag history contains backend/database/truthlens.db."
