@@ -130,6 +130,27 @@ jobs:
     needs: syntax
     steps:
       - uses: actions/checkout@v4
+      - name: Reclaim runner disk for the FEVEROUS database and FTS5 index
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1 (pinned)
+        with:
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          tool-cache: true
+          swap-storage: true
+      - name: Verify enough disk space before downloading the full corpus
+        shell: bash
+        run: |
+          set -euo pipefail
+          df -h /
+          available_kib="$(df -Pk / | awk 'NR==2 {print $4}')"
+          required_kib="$((40 * 1024 * 1024))"
+          if [ "$available_kib" -lt "$required_kib" ]; then
+            echo "::error::FEVEROUS requires at least 40 GiB free before download/indexing; only $((available_kib / 1024 / 1024)) GiB available after cleanup."
+            exit 1
+          fi
       - uses: actions/setup-node@v4
         with:
           node-version: 20
