@@ -1,0 +1,150 @@
+name: TruthLens Phase 2 Post-Benchmark Exit Gate
+
+'on':
+  push:
+    branches:
+      - fix/phase2-post-benchmark-exit-gate
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/v3-phase2-post-benchmark-gate.yml"
+  workflow_run:
+    workflows:
+      - V3 Phase 2 Scoring Recovery
+      - Phase 2 AVeriTeC End-to-End Benchmark
+    types:
+      - completed
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: truthlens-phase2-post-benchmark-gate-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  validate-workflow:
+    name: Validate post-benchmark workflow syntax
+    if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out proposed workflow
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Parse workflow YAML
+        run: ruby -e 'require "yaml"; YAML.parse_file(".github/workflows/v3-phase2-post-benchmark-gate.yml"); puts "Workflow YAML syntax OK"'
+
+  gate:
+    name: Recheck Phase 2 after benchmark completion
+    if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.head_branch == 'research/v3-phase2-current-main' && github.event.workflow_run.head_repository.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve latest benchmark runs for this exact research commit
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ github.event.workflow_run.head_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs"
+          recovery_json="$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "${api}?workflow_id=374135353&head_sha=${TARGET_SHA}&per_page=100" | jq -c '[.workflow_runs[]] | sort_by(.run_number) | last // empty')"
+          averitec_json="$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "${api}?workflow_id=373715227&head_sha=${TARGET_SHA}&per_page=100" | jq -c '[.workflow_runs[]] | sort_by(.run_number) | last // empty')"
+          holdout_json="$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "${api}?workflow_id=374147287&head_sha=${TARGET_SHA}&per_page=100" | jq -c '[.workflow_runs[] | select(.conclusion=="success")] | sort_by(.run_number) | last // empty')"
+
+          if [ -z "$recovery_json" ] || [ -z "$averitec_json" ]; then
+            echo "gate_ready=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::A benchmark workflow for this research SHA is not yet listed. The next benchmark completion will trigger another check."
+            exit 0
+          fi
+
+          recovery_status="$(jq -r '.status' <<<"$recovery_json")"
+          averitec_status="$(jq -r '.status' <<<"$averitec_json")"
+          recovery_id="$(jq -r '.id' <<<"$recovery_json")"
+          averitec_id="$(jq -r '.id' <<<"$averitec_json")"
+
+          if [ "$recovery_status" != "completed" ] || [ "$averitec_status" != "completed" ]; then
+            echo "gate_ready=false" >> "$GITHUB_OUTPUT"
+            echo "gate_wait_reason=companion benchmark is not completed" >> "$GITHUB_OUTPUT"
+            echo "Recovery run $recovery_id status: $recovery_status"
+            echo "AVeriTeC run $averitec_id status: $averitec_status"
+            echo "The completion of the remaining benchmark will trigger the final gate check."
+            exit 0
+          fi
+
+          echo "gate_ready=true" >> "$GITHUB_OUTPUT"
+          if [ "$(jq -r '.conclusion' <<<"$recovery_json")" = "success" ]; then
+            echo "recovery_id=$recovery_id" >> "$GITHUB_OUTPUT"
+          fi
+          if [ "$(jq -r '.conclusion' <<<"$averitec_json")" = "success" ]; then
+            echo "averitec_id=$averitec_id" >> "$GITHUB_OUTPUT"
+          fi
+          if [ -n "$holdout_json" ]; then
+            echo "holdout_id=$(jq -r '.id' <<<"$holdout_json")" >> "$GITHUB_OUTPUT"
+          fi
+          echo "target_sha=$TARGET_SHA" >> "$GITHUB_OUTPUT"
+          printf 'Completed research runs for %s: recovery=%s (%s), AVeriTeC=%s (%s)\n' "$TARGET_SHA" "$recovery_id" "$(jq -r '.conclusion' <<<"$recovery_json")" "$averitec_id" "$(jq -r '.conclusion' <<<"$averitec_json")"
+
+      - name: Check out the evaluated research commit
+        if: steps.resolve.outputs.gate_ready == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+
+      - name: Download complete FEVER score artifact
+        if: steps.resolve.outputs.gate_ready == 'true' && steps.resolve.outputs.recovery_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.resolve.outputs.recovery_id }}
+          pattern: truthlens-v3-fever-full-*
+          path: artifacts/v3/fever
+          merge-multiple: true
+
+      - name: Download complete FEVEROUS score artifact
+        if: steps.resolve.outputs.gate_ready == 'true' && steps.resolve.outputs.recovery_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.resolve.outputs.recovery_id }}
+          pattern: truthlens-v3-feverous-full-*
+          path: artifacts/v3/feverous
+          merge-multiple: true
+
+      - name: Download complete AVeriTeC score artifact
+        if: steps.resolve.outputs.gate_ready == 'true' && steps.resolve.outputs.averitec_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.resolve.outputs.averitec_id }}
+          pattern: truthlens-phase2-averitec-e2e-*
+          path: artifacts/v2-averitec-e2e
+          merge-multiple: true
+
+      - name: Download human holdout validation artifact
+        if: steps.resolve.outputs.gate_ready == 'true' && steps.resolve.outputs.holdout_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.resolve.outputs.holdout_id }}
+          pattern: truthlens-open-web-v1-holdout-gate-*
+          path: artifacts/v3/open-web-v1
+          merge-multiple: true
+
+      - name: Evaluate fail-closed Phase 2 gate
+        if: steps.resolve.outputs.gate_ready == 'true'
+        run: node scripts/phase2ExitGate.mjs
+
+      - name: Upload post-benchmark gate result
+        if: always() && steps.resolve.outputs.gate_ready == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: truthlens-v3-phase2-post-benchmark-gate-${{ github.run_id }}
+          path: artifacts/v3/phase2-exit-gate.json
+          if-no-files-found: warn
+          retention-days: 90
