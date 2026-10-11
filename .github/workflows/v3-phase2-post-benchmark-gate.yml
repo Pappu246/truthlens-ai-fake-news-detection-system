@@ -1,6 +1,9 @@
 name: TruthLens Phase 2 Post-Benchmark Exit Gate
 
 'on':
+  push:
+    branches:
+      - fix/phase2-post-benchmark-exit-gate
   pull_request:
     branches:
       - main
@@ -24,7 +27,7 @@ concurrency:
 jobs:
   validate-workflow:
     name: Validate post-benchmark workflow syntax
-    if: ${{ github.event_name == 'pull_request' }}
+    if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     steps:
       - name: Check out proposed workflow
