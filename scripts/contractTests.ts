@@ -207,7 +207,7 @@ async function httpContracts(): Promise<void> {
   const port = (server.address() as any).port;
   const base = `http://127.0.0.1:${port}`;
 
-  const call = async (method: 'GET' | 'POST', route: string, body?: any) => {
+  const call = async (method: 'GET' | 'POST' | 'DELETE', route: string, body?: any) => {
     const res = await fetch(`${base}${route}`, {
       method,
       headers: body ? { 'content-type': 'application/json' } : undefined,
