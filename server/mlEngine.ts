@@ -543,14 +543,20 @@ export class TruthLensMLEngine {
   }
 
   public updateThresholds(fake: number, real: number, minLength?: number): Thresholds {
+    if (!Number.isFinite(fake) || !Number.isFinite(real)) throw new Error('Thresholds must be finite numbers.');
+    if (!(fake > 0 && fake < 1) || !(real > 0 && real < 1)) {
+      throw new Error('Thresholds must be strictly between 0 and 1.');
+    }
     if (real >= fake) {
       throw new Error(`Real threshold (${real}) must be strictly less than Fake threshold (${fake}).`);
     }
+    if (minLength !== undefined &&
+        (!Number.isFinite(minLength) || !Number.isInteger(minLength) || minLength < 10 || minLength > 500)) {
+      throw new Error('Minimum text length must be an integer between 10 and 500.');
+    }
     this.thresholds.fake_threshold = fake;
     this.thresholds.real_threshold = real;
-    if (typeof minLength === 'number' && minLength >= 10 && minLength <= 500) {
-      this.thresholds.min_text_length = minLength;
-    }
+    if (typeof minLength === 'number') this.thresholds.min_text_length = minLength;
     this.saveThresholds();
     return { ...this.thresholds };
   }

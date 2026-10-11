@@ -54,6 +54,19 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
   const includeVite = options?.includeVite ?? !isProduction;
 
   const app = express();
+  app.disable('x-powered-by');
+  // Trust one edge hop on Vercel. Other hosts opt in only when exactly one
+  // trusted reverse proxy is guaranteed to precede this application.
+  const trustOneProxy = process.env.VERCEL === '1' || process.env.TRUST_PROXY_HOPS === '1';
+  app.set('trust proxy', trustOneProxy ? 1 : false);
+  app.use((_req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    if (isProduction) res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    next();
+  });
   const productionModelLocked = isProduction || process.env.NODE_ENV === 'production';
   const productionMutationBlocked = (res: express.Response, operation: string): boolean => {
     if (!productionModelLocked) return false;
@@ -66,8 +79,8 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
     return true;
   };
 
-  app.use(express.json({ limit: '10mb' }));
-  app.use(express.urlencoded({ extended: true }));
+  app.use(express.json({ limit: '2mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '128kb', parameterLimit: 1000 }));
 
   // Phase 3 Rate Limiters
   const extractRateLimiter = createRateLimiter({
@@ -81,19 +94,50 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
     maxRequests: 60,
     message: 'Too many live news requests. Please wait a moment.'
   });
+  const apiRateLimiter = createRateLimiter({
+    windowMs: 60 * 1000,
+    maxRequests: 40,
+    message: 'Too many API requests. Please try again shortly.'
+  });
+  const expensiveRateLimiter = createRateLimiter({
+    windowMs: 60 * 1000,
+    maxRequests: 12,
+    message: 'Too many verification requests. Please wait before retrying.'
+  });
+  const datasetValidationRateLimiter = createRateLimiter({
+    windowMs: 60 * 1000,
+    maxRequests: 8,
+    message: 'Too many dataset validation requests. Please try again shortly.'
+  });
+  // Remote history remains closed until per-user/session identity is implemented.
+  const historyApiEnabledForLocalDevelopment =
+    !productionModelLocked && process.env.TRUTHLENS_ENABLE_LOCAL_HISTORY_API === 'true';
+  const rejectUnscopedHistory = (res: express.Response) => res.status(403).json({
+    success: false,
+    code: 'HISTORY_AUTH_REQUIRED',
+    error: 'Remote history is disabled until authenticated, per-user history is implemented. Browser-local history remains available.'
+  });
 
   // 1. Health Endpoint
   app.get('/api/health', (req, res) => {
     const modelTrained = mlEngine.isModelTrained();
+    const calibrationExact = mlEngine.isCalibrationExact();
     const claimReady = claimModel.isReady();
+    const degradedReasons: string[] = [];
+    if (!modelTrained) degradedReasons.push('Article model artifact is unavailable.');
+    if (!calibrationExact) {
+      degradedReasons.push('Article model uses a legacy uncalibrated artifact; probability scores are withheld.');
+    }
+    if (!claimReady) degradedReasons.push('Claim model artifact is unavailable.');
     res.json({
-      status: modelTrained ? 'ok' : 'degraded',
+      status: degradedReasons.length === 0 ? 'ok' : 'degraded',
+      degraded_reasons: degradedReasons,
       service: 'TruthLens ML Engine',
       model: 'Linear SVM (Safety-Gated Legacy)',
       model_trained: modelTrained,
       article_model_version: mlEngine.getMetrics()?.model_version || null,
       article_inference_mode: mlEngine.getInferenceMode(),
-      article_calibration_exact: mlEngine.isCalibrationExact(),
+      article_calibration_exact: calibrationExact,
       // The article model and the claim model are separate systems and are
       // reported separately. They are never combined into one number.
       components: {
@@ -104,7 +148,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
           status: modelTrained ? 'READY' : 'DEGRADED',
           model_version: mlEngine.getMetrics()?.model_version || null,
           inference_mode: mlEngine.getInferenceMode(),
-          calibration_exact: mlEngine.isCalibrationExact()
+          calibration_exact: calibrationExact
         },
         claim_model: {
           role: 'claim_model',
@@ -136,7 +180,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
 
   // 1b. Dedicated CLAIM MODEL endpoints (LIAR specialist, separate from the
   //     ISOT article model -- the two are never merged into one metric).
-  app.post('/api/claim/predict', (req, res) => {
+  app.post('/api/claim/predict', apiRateLimiter, (req, res) => {
     try {
       const claimText = (req.body?.claim || req.body?.text || req.body?.statement || '').toString();
       if (!claimText.trim()) {
@@ -180,7 +224,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
 
   // 1c. Evidence Engine: CLAIM -> SEARCH -> RELEVANCE -> SUPPORT/CONTRADICT
   //     -> VERIFICATION SIGNAL -> FINAL INTERPRETATION
-  app.post('/api/evidence/verify', extractRateLimiter, async (req, res) => {
+  app.post('/api/evidence/verify', expensiveRateLimiter, async (req, res) => {
     try {
       const claimText = (req.body?.claim || req.body?.text || req.body?.statement || '').toString();
       if (!claimText.trim()) {
@@ -205,7 +249,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
   //     verification architecture (see docs/V2_ARCHITECTURE.md). It is
   //     entirely separate from, and does not alter, the production
   //     `/api/evidence/verify` and `/api/analyze` verdict semantics above.
-  app.post('/api/v2/evidence/verify', extractRateLimiter, async (req, res) => {
+  app.post('/api/v2/evidence/verify', expensiveRateLimiter, async (req, res) => {
     try {
       const claimText = (req.body?.claim || req.body?.text || req.body?.statement || '').toString();
       if (!claimText.trim()) {
@@ -222,11 +266,18 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
   });
 
   // 2. Core News Analysis Endpoint (Text)
-  app.post('/api/analyze', async (req, res) => {
+  app.post('/api/analyze', apiRateLimiter, async (req, res) => {
     try {
-      const text = req.body.text || req.body.raw_text || '';
-      const sourceUrl = req.body.source_url || '';
-      const inputType = req.body.input_type || 'text';
+      const text = req.body?.text ?? req.body?.raw_text ?? '';
+      const sourceUrl = req.body?.source_url ?? '';
+      const inputType = req.body?.input_type || 'text';
+      if (typeof text !== 'string' || typeof sourceUrl !== 'string') {
+        return res.status(400).json({ detail: 'Article text and source URL must be strings.' });
+      }
+      if (text.length > 50000 || sourceUrl.length > 2048) {
+        return res.status(400).json({ detail: 'Article text or source URL exceeds the allowed length.' });
+      }
+      if (!text.trim()) return res.status(400).json({ detail: 'Article text is required.' });
       const result = mlEngine.analyzeArticle(text, sourceUrl, {
         inputType,
         originalUrl: req.body.original_url || sourceUrl,
@@ -288,7 +339,10 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
   // 2b. Phase 3: URL Article Extraction Endpoint (SSRF Protected & Robust Clean Extraction)
   app.post('/api/article/extract', extractRateLimiter, async (req, res) => {
     try {
-      const rawUrl = (req.body.url || '').trim();
+      const urlValue = req.body?.url ?? '';
+      if (typeof urlValue !== 'string') return res.status(400).json({ success: false, error: 'URL must be a string.' });
+      if (urlValue.length > 2048) return res.status(400).json({ success: false, error: 'URL exceeds the 2,048-character limit.' });
+      const rawUrl = urlValue.trim();
       if (!rawUrl) {
         return res.status(400).json({
           success: false,
@@ -341,7 +395,10 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
   // 2c. Phase 3: Full URL Analysis Pipeline (Validate -> Fetch -> Extract -> ISOT ML Inference)
   app.post('/api/analyze-url', extractRateLimiter, async (req, res) => {
     try {
-      const rawUrl = (req.body.url || '').trim();
+      const urlValue = req.body?.url ?? '';
+      if (typeof urlValue !== 'string') return res.status(400).json({ detail: 'URL must be a string.' });
+      if (urlValue.length > 2048) return res.status(400).json({ detail: 'URL exceeds the 2,048-character limit.' });
+      const rawUrl = urlValue.trim();
       if (!rawUrl) {
         return res.status(400).json({ detail: 'URL is required for URL analysis.' });
       }
@@ -419,9 +476,18 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
   // 2d. Phase 3: Live News Acquisition (RSS / Atom provider with caching & deduplication)
   app.get('/api/news/latest', newsRateLimiter, async (req, res) => {
     try {
-      const category = (req.query.category as string) || undefined;
-      const language = (req.query.language as string) || undefined;
-      const limit = parseInt(req.query.limit as string, 10) || 25;
+      if ((req.query.category !== undefined && typeof req.query.category !== 'string') ||
+          (req.query.language !== undefined && typeof req.query.language !== 'string') ||
+          (req.query.limit !== undefined && typeof req.query.limit !== 'string')) {
+        return res.status(400).json({ error: 'category, language, and limit must be supplied once as single query values.' });
+      }
+      const category = typeof req.query.category === 'string' ? req.query.category : undefined;
+      const language = typeof req.query.language === 'string' ? req.query.language : undefined;
+      const parsedLimit = req.query.limit === undefined ? 25 : Number(req.query.limit);
+      if (!Number.isInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > 50) {
+        return res.status(400).json({ error: 'limit must be an integer between 1 and 50.' });
+      }
+      const limit = parsedLimit;
 
       const newsData = await liveNewsService.getLatestNews({ category, language, limit });
       res.json(newsData);
@@ -535,12 +601,15 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
     }
   });
 
-  app.post('/api/dataset/validate', (req, res) => {
+  app.post('/api/dataset/validate', datasetValidationRateLimiter, (req, res) => {
     try {
-      const csvContent = req.body.csv_content || '';
-      const filename = req.body.filename || 'uploaded_dataset.csv';
-      if (!csvContent) {
-        return res.status(400).json({ detail: 'No CSV content provided for validation.' });
+      const csvContent = req.body?.csv_content;
+      const filename = typeof req.body?.filename === 'string' ? req.body.filename.slice(0, 255) : 'uploaded_dataset.csv';
+      if (typeof csvContent !== 'string' || !csvContent.trim()) {
+        return res.status(400).json({ detail: 'CSV content must be a non-empty string.' });
+      }
+      if (Buffer.byteLength(csvContent, 'utf8') > 512 * 1024) {
+        return res.status(413).json({ detail: 'Dataset validation payload exceeds the 512 KiB limit.' });
       }
       const validation = validateDatasetContent(csvContent, filename);
       res.json(validation);
@@ -549,7 +618,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
     }
   });
 
-  app.post('/api/dataset/import', (req, res) => {
+  app.post('/api/dataset/import', expensiveRateLimiter, (req, res) => {
     if (productionMutationBlocked(res, 'dataset-import')) return;
     try {
       const csvContent = req.body.csv_content || '';
@@ -575,7 +644,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
     }
   });
 
-  app.post('/api/dataset/reset-demo', (req, res) => {
+  app.post('/api/dataset/reset-demo', expensiveRateLimiter, (req, res) => {
     if (productionMutationBlocked(res, 'reset-demo')) return;
     try {
       const backupPath = path.join(process.cwd(), 'data', 'news_demo_backup.csv');
@@ -591,10 +660,16 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
   });
 
   // 6. Claim Verification Endpoint
-  app.post('/api/verify-claim', async (req, res) => {
+  app.post('/api/verify-claim', expensiveRateLimiter, async (req, res) => {
     try {
-      const text = req.body.text || req.body.claim || '';
-      const sourceUrl = req.body.source_url || '';
+      const text = req.body?.text ?? req.body?.claim ?? '';
+      const sourceUrl = req.body?.source_url ?? '';
+      if (typeof text !== 'string' || typeof sourceUrl !== 'string') {
+        return res.status(400).json({ detail: 'Claim text and source URL must be strings.' });
+      }
+      if (text.length > 5000 || sourceUrl.length > 2048) {
+        return res.status(400).json({ detail: 'Claim text or source URL exceeds the allowed length.' });
+      }
       if (!text.trim()) {
         return res.status(400).json({ detail: 'Claim text is required.' });
       }
@@ -606,11 +681,17 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
   });
 
   // PHASE 4: CLAIM EXTRACTION & EVIDENCE ENDPOINTS
-  app.post('/api/claims/extract', async (req, res) => {
+  app.post('/api/claims/extract', expensiveRateLimiter, async (req, res) => {
     try {
-      const title = req.body.title || '';
-      const content = req.body.content || req.body.text || '';
-      const description = req.body.description || '';
+      const title = req.body?.title ?? '';
+      const content = req.body?.content ?? req.body?.text ?? '';
+      const description = req.body?.description ?? '';
+      if ([title, content, description].some(value => typeof value !== 'string')) {
+        return res.status(400).json({ error: 'Title, content, and description must be strings.' });
+      }
+      if (title.length > 1000 || content.length > 50000 || description.length > 5000) {
+        return res.status(400).json({ error: 'Claim extraction input exceeds the allowed length.' });
+      }
 
       if (!title.trim() && !content.trim() && !description.trim()) {
         return res.status(400).json({ error: 'Article title or content is required for claim extraction.' });
@@ -628,11 +709,21 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
     }
   });
 
-  app.post('/api/evidence/search', async (req, res) => {
+  app.post('/api/evidence/search', expensiveRateLimiter, async (req, res) => {
     try {
-      const query = req.body.query || '';
-      const queries = req.body.queries || (query ? [query] : []);
-      const claim = req.body.claim;
+      const query = req.body?.query ?? '';
+      if (typeof query !== 'string') return res.status(400).json({ error: 'Search query must be a string.' });
+      if (req.body?.queries !== undefined &&
+          (!Array.isArray(req.body.queries) || req.body.queries.length > 5 ||
+           req.body.queries.some((q: unknown) => typeof q !== 'string' || q.length > 500))) {
+        return res.status(400).json({ error: 'Provide at most 5 search queries, each no longer than 500 characters.' });
+      }
+      const queries: string[] = req.body?.queries ?? (query ? [query] : []);
+      const claim = req.body?.claim;
+      if (claim !== undefined && (!claim || typeof claim !== 'object' ||
+          typeof claim.originalText !== 'string' || claim.originalText.length > 5000)) {
+        return res.status(400).json({ error: 'Claim must be an object with originalText no longer than 5,000 characters.' });
+      }
 
       if (!claim && queries.length === 0) {
         return res.status(400).json({ error: 'Search query or claim is required.' });
@@ -665,11 +756,16 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
     }
   });
 
-  app.post('/api/verify-claims', async (req, res) => {
+  app.post('/api/verify-claims', expensiveRateLimiter, async (req, res) => {
     try {
-      const claims = req.body.claims;
-      if (!Array.isArray(claims)) {
-        return res.status(400).json({ error: 'Array of claims is required in request body.' });
+      const claims = req.body?.claims;
+      if (!Array.isArray(claims) || claims.length < 1 || claims.length > 20) {
+        return res.status(400).json({ error: 'Provide an array of 1 to 20 claims.' });
+      }
+      if (claims.some((claim: any) => !claim || typeof claim !== 'object' ||
+          typeof claim.originalText !== 'string' || claim.originalText.trim().length === 0 ||
+          claim.originalText.length > 2000)) {
+        return res.status(400).json({ error: 'Each claim must have originalText containing 1 to 2,000 characters.' });
       }
 
       const verified = await evidenceProvider.verifyClaims(claims);
@@ -684,13 +780,19 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
     }
   });
 
-  app.post('/api/verify-article', async (req, res) => {
+  app.post('/api/verify-article', expensiveRateLimiter, async (req, res) => {
     try {
-      const title = req.body.title || '';
-      const content = req.body.content || req.body.text || '';
-      const sourceUrl = req.body.sourceUrl || req.body.source_url || '';
-      const analysisId = req.body.analysisId || req.body.analysis_id;
-      let mlRiskLevel = req.body.mlRisk || req.body.mlRiskLevel || req.body.risk_level;
+      const title = req.body?.title ?? '';
+      const content = req.body?.content ?? req.body?.text ?? '';
+      const sourceUrl = req.body?.sourceUrl ?? req.body?.source_url ?? '';
+      const analysisId = req.body?.analysisId ?? req.body?.analysis_id;
+      let mlRiskLevel = req.body?.mlRisk ?? req.body?.mlRiskLevel ?? req.body?.risk_level;
+      if ([title, content, sourceUrl].some(value => typeof value !== 'string')) {
+        return res.status(400).json({ error: 'Article title, content, and source URL must be strings.' });
+      }
+      if (title.length > 1000 || content.length > 50000 || sourceUrl.length > 2048) {
+        return res.status(400).json({ error: 'Article verification input exceeds the allowed length.' });
+      }
 
       if (!content.trim() && !title.trim()) {
         return res.status(400).json({ error: 'Article content or title is required for verification.' });
@@ -734,7 +836,8 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
     }
   });
 
-  app.get('/api/verification/:id', (req, res) => {
+  app.get('/api/verification/:id', apiRateLimiter, (req, res) => {
+    if (!historyApiEnabledForLocalDevelopment) return rejectUnscopedHistory(res);
     try {
       const verification = sqliteHistory.getVerificationById(req.params.id);
       if (!verification) {
@@ -750,7 +853,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
     res.json(mlEngine.getThresholds());
   });
 
-  app.post('/api/model/thresholds', (req, res) => {
+  app.post('/api/model/thresholds', apiRateLimiter, (req, res) => {
     if (productionMutationBlocked(res, 'threshold-update')) return;
     try {
       const { fake_threshold, real_threshold, min_text_length } = req.body;
@@ -764,7 +867,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
     }
   });
 
-  app.post('/api/train', (req, res) => {
+  app.post('/api/train', expensiveRateLimiter, (req, res) => {
     if (productionMutationBlocked(res, 'train')) return;
     try {
       const results = mlEngine.train();
@@ -774,28 +877,43 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
     }
   });
 
-  app.get('/api/history', (req, res) => {
-    const limit = parseInt(req.query.limit as string, 10) || 50;
-    const history = mlEngine.getHistory(limit);
+  app.get('/api/history', apiRateLimiter, (req, res) => {
+    if (!historyApiEnabledForLocalDevelopment) return rejectUnscopedHistory(res);
+    if (req.query.limit !== undefined && typeof req.query.limit !== 'string') {
+      return res.status(400).json({ detail: 'limit must be supplied once as an integer.' });
+    }
+    const rawLimit = req.query.limit === undefined ? 50 : Number(req.query.limit);
+    const limit = Number.isFinite(rawLimit) ? Math.min(100, Math.max(1, Math.trunc(rawLimit))) : 50;
+    const history = mlEngine.getHistory(limit).map((record) => ({
+      ...record,
+      text_snippet: record.text_preview,
+      full_text: undefined
+    }));
     res.json(history);
   });
 
-  app.get('/api/history/:id', (req, res) => {
-    const id = parseInt(req.params.id, 10);
+  app.get('/api/history/:id', apiRateLimiter, (req, res) => {
+    if (!historyApiEnabledForLocalDevelopment) return rejectUnscopedHistory(res);
+    if (!/^[1-9]\\d*$/.test(req.params.id)) return res.status(400).json({ detail: 'History ID must be a positive integer.' });
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id)) return res.status(400).json({ detail: 'History ID is outside the supported range.' });
     const item = mlEngine.getHistoryItem(id);
-    if (!item) {
-      return res.status(404).json({ detail: 'History record not found' });
-    }
+    if (!item) return res.status(404).json({ detail: 'History record not found' });
     res.json(item);
   });
 
-  app.delete('/api/history/:id', (req, res) => {
-    const id = parseInt(req.params.id, 10);
+  app.delete('/api/history/:id', apiRateLimiter, (req, res) => {
+    if (!historyApiEnabledForLocalDevelopment) return rejectUnscopedHistory(res);
+    if (!/^[1-9]\\d*$/.test(req.params.id)) return res.status(400).json({ detail: 'History ID must be a positive integer.' });
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id)) return res.status(400).json({ detail: 'History ID is outside the supported range.' });
     const deleted = mlEngine.deleteHistoryItem(id);
-    res.json({ success: deleted });
+    if (!deleted) return res.status(404).json({ success: false, detail: 'History record not found or already deleted.' });
+    res.json({ success: true });
   });
 
-  app.delete('/api/history', (req, res) => {
+  app.delete('/api/history', apiRateLimiter, (req, res) => {
+    if (!historyApiEnabledForLocalDevelopment) return rejectUnscopedHistory(res);
     const count = mlEngine.clearHistory();
     res.json({ success: true, count });
   });
@@ -844,11 +962,13 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
     console.error('[Server] Unhandled error:', err?.message || err);
     if (res.headersSent) return;
     const status = err?.status || err?.statusCode || 500;
-    res.status(status).json({
+    const tooLarge = status === 413 || err?.type === 'entity.too.large';
+    res.status(tooLarge ? 413 : status).json({
       ok: false,
       error: {
-        code: status === 400 ? 'BAD_REQUEST' : 'INTERNAL_ERROR',
-        message: status === 400 ? 'The request body could not be parsed.' : 'An unexpected server error occurred.'
+        code: tooLarge ? 'PAYLOAD_TOO_LARGE' : status === 400 ? 'BAD_REQUEST' : 'INTERNAL_ERROR',
+        message: tooLarge ? 'Request payload exceeds the allowed size.' :
+          status === 400 ? 'The request body could not be parsed.' : 'An unexpected server error occurred.'
       }
     });
   });

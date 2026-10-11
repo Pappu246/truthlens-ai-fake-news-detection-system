@@ -52,7 +52,7 @@ export async function fetchHistory(): Promise<HistoryItem[]> {
       const records = Array.isArray(data) ? data : (data.records || []);
       const mapped: HistoryItem[] = records.map((r: any) => ({
         id: r.id,
-        text_snippet: r.full_text ? (r.full_text.length > 120 ? r.full_text.substring(0, 117) + '...' : r.full_text) : (r.text_snippet || ''),
+        text_snippet: r.text_preview || r.text_snippet || (r.full_text ? (r.full_text.length > 120 ? r.full_text.substring(0, 117) + '...' : r.full_text) : ''),
         source_url: r.source_url || '',
         prediction: r.prediction,
         fake_probability: typeof r.fake_probability === 'number' ? r.fake_probability : null,
@@ -62,7 +62,7 @@ export async function fetchHistory(): Promise<HistoryItem[]> {
           ? r.confidence_score
           : (typeof r.confidence === 'number' ? Math.round(r.confidence * 100) : null),
         model_used: r.model_name || r.model_used || 'Linear SVM (Calibrated)',
-        created_at: r.created_at || new Date().toISOString()
+        created_at: r.timestamp || r.created_at || new Date().toISOString()
       }));
       localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(mapped));
       return mapped;

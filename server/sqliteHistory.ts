@@ -39,6 +39,11 @@ export class SqliteHistoryManager {
   private db: Database | null = null;
   private SQL: SqlJsStatic | null = null;
   private dbPath: string;
+  // The shared history API is intentionally disabled in production until every
+  // row is scoped to an authenticated identity. Avoid exporting the whole sql.js
+  // database to ephemeral/read-only production filesystems on each analysis.
+  private readonly persistHistoryToDisk =
+    process.env.NODE_ENV !== 'production' && process.env.VERCEL !== '1';
   private isReady = false;
   private initPromise: Promise<void> | null = null;
   private pendingInserts: Array<{
@@ -62,8 +67,8 @@ export class SqliteHistoryManager {
   }> = [];
 
   constructor() {
-    // Vercel serverless filesystem is read-only except /tmp. Use /tmp there so
-    // history works per-instance; Render/local keep the persistent disk path.
+    // Production history is kept in-memory only until per-user authentication
+    // and durable storage are implemented. Development keeps local DB persistence.
     this.dbPath = process.env.VERCEL === '1'
       ? path.join('/tmp', 'truthlens.db')
       : path.join(process.cwd(), 'backend', 'database', 'truthlens.db');
@@ -90,9 +95,11 @@ export class SqliteHistoryManager {
           : await initSqlJs();
 
         const dir = path.dirname(this.dbPath);
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        if (this.persistHistoryToDisk && !fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true });
+        }
 
-        if (fs.existsSync(this.dbPath)) {
+        if (this.persistHistoryToDisk && fs.existsSync(this.dbPath)) {
           const fileBuffer = fs.readFileSync(this.dbPath);
           this.db = new this.SQL.Database(fileBuffer);
         } else {
@@ -233,7 +240,7 @@ export class SqliteHistoryManager {
   }
 
   private saveToDisk(): void {
-    if (!this.db) return;
+    if (!this.persistHistoryToDisk || !this.db) return;
     try {
       const data = this.db.export();
       const buffer = Buffer.from(data);

@@ -207,7 +207,7 @@ async function httpContracts(): Promise<void> {
   const port = (server.address() as any).port;
   const base = `http://127.0.0.1:${port}`;
 
-  const call = async (method: 'GET' | 'POST', route: string, body?: any) => {
+  const call = async (method: 'GET' | 'POST' | 'DELETE', route: string, body?: any) => {
     const res = await fetch(`${base}${route}`, {
       method,
       headers: body ? { 'content-type': 'application/json' } : undefined,
@@ -221,6 +221,13 @@ async function httpContracts(): Promise<void> {
   try {
     const health = await call('GET', '/api/health');
     assert(health.status === 200, '/api/health returns 200');
+    if (health.json?.article_calibration_exact === false) {
+      assert(health.json?.status === 'degraded',
+        '/api/health does not report an uncalibrated production artifact as fully healthy');
+      assert(Array.isArray(health.json?.degraded_reasons) &&
+        health.json.degraded_reasons.some((reason: string) => /legacy uncalibrated/i.test(reason)),
+        '/api/health explains legacy calibration degradation');
+    }
     assert(health.json?.components?.article_model?.role === 'article_model',
       '/api/health reports the article model component');
     assert(health.json?.components?.claim_model?.status === 'READY',
@@ -298,16 +305,14 @@ async function httpContracts(): Promise<void> {
         'legacy production analysis withholds confidence');
     }
 
-    const history = await call('GET', '/api/history?limit=1');
-    assert(history.status === 200, '/api/history returns 200');
-    if (analyzed.json?.calibration_status === 'LEGACY_UNCALIBRATED_MARGIN' && history.json?.[0]) {
-      assert(history.json[0].fake_probability === null,
-        'legacy probability is not persisted into history');
-      assert(history.json[0].real_probability === null,
-        'legacy real probability is not persisted into history');
-      assert(history.json[0].confidence_score === null,
-        'legacy confidence is not persisted into history');
-    }
+    const history = await call('GET', '/api/history?limit=-1');
+    assert(history.status === 403, '/api/history is closed until per-user authentication exists');
+    assert(history.json?.code === 'HISTORY_AUTH_REQUIRED',
+      '/api/history returns explicit auth-required response');
+    const historyDelete = await call('DELETE', '/api/history');
+    assert(historyDelete.status === 403, 'unauthenticated history clear is blocked');
+    const invalidHistoryDelete = await call('DELETE', '/api/history/abc');
+    assert(invalidHistoryDelete.status === 403, 'unauthenticated history item deletion is blocked');
 
     const evShort = await call('POST', '/api/evidence/verify', { claim: 'taxes rose' });
     assert(evShort.json?.status === 'NEEDS_MORE_CONTEXT',

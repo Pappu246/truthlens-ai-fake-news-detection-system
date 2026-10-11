@@ -82,31 +82,23 @@ async function main() {
     return null;
   });
 
-  await check('GET /api/history', 'GET', '/api/history?limit=5', null, (s, j) => {
-    if (s !== 200) return `expected 200, got ${s}`;
-    if (!Array.isArray(j)) return 'expected JSON array';
+  // Shared server-side history is intentionally disabled until it can be
+  // scoped to an authenticated user/session. Never regress to exposing article
+  // full_text or allowing a public DELETE to erase everyone’s history.
+  await check('GET /api/history (unauthenticated shared history is disabled)', 'GET', '/api/history?limit=-1', null, (s, j) => {
+    if (s !== 403) return `expected safe 403, got ${s}`;
+    if (j?.code !== 'HISTORY_AUTH_REQUIRED') return 'missing HISTORY_AUTH_REQUIRED response';
     return null;
   });
-
-  // History must actually persist the analyzed record (proves SQLite/WASM works,
-  // not just degraded empty arrays). Poll briefly: SQLite init is async.
-  {
-    let persisted = false;
-    let lastStatus = 0;
-    for (let i = 0; i < 25 && !persisted; i++) {
-      try {
-        const res = await fetch(base + '/api/history?limit=5', { signal: AbortSignal.timeout(10000) });
-        lastStatus = res.status;
-        const arr: any = await res.json();
-        if (res.status === 200 && Array.isArray(arr) && arr.length >= 1) persisted = true;
-        else await new Promise((r) => setTimeout(r, 200));
-      } catch {
-        await new Promise((r) => setTimeout(r, 200));
-      }
-    }
-    if (persisted) console.log('PASS: history persists analyzed record (SQLite/WASM functional)');
-    else { failures++; console.error(`FAIL: history persistence (last status ${lastStatus}, no records after analyze)`); }
-  }
+  await check('DELETE /api/history (unauthenticated bulk deletion is disabled)', 'DELETE', '/api/history', null, (s, j) => {
+    if (s !== 403) return `expected safe 403, got ${s}`;
+    if (j?.code !== 'HISTORY_AUTH_REQUIRED') return 'missing HISTORY_AUTH_REQUIRED response';
+    return null;
+  });
+  await check('DELETE /api/history/abc (unauthenticated deletion is disabled)', 'DELETE', '/api/history/abc', null, (s, j) => {
+    if (s !== 403) return `expected safe 403, got ${s}`;
+    return null;
+  });
 
   await check('GET /api/models/metrics', 'GET', '/api/models/metrics', null, (s, j) => {
     if (s !== 200) return `expected 200, got ${s}`;
@@ -153,6 +145,32 @@ async function main() {
         limiter(fakeReq, { set: () => {}, status: () => ({ json: () => {} }) }, () => { nextCalled = true; });
         if (nextCalled) console.log('PASS: rate limiter tolerates missing req.socket');
         else { failures++; console.error('FAIL: rate limiter did not call next() with missing socket'); }
+
+        const spoofLimiter: any = createRateLimiter({ windowMs: 60000, maxRequests: 2 });
+        let allowed = 0;
+        let blocked = 0;
+        for (const spoofedForwardedFor of ['198.51.100.1', '203.0.113.2', '1.1.1.1']) {
+          let statusCode = 0;
+          let nextInvoked = false;
+          const response: any = {
+            set: () => response,
+            status: (code: number) => { statusCode = code; return response; },
+            json: () => response
+          };
+          spoofLimiter({
+            ip: '192.0.2.55',
+            headers: { 'x-forwarded-for': spoofedForwardedFor },
+            socket: { remoteAddress: '127.0.0.1' }
+          } as any, response, () => { nextInvoked = true; });
+          if (nextInvoked) allowed++;
+          if (statusCode === 429) blocked++;
+        }
+        if (allowed === 2 && blocked === 1) {
+          console.log('PASS: changing X-Forwarded-For cannot bypass the client-IP rate-limit bucket');
+        } else {
+          failures++;
+          console.error(`FAIL: spoofed X-Forwarded-For bypassed rate limiting (allowed=${allowed}, blocked=${blocked})`);
+        }
       } catch (err: any) {
         failures++;
         console.error(`FAIL: rate limiter threw with missing req.socket: ${err.message}`);

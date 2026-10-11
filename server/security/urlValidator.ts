@@ -1,5 +1,6 @@
 import dns from 'dns';
 import net from 'net';
+import { Agent } from 'undici';
 
 export interface UrlValidationResult {
   isValid: boolean;
@@ -103,12 +104,32 @@ export function isPrivateIPv6(ip: string): boolean {
   // :: (Unspecified)
   if (normalized === '::' || normalized === '0:0:0:0:0:0:0:0') return true;
 
-  // IPv4-mapped IPv6: ::ffff:192.0.2.128 or ::ffff:c000:0280
-  if (normalized.startsWith('::ffff:') || normalized.startsWith('0:0:0:0:0:ffff:')) {
-    const lastPart = normalized.substring(normalized.lastIndexOf(':') + 1);
-    if (net.isIPv4(lastPart)) {
-      return isPrivateIPv4(lastPart);
+  // IPv4-mapped IPv6. WHATWG URL canonicalizes dotted literals like
+  // ::ffff:127.0.0.1 into hexadecimal form ::ffff:7f00:1, so handle both.
+  const mappedPrefix = normalized.startsWith('::ffff:')
+    ? normalized.slice('::ffff:'.length)
+    : normalized.startsWith('0:0:0:0:0:ffff:')
+      ? normalized.slice('0:0:0:0:0:ffff:'.length)
+      : null;
+  if (mappedPrefix !== null) {
+    if (net.isIPv4(mappedPrefix)) return isPrivateIPv4(mappedPrefix);
+    const halves = mappedPrefix.split(':');
+    if (halves.length !== 2 || halves.some(part => !/^[0-9a-f]{1,4}$/.test(part))) {
+      return true; // Malformed mapped address is unsafe.
     }
+    const high = Number.parseInt(halves[0], 16);
+    const low = Number.parseInt(halves[1], 16);
+    const mappedIPv4 = [
+      (high >> 8) & 255, high & 255,
+      (low >> 8) & 255, low & 255
+    ].join('.');
+    return isPrivateIPv4(mappedIPv4);
+  }
+
+  // IPv4-compatible / other all-zero-prefix IPv6 forms are deprecated and
+  // can disguise loopback or reserved IPv4 destinations after URL normalization.
+  if (normalized.startsWith('::') || normalized.startsWith('0:0:0:0:0:0:')) {
+    return true;
   }
 
   // fc00::/7 (Unique Local Address: fc00:: to fdff::)
@@ -212,8 +233,17 @@ export async function validateUrlSecurity(rawUrl: string): Promise<UrlValidation
     };
   }
 
-  // 2. Hostname sanity check
-  const hostname = parsed.hostname.toLowerCase();
+  // Credentials can obscure the intended host and are not needed for public news.
+  if (parsed.username || parsed.password) {
+    return { isValid: false, error: 'URLs containing usernames or passwords are not permitted.' };
+  }
+  const allowedPort = protocol === 'https:' ? '443' : '80';
+  if (parsed.port && parsed.port !== allowedPort) {
+    return { isValid: false, error: 'Only standard HTTP (80) and HTTPS (443) ports are permitted.' };
+  }
+
+  // Normalize bracketed IPv6 literals before all address checks and DNS lookup.
+  const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
   if (!hostname) {
     return { isValid: false, error: 'URL must contain a valid hostname.' };
   }
@@ -291,131 +321,111 @@ export async function safeFetchHtml(
   let redirectsFollowed = 0;
 
   while (redirectsFollowed <= maxRedirects) {
-    // Re-validate every hop against SSRF rules
+    // Resolve and inspect every redirect destination, then pin the actual socket
+    // lookup to this exact allow-listed result to close the DNS-rebinding gap.
     const validation = await validateUrlSecurity(currentUrl);
     if (!validation.isValid) {
       throw new Error(validation.error || `Security check failed for URL: ${currentUrl}`);
     }
-
+    const parsedUrl = new URL(currentUrl);
+    const normalizedHost = parsedUrl.hostname.toLowerCase().replace(/^\\[|\\]$/g, '');
+    const validatedAddresses = (validation.resolvedIps || [])
+      .map(address => ({ address, family: net.isIP(address) }))
+      .filter((entry) => entry.family === 4 || entry.family === 6);
+    if (validatedAddresses.length === 0) {
+      throw new Error(`DNS resolution failed for '${normalizedHost}': no validated public address was available.`);
+    }
+    const pinnedLookup = ((hostname: string, lookupOptions: any, callback: any) => {
+      const requestedHost = hostname.toLowerCase().replace(/^\\[|\\]$/g, '');
+      if (requestedHost !== normalizedHost) {
+        return callback(new Error('Connection hostname differed from the validated URL.'), '', 0);
+      }
+      const family = typeof lookupOptions === 'number' ? lookupOptions : lookupOptions?.family;
+      const candidates = validatedAddresses.filter((entry) => !family || family === 0 || entry.family === family);
+      if (candidates.length === 0) {
+        return callback(new Error('No validated address matched the requested address family.'), '', 0);
+      }
+      if (lookupOptions && typeof lookupOptions === 'object' && lookupOptions.all) {
+        callback(null, candidates);
+      } else {
+        callback(null, candidates[0].address, candidates[0].family);
+      }
+    }) as any;
+    const dispatcher = new Agent({ connections: 1, connect: { lookup: pinnedLookup } });
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-    let response: Response;
     try {
-      response = await fetch(currentUrl, {
-        method: 'GET',
-        headers: {
-          'User-Agent': userAgent,
-          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.9',
-          'Cache-Control': 'no-cache',
-          Pragma: 'no-cache',
-          'Upgrade-Insecure-Requests': '1',
-          'Sec-Fetch-Dest': 'document',
-          'Sec-Fetch-Mode': 'navigate',
-          'Sec-Fetch-Site': 'none'
-        },
-        redirect: 'manual', // Never let node auto-follow without validation
-        signal: controller.signal
-      });
-    } catch (fetchErr: any) {
-      clearTimeout(timeoutId);
-      if (fetchErr.name === 'AbortError') {
-        throw new Error(`Connection timed out after ${timeoutMs / 1000}s while fetching ${currentUrl}`);
-      }
-      throw new Error(`Failed to establish connection to ${currentUrl}: ${fetchErr.message}`);
-    }
-
-    clearTimeout(timeoutId);
-
-    // Handle redirects manually
-    if ([301, 302, 303, 307, 308].includes(response.status)) {
-      const location = response.headers.get('location');
-      if (!location) {
-        throw new Error(`Received HTTP ${response.status} redirect without a Location header.`);
-      }
-
-      redirectsFollowed++;
-      if (redirectsFollowed > maxRedirects) {
-        throw new Error(`Maximum redirect limit (${maxRedirects}) exceeded.`);
-      }
-
-      // Resolve relative redirect against current URL
+      let response: Response;
       try {
-        currentUrl = new URL(location, currentUrl).toString();
-      } catch {
-        throw new Error(`Malformed redirect Location header: ${location}`);
-      }
-      continue;
-    }
-
-    // Check status code
-    if (response.status === 403) {
-      throw new Error(`Access forbidden (HTTP 403): The target website blocked the extraction request.`);
-    }
-    if (response.status === 404) {
-      throw new Error(`Article not found (HTTP 404): The requested URL does not exist.`);
-    }
-    if (response.status === 429) {
-      throw new Error(`Rate limited by publisher (HTTP 429): Too many requests to the target website.`);
-    }
-    if (response.status >= 400) {
-      throw new Error(`HTTP error ${response.status}: Failed to retrieve article from target server.`);
-    }
-
-    // Check Content-Type
-    const contentType = (response.headers.get('content-type') || '').toLowerCase();
-    const isHtml =
-      contentType.includes('text/html') ||
-      contentType.includes('application/xhtml+xml');
-
-    if (!isHtml) {
-      throw new Error(
-        `Unsupported content type '${contentType || 'unknown'}'. TruthLens AI only processes HTML news web pages, not binaries, media, or PDFs.`
-      );
-    }
-
-    // Stream response with byte count guard
-    if (!response.body) {
-      throw new Error('Server returned empty response body.');
-    }
-
-    const reader = response.body.getReader();
-    const chunks: Uint8Array[] = [];
-    let totalBytes = 0;
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (value) {
-        totalBytes += value.length;
-        if (totalBytes > maxBytes) {
-          reader.cancel();
-          throw new Error(
-            `Article exceeds maximum allowed payload size of ${(maxBytes / (1024 * 1024)).toFixed(1)} MB.`
-          );
+        response = await fetch(currentUrl, {
+          method: 'GET',
+          headers: {
+            'User-Agent': userAgent,
+            Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Cache-Control': 'no-cache',
+            Pragma: 'no-cache',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none'
+          },
+          redirect: 'manual',
+          signal: controller.signal,
+          // node's fetch supports Undici dispatchers. Test doubles may ignore this option.
+          dispatcher
+        } as any);
+      } catch (fetchErr: any) {
+        if (fetchErr?.name === 'AbortError') {
+          throw new Error(`Connection timed out after ${timeoutMs / 1000}s while fetching ${currentUrl}`);
         }
-        chunks.push(value);
+        throw new Error(`Failed to establish connection to ${currentUrl}: ${fetchErr?.message || 'network error'}`);
       }
+
+      if ([301, 302, 303, 307, 308].includes(response.status)) {
+        const location = response.headers.get('location');
+        if (!location) throw new Error(`Received HTTP ${response.status} redirect without a Location header.`);
+        redirectsFollowed++;
+        if (redirectsFollowed > maxRedirects) throw new Error(`Maximum redirect limit (${maxRedirects}) exceeded.`);
+        try { currentUrl = new URL(location, currentUrl).toString(); }
+        catch { throw new Error(`Malformed redirect Location header: ${location}`); }
+        continue;
+      }
+      if (response.status === 403) throw new Error('Access forbidden (HTTP 403): The target website blocked the extraction request.');
+      if (response.status === 404) throw new Error('Article not found (HTTP 404): The requested URL does not exist.');
+      if (response.status === 429) throw new Error('Rate limited by publisher (HTTP 429): Too many requests to the target website.');
+      if (response.status >= 400) throw new Error(`HTTP error ${response.status}: Failed to retrieve article from target server.`);
+
+      const contentType = (response.headers.get('content-type') || '').toLowerCase();
+      const isHtml = contentType.includes('text/html') || contentType.includes('application/xhtml+xml');
+      if (!isHtml) {
+        throw new Error(`Unsupported content type '${contentType || 'unknown'}'. TruthLens AI only processes HTML news web pages, not binaries, media, or PDFs.`);
+      }
+      if (!response.body) throw new Error('Server returned empty response body.');
+      const reader = response.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let totalBytes = 0;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) {
+          totalBytes += value.length;
+          if (totalBytes > maxBytes) {
+            await reader.cancel().catch(() => {});
+            throw new Error(`Article exceeds maximum allowed payload size of ${(maxBytes / (1024 * 1024)).toFixed(1)} MB.`);
+          }
+          chunks.push(value);
+        }
+      }
+      const totalBuffer = new Uint8Array(totalBytes);
+      let offset = 0;
+      for (const chunk of chunks) { totalBuffer.set(chunk, offset); offset += chunk.length; }
+      const html = new TextDecoder('utf-8').decode(totalBuffer);
+      return { html, finalUrl: currentUrl, statusCode: response.status, contentType };
+    } finally {
+      clearTimeout(timeoutId);
+      await dispatcher.destroy().catch(() => {});
     }
-
-    // Combine chunks
-    const totalBuffer = new Uint8Array(totalBytes);
-    let offset = 0;
-    for (const chunk of chunks) {
-      totalBuffer.set(chunk, offset);
-      offset += chunk.length;
-    }
-
-    const decoder = new TextDecoder('utf-8');
-    const html = decoder.decode(totalBuffer);
-
-    return {
-      html,
-      finalUrl: currentUrl,
-      statusCode: response.status,
-      contentType
-    };
   }
 
   throw new Error(`Exceeded maximum redirect limit (${maxRedirects}).`);

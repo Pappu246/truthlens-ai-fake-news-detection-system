@@ -14,7 +14,23 @@ export function extractArticleFromHtml(options: RawExtractionOptions): Extracted
   const { url, html, fallbackTitle } = options;
   const warnings: string[] = [];
 
-  const $ = cheerio.load(html);
+  // Cheerio parsing is synchronous. Reject pathological markup before building
+  // a DOM, so a crafted publisher page cannot monopolize the event loop.
+  const MAX_HTML_BYTES = 512 * 1024;
+  const MAX_HTML_TAGS = 8000;
+  if (Buffer.byteLength(html, 'utf8') > MAX_HTML_BYTES) {
+    throw new Error('HTML extraction rejected: page exceeds the 512 KiB parsing limit.');
+  }
+  const tagPattern = /<\/?[A-Za-z][A-Za-z0-9:-]*(?=[\s/>])/g;
+  let tagCount = 0;
+  while (tagPattern.exec(html)) {
+    if (++tagCount > MAX_HTML_TAGS) {
+      throw new Error('HTML extraction rejected: page exceeds the 8,000-tag parsing limit.');
+    }
+  }
+  // Remove comments in a linear pre-pass instead of recursively walking DOM nodes.
+  const sanitizedHtml = html.replace(/<!--[\s\S]*?(?:-->|$)/g, '');
+  const $ = cheerio.load(sanitizedHtml);
 
   // 1. Extract JSON-LD structured data if present
   let jsonLdHeadline = '';
@@ -186,15 +202,13 @@ export function extractArticleFromHtml(options: RawExtractionOptions): Extracted
     $(selector).remove();
   });
 
-  // SECURITY: Remove HTML comments to prevent hidden prompt injection via <!-- comments -->
-  // Also remove elements with display:none or visibility hidden that could hide injection
-  $('*').contents().each((_, el: any) => {
-    if (el.type === 'comment') {
+  // Remove inline hidden content without a second recursive DOM traversal.
+  $('[style]').each((_, el) => {
+    const style = ($(el).attr('style') || '').toLowerCase().replace(/\s+/g, '');
+    if (/(^|;)(display:none|visibility:hidden|opacity:0)(;|$)/.test(style)) {
       $(el).remove();
     }
   });
-  // Remove inline hidden styles
-  $('[style*=\"display:none\"], [style*=\"display: none\"], [style*=\"visibility:hidden\"], [style*=\"visibility: hidden\"]').remove();
 
   // Candidate semantic content containers
   const containerCandidates = [
