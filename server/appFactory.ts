@@ -592,10 +592,21 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
   app.get('/api/validation/liar', handleExternalValidation);
 
   // 5. Dataset Validation Endpoint
-  app.get('/api/dataset/validation', (req, res) => {
+  app.get('/api/dataset/validation', datasetValidationRateLimiter, (req, res) => {
     try {
       const audit = validateDataset();
-      res.json(audit);
+      const MAX_DIAGNOSTICS = 100;
+      const { issues, warnings, parsed_records: _parsedRecords, ...summary } = audit;
+      res.json({
+        ...summary,
+        available_columns: summary.available_columns.map((column) => column.slice(0, 120)),
+        text_columns: summary.text_columns.map((column) => column.slice(0, 120)),
+        issues: issues.slice(0, MAX_DIAGNOSTICS),
+        warnings: warnings.slice(0, MAX_DIAGNOSTICS),
+        total_issues: issues.length,
+        total_warnings: warnings.length,
+        diagnostics_truncated: issues.length > MAX_DIAGNOSTICS || warnings.length > MAX_DIAGNOSTICS
+      });
     } catch (err: any) {
       res.status(500).json({ detail: err.message });
     }

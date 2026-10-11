@@ -444,6 +444,16 @@ async function localHistoryIdContracts(): Promise<void> {
     assert(duplicateCategory.status === 400,
       'news endpoint rejects repeated category parameters with 400',
       `HTTP ${duplicateCategory.status}: ${duplicateCategory.text.slice(0, 160)}`);
+    const publicValidationReport = await get('/api/dataset/validation');
+    const publicValidationJson = JSON.parse(publicValidationReport.text);
+    assert(publicValidationReport.status === 200,
+      'public dataset validation endpoint returns a bounded summary',
+      `HTTP ${publicValidationReport.status}: ${publicValidationReport.text.slice(0, 160)}`);
+    assert(!Object.prototype.hasOwnProperty.call(publicValidationJson, 'parsed_records'),
+      'public dataset validation endpoint does not expose full article records');
+    assert(publicValidationReport.text.length < 50000,
+      'public dataset validation response excludes dataset payload amplification');
+
     const invalidDatasetCsv = `text,label
 ${Array.from({ length: 3000 }, (_, i) =>
       `Article ${i} has enough content for a dataset row but uses an invalid class label.,UNKNOWN`).join('\n')}`;
