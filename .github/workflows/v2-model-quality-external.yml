@@ -45,7 +45,7 @@ jobs:
             printf 'HF_TOKEN is not configured; remote model-quality evaluation was not executed.\n' > artifacts/v2-model-quality/preflight.txt
           fi
       - name: Upload preflight status
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: truthlens-v2-model-quality-preflight
           path: artifacts/v2-model-quality/preflight.txt
@@ -57,10 +57,10 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout V2 research branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Setup Node 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -113,7 +113,7 @@ jobs:
             2>&1 | tee artifacts/v2-model-quality/harness-smoke.log
 
       - name: Upload harness smoke artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: truthlens-v2-model-quality-harness-smoke
           path: artifacts/v2-model-quality
@@ -125,10 +125,10 @@ jobs:
     timeout-minutes: 180
     steps:
       - name: Checkout V2 research branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Setup Node 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -188,7 +188,7 @@ jobs:
             2>&1 | tee artifacts/v2-model-quality/local-pretrained-evaluation.log
 
       - name: Upload local pretrained evaluation results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: truthlens-v2-model-quality-local-pretrained
           path: artifacts/v2-model-quality
@@ -203,10 +203,10 @@ jobs:
       HF_TOKEN: ${{ secrets.HF_TOKEN }}
     steps:
       - name: Checkout V2 research branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Setup Node 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -255,7 +255,7 @@ jobs:
           npm run eval:v2-model-quality-external --             --data-dir=/tmp/truthlens-model-quality/scifact             --output=artifacts/v2-model-quality/external-model-quality.json             2>&1 | tee artifacts/v2-model-quality/evaluation.log
 
       - name: Upload evaluation results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: truthlens-v2-model-quality-external
           path: artifacts/v2-model-quality
