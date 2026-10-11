@@ -56,6 +56,10 @@ jobs:
           else
             git -C "$MIRROR" remote add origin "$REPO_URL"
           fi
+          # A mirror clone defaults to remote.origin.mirror=true, which conflicts
+          # with explicit heads/tags refspecs. Disable mirror push mode so we only
+          # rewrite writable branch and tag refs (never GitHub-managed pull refs).
+          git -C "$MIRROR" config remote.origin.mirror false
           git -C "$MIRROR" -c http.extraheader="$AUTH_HEADER" push --force origin \
             '+refs/heads/*:refs/heads/*' \
             '+refs/tags/*:refs/tags/*'
