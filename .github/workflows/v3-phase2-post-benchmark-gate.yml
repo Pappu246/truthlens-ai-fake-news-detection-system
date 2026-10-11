@@ -36,7 +36,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
       - name: Parse workflow YAML
-        run: ruby -e 'require "yaml"; YAML.parse_file(".github/workflows/v3-phase2-post-benchmark-gate.yml"); puts "Workflow YAML syntax: OK"'
+        run: ruby -e 'require "yaml"; YAML.parse_file(".github/workflows/v3-phase2-post-benchmark-gate.yml"); puts "Workflow YAML syntax OK"'
 
   gate:
     name: Recheck Phase 2 after benchmark completion
