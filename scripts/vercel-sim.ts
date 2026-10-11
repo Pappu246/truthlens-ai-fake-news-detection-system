@@ -145,6 +145,32 @@ async function main() {
         limiter(fakeReq, { set: () => {}, status: () => ({ json: () => {} }) }, () => { nextCalled = true; });
         if (nextCalled) console.log('PASS: rate limiter tolerates missing req.socket');
         else { failures++; console.error('FAIL: rate limiter did not call next() with missing socket'); }
+
+        const spoofLimiter: any = createRateLimiter({ windowMs: 60000, maxRequests: 2 });
+        let allowed = 0;
+        let blocked = 0;
+        for (const spoofedForwardedFor of ['198.51.100.1', '203.0.113.2', '1.1.1.1']) {
+          let statusCode = 0;
+          let nextInvoked = false;
+          const response: any = {
+            set: () => response,
+            status: (code: number) => { statusCode = code; return response; },
+            json: () => response
+          };
+          spoofLimiter({
+            ip: '192.0.2.55',
+            headers: { 'x-forwarded-for': spoofedForwardedFor },
+            socket: { remoteAddress: '127.0.0.1' }
+          } as any, response, () => { nextInvoked = true; });
+          if (nextInvoked) allowed++;
+          if (statusCode === 429) blocked++;
+        }
+        if (allowed === 2 && blocked === 1) {
+          console.log('PASS: changing X-Forwarded-For cannot bypass the client-IP rate-limit bucket');
+        } else {
+          failures++;
+          console.error(`FAIL: spoofed X-Forwarded-For bypassed rate limiting (allowed=${allowed}, blocked=${blocked})`);
+        }
       } catch (err: any) {
         failures++;
         console.error(`FAIL: rate limiter threw with missing req.socket: ${err.message}`);

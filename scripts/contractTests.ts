@@ -221,6 +221,13 @@ async function httpContracts(): Promise<void> {
   try {
     const health = await call('GET', '/api/health');
     assert(health.status === 200, '/api/health returns 200');
+    if (health.json?.article_calibration_exact === false) {
+      assert(health.json?.status === 'degraded',
+        '/api/health does not report an uncalibrated production artifact as fully healthy');
+      assert(Array.isArray(health.json?.degraded_reasons) &&
+        health.json.degraded_reasons.some((reason: string) => /legacy uncalibrated/i.test(reason)),
+        '/api/health explains legacy calibration degradation');
+    }
     assert(health.json?.components?.article_model?.role === 'article_model',
       '/api/health reports the article model component');
     assert(health.json?.components?.claim_model?.status === 'READY',

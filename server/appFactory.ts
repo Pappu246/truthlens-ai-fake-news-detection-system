@@ -121,15 +121,23 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
   // 1. Health Endpoint
   app.get('/api/health', (req, res) => {
     const modelTrained = mlEngine.isModelTrained();
+    const calibrationExact = mlEngine.isCalibrationExact();
     const claimReady = claimModel.isReady();
+    const degradedReasons: string[] = [];
+    if (!modelTrained) degradedReasons.push('Article model artifact is unavailable.');
+    if (!calibrationExact) {
+      degradedReasons.push('Article model uses a legacy uncalibrated artifact; probability scores are withheld.');
+    }
+    if (!claimReady) degradedReasons.push('Claim model artifact is unavailable.');
     res.json({
-      status: modelTrained ? 'ok' : 'degraded',
+      status: degradedReasons.length === 0 ? 'ok' : 'degraded',
+      degraded_reasons: degradedReasons,
       service: 'TruthLens ML Engine',
       model: 'Linear SVM (Safety-Gated Legacy)',
       model_trained: modelTrained,
       article_model_version: mlEngine.getMetrics()?.model_version || null,
       article_inference_mode: mlEngine.getInferenceMode(),
-      article_calibration_exact: mlEngine.isCalibrationExact(),
+      article_calibration_exact: calibrationExact,
       // The article model and the claim model are separate systems and are
       // reported separately. They are never combined into one number.
       components: {
@@ -140,7 +148,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
           status: modelTrained ? 'READY' : 'DEGRADED',
           model_version: mlEngine.getMetrics()?.model_version || null,
           inference_mode: mlEngine.getInferenceMode(),
-          calibration_exact: mlEngine.isCalibrationExact()
+          calibration_exact: calibrationExact
         },
         claim_model: {
           role: 'claim_model',
