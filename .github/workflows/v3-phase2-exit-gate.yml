@@ -1,0 +1,108 @@
+name: TruthLens V3 Phase 2 Exit Gate
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'scripts/phase2ExitGate.mjs'
+      - 'research/multibenchmark-manifest.json'
+      - '.github/workflows/v3-phase2-exit-gate.yml'
+      - '.github/workflows/v3-phase2-scoring-recovery.yml'
+      - '.github/workflows/phase-2-averitec-e2e.yml'
+      - '.github/workflows/v3-openweb-holdout-gate.yml'
+  workflow_run:
+    workflows:
+      - V3 Phase 2 Scoring Recovery
+      - Phase 2 AVeriTeC End-to-End Benchmark
+      - TruthLens Open-Web V1 Holdout Gate
+    types:
+      - completed
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: truthlens-v3-phase2-exit-gate
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: Consolidate verified benchmark artifacts and evaluate fail-closed gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve latest successful benchmark workflows
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs"
+          target_sha="${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha || github.sha }}"
+          recovery_id="$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "${api}?workflow_id=374135353&head_sha=${target_sha}&per_page=20" | jq -r '[.workflow_runs[] | select(.conclusion=="success")] | sort_by(.updated_at) | last | .id // empty')"
+          averitec_id="$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "${api}?workflow_id=373715227&head_sha=${target_sha}&per_page=20" | jq -r '[.workflow_runs[] | select(.conclusion=="success")] | sort_by(.updated_at) | last | .id // empty')"
+          holdout_id="$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "${api}?workflow_id=374147287&head_sha=${target_sha}&per_page=20" | jq -r '[.workflow_runs[] | select(.conclusion=="success")] | sort_by(.updated_at) | last | .id // empty')"
+
+          echo "target_sha=$target_sha" >> "$GITHUB_OUTPUT"
+          echo "recovery_id=$recovery_id" >> "$GITHUB_OUTPUT"
+          echo "averitec_id=$averitec_id" >> "$GITHUB_OUTPUT"
+          echo "holdout_id=$holdout_id" >> "$GITHUB_OUTPUT"
+          printf 'Matching successful workflow ids for %s: recovery=%s averitec=%s holdout=%s\n' "$target_sha" "$recovery_id" "$averitec_id" "$holdout_id"
+
+      - name: Download FEVER artifact
+        if: steps.resolve.outputs.recovery_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.resolve.outputs.recovery_id }}
+          pattern: truthlens-v3-fever-full-*
+          path: artifacts/v3/fever
+          merge-multiple: true
+
+      - name: Download FEVEROUS artifact
+        if: steps.resolve.outputs.recovery_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.resolve.outputs.recovery_id }}
+          pattern: truthlens-v3-feverous-full-*
+          path: artifacts/v3/feverous
+          merge-multiple: true
+
+      - name: Download AVeriTeC official artifact
+        if: steps.resolve.outputs.averitec_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.resolve.outputs.averitec_id }}
+          pattern: truthlens-phase2-averitec-e2e-*
+          path: artifacts/v2-averitec-e2e
+          merge-multiple: true
+
+      - name: Download Open-Web gate artifact
+        if: steps.resolve.outputs.holdout_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.resolve.outputs.holdout_id }}
+          pattern: truthlens-open-web-v1-holdout-gate-*
+          path: artifacts/v3/open-web-v1
+          merge-multiple: true
+
+      - name: Run fail-closed Phase 2 exit gate
+        run: node scripts/phase2ExitGate.mjs
+
+      - name: Upload consolidated exit-gate artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: truthlens-v3-phase2-exit-gate-${{ github.run_id }}
+          path: artifacts/v3/phase2-exit-gate.json
+          if-no-files-found: error
+          retention-days: 90

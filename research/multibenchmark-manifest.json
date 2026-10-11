@@ -54,6 +54,7 @@
       ],
       "dataset_release": "FEVER v1.0",
       "expected_claims_total": 185445,
+      "expected_evaluation_claims": 19998,
       "evaluation": {
         "primary": "official FEVER score",
         "secondary": [
@@ -76,7 +77,9 @@
         "workflow": "Phase 2 External Dataset Materialization",
         "workflow_run": 10,
         "artifact_digest": "sha256:0a98f1cf50a3ed54c17817d3a542139ea009c3cb04c752c606ec864658a0ae60"
-      }
+      },
+      "split": "shared_task_dev (labeled development split)",
+      "evaluation_scope_note": "Use the hash-verified shared_task_dev.jsonl, which contains 19,998 labeled dev claims. Do not target 37,566 claims from this file."
     },
     {
       "id": "feverous",
@@ -88,6 +91,7 @@
         "NOT ENOUGH INFO"
       ],
       "expected_claims_total": 87026,
+      "expected_evaluation_claims": 7890,
       "evaluation": {
         "primary": "official FEVEROUS score",
         "secondary": [
@@ -103,7 +107,7 @@
       "source": "https://fever.ai/dataset/feverous.html",
       "dataset_hashes": {
         "train_sha256": "0c29ccba41e27c5b988ca5132085e8d67c7921f265707bea170bfbde12bceee7",
-        "dev_sha256": "1ac8cfd964d4dcedc5de3375850fe3f93d39b89a73a475734bde864da1701f8f",
+        "dev_sha256": "97dc8e2be8982774b0cbb1dc04c0fd5b0966e711e93c8ea01b234ab64356f234",
         "wikipedia_db_zip_sha256": "e25e034d9848c75ab3311a7a7ad8e80e769240b5a36b055da475f20071314881"
       },
       "materialization": {
@@ -123,6 +127,7 @@
         "CONFLICTING_EVIDENCE/CHERRY_PICKING"
       ],
       "expected_claims_total": 4568,
+      "expected_evaluation_claims": 500,
       "evaluation": {
         "primary": "official AVeriTeC score",
         "secondary": [
