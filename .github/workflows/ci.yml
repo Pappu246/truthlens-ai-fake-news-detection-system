@@ -76,7 +76,9 @@ jobs:
       - name: Contract tests
         run: npm run test:contracts
 
-      - name: Vercel runtime simulation
+      - name: Vercel runtime simulation (trace Node deprecations)
+        env:
+          NODE_OPTIONS: --trace-deprecation
         run: npm run test:vercel-sim
 
       - name: Verdict regression tests
