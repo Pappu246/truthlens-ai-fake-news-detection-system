@@ -1,6 +1,11 @@
 name: TruthLens Phase 2 Post-Benchmark Exit Gate
 
 on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/v3-phase2-post-benchmark-gate.yml"
   workflow_run:
     workflows:
       - V3 Phase 2 Scoring Recovery
@@ -17,6 +22,19 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  validate-workflow:
+    name: Validate post-benchmark workflow syntax
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out proposed workflow
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Parse workflow YAML
+        run: ruby -e 'require "yaml"; YAML.parse_file(".github/workflows/v3-phase2-post-benchmark-gate.yml"); puts "Workflow YAML syntax: OK"'
+
   gate:
     name: Recheck Phase 2 after benchmark completion
     if: >-
