@@ -26,7 +26,7 @@ import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
-    accuracy_score, average_precision_score, brier_score_loss,
+    accuracy_score, average_precision_score, balanced_accuracy_score, brier_score_loss,
     confusion_matrix, f1_score, precision_score, recall_score, roc_auc_score,
 )
 from sklearn.svm import LinearSVC
@@ -112,6 +112,7 @@ def metrics(y_true, p):
     pred = (p >= 0.5).astype(int)
     return {
         "accuracy": float(accuracy_score(y_true, pred)),
+        "balanced_accuracy": float(balanced_accuracy_score(y_true, pred)),
         "precision": float(precision_score(y_true, pred, zero_division=0)),
         "recall": float(recall_score(y_true, pred, zero_division=0)),
         "f1": float(f1_score(y_true, pred, zero_division=0)),
@@ -347,9 +348,13 @@ def main():
         })
     (out / "runtime_parity_fixtures.json").write_text(json.dumps(fixtures, indent=2), encoding="utf-8")
 
+    # The tracked LIAR fixture is stored under data/ in this repository. Keep
+    # compatibility with the original root-level location for CI/materialized data.
     liar_path = ROOT / "test.tsv"
     if not liar_path.exists():
-        raise SystemExit("LIAR test.tsv is required for the OOD gate.")
+        liar_path = DATA / "test.tsv"
+    if not liar_path.exists():
+        raise SystemExit("LIAR test.tsv is required for the OOD gate (checked repository root and data/).")
     mapping = {"pants-fire": 1, "false": 1, "mostly-true": 0, "true": 0}
     y = []
     p = []
