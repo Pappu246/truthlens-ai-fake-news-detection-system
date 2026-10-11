@@ -3,6 +3,16 @@ import { AnalysisResult, ModelComparisonData, isNeedsMoreContextLabel } from '..
 import { CheckCircle, AlertTriangle, XCircle, Info, ExternalLink, ShieldAlert, FileText, Search, HelpCircle, Layers } from 'lucide-react';
 import { TruthLensVerificationSection } from './TruthLensVerificationSection';
 
+function safeHttpUrl(value: unknown): string | undefined {
+  if (typeof value !== 'string' || !value.trim()) return undefined;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? parsed.href : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 interface AnalysisViewProps {
   result: AnalysisResult | null;
   metrics: ModelComparisonData;
@@ -458,11 +468,11 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
                 </div>
               )}
             </div>
-            {result.canonical_url && (
+            {safeHttpUrl(result.canonical_url) && (
               <div className="pt-1">
                 <span className="text-[10px] font-bold uppercase text-slate-400 block font-mono">Canonical Link:</span>
                 <a
-                  href={result.canonical_url}
+                  href={safeHttpUrl(result.canonical_url)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-slate-600 hover:text-slate-900 underline truncate block font-mono text-[11px]"

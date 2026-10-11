@@ -33,6 +33,16 @@ interface TruthLensVerificationSectionProps {
   analysisId?: string | number;
 }
 
+function safeEvidenceHttpUrl(value: unknown): string | undefined {
+  if (typeof value !== 'string' || !value.trim()) return undefined;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? parsed.href : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export const TruthLensVerificationSection: React.FC<TruthLensVerificationSectionProps> = ({
   initialVerification,
   articleTitle,
@@ -548,15 +558,17 @@ export const TruthLensVerificationSection: React.FC<TruthLensVerificationSection
                                     <span>
                                       {ev.publishedAt ? `Published: ${new Date(ev.publishedAt).toLocaleDateString()}` : 'Date recorded'}
                                     </span>
-                                    <a
-                                      href={ev.sourceUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-indigo-600 hover:text-indigo-800 inline-flex items-center gap-1 font-semibold"
-                                    >
-                                      <span>Original Article</span>
-                                      <ExternalLink className="w-3 h-3" />
-                                    </a>
+                                    {safeEvidenceHttpUrl(ev.sourceUrl) ? (
+                                      <a
+                                        href={safeEvidenceHttpUrl(ev.sourceUrl)}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-indigo-600 hover:text-indigo-800 inline-flex items-center gap-1 font-semibold"
+                                      >
+                                        <span>Original Article</span>
+                                        <ExternalLink className="w-3 h-3" />
+                                      </a>
+                                    ) : <span className="text-slate-500">Source link unavailable</span>}
                                   </div>
                                 </div>
                               ))}

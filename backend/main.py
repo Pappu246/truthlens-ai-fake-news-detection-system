@@ -1,8 +1,9 @@
 import os
 import json
+import secrets
 from pathlib import Path
 from typing import Optional, Dict, Any, List
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -28,14 +29,35 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Enable CORS for local Vite and preview containers
+# Production front-end origins must be explicitly configured; use local Vite
+# defaults only for development instead of wildcard CORS with credentials.
+cors_origins = [
+    origin.strip()
+    for origin in os.getenv(
+        "TRUTHLENS_CORS_ORIGINS",
+        "http://localhost:5173,http://127.0.0.1:5173"
+    ).split(",")
+    if origin.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=cors_origins,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
+
+def require_admin(authorization: Optional[str] = Header(default=None)):
+    expected = os.getenv("TRUTHLENS_ADMIN_TOKEN")
+    if not expected:
+        raise HTTPException(
+            status_code=503,
+            detail="Administrative endpoints are disabled until TRUTHLENS_ADMIN_TOKEN is configured."
+        )
+    scheme, _, supplied = (authorization or "").partition(" ")
+    if scheme.lower() != "bearer" or not supplied or not secrets.compare_digest(supplied, expected):
+        raise HTTPException(status_code=401, detail="Valid Bearer admin token required.")
+    return True
 
 # Request Models
 class AnalyzeRequest(BaseModel):
@@ -165,7 +187,7 @@ def get_diagnostics():
 def get_threshold_config():
     return get_thresholds()
 
-@app.post("/api/model/thresholds")
+@app.post("/api/model/thresholds", dependencies=[Depends(require_admin)])
 def set_threshold_config(req: ThresholdUpdateRequest):
     try:
         updated = update_thresholds(req.fake_threshold, req.real_threshold)
@@ -197,7 +219,7 @@ def get_metrics():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to read model evaluation file: {str(e)}")
 
-@app.post("/api/train")
+@app.post("/api/train", dependencies=[Depends(require_admin)])
 def trigger_training():
     """
     Triggers the ML training pipeline on the current dataset,
@@ -213,28 +235,28 @@ def trigger_training():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Training pipeline execution failed: {str(e)}")
 
-@app.get("/api/history")
+@app.get("/api/history", dependencies=[Depends(require_admin)])
 def list_history(limit: int = Query(default=50, ge=1, le=100)):
     try:
         return get_all_history(limit=limit)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to load history: {str(e)}")
 
-@app.get("/api/history/{record_id}")
+@app.get("/api/history/{record_id}", dependencies=[Depends(require_admin)])
 def get_history_detail(record_id: int):
     item = get_history_by_id(record_id)
     if not item:
         raise HTTPException(status_code=404, detail="History record not found.")
     return item
 
-@app.delete("/api/history/{record_id}")
+@app.delete("/api/history/{record_id}", dependencies=[Depends(require_admin)])
 def delete_history(record_id: int):
     success = delete_history_item(record_id)
     if not success:
         raise HTTPException(status_code=404, detail="History record not found or already deleted.")
     return {"message": f"Record {record_id} successfully deleted."}
 
-@app.delete("/api/history")
+@app.delete("/api/history", dependencies=[Depends(require_admin)])
 def clear_history():
     count = clear_all_history()
     return {"message": f"Cleared {count} history record(s)."}

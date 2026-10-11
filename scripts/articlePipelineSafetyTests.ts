@@ -158,6 +158,28 @@ async function main() {
     !/ignore all previous instructions|reveal the system prompt|api key/i.test(hostile.content)
   );
 
+  let pathologicalHtmlRejected = false;
+  try {
+    extractArticleFromHtml({
+      url: 'https://safe.test/pathological',
+      html: '<html><body>' + '<div>'.repeat(12000)
+    });
+  } catch (err: any) {
+    pathologicalHtmlRejected = /8,000-tag parsing limit/i.test(String(err?.message || err));
+  }
+  check('pathological unclosed-tag HTML is rejected before DOM parsing', pathologicalHtmlRejected);
+
+  let oversizedHtmlRejected = false;
+  try {
+    extractArticleFromHtml({
+      url: 'https://safe.test/oversized',
+      html: '<p>' + 'x'.repeat(512 * 1024)
+    });
+  } catch (err: any) {
+    oversizedHtmlRejected = /512 KiB parsing limit/i.test(String(err?.message || err));
+  }
+  check('oversized HTML is rejected before DOM parsing', oversizedHtmlRejected);
+
   const headlineOnly = extractArticleFromHtml({
     url: 'https://safe.test/headline',
     html: '<html><head><title>Breaking News Headline</title></head><body><h1>Breaking News Headline</h1></body></html>'

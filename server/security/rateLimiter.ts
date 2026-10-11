@@ -28,18 +28,19 @@ export function createRateLimiter(options: {
   }
 
   return (req: Request, res: Response, next: NextFunction) => {
-    // Vercel-safe IP extraction: req.socket may be unavailable in
-    // serverless/mocked invocations -- never throw during client identification.
-    const clientIp =
-      (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
-      (req as any)?.socket?.remoteAddress ||
-      (req as any)?.ip ||
-      'unknown-client';
+    // req.ip uses Express's trusted-proxy policy. Never read X-Forwarded-For
+    // directly because a caller can forge arbitrary values.
+    const clientIp = req.ip || req.socket?.remoteAddress || 'unknown-client';
 
     const now = Date.now();
     const record = ipMap.get(clientIp);
 
     if (!record || now > record.resetTime) {
+      // Keep per-process rate-limit state from growing unbounded under churn.
+      if (!ipMap.has(clientIp) && ipMap.size >= 10000) {
+        const oldestKey = ipMap.keys().next().value;
+        if (oldestKey !== undefined) ipMap.delete(oldestKey);
+      }
       ipMap.set(clientIp, {
         count: 1,
         resetTime: now + options.windowMs
