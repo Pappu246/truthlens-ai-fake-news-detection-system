@@ -427,8 +427,9 @@ export class SqliteHistoryManager {
   public deleteHistoryItem(id: number): boolean {
     if (!this.db) return false;
     this.db.run(`DELETE FROM history WHERE id = ?`, [id]);
-    this.saveToDisk();
-    return true;
+    const deleted = this.db.getRowsModified() > 0;
+    if (deleted) this.saveToDisk();
+    return deleted;
   }
 
   public clearAllHistory(): number {
