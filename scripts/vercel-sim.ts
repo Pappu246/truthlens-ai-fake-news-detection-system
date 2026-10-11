@@ -82,31 +82,23 @@ async function main() {
     return null;
   });
 
-  await check('GET /api/history', 'GET', '/api/history?limit=5', null, (s, j) => {
-    if (s !== 200) return `expected 200, got ${s}`;
-    if (!Array.isArray(j)) return 'expected JSON array';
+  // Shared server-side history is intentionally disabled until it can be
+  // scoped to an authenticated user/session. Never regress to exposing article
+  // full_text or allowing a public DELETE to erase everyone’s history.
+  await check('GET /api/history (unauthenticated shared history is disabled)', 'GET', '/api/history?limit=-1', null, (s, j) => {
+    if (s !== 403) return `expected safe 403, got ${s}`;
+    if (j?.code !== 'HISTORY_AUTH_REQUIRED') return 'missing HISTORY_AUTH_REQUIRED response';
     return null;
   });
-
-  // History must actually persist the analyzed record (proves SQLite/WASM works,
-  // not just degraded empty arrays). Poll briefly: SQLite init is async.
-  {
-    let persisted = false;
-    let lastStatus = 0;
-    for (let i = 0; i < 25 && !persisted; i++) {
-      try {
-        const res = await fetch(base + '/api/history?limit=5', { signal: AbortSignal.timeout(10000) });
-        lastStatus = res.status;
-        const arr: any = await res.json();
-        if (res.status === 200 && Array.isArray(arr) && arr.length >= 1) persisted = true;
-        else await new Promise((r) => setTimeout(r, 200));
-      } catch {
-        await new Promise((r) => setTimeout(r, 200));
-      }
-    }
-    if (persisted) console.log('PASS: history persists analyzed record (SQLite/WASM functional)');
-    else { failures++; console.error(`FAIL: history persistence (last status ${lastStatus}, no records after analyze)`); }
-  }
+  await check('DELETE /api/history (unauthenticated bulk deletion is disabled)', 'DELETE', '/api/history', null, (s, j) => {
+    if (s !== 403) return `expected safe 403, got ${s}`;
+    if (j?.code !== 'HISTORY_AUTH_REQUIRED') return 'missing HISTORY_AUTH_REQUIRED response';
+    return null;
+  });
+  await check('DELETE /api/history/abc (unauthenticated deletion is disabled)', 'DELETE', '/api/history/abc', null, (s, j) => {
+    if (s !== 403) return `expected safe 403, got ${s}`;
+    return null;
+  });
 
   await check('GET /api/models/metrics', 'GET', '/api/models/metrics', null, (s, j) => {
     if (s !== 200) return `expected 200, got ${s}`;
