@@ -1,4 +1,5 @@
 import os
+import math
 from pathlib import Path
 
 # Paths
@@ -21,6 +22,11 @@ SAMPLE_DATASET_PATH = DATA_DIR / "sample_news.csv"
 DEFAULT_FAKE_THRESHOLD = float(os.getenv("FAKE_THRESHOLD", "0.65"))
 DEFAULT_REAL_THRESHOLD = float(os.getenv("REAL_THRESHOLD", "0.35"))
 
+# Fall back safely instead of starting with NaN/Infinity or inverted thresholds.
+if (not math.isfinite(DEFAULT_FAKE_THRESHOLD) or not math.isfinite(DEFAULT_REAL_THRESHOLD)
+        or not (0.0 < DEFAULT_REAL_THRESHOLD < DEFAULT_FAKE_THRESHOLD < 1.0)):
+    DEFAULT_FAKE_THRESHOLD, DEFAULT_REAL_THRESHOLD = 0.65, 0.35
+
 FAKE_THRESHOLD = DEFAULT_FAKE_THRESHOLD
 REAL_THRESHOLD = DEFAULT_REAL_THRESHOLD
 
@@ -33,6 +39,8 @@ def get_thresholds():
 
 def update_thresholds(fake_threshold: float, real_threshold: float):
     global FAKE_THRESHOLD, REAL_THRESHOLD
+    if not math.isfinite(fake_threshold) or not math.isfinite(real_threshold):
+        raise ValueError("Thresholds must be finite numbers")
     if real_threshold >= fake_threshold:
         raise ValueError(f"REAL_THRESHOLD ({real_threshold}) must be strictly less than FAKE_THRESHOLD ({fake_threshold})")
     if not (0.0 < real_threshold < 1.0) or not (0.0 < fake_threshold < 1.0):

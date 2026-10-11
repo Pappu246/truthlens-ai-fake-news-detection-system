@@ -298,16 +298,14 @@ async function httpContracts(): Promise<void> {
         'legacy production analysis withholds confidence');
     }
 
-    const history = await call('GET', '/api/history?limit=1');
-    assert(history.status === 200, '/api/history returns 200');
-    if (analyzed.json?.calibration_status === 'LEGACY_UNCALIBRATED_MARGIN' && history.json?.[0]) {
-      assert(history.json[0].fake_probability === null,
-        'legacy probability is not persisted into history');
-      assert(history.json[0].real_probability === null,
-        'legacy real probability is not persisted into history');
-      assert(history.json[0].confidence_score === null,
-        'legacy confidence is not persisted into history');
-    }
+    const history = await call('GET', '/api/history?limit=-1');
+    assert(history.status === 403, '/api/history is closed until per-user authentication exists');
+    assert(history.json?.code === 'HISTORY_AUTH_REQUIRED',
+      '/api/history returns explicit auth-required response');
+    const historyDelete = await call('DELETE', '/api/history');
+    assert(historyDelete.status === 403, 'unauthenticated history clear is blocked');
+    const invalidHistoryDelete = await call('DELETE', '/api/history/abc');
+    assert(invalidHistoryDelete.status === 403, 'unauthenticated history item deletion is blocked');
 
     const evShort = await call('POST', '/api/evidence/verify', { claim: 'taxes rose' });
     assert(evShort.json?.status === 'NEEDS_MORE_CONTEXT',
