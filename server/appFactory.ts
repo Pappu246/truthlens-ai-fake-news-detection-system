@@ -856,10 +856,27 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
   app.post('/api/model/thresholds', apiRateLimiter, (req, res) => {
     if (productionMutationBlocked(res, 'threshold-update')) return;
     try {
-      const { fake_threshold, real_threshold, min_text_length } = req.body;
-      const fake = typeof fake_threshold === 'number' ? fake_threshold : parseFloat(fake_threshold);
-      const real = typeof real_threshold === 'number' ? real_threshold : parseFloat(real_threshold);
-      const minLength = min_text_length !== undefined ? (typeof min_text_length === 'number' ? min_text_length : parseInt(min_text_length, 10)) : undefined;
+      const { fake_threshold, real_threshold, min_text_length } = req.body ?? {};
+      const parseNumericValue = (value: unknown, field: string): number => {
+        if (typeof value === 'number') return value;
+        if (typeof value === 'string') {
+          const normalized = value.trim();
+          if (normalized && /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(normalized)) {
+            return Number(normalized);
+          }
+        }
+        throw new Error(field + ' must be a numeric value.');
+      };
+      const parseIntegerValue = (value: unknown, field: string): number => {
+        if (typeof value === 'number' && Number.isInteger(value)) return value;
+        if (typeof value === 'string' && /^[+-]?\d+$/.test(value.trim())) return Number(value.trim());
+        throw new Error(field + ' must be an integer value.');
+      };
+      const fake = parseNumericValue(fake_threshold, 'fake_threshold');
+      const real = parseNumericValue(real_threshold, 'real_threshold');
+      const minLength = min_text_length !== undefined
+        ? parseIntegerValue(min_text_length, 'min_text_length')
+        : undefined;
       const updated = mlEngine.updateThresholds(fake, real, minLength);
       res.json({ status: 'success', thresholds: updated });
     } catch (err: any) {
