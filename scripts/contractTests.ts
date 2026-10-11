@@ -381,6 +381,15 @@ async function localHistoryIdContracts(): Promise<void> {
       return { status: response.status, text: await response.text() };
     };
 
+    const post = async (route: string, body: unknown) => {
+      const response = await fetch(base + route, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      return { status: response.status, text: await response.text() };
+    };
+
     const numericGet = await get('/api/history/2147483647');
     assert(numericGet.status === 404,
       'local opt-in history route accepts numeric IDs and returns 404 for missing records',
@@ -397,6 +406,44 @@ async function localHistoryIdContracts(): Promise<void> {
     assert(malformedDelete.status === 400,
       'local opt-in history delete rejects malformed IDs with 400',
       `HTTP ${malformedDelete.status}: ${malformedDelete.text.slice(0, 160)}`);
+
+    const partialNumber = await post('/api/model/thresholds', {
+      fake_threshold: 0.9, real_threshold: 0.1, min_text_length: '50 / -3'
+    });
+    assert(partialNumber.status === 400,
+      'threshold API rejects partially numeric integer strings',
+      `HTTP ${partialNumber.status}: ${partialNumber.text.slice(0, 160)}`);
+    const nonNumericThreshold = await post('/api/model/thresholds', {
+      fake_threshold: 'NaN', real_threshold: 'Infinity'
+    });
+    assert(nonNumericThreshold.status === 400,
+      'threshold API rejects NaN and Infinity strings',
+      `HTTP ${nonNumericThreshold.status}: ${nonNumericThreshold.text.slice(0, 160)}`);
+
+    const malformedExtract = await post('/api/claims/extract', { title: {}, content: [] });
+    assert(malformedExtract.status === 400,
+      'claim extraction rejects object/array input with 400',
+      `HTTP ${malformedExtract.status}: ${malformedExtract.text.slice(0, 160)}`);
+    const malformedVerifyClaim = await post('/api/verify-claim', { text: { claim: 'object' } });
+    assert(malformedVerifyClaim.status === 400,
+      'claim verification rejects object input with 400',
+      `HTTP ${malformedVerifyClaim.status}: ${malformedVerifyClaim.text.slice(0, 160)}`);
+    const malformedVerifyArticle = await post('/api/verify-article', {
+      title: {}, content: 42, source_url: 'https://example.com/story'
+    });
+    assert(malformedVerifyArticle.status === 400,
+      'article verification rejects non-string article fields with 400',
+      `HTTP ${malformedVerifyArticle.status}: ${malformedVerifyArticle.text.slice(0, 160)}`);
+    const tooManyClaims = await post('/api/verify-claims', {
+      claims: Array.from({ length: 21 }, (_, i) => ({ originalText: 'Claim ' + (i + 1) + ' has enough context for validation.' }))
+    });
+    assert(tooManyClaims.status === 400,
+      'claim verification caps request arrays before outbound retrieval',
+      `HTTP ${tooManyClaims.status}: ${tooManyClaims.text.slice(0, 160)}`);
+    const duplicateCategory = await get('/api/news/latest?category=a&category=b');
+    assert(duplicateCategory.status === 400,
+      'news endpoint rejects repeated category parameters with 400',
+      `HTTP ${duplicateCategory.status}: ${duplicateCategory.text.slice(0, 160)}`);
   } catch (err: any) {
     assert(false, 'local opt-in history ID validation tests complete', String(err?.stack || err));
   } finally {
