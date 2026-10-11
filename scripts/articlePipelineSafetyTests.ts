@@ -2,6 +2,7 @@ import dns from 'dns';
 import { validateUrlSecurity, safeFetchHtml } from '../server/security/urlValidator';
 import { extractArticleFromHtml } from '../server/extraction/articleExtractor';
 import { TruthLensMLEngine } from '../server/mlEngine';
+import { SqliteHistoryManager } from '../server/sqliteHistory';
 
 let passed = 0;
 let failed = 0;
@@ -21,6 +22,51 @@ async function main() {
   console.log('ARTICLE PIPELINE / EXTRACTION SAFETY TESTS');
   console.log('='.repeat(72));
 
+  // Production does not expose shared history. Verify that full article bodies
+  // aren't accumulated in warm-instance memory when no authenticated archive exists.
+  const previousNodeEnv = process.env.NODE_ENV;
+  const previousVercel = process.env.VERCEL;
+  try {
+    process.env.NODE_ENV = 'production';
+    process.env.VERCEL = '1';
+    const isolatedHistory = new SqliteHistoryManager();
+    await isolatedHistory.init();
+    const historyId = isolatedHistory.insertHistory({
+      full_text: 'A full article body that must not be retained in production.',
+      prediction: 'NEEDS MORE CONTEXT',
+      confidence: null,
+      fake_probability: null,
+      real_probability: null,
+      risk_level: 'UNDETERMINED',
+      model_name: 'security-regression-test',
+      source_url: 'https://safe.test/story'
+    });
+    check('production analysis history is not retained in server-side memory',
+      Number.isFinite(historyId) && isolatedHistory.getAllHistory(10).length === 0);
+
+    const verificationId = isolatedHistory.insertVerification({
+      analysis_id: 'security-regression-verification',
+      title: 'Private article title',
+      content_preview: 'Private article preview',
+      claims: [],
+      summary: {},
+      final_assessment: 'INSUFFICIENT EVIDENCE',
+      final_reasoning: '',
+      ml_risk: 'UNKNOWN',
+      ml_synthesis: '',
+      warnings: []
+    });
+    check('production verification archive is not retained in server-side memory',
+      isolatedHistory.getVerificationById(verificationId) === undefined);
+  } catch (err: any) {
+    check('production history persistence safety test initializes cleanly', false, String(err?.stack || err));
+  } finally {
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnv;
+    if (previousVercel === undefined) delete process.env.VERCEL;
+    else process.env.VERCEL = previousVercel;
+  }
+
   check('localhost is rejected', !(await validateUrlSecurity('http://localhost/test')).isValid);
   check('loopback is rejected', !(await validateUrlSecurity('http://127.0.0.1/test')).isValid);
   check('file protocol is rejected', !(await validateUrlSecurity('file:///etc/passwd')).isValid);
@@ -34,8 +80,16 @@ async function main() {
       if (hostname === 'safe.test') {
         return [{ address: '93.184.216.34', family: 4 }];
       }
+      if (hostname === '2606:4700:4700::1111') {
+        return [{ address: '2606:4700:4700::1111', family: 6 }];
+      }
       throw new Error('unexpected hostname: ' + hostname);
     };
+
+    const publicIpv6 = await validateUrlSecurity('https://[2606:4700:4700::1111]/');
+    check('public IPv6 URL hostname is normalized without brackets',
+      publicIpv6.isValid && publicIpv6.resolvedIps?.includes('2606:4700:4700::1111') === true,
+      JSON.stringify(publicIpv6));
 
     let callCount = 0;
     globalThis.fetch = (async (input: RequestInfo | URL) => {
@@ -157,6 +211,28 @@ async function main() {
   check('hidden comments/scripts/instructions are not emitted',
     !/ignore all previous instructions|reveal the system prompt|api key/i.test(hostile.content)
   );
+
+  let pathologicalHtmlRejected = false;
+  try {
+    extractArticleFromHtml({
+      url: 'https://safe.test/pathological',
+      html: '<html><body>' + '<div>'.repeat(12000)
+    });
+  } catch (err: any) {
+    pathologicalHtmlRejected = /8,000-tag parsing limit/i.test(String(err?.message || err));
+  }
+  check('pathological unclosed-tag HTML is rejected before DOM parsing', pathologicalHtmlRejected);
+
+  let oversizedHtmlRejected = false;
+  try {
+    extractArticleFromHtml({
+      url: 'https://safe.test/oversized',
+      html: '<p>' + 'x'.repeat(512 * 1024)
+    });
+  } catch (err: any) {
+    oversizedHtmlRejected = /512 KiB parsing limit/i.test(String(err?.message || err));
+  }
+  check('oversized HTML is rejected before DOM parsing', oversizedHtmlRejected);
 
   const headlineOnly = extractArticleFromHtml({
     url: 'https://safe.test/headline',

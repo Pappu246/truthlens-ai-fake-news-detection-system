@@ -21,6 +21,13 @@ export interface EvidenceSearchOptions {
   timeoutMs?: number;
 }
 
+/** Parse a feed date without allowing one malformed item to abort the search. */
+export function parsePublicationDate(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  const parsed = new Date(raw);
+  return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : undefined;
+}
+
 /**
  * Fall back to Wikipedia when too few Google News results survive publisher
  * fetching and provenance verification. Search-result count alone is not
@@ -395,6 +402,10 @@ export class EvidenceProvider {
           const rawTitle = titleMatch ? titleMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim() : '';
           const rawLink = linkMatch ? linkMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim() : '';
           const rawPubDate = pubMatch ? pubMatch[1].trim() : undefined;
+          const parsedPubDate = rawPubDate ? new Date(rawPubDate) : null;
+          const publishedAt = parsedPubDate && Number.isFinite(parsedPubDate.getTime())
+            ? parsedPubDate.toISOString()
+            : undefined;
           const rawSourceName = sourceMatch ? sourceMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim() : 'News Outlet';
 
           if (rawLink && !seenUrls.has(rawLink)) {
@@ -420,7 +431,7 @@ export class EvidenceProvider {
               sourceName: rawSourceName,
               sourceUrl: rawLink,
               title: cleanTitle || rawTitle,
-              publishedAt: rawPubDate ? new Date(rawPubDate).toISOString() : undefined,
+              publishedAt,
               retrievedAt: new Date().toISOString(),
               sourceType,
               snippet,

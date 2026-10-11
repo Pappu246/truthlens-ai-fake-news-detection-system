@@ -207,7 +207,7 @@ async function httpContracts(): Promise<void> {
   const port = (server.address() as any).port;
   const base = `http://127.0.0.1:${port}`;
 
-  const call = async (method: 'GET' | 'POST', route: string, body?: any) => {
+  const call = async (method: 'GET' | 'POST' | 'DELETE', route: string, body?: any) => {
     const res = await fetch(`${base}${route}`, {
       method,
       headers: body ? { 'content-type': 'application/json' } : undefined,
@@ -221,6 +221,13 @@ async function httpContracts(): Promise<void> {
   try {
     const health = await call('GET', '/api/health');
     assert(health.status === 200, '/api/health returns 200');
+    if (health.json?.article_calibration_exact === false) {
+      assert(health.json?.status === 'degraded',
+        '/api/health does not report an uncalibrated production artifact as fully healthy');
+      assert(Array.isArray(health.json?.degraded_reasons) &&
+        health.json.degraded_reasons.some((reason: string) => /legacy uncalibrated/i.test(reason)),
+        '/api/health explains legacy calibration degradation');
+    }
     assert(health.json?.components?.article_model?.role === 'article_model',
       '/api/health reports the article model component');
     assert(health.json?.components?.claim_model?.status === 'READY',
@@ -298,16 +305,14 @@ async function httpContracts(): Promise<void> {
         'legacy production analysis withholds confidence');
     }
 
-    const history = await call('GET', '/api/history?limit=1');
-    assert(history.status === 200, '/api/history returns 200');
-    if (analyzed.json?.calibration_status === 'LEGACY_UNCALIBRATED_MARGIN' && history.json?.[0]) {
-      assert(history.json[0].fake_probability === null,
-        'legacy probability is not persisted into history');
-      assert(history.json[0].real_probability === null,
-        'legacy real probability is not persisted into history');
-      assert(history.json[0].confidence_score === null,
-        'legacy confidence is not persisted into history');
-    }
+    const history = await call('GET', '/api/history?limit=-1');
+    assert(history.status === 403, '/api/history is closed until per-user authentication exists');
+    assert(history.json?.code === 'HISTORY_AUTH_REQUIRED',
+      '/api/history returns explicit auth-required response');
+    const historyDelete = await call('DELETE', '/api/history');
+    assert(historyDelete.status === 403, 'unauthenticated history clear is blocked');
+    const invalidHistoryDelete = await call('DELETE', '/api/history/abc');
+    assert(invalidHistoryDelete.status === 403, 'unauthenticated history item deletion is blocked');
 
     const evShort = await call('POST', '/api/evidence/verify', { claim: 'taxes rose' });
     assert(evShort.json?.status === 'NEEDS_MORE_CONTEXT',
@@ -350,7 +355,155 @@ async function httpContracts(): Promise<void> {
   }
 }
 
-httpContracts().then(() => {
+
+async function localHistoryIdContracts(): Promise<void> {
+  const previousNodeEnv = process.env.NODE_ENV;
+  const previousHistoryOptIn = process.env.TRUTHLENS_ENABLE_LOCAL_HISTORY_API;
+  let server: Server | undefined;
+
+  process.env.NODE_ENV = 'development';
+  process.env.TRUTHLENS_ENABLE_LOCAL_HISTORY_API = 'true';
+
+  try {
+    const localApp = await createExpressApp({ isProduction: false, includeVite: false });
+    server = await new Promise<Server>(resolve => {
+      const s = localApp.listen(0, '127.0.0.1', () => resolve(s));
+    });
+    const port = (server.address() as any).port;
+    const base = `http://127.0.0.1:${port}`;
+
+    const get = async (route: string) => {
+      const response = await fetch(base + route);
+      return { status: response.status, text: await response.text() };
+    };
+    const remove = async (route: string) => {
+      const response = await fetch(base + route, { method: 'DELETE' });
+      return { status: response.status, text: await response.text() };
+    };
+
+    const post = async (route: string, body: unknown) => {
+      const response = await fetch(base + route, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      return { status: response.status, text: await response.text() };
+    };
+
+    const numericGet = await get('/api/history/2147483647');
+    assert(numericGet.status === 404,
+      'local opt-in history route accepts numeric IDs and returns 404 for missing records',
+      `HTTP ${numericGet.status}: ${numericGet.text.slice(0, 160)}`);
+    const malformedGet = await get('/api/history/not-an-id');
+    assert(malformedGet.status === 400,
+      'local opt-in history route rejects malformed IDs with 400',
+      `HTTP ${malformedGet.status}: ${malformedGet.text.slice(0, 160)}`);
+    const numericDelete = await remove('/api/history/2147483647');
+    assert(numericDelete.status === 404,
+      'local opt-in history delete accepts numeric IDs and returns 404 for missing records',
+      `HTTP ${numericDelete.status}: ${numericDelete.text.slice(0, 160)}`);
+    const malformedDelete = await remove('/api/history/not-an-id');
+    assert(malformedDelete.status === 400,
+      'local opt-in history delete rejects malformed IDs with 400',
+      `HTTP ${malformedDelete.status}: ${malformedDelete.text.slice(0, 160)}`);
+
+    const partialNumber = await post('/api/model/thresholds', {
+      fake_threshold: 0.9, real_threshold: 0.1, min_text_length: '50 / -3'
+    });
+    assert(partialNumber.status === 400,
+      'threshold API rejects partially numeric integer strings',
+      `HTTP ${partialNumber.status}: ${partialNumber.text.slice(0, 160)}`);
+    const nonNumericThreshold = await post('/api/model/thresholds', {
+      fake_threshold: 'NaN', real_threshold: 'Infinity'
+    });
+    assert(nonNumericThreshold.status === 400,
+      'threshold API rejects NaN and Infinity strings',
+      `HTTP ${nonNumericThreshold.status}: ${nonNumericThreshold.text.slice(0, 160)}`);
+
+    const malformedExtract = await post('/api/claims/extract', { title: {}, content: [] });
+    assert(malformedExtract.status === 400,
+      'claim extraction rejects object/array input with 400',
+      `HTTP ${malformedExtract.status}: ${malformedExtract.text.slice(0, 160)}`);
+    const malformedVerifyClaim = await post('/api/verify-claim', { text: { claim: 'object' } });
+    assert(malformedVerifyClaim.status === 400,
+      'claim verification rejects object input with 400',
+      `HTTP ${malformedVerifyClaim.status}: ${malformedVerifyClaim.text.slice(0, 160)}`);
+    const malformedVerifyArticle = await post('/api/verify-article', {
+      title: {}, content: 42, source_url: 'https://example.com/story'
+    });
+    assert(malformedVerifyArticle.status === 400,
+      'article verification rejects non-string article fields with 400',
+      `HTTP ${malformedVerifyArticle.status}: ${malformedVerifyArticle.text.slice(0, 160)}`);
+    const tooManyClaims = await post('/api/verify-claims', {
+      claims: Array.from({ length: 21 }, (_, i) => ({ originalText: 'Claim ' + (i + 1) + ' has enough context for validation.' }))
+    });
+    assert(tooManyClaims.status === 400,
+      'claim verification caps request arrays before outbound retrieval',
+      `HTTP ${tooManyClaims.status}: ${tooManyClaims.text.slice(0, 160)}`);
+    const duplicateCategory = await get('/api/news/latest?category=a&category=b');
+    assert(duplicateCategory.status === 400,
+      'news endpoint rejects repeated category parameters with 400',
+      `HTTP ${duplicateCategory.status}: ${duplicateCategory.text.slice(0, 160)}`);
+    const publicValidationReport = await get('/api/dataset/validation');
+    const publicValidationJson = JSON.parse(publicValidationReport.text);
+    assert(publicValidationReport.status === 200,
+      'public dataset validation endpoint returns a bounded summary',
+      `HTTP ${publicValidationReport.status}: ${publicValidationReport.text.slice(0, 160)}`);
+    assert(!Object.prototype.hasOwnProperty.call(publicValidationJson, 'parsed_records'),
+      'public dataset validation endpoint does not expose full article records');
+    assert(publicValidationReport.text.length < 50000,
+      'public dataset validation response excludes dataset payload amplification');
+
+    const invalidDatasetCsv = `text,label
+${Array.from({ length: 3000 }, (_, i) =>
+      `Article ${i} has enough content for a dataset row but uses an invalid class label.,UNKNOWN`).join('\n')}`;
+    const validationSummary = await post('/api/dataset/validate', {
+      filename: 'bounded-diagnostics.csv', csv_content: invalidDatasetCsv
+    });
+    const validationJson = JSON.parse(validationSummary.text);
+    assert(validationSummary.status === 200,
+      'dataset validation handles bounded input successfully',
+      `HTTP ${validationSummary.status}: ${validationSummary.text.slice(0, 160)}`);
+    assert(!Object.prototype.hasOwnProperty.call(validationJson, 'parsed_records'),
+      'dataset validation API does not echo the uploaded parsed dataset');
+    assert(validationJson.diagnostics_truncated === true &&
+      validationJson.issues.length === 100 && validationJson.total_issues >= 3000,
+      'dataset validation caps diagnostics while reporting total issue counts');
+    assert(validationSummary.text.length < 50000,
+      'dataset validation response is bounded against response amplification',
+      `response bytes=${validationSummary.text.length}`);
+
+    const tooManyDatasetRows = `text,label
+${Array.from({ length: 10001 }, (_, i) => `Article ${i},UNKNOWN`).join('\n')}`;
+    const rowLimitResult = await post('/api/dataset/validate', {
+      filename: 'too-many-rows.csv', csv_content: tooManyDatasetRows
+    });
+    assert(rowLimitResult.status === 413,
+      'dataset validation rejects more than 10,000 CSV records',
+      `HTTP ${rowLimitResult.status}: ${rowLimitResult.text.slice(0, 160)}`);
+
+    const tooManyDatasetColumns = 'text,label,' + Array.from({ length: 64 }, (_, i) => `extra${i}`).join(',') +
+      '\nArticle text is long enough to avoid an empty row issue,REAL';
+    const columnLimitResult = await post('/api/dataset/validate', {
+      filename: 'too-many-columns.csv', csv_content: tooManyDatasetColumns
+    });
+    assert(columnLimitResult.status === 413,
+      'dataset validation rejects CSV records with more than 64 columns',
+      `HTTP ${columnLimitResult.status}: ${columnLimitResult.text.slice(0, 160)}`);
+
+  } catch (err: any) {
+    assert(false, 'local opt-in history ID validation tests complete', String(err?.stack || err));
+  } finally {
+    if (server) await new Promise<void>(resolve => server!.close(() => resolve()));
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnv;
+    if (previousHistoryOptIn === undefined) delete process.env.TRUTHLENS_ENABLE_LOCAL_HISTORY_API;
+    else process.env.TRUTHLENS_ENABLE_LOCAL_HISTORY_API = previousHistoryOptIn;
+  }
+}
+
+httpContracts().then(async () => {
+  await localHistoryIdContracts();
   console.log(`\n====================================================`);
   console.log(`CONTRACT TESTS SUMMARY: ${passed} PASSED, ${failed} FAILED`);
   console.log(`====================================================`);

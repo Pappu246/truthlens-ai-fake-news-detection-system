@@ -19,7 +19,7 @@ import { EvidenceItem } from '../src/types';
 import { buildArticleVerification } from '../server/verification/assessmentEngine';
 import { ClaimVerificationResult } from '../src/types';
 import { extractClaimsHeuristic } from '../server/verification/claimExtractor';
-import { extractReadableArticleText, shouldSearchWikipediaForEvidence } from '../server/verification/evidenceProvider';
+import { extractReadableArticleText, shouldSearchWikipediaForEvidence, parsePublicationDate } from '../server/verification/evidenceProvider';
 import { checkNumericalConsistency, classifyEvidenceRelation } from '../server/verification/evidenceAnalyzer';
 
 let passed = 0;
@@ -85,6 +85,11 @@ async function main(): Promise<void> {
   console.log('='.repeat(72));
   console.log('EVIDENCE ENGINE TESTS');
   console.log('='.repeat(72));
+  check('invalid RSS publication dates are ignored instead of aborting evidence search',
+    parsePublicationDate('not a real date') === undefined);
+  check('valid RSS publication date is normalized safely',
+    parsePublicationDate('Tue, 10 Oct 2023 12:00:00 GMT') === '2023-10-10T12:00:00.000Z');
+
   section('0. Publisher article text extraction');
 
   section('0a. Wikipedia navigation is not evidence text');

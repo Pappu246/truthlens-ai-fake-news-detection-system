@@ -10,6 +10,8 @@ async function main() {
   const port = server.address().port;
   const base = `http://127.0.0.1:${port}`;
   const cases: [string, any, number][] = [
+    ['URL credentials are rejected', { url: 'https://user:pass@example.com/story' }, 400],
+    ['nonstandard port is rejected', { url: 'http://example.com:8080/story' }, 400],
     ['localhost', { url: 'http://localhost/x' }, 400],
     ['127.0.0.1', { url: 'http://127.0.0.1/x' }, 400],
     ['cloud metadata 169.254', { url: 'http://169.254.169.254/' }, 400],
@@ -44,7 +46,9 @@ async function main() {
     ['IPv4 CGNAT', isPrivateIPv4('100.64.0.1')],
     ['IPv4 benchmarking', isPrivateIPv4('198.18.0.1')],
     ['IPv6 loopback', isPrivateIPv6('::1')],
-    ['IPv6 mapped loopback', isPrivateIPv6('::ffff:127.0.0.1')],
+    ['IPv6 mapped loopback dotted', isPrivateIPv6('::ffff:127.0.0.1')],
+    ['IPv6 mapped loopback canonical hex', isPrivateIPv6('::ffff:7f00:1')],
+    ['IPv4-compatible IPv6 loopback', isPrivateIPv6('::7f00:1')],
     ['IPv6 ULA', isPrivateIPv6('fd00::1')],
     ['IPv6 link-local', isPrivateIPv6('fe80::1')],
   ];

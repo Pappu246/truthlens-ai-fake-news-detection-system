@@ -39,6 +39,11 @@ export class SqliteHistoryManager {
   private db: Database | null = null;
   private SQL: SqlJsStatic | null = null;
   private dbPath: string;
+  // Shared server-side history is disabled until rows are scoped to an authenticated
+  // identity. In production/serverless, do not retain full articles in warm-process
+  // memory either; browser-local history is the supported per-user history store.
+  private readonly persistHistoryToDisk =
+    process.env.NODE_ENV !== 'production' && process.env.VERCEL !== '1';
   private isReady = false;
   private initPromise: Promise<void> | null = null;
   private pendingInserts: Array<{
@@ -62,8 +67,8 @@ export class SqliteHistoryManager {
   }> = [];
 
   constructor() {
-    // Vercel serverless filesystem is read-only except /tmp. Use /tmp there so
-    // history works per-instance; Render/local keep the persistent disk path.
+    // Production history is kept in-memory only until per-user authentication
+    // and durable storage are implemented. Development keeps local DB persistence.
     this.dbPath = process.env.VERCEL === '1'
       ? path.join('/tmp', 'truthlens.db')
       : path.join(process.cwd(), 'backend', 'database', 'truthlens.db');
@@ -90,9 +95,11 @@ export class SqliteHistoryManager {
           : await initSqlJs();
 
         const dir = path.dirname(this.dbPath);
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        if (this.persistHistoryToDisk && !fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true });
+        }
 
-        if (fs.existsSync(this.dbPath)) {
+        if (this.persistHistoryToDisk && fs.existsSync(this.dbPath)) {
           const fileBuffer = fs.readFileSync(this.dbPath);
           this.db = new this.SQL.Database(fileBuffer);
         } else {
@@ -233,7 +240,7 @@ export class SqliteHistoryManager {
   }
 
   private saveToDisk(): void {
-    if (!this.db) return;
+    if (!this.persistHistoryToDisk || !this.db) return;
     try {
       const data = this.db.export();
       const buffer = Buffer.from(data);
@@ -262,6 +269,9 @@ export class SqliteHistoryManager {
     indicators?: any[];
     explanation?: any[];
   }): number {
+    // There is no authenticated remote history API in production, so retaining
+    // every article here would only grow memory in a warm serverless instance.
+    if (!this.persistHistoryToDisk) return Date.now();
     if (!this.db) {
       this.pendingInserts.push(record);
       return Date.now();
@@ -443,6 +453,9 @@ export class SqliteHistoryManager {
     ml_synthesis: string;
     warnings: string[];
   }): number {
+    // The shared verification archive is also disabled in production until it
+    // can be authenticated and durably scoped per user.
+    if (!this.persistHistoryToDisk) return Date.now();
     if (!this.db) return Date.now();
     try {
       const stmt = this.db.prepare(`
