@@ -11,12 +11,18 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/production-smoke.yml'
+      - 'scripts/productionSmokeTest.ts'
   workflow_dispatch:
     inputs:
       base_url:
         description: Base URL of the deployment to verify
         required: false
-        default: https://truthlens-ai-dvpf.onrender.com
+        default: https://truthlens-ai-fake-news-detection-sy.vercel.app
   schedule:
     - cron: '0 6 * * 1'
 
@@ -37,12 +43,13 @@ jobs:
 
       - run: npm ci
 
-      - name: Allow the deployment to roll out
+      - name: Allow the deployment to roll out after a push to main
+        if: github.event_name == 'push'
         run: sleep 150
 
       - name: Wake the deployment (free tier cold start)
         env:
-          BASE_URL: ${{ github.event.inputs.base_url || 'https://truthlens-ai-dvpf.onrender.com' }}
+          BASE_URL: ${{ github.event.inputs.base_url || 'https://truthlens-ai-fake-news-detection-sy.vercel.app' }}
         run: |
           for i in $(seq 1 30); do
             code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 60 "$BASE_URL/api/health" || true)
@@ -55,5 +62,5 @@ jobs:
 
       - name: Production smoke test
         env:
-          BASE_URL: ${{ github.event.inputs.base_url || 'https://truthlens-ai-dvpf.onrender.com' }}
+          BASE_URL: ${{ github.event.inputs.base_url || 'https://truthlens-ai-fake-news-detection-sy.vercel.app' }}
         run: npx tsx scripts/productionSmokeTest.ts "$BASE_URL"
