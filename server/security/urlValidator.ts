@@ -104,12 +104,32 @@ export function isPrivateIPv6(ip: string): boolean {
   // :: (Unspecified)
   if (normalized === '::' || normalized === '0:0:0:0:0:0:0:0') return true;
 
-  // IPv4-mapped IPv6: ::ffff:192.0.2.128 or ::ffff:c000:0280
-  if (normalized.startsWith('::ffff:') || normalized.startsWith('0:0:0:0:0:ffff:')) {
-    const lastPart = normalized.substring(normalized.lastIndexOf(':') + 1);
-    if (net.isIPv4(lastPart)) {
-      return isPrivateIPv4(lastPart);
+  // IPv4-mapped IPv6. WHATWG URL canonicalizes dotted literals like
+  // ::ffff:127.0.0.1 into hexadecimal form ::ffff:7f00:1, so handle both.
+  const mappedPrefix = normalized.startsWith('::ffff:')
+    ? normalized.slice('::ffff:'.length)
+    : normalized.startsWith('0:0:0:0:0:ffff:')
+      ? normalized.slice('0:0:0:0:0:ffff:'.length)
+      : null;
+  if (mappedPrefix !== null) {
+    if (net.isIPv4(mappedPrefix)) return isPrivateIPv4(mappedPrefix);
+    const halves = mappedPrefix.split(':');
+    if (halves.length !== 2 || halves.some(part => !/^[0-9a-f]{1,4}$/.test(part))) {
+      return true; // Malformed mapped address is unsafe.
     }
+    const high = Number.parseInt(halves[0], 16);
+    const low = Number.parseInt(halves[1], 16);
+    const mappedIPv4 = [
+      (high >> 8) & 255, high & 255,
+      (low >> 8) & 255, low & 255
+    ].join('.');
+    return isPrivateIPv4(mappedIPv4);
+  }
+
+  // IPv4-compatible / other all-zero-prefix IPv6 forms are deprecated and
+  // can disguise loopback or reserved IPv4 destinations after URL normalization.
+  if (normalized.startsWith('::') || normalized.startsWith('0:0:0:0:0:0:')) {
+    return true;
   }
 
   // fc00::/7 (Unique Local Address: fc00:: to fdff::)
