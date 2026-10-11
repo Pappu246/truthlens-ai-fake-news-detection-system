@@ -36,6 +36,7 @@ jobs:
           api="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs"
           recovery_json="$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "${api}?workflow_id=374135353&head_sha=${TARGET_SHA}&per_page=100" | jq -c '[.workflow_runs[]] | sort_by(.run_number) | last // empty')"
           averitec_json="$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "${api}?workflow_id=373715227&head_sha=${TARGET_SHA}&per_page=100" | jq -c '[.workflow_runs[]] | sort_by(.run_number) | last // empty')"
+          holdout_json="$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "${api}?workflow_id=374147287&head_sha=${TARGET_SHA}&per_page=100" | jq -c '[.workflow_runs[] | select(.conclusion=="success")] | sort_by(.run_number) | last // empty')"
 
           if [ -z "$recovery_json" ] || [ -z "$averitec_json" ]; then
             echo "gate_ready=false" >> "$GITHUB_OUTPUT"
@@ -63,6 +64,9 @@ jobs:
           fi
           if [ "$(jq -r '.conclusion' <<<"$averitec_json")" = "success" ]; then
             echo "averitec_id=$averitec_id" >> "$GITHUB_OUTPUT"
+          fi
+          if [ -n "$holdout_json" ]; then
+            echo "holdout_id=$(jq -r '.id' <<<"$holdout_json")" >> "$GITHUB_OUTPUT"
           fi
           echo "target_sha=$TARGET_SHA" >> "$GITHUB_OUTPUT"
           printf 'Completed research runs for %s: recovery=%s (%s), AVeriTeC=%s (%s)\n' "$TARGET_SHA" "$recovery_id" "$(jq -r '.conclusion' <<<"$recovery_json")" "$averitec_id" "$(jq -r '.conclusion' <<<"$averitec_json")"
@@ -105,21 +109,14 @@ jobs:
           merge-multiple: true
 
       - name: Download human holdout validation artifact
-        if: steps.resolve.outputs.gate_ready == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TARGET_SHA: ${{ github.event.workflow_run.head_sha }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          response="$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs?workflow_id=374147287&head_sha=${TARGET_SHA}&per_page=100")"
-          holdout_id="$(jq -r '[.workflow_runs[] | select(.conclusion=="success")] | sort_by(.run_number) | last | .id // empty' <<<"$response")"
-          if [ -n "$holdout_id" ]; then
-            echo "Downloading validation artifact from holdout workflow run $holdout_id"
-            gh run download "$holdout_id" --repo "$GITHUB_REPOSITORY" --name "truthlens-open-web-v1-holdout-gate-*" --dir artifacts/v3/open-web-v1 || true
-          else
-            echo "No successful holdout-validation workflow is available for this SHA."
-          fi
+        if: steps.resolve.outputs.gate_ready == 'true' && steps.resolve.outputs.holdout_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.resolve.outputs.holdout_id }}
+          pattern: truthlens-open-web-v1-holdout-gate-*
+          path: artifacts/v3/open-web-v1
+          merge-multiple: true
 
       - name: Evaluate fail-closed Phase 2 gate
         if: steps.resolve.outputs.gate_ready == 'true'
