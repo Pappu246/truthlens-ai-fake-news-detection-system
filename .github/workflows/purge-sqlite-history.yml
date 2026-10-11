@@ -49,9 +49,13 @@ jobs:
             exit 1
           fi
 
-          # git-filter-repo removes 'origin' intentionally. Re-add a credential-free
-          # URL; credentials are supplied only through a temporary HTTP header.
-          git -C "$MIRROR" remote add origin "$REPO_URL"
+          # Normalize the credential-free origin URL. Depending on the installed
+          # git-filter-repo version, the original remote may still exist.
+          if git -C "$MIRROR" remote get-url origin >/dev/null 2>&1; then
+            git -C "$MIRROR" remote set-url origin "$REPO_URL"
+          else
+            git -C "$MIRROR" remote add origin "$REPO_URL"
+          fi
           git -C "$MIRROR" -c http.extraheader="$AUTH_HEADER" push --force origin \
             '+refs/heads/*:refs/heads/*' \
             '+refs/tags/*:refs/tags/*'
