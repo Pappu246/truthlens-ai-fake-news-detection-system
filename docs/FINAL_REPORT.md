@@ -146,3 +146,49 @@ The workflow covered health, article and claim metrics, claim prediction with an
 - **PR state at audit completion:** Open, documentation-only follow-up from the fixed Arena session branch; not merged in this audit.
 - **PR head:** latest pushed documentation commit on the [PR #24 branch](https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/pull/24)
 - **PR checks:** Green at audit completion for type-check/build, ISOT pipeline tests, real-ISOT validation, benchmark, and Vercel checks.
+
+
+## Production re-verification addendum — 2026-10-11
+
+This addendum records the latest verified deployment state. Historical sections above are retained as an audit trail and must not be read as a current-state claim where they differ from this addendum.
+
+### Current production verification
+
+- `main` was verified at `ceabfaa9df6b186e00f4f133b378f78a44705d2f`.
+- Vercel production deployment `dpl_4CBM5iFEEWeRKpUABpKaWTi5ttFG` was reported `READY`, deployed from source commit `2727b29ffd222d8a37c9d6a8eb9f7d113b29364c`.
+- Main CI run [38129873460](https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/actions/runs/38129873460): success.
+- Vercel production smoke run [38129873463](https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/actions/runs/38129873463): success; health HTTP 200; 63 passed, 0 failed.
+- Render production smoke run [38129873487](https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/actions/runs/38129873487): success; health HTTP 200; 61 passed, 0 failed.
+- The latest Research Intelligence run [38133869697](https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/actions/runs/38133869697) completed successfully.
+- A subsequent Vercel runtime-error aggregation query for the last hour returned no runtime errors. This is a point-in-time check, not proof that earlier warnings are permanently resolved.
+
+These smoke suites establish the tested endpoint and contract behavior; they do not establish production model calibration or real-world fact-checking accuracy.
+
+### Open issue: Node DEP0169 deprecation warning
+
+A previous Vercel runtime log sample contained Node's `DEP0169` warning for legacy `url.parse()`. A repository search for direct `url.parse(` calls returned no application-code matches, and the available runtime log sample did not expose a stack trace. The originating dependency/platform layer is therefore not yet proven.
+
+A targeted CI diagnostic change is prepared on branch `fix/deprecation-calibration-audit`: the Vercel runtime simulation now runs with `NODE_OPTIONS=--trace-deprecation`. This should emit a stack trace if the warning reproduces in the simulated application path. It is not yet a confirmed root-cause fix, and it does not instrument the deployed Vercel runtime itself. Do not suppress the warning or perform speculative dependency upgrades. If CI reproduces it, patch only the confirmed application-controlled source; if it does not, obtain a trace from the deployed runtime before changing dependencies.
+
+### Open issue: production article-model calibration
+
+Production remains on ISOT artifact `v3.0.0-isot` using `legacy_single_svm` inference mode. Its stored fold calibration parameters are not equivalent to the exact calibrated runtime ensemble. Public probability/confidence output remains withheld on affected paths, and the health endpoint correctly reports `degraded`.
+
+The repository contains candidate-only training and explicit promotion gates. Candidate training must remain separate from `data/saved_model_artifacts.json`. Do not promote or change health to `healthy` until a candidate demonstrates, with reproducible artifacts:
+- disjoint train/validation/test and temporal-test evaluation;
+- exact runtime scorer parity between Python and Node;
+- out-of-domain validation that clears the existing promotion gate;
+- artifact/manifest fingerprint and hash consistency;
+- passing model safety, contract, CI, and production smoke regressions.
+
+No production model artifact was modified in this re-verification.
+
+### Release decision
+
+| Area | Status |
+|---|---|
+| Deployment availability and recorded smoke contracts | PASS at the linked run timestamps |
+| Current production health | DEGRADED (intentional safety gate) |
+| Article probability calibration / promotion | BLOCKED pending valid candidate evidence |
+| DEP0169 root cause | OPEN pending stack trace |
+| Production model artifact integrity | Unchanged by this re-verification |
