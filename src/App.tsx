@@ -9,6 +9,7 @@ import { AnalysisResult, ContentSource, HistoryItem, ModelComparisonData } from 
 import { INITIAL_METRICS_DATA } from './data/mockData';
 import {
   executeNewsAnalysis,
+  extractArticleApi,
   fetchHistory,
   clearAllHistoryApi,
   deleteHistoryItemApi,
@@ -23,6 +24,7 @@ export default function App() {
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [metrics, setMetrics] = useState<ModelComparisonData>(INITIAL_METRICS_DATA);
   const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [historyRetestId, setHistoryRetestId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [systemStatus, setSystemStatus] = useState<string>('CONNECTING...');
@@ -110,10 +112,85 @@ export default function App() {
     setHistory([]);
   };
 
-  const handleSelectSnippetFromHistory = (snippet: string, url: string) => {
-    setArticleText(snippet);
-    setSourceUrl(url);
+  // Re-test must perform a fresh analysis, not just switch tabs with an old preview.
+  // When a source URL exists, retrieve the publisher page again and analyze the fresh body.
+  // Browser history stores only a short preview, so source-less entries cannot be
+  // safely re-scored unless their full text was explicitly retained.
+  const handleRetestHistoryItem = async (item: HistoryItem) => {
     setActiveTab('analyze');
+    setErrorMessage(null);
+    setAnalysisResult(null);
+
+    const url = (item.canonical_url || item.original_url || item.source_url || '').trim();
+    const storedFullText = (item.full_text || '').trim();
+
+    if (url) {
+      setHistoryRetestId(item.id);
+      try {
+        const article = await extractArticleApi(url, item.article_title);
+        const content = (article.content || '').trim();
+        if (!content) {
+          throw new Error('The publisher returned no readable article text.');
+        }
+
+        const isHeadlineOnly = Boolean(article.isHeadlineOnly) || article.wordCount < 40;
+        const contentSource: ContentSource = isHeadlineOnly
+          ? 'HEADLINE_ONLY'
+          : article.extractionStatus === 'PARTIAL'
+            ? 'PARTIAL_ARTICLE_EXTRACTED'
+            : 'FULL_ARTICLE_EXTRACTED';
+
+        await handleAnalyze({
+          inputType: item.input_type === 'live_news' ? 'live_news' : 'url',
+          originalUrl: item.original_url || url,
+          canonicalUrl: article.canonicalUrl || item.canonical_url || url,
+          articleTitle: article.title || item.article_title,
+          sourceName: article.sourceName || item.source_name,
+          author: article.author,
+          publishedAt: article.publishedAt || item.published_at,
+          wordCount: article.wordCount,
+          extractionStatus: article.extractionStatus,
+          warnings: article.warnings,
+          isHeadlineOnly,
+          contentSource,
+          contentOverride: content,
+          sourceUrlOverride: article.url || url
+        });
+      } catch (err: any) {
+        // Never call the model on text_snippet: it is only a truncated history preview.
+        setArticleText(storedFullText || item.text_snippet || '');
+        setSourceUrl(url);
+        setErrorMessage(
+          `Re-test could not retrieve the full article (${err?.message || 'publisher unavailable'}). ` +
+          'This history entry stores only a short preview. Paste the full article text in Text mode to analyze it; the preview was not scored.'
+        );
+      } finally {
+        setHistoryRetestId(null);
+      }
+      return;
+    }
+
+    if (storedFullText.length >= 200) {
+      setArticleText(storedFullText);
+      setSourceUrl('');
+      await handleAnalyze({
+        inputType: item.input_type || 'text',
+        articleTitle: item.article_title,
+        sourceName: item.source_name,
+        publishedAt: item.published_at,
+        contentOverride: storedFullText,
+        sourceUrlOverride: ''
+      });
+      return;
+    }
+
+    setArticleText(item.text_snippet || '');
+    setSourceUrl('');
+    setErrorMessage(
+      'This entry has no retrievable source URL and stores only a short preview. ' +
+      'To re-test it accurately, paste the original full article in Text mode. ' +
+      'TruthLens will not classify a truncated history preview as a full article.'
+    );
   };
 
   const handleRetrainPipeline = async () => {
@@ -179,7 +256,8 @@ export default function App() {
         {activeTab === 'history' && (
           <HistoryView
             history={history}
-            onSelectSnippet={handleSelectSnippetFromHistory}
+            onRetest={handleRetestHistoryItem}
+            retestingId={historyRetestId}
             onDeleteItem={handleDeleteHistoryItem}
             onClearAll={handleClearAllHistory}
           />
