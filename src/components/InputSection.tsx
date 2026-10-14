@@ -40,6 +40,10 @@ interface InputSectionProps {
   onClear: () => void;
   onClearResult: () => void;
   isLoading: boolean;
+  /** Increment to force the persistent input panel into Text mode (e.g. from History). */
+  forceTextModeVersion: number;
+  /** Show the Analyze result pane immediately when a Live News item is selected. */
+  onShowAnalysis: () => void;
 }
 
 export const InputSection: React.FC<InputSectionProps> = ({
@@ -50,7 +54,9 @@ export const InputSection: React.FC<InputSectionProps> = ({
   onAnalyze,
   onClear,
   onClearResult,
-  isLoading
+  isLoading,
+  forceTextModeVersion,
+  onShowAnalysis
 }) => {
   const [inputMode, setInputMode] = useState<AnalysisInputMode>('text');
 
@@ -68,6 +74,13 @@ export const InputSection: React.FC<InputSectionProps> = ({
   const [selectedNewsId, setSelectedNewsId] = useState<string | null>(null);
   const [isLiveExtracting, setIsLiveExtracting] = useState(false);
   const [liveExtractError, setLiveExtractError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (forceTextModeVersion > 0) {
+      setInputMode('text');
+      setLiveExtractError(null);
+    }
+  }, [forceTextModeVersion]);
 
   // Load live news when switching to live news tab
   useEffect(() => {
@@ -194,6 +207,7 @@ export const InputSection: React.FC<InputSectionProps> = ({
     setSelectedNewsId(item.id);
     setLiveExtractError(null);
     onClearResult();
+    onShowAnalysis();
 
     // If no URL is available from RSS, we cannot attempt full-article extraction.
     // Use RSS description (the data contract from rssProvider), and correctly
@@ -219,6 +233,13 @@ export const InputSection: React.FC<InputSectionProps> = ({
 
       onTextChange(fallbackContent);
       onSourceUrlChange('');
+      if (!substantive) {
+        const notice = warnings[0] || 'Only a headline is available. Paste the full article text before analysis.';
+        setLiveExtractError(notice);
+        setInputMode('text');
+        return;
+      }
+
       onAnalyze({
         inputType: 'live_news',
         originalUrl: '',
@@ -243,6 +264,14 @@ export const InputSection: React.FC<InputSectionProps> = ({
     try {
       const article = await extractArticleApi(item.url);
       const isHeadlineOnly = Boolean(article.isHeadlineOnly) || article.wordCount < 40;
+      if (isHeadlineOnly || article.extractionStatus === 'FAILED') {
+        const notice = 'The publisher returned only a headline or short excerpt. Paste the full article text in Text mode; TruthLens will not force a real/fake verdict from a headline.';
+        onTextChange(article.content || item.title);
+        onSourceUrlChange(article.url || item.url);
+        setLiveExtractError(notice);
+        setInputMode('text');
+        return;
+      }
       let contentSource: ContentSource = 'FULL_ARTICLE_EXTRACTED';
       if (isHeadlineOnly) contentSource = 'HEADLINE_ONLY';
       else if (article.extractionStatus === 'PARTIAL') contentSource = 'PARTIAL_ARTICLE_EXTRACTED';
@@ -307,6 +336,12 @@ export const InputSection: React.FC<InputSectionProps> = ({
 
       onTextChange(fallbackContent);
       onSourceUrlChange(item.url);
+
+      if (!substantive) {
+        setInputMode('text');
+        setLiveExtractError(warnings[warnings.length - 1] || 'Only a headline is available. Paste the full article text before analysis.');
+        return;
+      }
 
       if (substantive) {
         // Auto-analyze the substantive RSS summary
@@ -384,6 +419,17 @@ export const InputSection: React.FC<InputSectionProps> = ({
           <span>Live News</span>
         </button>
       </div>
+
+      {liveExtractError && (
+        <div role="alert" className="bg-amber-50 border border-amber-200 text-amber-900 p-3 rounded-lg text-xs flex items-start gap-2 mb-4">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-700" />
+          <div className="flex-1 leading-relaxed">
+            <span className="font-bold block">Article input needed:</span>
+            <span>{liveExtractError}</span>
+          </div>
+          <button type="button" onClick={() => setLiveExtractError(null)} className="font-bold uppercase text-[10px] shrink-0">Dismiss</button>
+        </div>
+      )}
 
       {/* MODE 1: RAW TEXT INPUT */}
       {inputMode === 'text' && (
@@ -640,16 +686,6 @@ export const InputSection: React.FC<InputSectionProps> = ({
           {newsError && (
             <div className="bg-amber-50 border border-amber-200 text-amber-800 p-3 rounded-lg text-xs">
               {newsError}
-            </div>
-          )}
-
-          {liveExtractError && (
-            <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-lg text-xs flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-600" />
-              <div>
-                <span className="font-bold block">Extraction Notice:</span>
-                <span>{liveExtractError}</span>
-              </div>
             </div>
           )}
 
