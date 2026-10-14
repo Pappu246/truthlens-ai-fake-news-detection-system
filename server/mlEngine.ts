@@ -60,6 +60,10 @@ const DEMO_REAL_ZONE_BOUND = 0.40;
 // every otherwise-eligible article abstain, so it is not a valid substitute
 // for the classifier's trained decision boundary.
 const LEGACY_MIN_VOCAB_COVERAGE = 0.10;
+// Native LinearSVC decision boundary: positive margin => FAKE, non-positive => REAL.
+// Exposed to diagnostics so UI/runtime contracts describe the policy accurately.
+const LEGACY_FAKE_MARGIN = 0.0;
+const LEGACY_REAL_MARGIN = 0.0;
 const LIMITED_CONTENT_SOURCES = new Set(['RSS_SUMMARY_ONLY', 'PARTIAL_ARTICLE_EXTRACTED', 'HEADLINE_ONLY', 'EXTRACTION_BLOCKED']);
 
 
