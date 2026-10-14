@@ -59,6 +59,14 @@ assert(
   'Case A: fake-style text is NEVER shown as LIKELY REAL',
   `got ${caseA.prediction}, P(FAKE)=${caseA.fake_probability}`
 );
+if ((caseA.vocabulary_coverage?.ratio ?? 0) >= 0.10) {
+  assert(
+    caseA.prediction === 'LIKELY FAKE',
+    'Case A: sufficiently covered fake-style text receives the native SVM verdict instead of blanket abstention',
+    JSON.stringify({ prediction: caseA.prediction, decision_margin: caseA.decision_margin,
+      vocabulary_coverage: caseA.vocabulary_coverage })
+  );
+}
 if (caseA.prediction === 'LIKELY FAKE') {
   assert(
     typeof caseA.fake_probability === 'number' && caseA.fake_probability >= 0.65,
