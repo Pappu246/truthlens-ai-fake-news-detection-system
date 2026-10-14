@@ -59,13 +59,30 @@ assert(
   'Case A: fake-style text is NEVER shown as LIKELY REAL',
   `got ${caseA.prediction}, P(FAKE)=${caseA.fake_probability}`
 );
-if (caseA.prediction === 'LIKELY FAKE') {
+if ((caseA.vocabulary_coverage?.ratio ?? 0) >= 0.10) {
   assert(
-    typeof caseA.fake_probability === 'number' && caseA.fake_probability >= 0.65,
-    'Case A: LIKELY FAKE is backed by P(FAKE) >= 0.65',
-    `P(FAKE)=${caseA.fake_probability}`
+    caseA.prediction === 'LIKELY FAKE',
+    'Case A: sufficiently covered fake-style text receives the native SVM verdict instead of blanket abstention',
+    JSON.stringify({ prediction: caseA.prediction, decision_margin: caseA.decision_margin,
+      vocabulary_coverage: caseA.vocabulary_coverage })
   );
-  assert(caseA.risk_level === 'HIGH', 'Case A: risk level is HIGH', `got ${caseA.risk_level}`);
+}
+if (caseA.prediction === 'LIKELY FAKE') {
+  if (caseA.model_inference_mode === 'legacy_single_svm') {
+    assert(
+      isNullable(caseA.fake_probability) && isNullable(caseA.real_probability) && isNullable(caseA.confidence_score),
+      'Case A (legacy): never expose uncalibrated probability or confidence',
+      `P(FAKE)=${caseA.fake_probability}, P(REAL)=${caseA.real_probability}, confidence=${caseA.confidence_score}`
+    );
+    assert(caseA.risk_level === 'HIGH', 'Case A: risk level is HIGH', `got ${caseA.risk_level}`);
+  } else {
+    assert(
+      typeof caseA.fake_probability === 'number' && caseA.fake_probability >= 0.65,
+      'Case A: LIKELY FAKE is backed by calibrated P(FAKE) >= 0.65',
+      `P(FAKE)=${caseA.fake_probability}`
+    );
+    assert(caseA.risk_level === 'HIGH', 'Case A: risk level is HIGH', `got ${caseA.risk_level}`);
+  }
 }
 
 // ======================================================================
