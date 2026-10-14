@@ -20,6 +20,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<NavTab>('analyze');
   const [articleText, setArticleText] = useState<string>('');
   const [sourceUrl, setSourceUrl] = useState<string>('');
+  const [forceTextModeVersion, setForceTextModeVersion] = useState<number>(0);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [metrics, setMetrics] = useState<ModelComparisonData>(INITIAL_METRICS_DATA);
   const [history, setHistory] = useState<HistoryItem[]>([]);
@@ -72,7 +73,9 @@ export default function App() {
     // Use contentOverride if provided (for Live News secure extraction pipeline to avoid React state race)
     // Otherwise fall back to current articleText state
     const effectiveText = options?.contentOverride?.trim() || articleText.trim();
-    const effectiveSourceUrl = options?.sourceUrlOverride?.trim() || sourceUrl.trim();
+    const effectiveSourceUrl = options?.sourceUrlOverride !== undefined
+      ? options.sourceUrlOverride.trim()
+      : sourceUrl.trim();
     if (!effectiveText) return;
     setIsLoading(true);
     setErrorMessage(null);
@@ -110,10 +113,39 @@ export default function App() {
     setHistory([]);
   };
 
-  const handleSelectSnippetFromHistory = (snippet: string, url: string) => {
-    setArticleText(snippet);
-    setSourceUrl(url);
+  const handleSelectSnippetFromHistory = (item: HistoryItem) => {
+    const savedText = typeof item.full_text === 'string' ? item.full_text : '';
+    const hasCompleteSavedText = Boolean(savedText.trim()) && !item.full_text_truncated;
+    const textToLoad = savedText || item.text_snippet || '';
+
+    setArticleText(textToLoad);
+    setSourceUrl(item.source_url || '');
+    setForceTextModeVersion((version) => version + 1);
+    setAnalysisResult(null);
     setActiveTab('analyze');
+
+    if (!hasCompleteSavedText) {
+      setErrorMessage(item.full_text_truncated
+        ? 'This history entry was capped at 20,000 characters. It is open in Text mode, but it was not auto-tested because it may be incomplete.'
+        : 'This older history record contains only a short preview, not the original article. The preview is open in Text mode; paste the full article before clicking Analyze News Text.');
+      return;
+    }
+
+    setErrorMessage(null);
+    void handleAnalyze({
+      inputType: item.input_type || (item.source_url ? 'url' : 'text'),
+      originalUrl: item.original_url || item.source_url || '',
+      canonicalUrl: item.canonical_url,
+      articleTitle: item.article_title,
+      sourceName: item.source_name,
+      publishedAt: item.published_at,
+      extractionStatus: item.extraction_status,
+      warnings: item.extraction_warnings,
+      isHeadlineOnly: item.is_headline_only,
+      contentSource: item.content_source,
+      contentOverride: savedText,
+      sourceUrlOverride: item.source_url || ''
+    });
   };
 
   const handleRetrainPipeline = async () => {
@@ -169,6 +201,8 @@ export default function App() {
           onClear={handleClear}
           onClearResult={() => setAnalysisResult(null)}
           isLoading={isLoading}
+          forceTextModeVersion={forceTextModeVersion}
+          onShowAnalysis={() => setActiveTab('analyze')}
         />
 
         {/* Right Side: Tabbed Views */}
