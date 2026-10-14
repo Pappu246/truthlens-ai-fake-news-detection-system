@@ -53,17 +53,12 @@ const DEMO_REAL_ZONE_BOUND = 0.40;
 // three fold calibration parameters. That reconstruction is NOT equivalent
 // to sklearn CalibratedClassifierCV.predict_proba() and can saturate near
 // 100% FAKE on unfamiliar inputs. Until an exact calibrated ensemble is
-// present, use the raw SVM's native decision boundary (margin zero) for the
-// label only; never interpret its magnitude as a calibrated probability.
-// Abstain separately when vocabulary coverage is low or the input is only
-// a headline/RSS fallback. An arbitrary +/-1.5 raw-margin band made almost
-// every otherwise-eligible article abstain, so it is not a valid substitute
-// for the classifier's trained decision boundary.
+// The legacy artifact is not calibrated, so a margin sign alone is not strong
+// enough to show a user-facing FAKE/REAL verdict. Require conservative raw-margin
+// strength, and otherwise abstain. Probabilities/confidence remain withheld.
 const LEGACY_MIN_VOCAB_COVERAGE = 0.10;
-// Native LinearSVC decision boundary: positive margin => FAKE, non-positive => REAL.
-// Exposed to diagnostics so UI/runtime contracts describe the policy accurately.
-const LEGACY_FAKE_MARGIN = 0.0;
-const LEGACY_REAL_MARGIN = 0.0;
+const LEGACY_FAKE_MARGIN = 1.50;
+const LEGACY_REAL_MARGIN = -1.50;
 const LIMITED_CONTENT_SOURCES = new Set(['RSS_SUMMARY_ONLY', 'PARTIAL_ARTICLE_EXTRACTED', 'HEADLINE_ONLY', 'EXTRACTION_BLOCKED']);
 
 
@@ -1568,22 +1563,28 @@ export class TruthLensMLEngine {
       verdictReason =
         `Only ${predictionDetails.matched_term_count}/${predictionDetails.candidate_term_count} candidate vocabulary terms matched the active training space (${Math.round(predictionDetails.coverage_ratio * 100)}% coverage). This input is outside the model's learned vocabulary, so the classifier abstains rather than guessing.`;
     } else if (legacySafetyMode) {
-      // Match LinearSVC's native sign-based decision rule. The legacy export's
-      // sigmoid is deliberately NOT exposed as a probability, but the trained
-      // decision boundary still separates the model's two labels. Low-coverage
-      // and limited-source guards above remain mandatory before reaching here.
-      if (predictionDetails.decision_margin > 0) {
+      // The raw margin is not a calibrated probability. Only margins well
+      // outside this conservative band support a directional model signal.
+      // Borderline full articles abstain so small model biases (e.g. scientific
+      // reporting outside ISOT's training style) are not shown as likely fake.
+      if (predictionDetails.decision_margin >= LEGACY_FAKE_MARGIN) {
         prediction = VERDICT_LIKELY_FAKE;
         riskLevel = 'HIGH';
         confidence = null;
         verdictReason =
-          `The legacy Linear SVM decision margin is positive (${predictionDetails.decision_margin.toFixed(3)}), so its native decision boundary selects LIKELY FAKE. The runtime artifact is uncalibrated; no probability or confidence percentage is available.`;
-      } else {
+          `The legacy Linear SVM decision margin (${predictionDetails.decision_margin.toFixed(3)}) exceeds the conservative FAKE decision-strength boundary (+${LEGACY_FAKE_MARGIN.toFixed(2)}). This is an uncalibrated model signal, not proof the article is factually false; verify its claims against independent evidence.`;
+      } else if (predictionDetails.decision_margin <= LEGACY_REAL_MARGIN) {
         prediction = VERDICT_LIKELY_REAL;
         riskLevel = 'LOW';
         confidence = null;
         verdictReason =
-          `The legacy Linear SVM decision margin is non-positive (${predictionDetails.decision_margin.toFixed(3)}), so its native decision boundary selects LIKELY REAL. The runtime artifact is uncalibrated; no probability or confidence percentage is available.`;
+          `The legacy Linear SVM decision margin (${predictionDetails.decision_margin.toFixed(3)}) is below the conservative REAL decision-strength boundary (${LEGACY_REAL_MARGIN.toFixed(2)}). This is an uncalibrated model signal, not independent factual verification.`;
+      } else {
+        prediction = VERDICT_NEEDS_MORE_CONTEXT;
+        riskLevel = 'UNDETERMINED';
+        confidence = null;
+        verdictReason =
+          `The legacy Linear SVM decision margin (${predictionDetails.decision_margin.toFixed(3)}) is inside the conservative uncertainty band (${LEGACY_REAL_MARGIN.toFixed(2)} to +${LEGACY_FAKE_MARGIN.toFixed(2)}). The model cannot safely label this full article REAL or FAKE with the current uncalibrated artifact. Use the claim-verification section below to check factual statements against sources.`;
       }
     } else if (fakeProb >= tFake) {
       prediction = VERDICT_LIKELY_FAKE;

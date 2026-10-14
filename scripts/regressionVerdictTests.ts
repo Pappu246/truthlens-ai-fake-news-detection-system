@@ -41,6 +41,10 @@ const FAKE_ARTICLE =
   'SHOCKING SECRET EXPOSED BY MILITARY WHISTLEBLOWER! Alien mothership over five miles wide is hovering in lunar orbit completely concealed from civilian telescopes using cloaking technology! The mainstream corrupt media and shadow government are desperately attempting to scrub this unbelievable miracle truth from the internet! Insiders confirm that world leaders signed a secret treaty allowing deep-state extraction operations in exchange for zero-point energy weapons! Share this before the global elites delete it forever! Wake up people!';
 
 const SHORT_TEXT = 'Alien UFO spotted in sky';
+const NASA_SCIENCE_ARTICLE =
+  'Astronomers utilizing the James Webb Space Telescope have captured unprecedented infrared observations of star-forming regions in the nearby NGC 346 cluster. ' +
+  'According to peer-reviewed findings published this week in the Astrophysical Journal, spectroscopic data confirms molecular hydrogen density variations consistent with theoretical models of stellar nurseries. ' +
+  'Lead researchers describe the observations as new measurements of a nearby star-forming region.';
 
 function isNullable(v: unknown): boolean {
   return v === null || v === undefined;
@@ -59,13 +63,17 @@ assert(
   'Case A: fake-style text is NEVER shown as LIKELY REAL',
   `got ${caseA.prediction}, P(FAKE)=${caseA.fake_probability}`
 );
-if ((caseA.vocabulary_coverage?.ratio ?? 0) >= 0.10) {
-  assert(
-    caseA.prediction === 'LIKELY FAKE',
-    'Case A: sufficiently covered fake-style text receives the native SVM verdict instead of blanket abstention',
-    JSON.stringify({ prediction: caseA.prediction, decision_margin: caseA.decision_margin,
-      vocabulary_coverage: caseA.vocabulary_coverage })
-  );
+if (caseA.model_inference_mode === 'legacy_single_svm' &&
+    (caseA.vocabulary_coverage?.ratio ?? 0) >= 0.10) {
+  if (caseA.decision_margin >= 1.50) {
+    assert(caseA.prediction === 'LIKELY FAKE',
+      'Case A: strong positive legacy margin yields a FAKE signal',
+      JSON.stringify({ prediction: caseA.prediction, decision_margin: caseA.decision_margin }));
+  } else {
+    assert(caseA.prediction !== 'LIKELY FAKE',
+      'Case A: weak legacy margin never yields a forced FAKE verdict',
+      JSON.stringify({ prediction: caseA.prediction, decision_margin: caseA.decision_margin }));
+  }
 }
 if (caseA.prediction === 'LIKELY FAKE') {
   if (caseA.model_inference_mode === 'legacy_single_svm') {
@@ -87,6 +95,23 @@ if (caseA.prediction === 'LIKELY FAKE') {
 
 // ======================================================================
 console.log('\n=== CASE B — Normal/real-style article (exact user text) ===');
+const scienceArticle = mlEngine.analyzeArticle(
+  NASA_SCIENCE_ARTICLE,
+  'https://www.nasa.gov/press-release/james-webb-star-forming-regions'
+);
+if (scienceArticle.model_inference_mode === 'legacy_single_svm' &&
+    (scienceArticle.vocabulary_coverage?.ratio ?? 0) >= 0.10 &&
+    scienceArticle.decision_margin > -1.50 &&
+    scienceArticle.decision_margin < 1.50) {
+  assert(scienceArticle.prediction === 'NEEDS MORE CONTEXT',
+    'Science/news article with a weak legacy margin abstains instead of false-positive FAKE',
+    JSON.stringify({ prediction: scienceArticle.prediction,
+      decision_margin: scienceArticle.decision_margin,
+      vocabulary_coverage: scienceArticle.vocabulary_coverage }));
+  assert(isNullable(scienceArticle.fake_probability) && isNullable(scienceArticle.confidence_score),
+    'Science article legacy margin abstention exposes no fake score');
+}
+
 const caseB = mlEngine.analyzeArticle(REAL_ARTICLE, '');
 assert(
   caseB.prediction !== 'LIKELY FAKE',
