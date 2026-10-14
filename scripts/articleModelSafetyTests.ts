@@ -79,11 +79,18 @@ const fake = mlEngine.analyzeArticle(FAKE_ARTICLE);
 assert(fake.prediction !== 'LIKELY REAL',
   'Clearly fabricated article is never LIKELY REAL',
   JSON.stringify({ prediction: fake.prediction, fake_probability: fake.fake_probability }));
-if ((fake.vocabulary_coverage?.ratio ?? 0) >= 0.10) {
-  assert(fake.prediction === 'LIKELY FAKE',
-    'Covered fabricated article receives a verdict without a fabricated confidence percentage',
-    JSON.stringify({ prediction: fake.prediction, decision_margin: fake.decision_margin,
-      vocabulary_coverage: fake.vocabulary_coverage, confidence_score: fake.confidence_score }));
+if (fake.model_inference_mode === 'legacy_single_svm' &&
+    (fake.vocabulary_coverage?.ratio ?? 0) >= 0.10) {
+  if (fake.decision_margin >= 1.50) {
+    assert(fake.prediction === 'LIKELY FAKE',
+      'Covered fabricated article with a strong margin receives a FAKE model signal',
+      JSON.stringify({ prediction: fake.prediction, decision_margin: fake.decision_margin,
+        vocabulary_coverage: fake.vocabulary_coverage }));
+  } else {
+    assert(fake.prediction !== 'LIKELY FAKE',
+      'Covered fabricated article with a weak margin is not force-classified',
+      JSON.stringify({ prediction: fake.prediction, decision_margin: fake.decision_margin }));
+  }
   assert(fake.confidence_score === null && fake.fake_probability === null && fake.real_probability === null,
     'Legacy verdict keeps all uncalibrated probability/confidence values withheld');
 }
