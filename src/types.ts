@@ -222,6 +222,12 @@ export interface HistoryItem {
   id: number;
   text_snippet: string;
   full_text?: string;
+  /** True when full_text was capped to keep browser-local history bounded. */
+  full_text_truncated?: boolean;
+  content_source?: ContentSource;
+  extraction_status?: 'SUCCESS' | 'PARTIAL' | 'FAILED';
+  extraction_warnings?: string[];
+  is_headline_only?: boolean;
   source_url: string;
   prediction: PredictionLabel;
   /** NULL = probability was withheld by the backend (render N/A). */

@@ -2,6 +2,8 @@ import { AnalysisResult, ContentSource, HistoryItem, ModelComparisonData, Featur
 import { INITIAL_METRICS_DATA } from '../data/mockData';
 
 const HISTORY_STORAGE_KEY = 'truthlens_analysis_history';
+// Keep history useful for re-testing without letting localStorage grow without bound.
+const MAX_LOCAL_HISTORY_TEXT_CHARS = 20000;
 
 export function getLocalHistory(): HistoryItem[] {
   try {
@@ -14,7 +16,7 @@ export function getLocalHistory(): HistoryItem[] {
   }
 }
 
-export function saveToLocalHistory(result: AnalysisResult): HistoryItem[] {
+export function saveToLocalHistory(result: AnalysisResult, fullText?: string): HistoryItem[] {
   try {
     const current = getLocalHistory();
     const newItem: HistoryItem = {
@@ -22,6 +24,12 @@ export function saveToLocalHistory(result: AnalysisResult): HistoryItem[] {
         ? parseInt(result.id.replace(/\D/g, ''), 10) || Date.now()
         : Number(result.id) || Date.now(),
       text_snippet: result.text_snippet,
+      full_text: typeof fullText === 'string' ? fullText.slice(0, MAX_LOCAL_HISTORY_TEXT_CHARS) : undefined,
+      full_text_truncated: typeof fullText === 'string' && fullText.length > MAX_LOCAL_HISTORY_TEXT_CHARS,
+      content_source: result.content_source,
+      extraction_status: result.extraction_status,
+      extraction_warnings: result.extraction_warnings,
+      is_headline_only: result.is_headline_only,
       source_url: result.source_url || result.original_url || '',
       prediction: result.prediction,
       fake_probability: result.fake_probability,
@@ -53,6 +61,12 @@ export async function fetchHistory(): Promise<HistoryItem[]> {
       const mapped: HistoryItem[] = records.map((r: any) => ({
         id: r.id,
         text_snippet: r.text_preview || r.text_snippet || (r.full_text ? (r.full_text.length > 120 ? r.full_text.substring(0, 117) + '...' : r.full_text) : ''),
+        full_text: typeof r.full_text === 'string' ? r.full_text.slice(0, MAX_LOCAL_HISTORY_TEXT_CHARS) : undefined,
+        full_text_truncated: r.full_text_truncated === true || (typeof r.full_text === 'string' && r.full_text.length > MAX_LOCAL_HISTORY_TEXT_CHARS),
+        content_source: r.content_source,
+        extraction_status: r.extraction_status,
+        extraction_warnings: Array.isArray(r.extraction_warnings) ? r.extraction_warnings : undefined,
+        is_headline_only: r.is_headline_only === true,
         source_url: r.source_url || '',
         prediction: r.prediction,
         fake_probability: typeof r.fake_probability === 'number' ? r.fake_probability : null,
@@ -336,7 +350,7 @@ export async function executeNewsAnalysis(
   };
 
   if (fullResult.status !== 'INSUFFICIENT_INFORMATION') {
-    saveToLocalHistory(fullResult);
+    saveToLocalHistory(fullResult, textTrimmed);
   }
   return fullResult;
 }
