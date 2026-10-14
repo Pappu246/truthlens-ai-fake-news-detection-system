@@ -4,14 +4,16 @@ import { Trash2, ExternalLink, ArrowRight } from 'lucide-react';
 
 interface HistoryViewProps {
   history: HistoryItem[];
-  onSelectSnippet: (snippet: string, url: string) => void;
+  onRetest: (item: HistoryItem) => void;
+  retestingId: number | null;
   onDeleteItem: (id: number) => void;
   onClearAll: () => void;
 }
 
 export const HistoryView: React.FC<HistoryViewProps> = ({
   history,
-  onSelectSnippet,
+  onRetest,
+  retestingId,
   onDeleteItem,
   onClearAll
 }) => {
@@ -132,11 +134,12 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => onSelectSnippet(item.text_snippet, item.source_url)}
-                        className="bg-slate-900 text-white font-bold px-3 py-2 rounded-lg text-xs uppercase tracking-wider hover:bg-slate-800 transition-colors flex items-center gap-1 cursor-pointer"
-                        title="Re-analyze or view"
+                        onClick={() => onRetest(item)}
+                        disabled={retestingId === item.id}
+                        className="bg-slate-900 text-white font-bold px-3 py-2 rounded-lg text-xs uppercase tracking-wider hover:bg-slate-800 transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-60 disabled:cursor-wait"
+                        title="Fetch the original source again and run a fresh analysis"
                       >
-                        <span>Re-test</span>
+                        <span>{retestingId === item.id ? 'Re-testing…' : 'Re-test'}</span>
                         <ArrowRight className="w-3.5 h-3.5" />
                       </button>
                       <button
