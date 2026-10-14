@@ -117,7 +117,6 @@ export default function App() {
   // Browser history stores only a short preview, so source-less entries cannot be
   // safely re-scored unless their full text was explicitly retained.
   const handleRetestHistoryItem = async (item: HistoryItem) => {
-    setActiveTab('analyze');
     setErrorMessage(null);
     setAnalysisResult(null);
 
@@ -136,10 +135,14 @@ export default function App() {
         const isHeadlineOnly = Boolean(article.isHeadlineOnly) || article.wordCount < 40;
         const contentSource: ContentSource = isHeadlineOnly
           ? 'HEADLINE_ONLY'
-          : article.extractionStatus === 'PARTIAL'
-            ? 'PARTIAL_ARTICLE_EXTRACTED'
-            : 'FULL_ARTICLE_EXTRACTED';
+          : article.extractionStatus === 'FAILED'
+            ? 'EXTRACTION_BLOCKED'
+            : article.extractionStatus === 'PARTIAL'
+              ? 'PARTIAL_ARTICLE_EXTRACTED'
+              : 'FULL_ARTICLE_EXTRACTED';
 
+        setArticleText(content);
+        setSourceUrl(article.url || url);
         await handleAnalyze({
           inputType: item.input_type === 'live_news' ? 'live_news' : 'url',
           originalUrl: item.original_url || url,
@@ -158,6 +161,7 @@ export default function App() {
         });
       } catch (err: any) {
         // Never call the model on text_snippet: it is only a truncated history preview.
+        setActiveTab('analyze');
         setArticleText(storedFullText || item.text_snippet || '');
         setSourceUrl(url);
         setErrorMessage(
@@ -184,6 +188,7 @@ export default function App() {
       return;
     }
 
+    setActiveTab('analyze');
     setArticleText(item.text_snippet || '');
     setSourceUrl('');
     setErrorMessage(
