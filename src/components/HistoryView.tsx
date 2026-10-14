@@ -4,7 +4,7 @@ import { Trash2, ExternalLink, ArrowRight } from 'lucide-react';
 
 interface HistoryViewProps {
   history: HistoryItem[];
-  onSelectSnippet: (snippet: string, url: string) => void;
+  onSelectSnippet: (item: HistoryItem) => void;
   onDeleteItem: (id: number) => void;
   onClearAll: () => void;
 }
@@ -132,11 +132,11 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => onSelectSnippet(item.text_snippet, item.source_url)}
+                        onClick={() => onSelectSnippet(item)}
                         className="bg-slate-900 text-white font-bold px-3 py-2 rounded-lg text-xs uppercase tracking-wider hover:bg-slate-800 transition-colors flex items-center gap-1 cursor-pointer"
-                        title="Re-analyze or view"
+                        title={item.full_text && !item.full_text_truncated ? "Run this saved article through the current analysis pipeline" : "Open the saved preview in Text mode; older history may not contain the full article"}
                       >
-                        <span>Re-test</span>
+                        <span>{item.full_text && !item.full_text_truncated ? 'Re-test' : 'Open Snippet'}</span>
                         <ArrowRight className="w-3.5 h-3.5" />
                       </button>
                       <button
