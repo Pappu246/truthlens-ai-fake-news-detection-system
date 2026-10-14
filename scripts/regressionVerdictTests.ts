@@ -68,12 +68,21 @@ if ((caseA.vocabulary_coverage?.ratio ?? 0) >= 0.10) {
   );
 }
 if (caseA.prediction === 'LIKELY FAKE') {
-  assert(
-    typeof caseA.fake_probability === 'number' && caseA.fake_probability >= 0.65,
-    'Case A: LIKELY FAKE is backed by P(FAKE) >= 0.65',
-    `P(FAKE)=${caseA.fake_probability}`
-  );
-  assert(caseA.risk_level === 'HIGH', 'Case A: risk level is HIGH', `got ${caseA.risk_level}`);
+  if (caseA.model_inference_mode === 'legacy_single_svm') {
+    assert(
+      isNullable(caseA.fake_probability) && isNullable(caseA.real_probability) && isNullable(caseA.confidence_score),
+      'Case A (legacy): never expose uncalibrated probability or confidence',
+      `P(FAKE)=${caseA.fake_probability}, P(REAL)=${caseA.real_probability}, confidence=${caseA.confidence_score}`
+    );
+    assert(caseA.risk_level === 'HIGH', 'Case A: risk level is HIGH', `got ${caseA.risk_level}`);
+  } else {
+    assert(
+      typeof caseA.fake_probability === 'number' && caseA.fake_probability >= 0.65,
+      'Case A: LIKELY FAKE is backed by calibrated P(FAKE) >= 0.65',
+      `P(FAKE)=${caseA.fake_probability}`
+    );
+    assert(caseA.risk_level === 'HIGH', 'Case A: risk level is HIGH', `got ${caseA.risk_level}`);
+  }
 }
 
 // ======================================================================
