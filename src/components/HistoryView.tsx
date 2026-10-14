@@ -60,6 +60,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             {history.map((item) => {
               const isFake = item.prediction.includes('FAKE');
               const isReal = item.prediction.includes('REAL');
+              const hasSavedFullText = typeof item.full_text === 'string' &&
+                item.full_text.trim().length >= 200 && !item.full_text_truncated;
+              const hasRetestableSource = Boolean(item.canonical_url || item.original_url || item.source_url);
               const badgeClass = isFake
                 ? 'bg-red-100 text-red-600'
                 : isReal
@@ -137,9 +140,17 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                         onClick={() => onRetest(item)}
                         disabled={retestingId === item.id}
                         className="bg-slate-900 text-white font-bold px-3 py-2 rounded-lg text-xs uppercase tracking-wider hover:bg-slate-800 transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-60 disabled:cursor-wait"
-                        title="Fetch the original source again and run a fresh analysis"
+                        title={hasSavedFullText
+                          ? "Run the saved full article through the current analysis pipeline"
+                          : hasRetestableSource
+                            ? "Fetch the original source again; if it is blocked, request full text instead of scoring a preview"
+                            : "Open the saved preview; the full article is not available in this older record"}
                       >
-                        <span>{retestingId === item.id ? 'Re-testing…' : 'Re-test'}</span>
+                        <span>{retestingId === item.id
+                          ? 'Re-testing…'
+                          : !hasSavedFullText && !hasRetestableSource
+                            ? 'Open Snippet'
+                            : 'Re-test'}</span>
                         <ArrowRight className="w-3.5 h-3.5" />
                       </button>
                       <button
