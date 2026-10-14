@@ -40,7 +40,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
         {history.length > 0 && (
           <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-950 leading-relaxed">
-            <strong className="font-black uppercase tracking-wide">Historical record notice:</strong> older entries may contain confidence values written before the production probability safety lock. Those values are audit history, not a guarantee of the current runtime. Use <strong>Re-test</strong> to run the article through the current safety policy.
+            <strong className="font-black uppercase tracking-wide">History notice:</strong> older entries may contain confidence values written before the production probability safety lock; those are not guarantees of the current runtime. History is stored in this browser. New entries retain up to 20,000 characters of article text locally for Re-test. Older entries that contain only a preview are labelled <strong>Open Snippet</strong>; paste the full article before running analysis.
           </div>
         )}
 
