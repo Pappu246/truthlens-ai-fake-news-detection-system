@@ -61,9 +61,17 @@ if (real.model_inference_mode === 'legacy_single_svm') {
 assert(real.prediction !== 'LIKELY FAKE',
   'Reuters-style real article is never LIKELY FAKE',
   JSON.stringify({ prediction: real.prediction, fake_probability: real.fake_probability, margin: real.decision_margin }));
-if (real.prediction === 'LIKELY REAL') {
-  assert((real.fake_probability ?? 1) < 0.35,
-    'Reuters-style real article has low fake score',
+if (real.prediction === 'LIKELY REAL' && real.model_inference_mode === 'legacy_single_svm') {
+  assert(real.fake_probability === null && real.real_probability === null && real.confidence_score === null,
+    'Legacy Reuters-style real article exposes no uncalibrated probability or confidence',
+    JSON.stringify({
+      fake_probability: real.fake_probability,
+      real_probability: real.real_probability,
+      confidence_score: real.confidence_score
+    }));
+} else if (real.prediction === 'LIKELY REAL') {
+  assert(typeof real.fake_probability === 'number' && real.fake_probability < 0.35,
+    'Calibrated Reuters-style real article has low fake score',
     JSON.stringify(real.fake_probability));
 }
 
