@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArticleVerificationResponse,
   ClaimVerificationResult,
@@ -31,6 +31,8 @@ interface TruthLensVerificationSectionProps {
   sourceUrl?: string;
   mlRiskLevel?: 'LOW' | 'MODERATE' | 'HIGH' | 'UNDETERMINED';
   analysisId?: string | number;
+  /** Automatically check article claims when the style classifier abstains on full text. */
+  autoVerify?: boolean;
 }
 
 function safeEvidenceHttpUrl(value: unknown): string | undefined {
@@ -49,14 +51,29 @@ export const TruthLensVerificationSection: React.FC<TruthLensVerificationSection
   articleContent,
   sourceUrl,
   mlRiskLevel = 'UNDETERMINED',
-  analysisId
+  analysisId,
+  autoVerify = false
 }) => {
+  const normalizedContent = articleContent.trim();
+  const articleKey = `${String(analysisId ?? '')}|${sourceUrl || ''}|${normalizedContent.length}|${normalizedContent.slice(0, 120)}`;
   const [verification, setVerification] = useState<ArticleVerificationResponse | undefined>(initialVerification);
+  const [verificationKey, setVerificationKey] = useState<string | null>(initialVerification ? articleKey : null);
+  const autoStartedKey = useRef<string | null>(null);
+  const activeVerification = verificationKey === articleKey ? verification : undefined;
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedClaimId, setExpandedClaimId] = useState<string | null>(null);
 
-  const handleVerifyArticle = async () => {
+  // A new analysis must never display the previous article's evidence.
+  useEffect(() => {
+    setVerification(initialVerification);
+    setVerificationKey(initialVerification ? articleKey : null);
+    setError(null);
+    setExpandedClaimId(null);
+    setIsLoading(false);
+  }, [articleKey, initialVerification]);
+
+  const handleVerifyArticle = useCallback(async () => {
     setIsLoading(true);
     setError(null);
 
@@ -80,6 +97,7 @@ export const TruthLensVerificationSection: React.FC<TruthLensVerificationSection
 
       const data: ArticleVerificationResponse = await res.json();
       setVerification(data);
+      setVerificationKey(articleKey);
       if (data.claims && data.claims.length > 0) {
         setExpandedClaimId(data.claims[0].claim.claimId);
       }
@@ -88,7 +106,17 @@ export const TruthLensVerificationSection: React.FC<TruthLensVerificationSection
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [articleTitle, articleContent, sourceUrl, mlRiskLevel, analysisId, articleKey]);
+
+  // Weak/uncertain ML outputs on full article text automatically move to the
+  // independent evidence engine. Headline/RSS-only inputs are deliberately
+  // excluded so the system does not pretend a snippet is a full article.
+  useEffect(() => {
+    if (!autoVerify || initialVerification || !normalizedContent || activeVerification) return;
+    if (autoStartedKey.current === articleKey) return;
+    autoStartedKey.current = articleKey;
+    void handleVerifyArticle();
+  }, [autoVerify, initialVerification, normalizedContent, articleKey, activeVerification, handleVerifyArticle]);
 
   const getAssessmentBadge = (assessment: ClaimAssessment) => {
     switch (assessment) {
@@ -222,7 +250,7 @@ export const TruthLensVerificationSection: React.FC<TruthLensVerificationSection
           ) : (
             <>
               <Search className="w-3.5 h-3.5" />
-              <span>{verification ? 'Re-verify with Evidence' : 'Verify Article Claims'}</span>
+              <span>{activeVerification ? 'Re-verify with Evidence' : autoVerify && isLoading ? 'Checking Claims Automatically…' : 'Verify Article Claims'}</span>
             </>
           )}
         </button>
@@ -251,7 +279,7 @@ export const TruthLensVerificationSection: React.FC<TruthLensVerificationSection
       )}
 
       {/* Unverified state initial callout */}
-      {!verification && !isLoading && (
+      {!activeVerification && !isLoading && (
         <div className="p-6 bg-slate-50 rounded-2xl border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-start gap-3">
             <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center shrink-0 shadow-xs">
@@ -276,7 +304,7 @@ export const TruthLensVerificationSection: React.FC<TruthLensVerificationSection
       )}
 
       {/* VERIFICATION REPORT */}
-      {verification && !isLoading && (
+      {activeVerification && !isLoading && (
         <div className="space-y-6">
           {/* Dual-Signal Comparison Banner */}
           <div className="p-5 bg-gradient-to-r from-slate-900 to-slate-800 rounded-2xl text-white space-y-4 shadow-sm">
@@ -288,7 +316,7 @@ export const TruthLensVerificationSection: React.FC<TruthLensVerificationSection
                 <span className="text-slate-500">•</span>
                 <span className="text-xs text-slate-300">ML Risk vs Factual Evidence</span>
               </div>
-              <div>{getFinalVerdictBadge(verification.finalAssessment)}</div>
+              <div>{getFinalVerdictBadge(activeVerification.finalAssessment)}</div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
@@ -298,7 +326,7 @@ export const TruthLensVerificationSection: React.FC<TruthLensVerificationSection
                 </span>
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-black text-white">
-                    {verification.mlRisk} LINGUISTIC RISK
+                    {activeVerification.mlRisk} LINGUISTIC RISK
                   </span>
                   <span className="text-[10px] px-2 py-0.5 rounded bg-slate-700 text-slate-300 font-mono">
                     Linear SVM
@@ -315,14 +343,14 @@ export const TruthLensVerificationSection: React.FC<TruthLensVerificationSection
                 </span>
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-black text-white">
-                    {verification.finalAssessment}
+                    {activeVerification.finalAssessment}
                   </span>
                   <span className="text-[10px] px-2 py-0.5 rounded bg-slate-700 text-slate-300 font-mono">
                     Live Web
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-400 pt-1 leading-snug">
-                  {verification.finalAssessmentReasoning}
+                  {activeVerification.finalAssessmentReasoning}
                 </p>
               </div>
             </div>
@@ -332,7 +360,7 @@ export const TruthLensVerificationSection: React.FC<TruthLensVerificationSection
               <Info className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
               <div>
                 <strong className="text-white block mb-0.5">Synthesis Reasoning:</strong>
-                <span>{verification.mlEvidenceSynthesis}</span>
+                <span>{activeVerification.mlEvidenceSynthesis}</span>
               </div>
             </div>
           </div>
@@ -345,10 +373,10 @@ export const TruthLensVerificationSection: React.FC<TruthLensVerificationSection
               </span>
               <div className="flex items-baseline gap-1.5">
                 <span className="text-2xl font-black text-emerald-900">
-                  {verification.summary?.supported ?? 0}
+                  {activeVerification.summary?.supported ?? 0}
                 </span>
                 <span className="text-xs text-emerald-700 font-mono">
-                  / {verification.summary?.totalClaims ?? 0} claims
+                  / {activeVerification.summary?.totalClaims ?? 0} claims
                 </span>
               </div>
             </div>
@@ -359,10 +387,10 @@ export const TruthLensVerificationSection: React.FC<TruthLensVerificationSection
               </span>
               <div className="flex items-baseline gap-1.5">
                 <span className="text-2xl font-black text-red-900">
-                  {verification.summary?.contradicted ?? 0}
+                  {activeVerification.summary?.contradicted ?? 0}
                 </span>
                 <span className="text-xs text-red-700 font-mono">
-                  / {verification.summary?.totalClaims ?? 0} claims
+                  / {activeVerification.summary?.totalClaims ?? 0} claims
                 </span>
               </div>
             </div>
@@ -373,10 +401,10 @@ export const TruthLensVerificationSection: React.FC<TruthLensVerificationSection
               </span>
               <div className="flex items-baseline gap-1.5">
                 <span className="text-2xl font-black text-amber-900">
-                  {verification.summary?.mixed ?? 0}
+                  {activeVerification.summary?.mixed ?? 0}
                 </span>
                 <span className="text-xs text-amber-700 font-mono">
-                  / {verification.summary?.totalClaims ?? 0} claims
+                  / {activeVerification.summary?.totalClaims ?? 0} claims
                 </span>
               </div>
             </div>
@@ -387,19 +415,19 @@ export const TruthLensVerificationSection: React.FC<TruthLensVerificationSection
               </span>
               <div className="flex items-baseline gap-1.5">
                 <span className="text-2xl font-black text-slate-900">
-                  {verification.summary?.insufficient ?? 0}
+                  {activeVerification.summary?.insufficient ?? 0}
                 </span>
                 <span className="text-xs text-slate-600 font-mono">
-                  / {verification.summary?.totalClaims ?? 0} claims
+                  / {activeVerification.summary?.totalClaims ?? 0} claims
                 </span>
               </div>
             </div>
           </div>
 
           {/* Warnings & Advisories */}
-          {verification.warnings && verification.warnings.length > 0 && (
+          {activeVerification.warnings && activeVerification.warnings.length > 0 && (
             <div className="space-y-2">
-              {verification.warnings.map((warn, wIdx) => (
+              {activeVerification.warnings.map((warn, wIdx) => (
                 <div
                   key={wIdx}
                   className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-start gap-2.5"
@@ -415,13 +443,13 @@ export const TruthLensVerificationSection: React.FC<TruthLensVerificationSection
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h4 className="text-xs font-black uppercase tracking-wider text-slate-500">
-                Extracted Claims & Independent Evidence ({verification.claims.length})
+                Extracted Claims & Independent Evidence ({activeVerification.claims.length})
               </h4>
               <span className="text-[10px] text-slate-400 font-mono">Click claim to expand sources</span>
             </div>
 
             <div className="space-y-3">
-              {verification.claims.map((claimResult: ClaimVerificationResult) => {
+              {activeVerification.claims.map((claimResult: ClaimVerificationResult) => {
                 const isExpanded = expandedClaimId === claimResult.claim.claimId;
                 const evidenceList = claimResult.evidence || [];
 

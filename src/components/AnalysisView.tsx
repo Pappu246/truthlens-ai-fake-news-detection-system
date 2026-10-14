@@ -545,6 +545,10 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
         sourceUrl={result.canonical_url || result.source_url}
         mlRiskLevel={result.risk_level as any}
         analysisId={result.id}
+        autoVerify={
+          isNeedsMoreContextLabel(result.prediction) &&
+          (result.content_source === 'FULL_ARTICLE_EXTRACTED' || result.content_source === 'TEXT_DIRECT')
+        }
       />
 
       {/* SECTION 7: LIMITATIONS & NOTE */}
