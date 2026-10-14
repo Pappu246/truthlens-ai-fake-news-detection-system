@@ -71,6 +71,14 @@ const fake = mlEngine.analyzeArticle(FAKE_ARTICLE);
 assert(fake.prediction !== 'LIKELY REAL',
   'Clearly fabricated article is never LIKELY REAL',
   JSON.stringify({ prediction: fake.prediction, fake_probability: fake.fake_probability }));
+if ((fake.vocabulary_coverage?.ratio ?? 0) >= 0.10) {
+  assert(fake.prediction === 'LIKELY FAKE',
+    'Covered fabricated article receives a verdict without a fabricated confidence percentage',
+    JSON.stringify({ prediction: fake.prediction, decision_margin: fake.decision_margin,
+      vocabulary_coverage: fake.vocabulary_coverage, confidence_score: fake.confidence_score }));
+  assert(fake.confidence_score === null && fake.fake_probability === null && fake.real_probability === null,
+    'Legacy verdict keeps all uncalibrated probability/confidence values withheld');
+}
 
 const rssSummary = {
   text: 'Officials announced today that consumer prices rose in March, according to data published by the national statistics office. ' +
