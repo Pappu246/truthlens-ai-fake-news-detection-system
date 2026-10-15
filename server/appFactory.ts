@@ -408,7 +408,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
       if (status !== 400) {
         const fallback = await fetchAbpRssSummary(fallbackUrl, `HTTP ${status}`);
         if (fallback) {
-          fallback.normalizedUrl = validation.normalizedUrl || fallback.normalizedUrl;
+          fallback.normalizedUrl = normalizedUrlForFallback || fallback.normalizedUrl;
           return res.status(200).json(fallback);
         }
       }
