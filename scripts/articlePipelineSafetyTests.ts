@@ -2,6 +2,7 @@ import dns from 'dns';
 import { validateUrlSecurity, safeFetchHtml } from '../server/security/urlValidator';
 import { extractArticleFromHtml } from '../server/extraction/articleExtractor';
 import { buildAbpRssFeedUrls, parseAbpRssSummary } from '../server/extraction/abpRssFallback';
+import { shouldAutoVerifyArticleContent } from '../src/utils/articleVerificationPolicy';
 import { TruthLensMLEngine } from '../server/mlEngine';
 import { SqliteHistoryManager } from '../server/sqliteHistory';
 
@@ -280,6 +281,21 @@ async function main() {
       abpArticleUrl,
       'HTTP 403'
     ) === null);
+
+  check('substantial official ABP RSS summaries can trigger independent claim verification',
+    Boolean(abpFallback && shouldAutoVerifyArticleContent(
+      abpFallback.content, 'RSS_SUMMARY_ONLY', false
+    )));
+  check('a substantial partial extraction can be evidence-checked without being called a full article',
+    Boolean(abpFallback && shouldAutoVerifyArticleContent(
+      abpFallback.content, 'PARTIAL_ARTICLE_EXTRACTED', false
+    )));
+  check('headline-only material never triggers full claim verification',
+    !shouldAutoVerifyArticleContent('A headline only', 'HEADLINE_ONLY', true));
+  check('extraction-blocked content never triggers claim verification',
+    !shouldAutoVerifyArticleContent(abpWords, 'EXTRACTION_BLOCKED', false));
+  check('short publisher excerpts are not auto-verified',
+    !shouldAutoVerifyArticleContent(abpWords.slice(0, 250), 'PARTIAL_ARTICLE_EXTRACTED', false));
 
   const headlineOnly = extractArticleFromHtml({
     url: 'https://safe.test/headline',
