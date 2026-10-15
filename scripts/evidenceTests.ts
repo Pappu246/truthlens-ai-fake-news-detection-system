@@ -19,7 +19,7 @@ import { EvidenceItem } from '../src/types';
 import { buildArticleVerification } from '../server/verification/assessmentEngine';
 import { ClaimVerificationResult } from '../src/types';
 import { extractClaimsHeuristic } from '../server/verification/claimExtractor';
-import { extractReadableArticleText, shouldSearchWikipediaForEvidence, parsePublicationDate, parseBingNewsRss, parseGdeltArticleList, buildGdeltArticleSearchUrl, isAdmissibleEvidence, verifyEvidenceProvenance } from '../server/verification/evidenceProvider';
+import { extractReadableArticleText, shouldSearchWikipediaForEvidence, parsePublicationDate, parseBingNewsRss, parseGdeltArticleList, buildGdeltArticleSearchUrl, isAdmissibleEvidence, preferPublisherEvidence, verifyEvidenceProvenance } from '../server/verification/evidenceProvider';
 import { checkNumericalConsistency, classifyEvidenceRelation } from '../server/verification/evidenceAnalyzer';
 
 let passed = 0;
@@ -171,6 +171,33 @@ async function main(): Promise<void> {
   check('GDELT compact UTC publication time is parsed',
     gdeltHits[0]?.publishedAt === '2026-10-15T14:15:00.000Z',
     String(gdeltHits[0]?.publishedAt));
+
+  const wikiCandidate = item({
+    sourceName: 'Wikipedia / Wikimedia Foundation',
+    sourceUrl: 'https://en.wikipedia.org/wiki/Unemployment_in_the_United_States',
+    sourceFinalUrl: 'https://en.wikipedia.org/wiki/Unemployment_in_the_United_States',
+    sourceType: 'REPUTABLE_SOURCE',
+    sourceFetchStatus: 'FETCHED',
+    provenanceVerified: true,
+    relevanceScore: 0.62,
+    relation: 'INSUFFICIENT'
+  });
+  const nasaCandidate = item({
+    sourceName: 'NASA',
+    sourceUrl: 'https://www.nasa.gov/science/example',
+    sourceFinalUrl: 'https://www.nasa.gov/science/example',
+    sourceType: 'OFFICIAL_GOVERNMENT',
+    sourceFetchStatus: 'FETCHED',
+    provenanceVerified: true,
+    relevanceScore: 0.51,
+    relation: 'INSUFFICIENT'
+  });
+  check('publisher page is preferred over Wikipedia when both are available',
+    preferPublisherEvidence([wikiCandidate, nasaCandidate]).length === 1 &&
+      preferPublisherEvidence([wikiCandidate, nasaCandidate])[0].sourceName === 'NASA');
+  check('Wikipedia remains only as a last-resort context source',
+    preferPublisherEvidence([wikiCandidate]).length === 1 &&
+      preferPublisherEvidence([wikiCandidate])[0].sourceName.includes('Wikipedia'));
 
   const admissibleBase = item({
     sourceFetchStatus: 'FETCHED',
