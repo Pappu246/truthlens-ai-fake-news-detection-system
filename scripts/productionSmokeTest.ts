@@ -156,6 +156,21 @@ async function main(): Promise<void> {
     check('every citation has a retrieval timestamp',
       ev.json.evidence.every((e: any) => !Number.isNaN(Date.parse(e.retrieval_timestamp))));
     check('every citation has a domain', ev.json.evidence.every((e: any) => e.source_domain));
+    check('every production evidence item was fetched from a verified publisher',
+      ev.json.evidence.every((e: any) =>
+        e.provenance_verified === true && e.source_fetch_status === 'FETCHED'),
+      JSON.stringify(ev.json.evidence.map((e: any) => ({
+        domain: e.source_domain,
+        provenance_verified: e.provenance_verified,
+        source_fetch_status: e.source_fetch_status
+      }))));
+    check('production evidence excludes low-relevance sources',
+      ev.json.evidence.every((e: any) =>
+        Number(e.relevance_signal?.score) >= 0.22 &&
+        e.relevance_signal?.band !== 'IRRELEVANT'),
+      JSON.stringify(ev.json.evidence.map((e: any) => ({
+        domain: e.source_domain, relevance: e.relevance_signal?.score, band: e.relevance_signal?.band
+      }))));
     console.log(`  INFO  retrieved ${ev.json.evidence.length} source(s): ` +
       ev.json.evidence.map((e: any) => e.source_domain).join(', '));
   } else {

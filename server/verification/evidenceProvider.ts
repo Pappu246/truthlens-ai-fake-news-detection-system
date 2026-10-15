@@ -55,6 +55,23 @@ export interface GdeltArticleItem {
   sourceName: string;
 }
 
+/**
+ * Build a bounded historical GDELT DOC query. The default short horizon missed
+ * relevant follow-up coverage for official science/health articles. DOC search
+ * supports a one-year window, while results still must pass the same publisher
+ * fetch, provenance, and relevance checks.
+ */
+export function buildGdeltArticleSearchUrl(query: string): string {
+  const url = new URL('https://api.gdeltproject.org/api/v2/doc/doc');
+  url.searchParams.set('query', (query || '').slice(0, 240));
+  url.searchParams.set('mode', 'ArtList');
+  url.searchParams.set('format', 'json');
+  url.searchParams.set('maxrecords', '5');
+  url.searchParams.set('timespan', '1y');
+  url.searchParams.set('sort', 'HybridRel');
+  return url.toString();
+}
+
 /** GDELT emits compact UTC timestamps such as 20261015T141500Z. */
 function parseGdeltPublicationDate(raw: unknown): string | undefined {
   if (typeof raw !== 'string' || !raw.trim()) return undefined;
@@ -359,6 +376,24 @@ export function extractReadableArticleText(html: string): string {
   return structuredBody.length > best.length ? structuredBody : best;
 }
 
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+  const workerCount = Math.max(1, Math.min(Math.floor(concurrency) || 1, items.length));
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (true) {
+      const index = nextIndex++;
+      if (index >= items.length) return;
+      results[index] = await mapper(items[index], index);
+    }
+  }));
+  return results;
+}
+
 export class EvidenceProvider {
   private timeoutMs: number;
 
@@ -598,11 +633,10 @@ export class EvidenceProvider {
 
     // Hydrate news candidates before deciding whether Wikipedia fallback is needed.
     // Raw RSS hit counts are not an evidence count; publisher pages can fail to fetch.
-    const newsCandidates = results.splice(0, results.length);
-    const hydratedNews: EvidenceItem[] = [];
-    for (const item of newsCandidates.slice(0, 6)) {
-      hydratedNews.push(await this.hydrateEvidenceItem(item, claim, diagnostics));
-    }
+    const newsCandidates = results.splice(0, results.length).slice(0, 3);
+    const hydratedNews = await Promise.all(
+      newsCandidates.map(item => this.hydrateEvidenceItem(item, claim, diagnostics))
+    );
     results.push(...hydratedNews);
     let verifiedNewsCount = hydratedNews.filter(
       item => item.sourceFetchStatus === 'FETCHED' && item.provenanceVerified === true
@@ -650,10 +684,9 @@ export class EvidenceProvider {
             });
           }
 
-          const hydratedBing: EvidenceItem[] = [];
-          for (const item of bingCandidates) {
-            hydratedBing.push(await this.hydrateEvidenceItem(item, claim, diagnostics));
-          }
+          const hydratedBing = await Promise.all(
+            bingCandidates.slice(0, 3).map(item => this.hydrateEvidenceItem(item, claim, diagnostics))
+          );
           results.push(...hydratedBing);
           verifiedNewsCount += hydratedBing.filter(
             item => item.sourceFetchStatus === 'FETCHED' && item.provenanceVerified === true
@@ -733,10 +766,9 @@ export class EvidenceProvider {
     const firstUnhydratedIndex = results.findIndex(item => item.sourceFetchStatus === undefined);
     if (firstUnhydratedIndex >= 0) {
       const wikiCandidates = results.slice(firstUnhydratedIndex);
-      const hydratedWiki: EvidenceItem[] = [];
-      for (const item of wikiCandidates.slice(0, 6)) {
-        hydratedWiki.push(await this.hydrateEvidenceItem(item, claim, diagnostics));
-      }
+      const hydratedWiki = await Promise.all(
+        wikiCandidates.slice(0, 3).map(item => this.hydrateEvidenceItem(item, claim, diagnostics))
+      );
       results.splice(firstUnhydratedIndex, wikiCandidates.length, ...hydratedWiki);
     }
 
@@ -773,15 +805,9 @@ export class EvidenceProvider {
   ): Promise<EvidenceItem[]> {
     const startedAt = new Date().toISOString();
     try {
-      const url = new URL('https://api.gdeltproject.org/api/v2/doc/doc');
-      url.searchParams.set('query', query.slice(0, 240));
-      url.searchParams.set('mode', 'ArtList');
-      url.searchParams.set('format', 'json');
-      url.searchParams.set('maxrecords', '5');
-      url.searchParams.set('timespan', '3m');
-      url.searchParams.set('sort', 'HybridRel');
+      const searchUrl = buildGdeltArticleSearchUrl(query);
 
-      const response = await fetch(url.toString(), {
+      const response = await fetch(searchUrl, {
         headers: { 'User-Agent': 'TruthLens-EvidenceBot/1.0 (academic; fact-checking)' },
         signal: AbortSignal.timeout(Math.min(this.timeoutMs, 5000))
       });
@@ -883,7 +909,7 @@ export class EvidenceProvider {
         }
       }
 
-      if (allEvidence.length >= 6) break;
+      if (allEvidence.length >= 3) break;
     }
 
     return allEvidence;
@@ -925,23 +951,19 @@ export class EvidenceProvider {
    * Verifies a batch of claims and aggregates verdicts.
    */
   public async verifyClaims(claims: ExtractedClaim[]): Promise<ClaimVerificationResult[]> {
-    const results: ClaimVerificationResult[] = [];
     const importantClaims = claims.filter(c => c.importance === 'HIGH' || c.importance === 'MEDIUM');
 
-    // First spend retrieval budget on the claims that can materially affect the
-    // article verdict. Low-importance claims are only searched when the
-    // important-claim pass does not establish enough evidence, avoiding a
-    // large latency increase on normal articles.
-    for (const claim of claims) {
-      if (claim.importance !== 'HIGH' && claim.importance !== 'MEDIUM') {
-        results.push(aggregateClaimAssessment(claim, []));
-        continue;
-      }
+    // Keep low-importance claims in the response, but prioritize important claims.
+    // Two bounded workers avoid serial network waits without fanning every claim
+    // out simultaneously and exhausting the serverless request's time budget.
+    const importantResults = await mapWithConcurrency(importantClaims, 2, async claim => {
       const evidenceItems = await this.searchEvidenceForClaim(claim);
-      results.push(aggregateClaimAssessment(claim, evidenceItems));
-    }
-
-    const importantResults = results.filter(r => r.claim.importance === 'HIGH' || r.claim.importance === 'MEDIUM');
+      return aggregateClaimAssessment(claim, evidenceItems);
+    });
+    const resultById = new Map(importantResults.map(result => [result.claim.claimId, result]));
+    const results: ClaimVerificationResult[] = claims.map(claim =>
+      resultById.get(claim.claimId) || aggregateClaimAssessment(claim, [])
+    );
     const importantCoverage = importantClaims.length > 0 &&
       importantResults.filter(r => r.assessment !== 'INSUFFICIENT').length === importantClaims.length;
 

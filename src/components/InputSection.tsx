@@ -610,7 +610,9 @@ export const InputSection: React.FC<InputSectionProps> = ({
               <div className="flex items-center justify-between mb-2 pb-2 border-b border-slate-100">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 flex items-center gap-1">
                   <CheckCircle2 className="w-3.5 h-3.5" />
-                  Article Extracted ({extractedData.wordCount} words)
+                  {extractedData.extractionMethod === 'ABP_OFFICIAL_RSS_SUMMARY'
+                    ? `ABP RSS summary only — partial content (${extractedData.wordCount} words)`
+                    : `Article Extracted (${extractedData.wordCount} words)`}
                 </span>
                 <span className="font-mono text-[10px] text-slate-400">
                   {extractedData.sourceName || 'Web Page'}

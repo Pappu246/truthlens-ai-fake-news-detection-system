@@ -123,8 +123,8 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
 
             <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
               The legacy article classifier is not calibrated. A weak margin is not proof that the
-              article is false or true. For full article text, TruthLens checks factual claims against
-              independent evidence below; headlines and short snippets are not treated as full articles.
+              article is false or true. For full text or a substantial publisher summary, TruthLens checks
+              factual claims against independent evidence below; headlines and short snippets are excluded.
             </p>
           </div>
         </div>
@@ -145,6 +145,7 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
                 isNeedsMoreContextLabel(result.verdict) ||
                 isNeedsMoreContextLabel(result.prediction)) &&
               (result.content_source === 'FULL_ARTICLE_EXTRACTED' ||
+                result.content_source === 'PARTIAL_ARTICLE_EXTRACTED' ||
                 result.content_source === 'TEXT_DIRECT') &&
               (articleText || result.text_snippet || '').trim().length >= 300
             }
@@ -522,7 +523,7 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
             <div className="font-black uppercase tracking-wider text-[10px] mb-1">Classification Basis</div>
             <div className="font-bold text-sm">
               {result.content_source === 'FULL_ARTICLE_EXTRACTED' && 'Analysis used the FULL extracted article body.'}
-              {result.content_source === 'PARTIAL_ARTICLE_EXTRACTED' && 'Only part of the webpage was extracted. TruthLens withholds the ML verdict because incomplete article content is not sufficient for a reliable classification.'}
+              {result.content_source === 'PARTIAL_ARTICLE_EXTRACTED' && 'Only part of the webpage was extracted. The ML verdict stays withheld; claim-level evidence checking can still run on the available excerpt, with this limitation preserved.'}
               {result.content_source === 'RSS_SUMMARY_ONLY' && 'Analysis used the RSS SUMMARY only — full article was not retrieved. Verdict is withheld pending fuller context.'}
               {result.content_source === 'EXTRACTION_BLOCKED' && 'The publisher blocked automated article extraction (HTTP 403). Analysis is withheld unless sufficient article content is provided.'}
               {result.content_source === 'HEADLINE_ONLY' && 'Only a headline was available — verdict was WITHHELD (NEEDS MORE CONTEXT). No forced prediction was made.'}
@@ -568,7 +569,9 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
         analysisId={result.id}
         autoVerify={
           isNeedsMoreContextLabel(result.prediction) &&
-          (result.content_source === 'FULL_ARTICLE_EXTRACTED' || result.content_source === 'TEXT_DIRECT')
+          (result.content_source === 'FULL_ARTICLE_EXTRACTED' ||
+          result.content_source === 'PARTIAL_ARTICLE_EXTRACTED' ||
+          result.content_source === 'TEXT_DIRECT')
         }
       />
 
