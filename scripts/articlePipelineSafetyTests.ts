@@ -1,6 +1,7 @@
 import dns from 'dns';
 import { validateUrlSecurity, safeFetchHtml } from '../server/security/urlValidator';
 import { extractArticleFromHtml } from '../server/extraction/articleExtractor';
+import { buildAbpRssFeedUrls, parseAbpRssSummary } from '../server/extraction/abpRssFallback';
 import { TruthLensMLEngine } from '../server/mlEngine';
 import { SqliteHistoryManager } from '../server/sqliteHistory';
 
@@ -233,6 +234,52 @@ async function main() {
     oversizedHtmlRejected = /512 KiB parsing limit/i.test(String(err?.message || err));
   }
   check('oversized HTML is rejected before DOM parsing', oversizedHtmlRejected);
+
+  const abpArticleUrl = 'https://www.abplive.com/news/india/example-article-1234567';
+  const abpFeeds = buildAbpRssFeedUrls(abpArticleUrl);
+  check('ABP fallback uses a bounded set of HTTPS feeds on the allowlisted ABP host',
+    abpFeeds.length > 0 && abpFeeds.length <= 5 &&
+      abpFeeds.every(feed => {
+        const parsed = new URL(feed);
+        return parsed.protocol === 'https:' && /(^|\\.)abplive\\.com$/i.test(parsed.hostname);
+      }),
+    JSON.stringify(abpFeeds));
+  check('ABP fallback rejects a non-ABP URL',
+    buildAbpRssFeedUrls('https://attacker.example/news/india/story').length === 0);
+
+  const abpWords = [
+    'The state government released an official report on the regional transport project this morning.',
+    'The report describes the route, the announced schedule, the funding allocation and the agencies responsible for implementation.',
+    'Officials said the published document includes dates, budget information and the locations of planned work.',
+    'The department also said the project details would be updated on its public website as implementation proceeds.',
+    'The statement names the coordinating office and explains where residents can read the full announcement.'
+  ].join(' ');
+  const abpXml = `<?xml version="1.0"?><rss><channel><item>
+    <title>Regional transport project announcement</title>
+    <link>${abpArticleUrl}</link>
+    <pubDate>Thu, 15 Oct 2026 10:00:00 GMT</pubDate>
+    <description><![CDATA[${abpWords}]]></description>
+  </item><item>
+    <title>Unrelated transport story</title>
+    <link>https://www.abplive.com/news/india/another-article-7654321</link>
+    <description><![CDATA[${abpWords}]]></description>
+  </item></channel></rss>`;
+  const abpFallback = parseAbpRssSummary(abpXml, abpArticleUrl, 'HTTP 403');
+  check('ABP fallback matches the exact article and requires a substantive summary',
+    Boolean(abpFallback && abpFallback.title === 'Regional transport project announcement' &&
+      abpFallback.wordCount >= 40 && abpFallback.characterCount >= 300),
+    abpFallback ? JSON.stringify({ title: abpFallback.title, words: abpFallback.wordCount }) : 'no fallback');
+  check('ABP RSS content is explicitly partial and warns that it is not the full article',
+    Boolean(abpFallback && abpFallback.extractionStatus === 'PARTIAL' &&
+      abpFallback.extractionMethod === 'ABP_OFFICIAL_RSS_SUMMARY' &&
+      abpFallback.warnings.some(w => /not the full article body/i.test(w))),
+    JSON.stringify(abpFallback?.warnings || []));
+  check('ABP fallback refuses a headline-only feed item',
+    parseAbpRssSummary(
+      `<rss><channel><item><title>Headline only</title><link>${abpArticleUrl}</link><description>Short news summary.</description></item></channel></rss>`,
+      abpArticleUrl,
+      'HTTP 403'
+    ) === null);
 
   const headlineOnly = extractArticleFromHtml({
     url: 'https://safe.test/headline',
