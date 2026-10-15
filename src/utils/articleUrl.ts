@@ -8,7 +8,9 @@ export function normalizeArticleUrlForCache(value: string): string | null {
     const parsed = new URL(value.trim());
     if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null;
     parsed.hash = '';
-    if (parsed.pathname.length > 1) parsed.pathname = parsed.pathname.replace(/\\/+$/, '');
+    while (parsed.pathname.length > 1 && parsed.pathname.endsWith('/')) {
+      parsed.pathname = parsed.pathname.slice(0, -1);
+    }
     return parsed.href;
   } catch {
     return null;
