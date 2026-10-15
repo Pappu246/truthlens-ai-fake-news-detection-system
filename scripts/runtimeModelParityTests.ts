@@ -123,5 +123,5 @@ const probeReport = {
   note: "No probe label is treated as human ground truth. Use this report to inspect calibration and abstention behaviour only.",
   probes: probeResults
 };
-fs.writeFileSync(path.join(dir, "runtime_probe_diagnostics.json"), JSON.stringify(probeReport, null, 2) + "\\n");
+fs.writeFileSync(path.join(dir, "runtime_probe_diagnostics.json"), JSON.stringify(probeReport, null, 2) + "\n");
 console.log("PASS: Calibrated runtime diagnostic probes " + probeResults.length + "/"+ probes.length + " recorded.");
