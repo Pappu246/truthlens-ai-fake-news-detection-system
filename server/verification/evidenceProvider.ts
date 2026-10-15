@@ -59,7 +59,7 @@ export interface GdeltArticleItem {
 function parseGdeltPublicationDate(raw: unknown): string | undefined {
   if (typeof raw !== 'string' || !raw.trim()) return undefined;
   const value = raw.trim();
-  const compact = value.match(/^(\\d{4})(\\d{2})(\\d{2})T(\\d{2})(\\d{2})(\\d{2})Z$/);
+  const compact = value.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/);
   if (compact) {
     const [, year, month, day, hour, minute, second] = compact;
     const time = Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second));
@@ -94,7 +94,7 @@ export function parseGdeltArticleList(payload: unknown): GdeltArticleItem[] {
       const canonicalUrl = parsedUrl.href;
       if (seen.has(canonicalUrl)) continue;
       seen.add(canonicalUrl);
-      const host = parsedUrl.hostname.toLowerCase().replace(/^www\\./, '');
+      const host = parsedUrl.hostname.toLowerCase().replace(/^www\./, '');
       parsed.push({
         title: title.slice(0, 500),
         url: canonicalUrl,
@@ -829,9 +829,8 @@ export class EvidenceProvider {
       }));
 
       const admissible = hydrated.filter(isAdmissibleEvidence);
-      for (const item of admissible) {
-        seenUrls.add(item.sourceFinalUrl || item.sourceUrl);
-      }
+      // The caller owns seenUrls and adds returned sources to its evidence list.
+      // Do not mark returned items as seen here or the caller would skip them.
       diagnostics?.push({
         provider: 'gdelt_doc_api', query, attemptedAt: startedAt, ok: true,
         resultCount: admissible.length, stage: 'SEARCH'
