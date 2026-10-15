@@ -241,7 +241,7 @@ async function main() {
     abpFeeds.length > 0 && abpFeeds.length <= 5 &&
       abpFeeds.every(feed => {
         const parsed = new URL(feed);
-        return parsed.protocol === 'https:' && /(^|\\.)abplive\\.com$/i.test(parsed.hostname);
+        return parsed.protocol === 'https:' && /(^|\.)abplive\.com$/i.test(parsed.hostname);
       }),
     JSON.stringify(abpFeeds));
   check('ABP fallback rejects a non-ABP URL',
