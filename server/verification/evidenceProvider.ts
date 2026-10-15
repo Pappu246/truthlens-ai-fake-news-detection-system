@@ -143,7 +143,7 @@ export function isAdmissibleEvidence(
 
 function isWikipediaEvidence(item: Pick<EvidenceItem, 'sourceUrl' | 'sourceFinalUrl'>): boolean {
   try {
-    const host = new URL(item.sourceFinalUrl || item.sourceUrl).hostname.toLowerCase().replace(/^www\\./, '');
+    const host = new URL(item.sourceFinalUrl || item.sourceUrl).hostname.toLowerCase().replace(/^www\./, '');
     return host === 'wikipedia.org' || host.endsWith('.wikipedia.org') ||
       host === 'wikimedia.org' || host.endsWith('.wikimedia.org');
   } catch {
@@ -919,7 +919,7 @@ export class EvidenceProvider {
 
         if (!isWikipediaEvidence(item)) {
           try {
-            publisherDomains.add(new URL(item.sourceFinalUrl || item.sourceUrl).hostname.toLowerCase().replace(/^www\\./, ''));
+            publisherDomains.add(new URL(item.sourceFinalUrl || item.sourceUrl).hostname.toLowerCase().replace(/^www\./, ''));
           } catch {
             // A malformed URL will already have failed the source-fetch/provenance gates.
           }
