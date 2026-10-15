@@ -150,6 +150,26 @@ async function main(): Promise<void> {
   check('evidence is declared untrusted data',
     ev.json?.security?.evidence_treated_as === 'UNTRUSTED_DATA');
   check('retrieval diagnostics present', Array.isArray(ev.json?.retrieval?.providers));
+  const evidenceItems = Array.isArray(ev.json?.evidence) ? ev.json.evidence : [];
+  const sourceDomains = evidenceItems.map((e: any) => String(e.source_domain || '').toLowerCase());
+  const publisherDomains = new Set(sourceDomains.filter((domain: string) =>
+    domain && domain !== 'wikipedia.org' && !domain.endsWith('.wikipedia.org') &&
+    domain !== 'wikimedia.org' && !domain.endsWith('.wikimedia.org')));
+  const providerDiagnostics = Array.isArray(ev.json?.retrieval?.providers)
+    ? ev.json.retrieval.providers
+    : [];
+  if (publisherDomains.size < 3) {
+    check('GDELT fallback is attempted when fewer than three publisher domains are available',
+      providerDiagnostics.some((provider: any) => provider.provider === 'gdelt_doc_api'),
+      JSON.stringify(providerDiagnostics.map((provider: any) => ({
+        provider: provider.provider, ok: provider.ok, resultCount: provider.resultCount,
+        error: provider.error
+      }))));
+  }
+  console.log('  INFO  retrieval provider diagnostics: ' + JSON.stringify(providerDiagnostics.map((provider: any) => ({
+    provider: provider.provider, ok: provider.ok, resultCount: provider.resultCount,
+    stage: provider.stage, error: provider.error
+  }))));
   if (ev.json?.available) {
     check('every citation has a real URL',
       ev.json.evidence.every((e: any) => /^https?:\/\//.test(e.source_url)));
@@ -171,15 +191,6 @@ async function main(): Promise<void> {
       JSON.stringify(ev.json.evidence.map((e: any) => ({
         domain: e.source_domain, relevance: e.relevance_signal?.score, band: e.relevance_signal?.band
       }))));
-    const sourceDomains = ev.json.evidence.map((e: any) => String(e.source_domain || '').toLowerCase());
-    if (sourceDomains.length > 0 && sourceDomains.every((domain: string) =>
-      domain === 'wikipedia.org' || domain.endsWith('.wikipedia.org'))) {
-      check('GDELT fallback is attempted when Wikipedia is the only source family',
-        ev.json.retrieval.providers.some((provider: any) => provider.provider === 'gdelt_doc_api'),
-        JSON.stringify(ev.json.retrieval.providers.map((provider: any) => ({
-          provider: provider.provider, ok: provider.ok, resultCount: provider.resultCount
-        }))));
-    }
     console.log(`  INFO  evidence detail: ` + JSON.stringify(ev.json.evidence.map((e: any) => ({
       domain: e.source_domain, title: e.source_title,
       relevance: e.relevance_signal?.score, stance: e.stance
