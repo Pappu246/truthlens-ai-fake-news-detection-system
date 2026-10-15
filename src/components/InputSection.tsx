@@ -140,7 +140,7 @@ export const InputSection: React.FC<InputSectionProps> = ({
     };
     const refuseNonSubstantiveArticle = (article: ExtractedArticle): boolean => {
       const body = (article.content || '').trim();
-      const words = body.split(/\\s+/).filter(Boolean).length;
+      const words = body.split(/\s+/).filter(Boolean).length;
       if (article.extractionStatus === 'FAILED' || article.isHeadlineOnly ||
           article.wordCount < 40 || words < 40 || body.length < 300) {
         setUrlError(
