@@ -122,12 +122,33 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
             </div>
 
             <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
-              Statistical natural language models require multiple sentences to evaluate vocabulary
-              distributions, syntax markers, and attribution hedges. Single headlines or fragments are
-              not classified to avoid arbitrary predictions. Add the full article body or a source
-              URL with article text to obtain a verdict.
+              The legacy article classifier is not calibrated. A weak margin is not proof that the
+              article is false or true. For full article text, TruthLens checks factual claims against
+              independent evidence below; headlines and short snippets are not treated as full articles.
             </p>
           </div>
+        </div>
+
+        {/* IMPORTANT: this section must also mount in the abstention branch.
+            The old early return hid the evidence engine, so automatic verification
+            never ran even when autoVerify was enabled. */}
+        <div className="w-full max-w-4xl mx-auto pb-10">
+          <TruthLensVerificationSection
+            initialVerification={result.verification}
+            articleTitle={result.article_title}
+            articleContent={(articleText || result.text_snippet || '').trim()}
+            sourceUrl={result.canonical_url || result.source_url}
+            mlRiskLevel={result.risk_level as any}
+            analysisId={result.id}
+            autoVerify={
+              (result.status === 'INSUFFICIENT_INFORMATION' ||
+                isNeedsMoreContextLabel(result.verdict) ||
+                isNeedsMoreContextLabel(result.prediction)) &&
+              (result.content_source === 'FULL_ARTICLE_EXTRACTED' ||
+                result.content_source === 'TEXT_DIRECT') &&
+              (articleText || result.text_snippet || '').trim().length >= 300
+            }
+          />
         </div>
       </section>
     );
