@@ -565,7 +565,7 @@ export const InputSection: React.FC<InputSectionProps> = ({
               </button>
               <button
                 type="button"
-                onClick={() => setTargetUrl('https://www.bbc.com/news/technology-quantum-computing-advancement')}
+                onClick={() => setTargetUrl('https://www.bbc.com/news/articles/c20q4nv89yzo')}
                 className="text-left text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200/80 px-2.5 py-1.5 rounded truncate font-mono cursor-pointer"
               >
                 BBC News: Quantum computing
