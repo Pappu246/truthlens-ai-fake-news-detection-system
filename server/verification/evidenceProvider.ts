@@ -48,6 +48,82 @@ export interface BingNewsRssItem {
   sourceName: string;
 }
 
+export interface GdeltArticleItem {
+  title: string;
+  url: string;
+  publishedAt?: string;
+  sourceName: string;
+}
+
+/** GDELT emits compact UTC timestamps such as 20261015T141500Z. */
+function parseGdeltPublicationDate(raw: unknown): string | undefined {
+  if (typeof raw !== 'string' || !raw.trim()) return undefined;
+  const value = raw.trim();
+  const compact = value.match(/^(\\d{4})(\\d{2})(\\d{2})T(\\d{2})(\\d{2})(\\d{2})Z$/);
+  if (compact) {
+    const [, year, month, day, hour, minute, second] = compact;
+    const time = Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second));
+    const date = new Date(time);
+    return Number.isFinite(date.getTime()) ? date.toISOString() : undefined;
+  }
+  return parsePublicationDate(value);
+}
+
+/**
+ * Parse only GDELT article-list metadata. A search hit is never evidence until
+ * its actual publisher page is fetched, the final domain is verified, and the
+ * article excerpt passes relevance checks.
+ */
+export function parseGdeltArticleList(payload: unknown): GdeltArticleItem[] {
+  if (!payload || typeof payload !== 'object') return [];
+  const articles = (payload as { articles?: unknown }).articles;
+  if (!Array.isArray(articles)) return [];
+
+  const parsed: GdeltArticleItem[] = [];
+  const seen = new Set<string>();
+  for (const candidate of articles.slice(0, 10)) {
+    if (!candidate || typeof candidate !== 'object') continue;
+    const row = candidate as Record<string, unknown>;
+    const title = typeof row.title === 'string' ? row.title.trim() : '';
+    const url = typeof row.url === 'string' ? row.url.trim() : '';
+    if (!title || !url) continue;
+
+    try {
+      const parsedUrl = new URL(url);
+      if (parsedUrl.protocol !== 'https:' || !parsedUrl.hostname) continue;
+      const canonicalUrl = parsedUrl.href;
+      if (seen.has(canonicalUrl)) continue;
+      seen.add(canonicalUrl);
+      const host = parsedUrl.hostname.toLowerCase().replace(/^www\\./, '');
+      parsed.push({
+        title: title.slice(0, 500),
+        url: canonicalUrl,
+        publishedAt: parseGdeltPublicationDate(row.seendate),
+        sourceName: host.slice(0, 120)
+      });
+    } catch {
+      // Ignore malformed URLs; never turn API metadata into an evidence link.
+    }
+  }
+  return parsed;
+}
+
+/**
+ * Evidence is only admissible when the publisher page was actually fetched,
+ * its final URL was independently matched to the claimed publisher, and its
+ * text was relevant enough to the extracted claim. A fetched but unrelated
+ * Wikipedia article is not evidence.
+ */
+export function isAdmissibleEvidence(
+  item: Pick<EvidenceItem, 'sourceFetchStatus' | 'provenanceVerified' | 'relevanceScore' | 'relation'>
+): boolean {
+  return item.sourceFetchStatus === 'FETCHED' &&
+    item.provenanceVerified === true &&
+    Number.isFinite(item.relevanceScore) &&
+    item.relevanceScore >= 0.22 &&
+    item.relation !== 'IRRELEVANT';
+}
+
 /** Parse a small, bounded set of Bing News RSS results without trusting feed markup. */
 export function parseBingNewsRss(xml: string): BingNewsRssItem[] {
   const decodeXml = (raw: string): string => raw
@@ -684,6 +760,93 @@ export class EvidenceProvider {
   }
 
   /**
+   * Supplement Google/Bing News with GDELT's public DOC article index when the
+   * first query has produced too little relevant, fetched evidence. This is
+   * source discovery only: every candidate must still pass the same publisher
+   * fetch, provenance, and relevance gates as other providers.
+   */
+  private async searchGdeltForClaim(
+    query: string,
+    claim: ExtractedClaim,
+    diagnostics: RetrievalDiagnostic[] | undefined,
+    seenUrls: Set<string>
+  ): Promise<EvidenceItem[]> {
+    const startedAt = new Date().toISOString();
+    try {
+      const url = new URL('https://api.gdeltproject.org/api/v2/doc/doc');
+      url.searchParams.set('query', query.slice(0, 240));
+      url.searchParams.set('mode', 'ArtList');
+      url.searchParams.set('format', 'json');
+      url.searchParams.set('maxrecords', '5');
+      url.searchParams.set('timespan', '3m');
+      url.searchParams.set('sort', 'HybridRel');
+
+      const response = await fetch(url.toString(), {
+        headers: { 'User-Agent': 'TruthLens-EvidenceBot/1.0 (academic; fact-checking)' },
+        signal: AbortSignal.timeout(Math.min(this.timeoutMs, 5000))
+      });
+      if (!response.ok) {
+        diagnostics?.push({
+          provider: 'gdelt_doc_api', query, attemptedAt: startedAt, ok: false,
+          httpStatus: response.status, resultCount: 0,
+          error: `HTTP ${response.status}`, stage: 'SEARCH'
+        });
+        return [];
+      }
+
+      const body = await response.text();
+      let payload: unknown;
+      try {
+        payload = JSON.parse(body);
+      } catch {
+        throw new Error('GDELT returned a non-JSON response.');
+      }
+
+      const candidates = parseGdeltArticleList(payload)
+        .filter(candidate => !seenUrls.has(candidate.url))
+        .slice(0, 3);
+
+      // Publisher fetches run concurrently but remain strictly bounded.
+      const hydrated = await Promise.all(candidates.map(async (candidate, index) => {
+        const sourceType = determineSourceType(candidate.url, candidate.sourceName);
+        const { score, explanation } = calculateRelevance(claim, candidate.title, candidate.title);
+        const base: EvidenceItem = {
+          id: `gdelt-ev-${index + 1}`,
+          sourceName: candidate.sourceName,
+          sourceUrl: candidate.url,
+          title: candidate.title,
+          publishedAt: candidate.publishedAt,
+          retrievedAt: new Date().toISOString(),
+          sourceType,
+          snippet: candidate.title,
+          relation: classifyEvidenceRelation(claim, candidate.title, score, { isConsistent: true }),
+          relevanceScore: score,
+          relevanceExplanation: explanation,
+          numericalConsistency: checkNumericalConsistency(claim, candidate.title),
+          temporalConsistency: checkTemporalConsistency(claim, candidate.publishedAt)
+        };
+        return this.hydrateEvidenceItem(base, claim, diagnostics);
+      }));
+
+      const admissible = hydrated.filter(isAdmissibleEvidence);
+      for (const item of admissible) {
+        seenUrls.add(item.sourceFinalUrl || item.sourceUrl);
+      }
+      diagnostics?.push({
+        provider: 'gdelt_doc_api', query, attemptedAt: startedAt, ok: true,
+        resultCount: admissible.length, stage: 'SEARCH'
+      });
+      return admissible;
+    } catch (err: any) {
+      diagnostics?.push({
+        provider: 'gdelt_doc_api', query, attemptedAt: startedAt, ok: false,
+        resultCount: 0, error: err?.message || 'GDELT search failed', stage: 'SEARCH'
+      });
+      return [];
+    }
+  }
+
+  /**
    * Gathers evidence across all generated search queries for a claim.
    */
   public async searchEvidenceForClaim(
@@ -697,16 +860,30 @@ export class EvidenceProvider {
       ? claim.searchQueries 
       : [claim.normalizedText];
 
-    for (const q of queriesToRun) {
+    for (const [queryIndex, q] of queriesToRun.entries()) {
       const items = await this.search(q, claim, diagnostics);
       for (const item of items) {
-        if (item.sourceFetchStatus !== 'FETCHED' || item.provenanceVerified === false) continue;
+        if (!isAdmissibleEvidence(item)) continue;
         const dedupeUrl = item.sourceFinalUrl || item.sourceUrl;
         if (!seenUrls.has(dedupeUrl)) {
           seenUrls.add(dedupeUrl);
           allEvidence.push(item);
         }
       }
+
+      // GDELT is a third discovery path, invoked at most once per claim. It is
+      // only needed if the first search query still lacks three usable pages.
+      if (queryIndex === 0 && allEvidence.length < 3) {
+        const gdeltItems = await this.searchGdeltForClaim(q, claim, diagnostics, seenUrls);
+        for (const item of gdeltItems) {
+          const dedupeUrl = item.sourceFinalUrl || item.sourceUrl;
+          if (!seenUrls.has(dedupeUrl)) {
+            seenUrls.add(dedupeUrl);
+            allEvidence.push(item);
+          }
+        }
+      }
+
       if (allEvidence.length >= 6) break;
     }
 
