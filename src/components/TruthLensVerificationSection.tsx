@@ -31,8 +31,10 @@ interface TruthLensVerificationSectionProps {
   sourceUrl?: string;
   mlRiskLevel?: 'LOW' | 'MODERATE' | 'HIGH' | 'UNDETERMINED';
   analysisId?: string | number;
-  /** Automatically check article claims when the style classifier abstains on full text. */
+  /** Automatically check substantial full text or publisher summaries when the classifier abstains. */
   autoVerify?: boolean;
+  /** Bubble the current article's evidence report to the primary result card. */
+  onVerificationChange?: (response: ArticleVerificationResponse) => void;
 }
 
 function safeEvidenceHttpUrl(value: unknown): string | undefined {
@@ -52,7 +54,8 @@ export const TruthLensVerificationSection: React.FC<TruthLensVerificationSection
   sourceUrl,
   mlRiskLevel = 'UNDETERMINED',
   analysisId,
-  autoVerify = false
+  autoVerify = false,
+  onVerificationChange
 }) => {
   const normalizedContent = articleContent.trim();
   const articleKey = `${String(analysisId ?? '')}|${sourceUrl || ''}|${normalizedContent.length}|${normalizedContent.slice(0, 120)}`;
@@ -71,7 +74,8 @@ export const TruthLensVerificationSection: React.FC<TruthLensVerificationSection
     setError(null);
     setExpandedClaimId(null);
     setIsLoading(false);
-  }, [articleKey, initialVerification]);
+    if (initialVerification) onVerificationChange?.(initialVerification);
+  }, [articleKey, initialVerification, onVerificationChange]);
 
   const handleVerifyArticle = useCallback(async () => {
     setIsLoading(true);
@@ -98,6 +102,7 @@ export const TruthLensVerificationSection: React.FC<TruthLensVerificationSection
       const data: ArticleVerificationResponse = await res.json();
       setVerification(data);
       setVerificationKey(articleKey);
+      onVerificationChange?.(data);
       if (data.claims && data.claims.length > 0) {
         setExpandedClaimId(data.claims[0].claim.claimId);
       }
@@ -106,7 +111,7 @@ export const TruthLensVerificationSection: React.FC<TruthLensVerificationSection
     } finally {
       setIsLoading(false);
     }
-  }, [articleTitle, articleContent, sourceUrl, mlRiskLevel, analysisId, articleKey]);
+  }, [articleTitle, articleContent, sourceUrl, mlRiskLevel, analysisId, articleKey, onVerificationChange]);
 
   // Weak/uncertain ML outputs on full article text automatically move to the
   // independent evidence engine. Headline/RSS-only inputs are deliberately
