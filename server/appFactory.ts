@@ -17,6 +17,7 @@ import { sqliteHistory } from './sqliteHistory.js';
 import { getExternalValidationReport } from './externalValidation.js';
 import { validateUrlSecurity, safeFetchHtml, normalizeUrl } from './security/urlValidator.js';
 import { extractArticleFromHtml } from './extraction/articleExtractor.js';
+import { fetchAbpRssSummary } from './extraction/abpRssFallback.js';
 import { liveNewsService } from './news/newsService.js';
 import { createRateLimiter } from './security/rateLimiter.js';
 import { verifyClaimV2 } from './v2/pipeline.js';
@@ -371,6 +372,20 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
 
       extracted.normalizedUrl = validation.normalizedUrl || normalizeUrl(rawUrl);
 
+      // Some ABP pages return a JS shell or a very short body even when the
+      // HTTP request succeeds. If so, look for the exact story in ABP's own
+      // public RSS feeds. The fallback stays explicitly PARTIAL, never FULL.
+      if (extracted.extractionStatus !== 'SUCCESS' || extracted.wordCount < 80) {
+        const fallback = await fetchAbpRssSummary(
+          rawUrl,
+          'the publisher page returned only a headline or short body'
+        );
+        if (fallback) {
+          fallback.normalizedUrl = validation.normalizedUrl || fallback.normalizedUrl;
+          return res.status(200).json(fallback);
+        }
+      }
+
       res.json(extracted);
     } catch (err: any) {
       const message: string = err.message || 'Failed to extract article from URL.';
@@ -383,6 +398,17 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
       else if (/HTTP 429|Rate limited/i.test(message)) status = 429;
       else if (/HTTP 403|Access forbidden|blocked the extraction request/i.test(message)) status = 403;
       else if (/Invalid URL|Security violation|SSRF|forbidden protocol|DNS resolution failed|Could not resolve/i.test(message)) status = 400;
+
+      // A blocked ABP article may still have a matching public RSS summary.
+      // Only try this after security validation and only for non-SSRF fetch or
+      // publisher failures; other domains keep their original HTTP semantics.
+      if (status !== 400) {
+        const fallback = await fetchAbpRssSummary(rawUrl, `HTTP ${status}`);
+        if (fallback) {
+          fallback.normalizedUrl = validation.normalizedUrl || fallback.normalizedUrl;
+          return res.status(200).json(fallback);
+        }
+      }
 
       res.status(status).json({
         success: false,
