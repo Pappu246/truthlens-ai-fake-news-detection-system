@@ -41,6 +41,58 @@ export function shouldSearchWikipediaForEvidence(
     ['Science', 'Historical', 'Environment', 'Statistics'].includes(claimType);
 }
 
+export interface BingNewsRssItem {
+  title: string;
+  url: string;
+  publishedAt?: string;
+  sourceName: string;
+}
+
+/** Parse a small, bounded set of Bing News RSS results without trusting feed markup. */
+export function parseBingNewsRss(xml: string): BingNewsRssItem[] {
+  const decodeXml = (raw: string): string => raw
+    .replace(/<!\[CDATA\[/g, '')
+    .replace(/\]\]>/g, '')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .trim();
+  const readTag = (item: string, tag: string): string => {
+    const match = item.match(new RegExp(`<(?:[A-Za-z0-9_-]+:)?${tag}\\b[^>]*>([\\s\\S]*?)<\\/(?:[A-Za-z0-9_-]+:)?${tag}\\s*>`, 'i'));
+    return match ? decodeXml(match[1]) : '';
+  };
+  const items = xml.match(/<item\b[\s\S]*?<\/item>/gi) || [];
+  const parsed: BingNewsRssItem[] = [];
+  for (const item of items.slice(0, 10)) {
+    const rawTitle = readTag(item, 'title');
+    const url = readTag(item, 'link');
+    const rawDate = readTag(item, 'pubDate');
+    const sourceTag = item.match(/<(?:news:)?source\b[^>]*>([\s\S]*?)<\/(?:news:)?source\s*>/i);
+    const sourceName = sourceTag
+      ? decodeXml(sourceTag[1])
+      : (rawTitle.match(/\s+-\s+([^-]{2,60})$/)?.[1]?.trim() || 'Unknown publisher');
+    const title = rawTitle.replace(/\s+-\s+[^-]+$/, '').trim();
+    if (!title || !url) continue;
+    let safeHttpUrl = false;
+    try {
+      const parsedUrl = new URL(url);
+      safeHttpUrl = parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:';
+    } catch {
+      safeHttpUrl = false;
+    }
+    if (!safeHttpUrl) continue;
+    parsed.push({
+      title: title.slice(0, 500),
+      url,
+      publishedAt: parsePublicationDate(rawDate),
+      sourceName: sourceName.slice(0, 100)
+    });
+  }
+  return parsed;
+}
+
 /**
  * Per-provider retrieval outcome. This exists so the evidence engine can tell
  * the difference between "we searched and found nothing" and "the search
@@ -66,11 +118,15 @@ export function verifyEvidenceProvenance(
 ): boolean {
   try {
     const finalHost = new URL(finalUrl).hostname.toLowerCase().replace(/^www\./, '');
-    const originalHost = new URL(originalUrl).hostname.toLowerCase().replace(/^www\./, '');
+    const originalParsed = new URL(originalUrl);
+    const originalHost = originalParsed.hostname.toLowerCase().replace(/^www\./, '');
     if (!finalHost || finalHost === 'news.google.com') return false;
+    const isGoogleNewsWrapper = originalHost === 'news.google.com';
+    const isBingNewsWrapper = originalHost === 'bing.com' && /\/news\/apiclick\.aspx$/i.test(originalParsed.pathname);
+    const isNewsWrapper = isGoogleNewsWrapper || isBingNewsWrapper;
 
     const samePublisherHost =
-      originalHost !== 'news.google.com' &&
+      !isNewsWrapper &&
       (finalHost === originalHost ||
         finalHost.endsWith('.' + originalHost) ||
         originalHost.endsWith('.' + finalHost));
@@ -78,7 +134,15 @@ export function verifyEvidenceProvenance(
     const aliases: Record<string, string[]> = {
       reuters: ['reuters.com'], 'associated press': ['apnews.com'], ap: ['apnews.com'],
       bbc: ['bbc.com', 'bbc.co.uk'], npr: ['npr.org'], bloomberg: ['bloomberg.com'],
-      afp: ['afp.com'], wikipedia: ['wikipedia.org', 'wikimedia.org']
+      afp: ['afp.com'], wikipedia: ['wikipedia.org', 'wikimedia.org'],
+      nasa: ['nasa.gov'], nih: ['nih.gov', 'ncbi.nlm.nih.gov'],
+      'national institutes of health': ['nih.gov', 'ncbi.nlm.nih.gov'],
+      'the guardian': ['theguardian.com'], cnn: ['cnn.com'], cnbc: ['cnbc.com'],
+      'new york times': ['nytimes.com'], nyt: ['nytimes.com'],
+      'washington post': ['washingtonpost.com'], 'wall street journal': ['wsj.com'],
+      nature: ['nature.com'], 'science magazine': ['science.org'], politico: ['politico.com'],
+      'the verge': ['theverge.com'], wired: ['wired.com'], nbc: ['nbcnews.com'],
+      abc: ['abcnews.go.com', 'abc.net.au'], euronews: ['euronews.com']
     };
     const name = sourceName.toLowerCase();
     const matched = Object.entries(aliases).find(([alias]) => name.includes(alias));
@@ -93,7 +157,7 @@ export function verifyEvidenceProvenance(
         : finalType === originalType || aliasMatch;
     }
 
-    if (originalHost === 'news.google.com') return aliasMatch;
+    if (isNewsWrapper) return aliasMatch;
     return aliasMatch;
   } catch {
     return false;
@@ -257,7 +321,9 @@ export class EvidenceProvider {
         timeoutMs: this.timeoutMs,
         maxBytes: 2.5 * 1024 * 1024,
         maxRedirects: 5,
-        userAgent: 'TruthLens-EvidenceBot/1.0 (academic; evidence retrieval)'
+        // Use the same ordinary browser UA as direct extraction. Some publishers
+        // reject an identifiable bot UA even for public, non-paywalled pages.
+        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36'
       });
       const body = this.extractReadableText(fetched.html);
       if (body.length < 120) throw new Error('Publisher page did not expose enough readable article text.');
@@ -462,9 +528,69 @@ export class EvidenceProvider {
       hydratedNews.push(await this.hydrateEvidenceItem(item, claim, diagnostics));
     }
     results.push(...hydratedNews);
-    const verifiedNewsCount = hydratedNews.filter(
+    let verifiedNewsCount = hydratedNews.filter(
       item => item.sourceFetchStatus === 'FETCHED' && item.provenanceVerified === true
     ).length;
+
+    // Google News often returns headlines for publisher pages that block server-side
+    // retrieval. Try Bing News RSS as a second source-discovery path before falling
+    // back to Wikipedia. Headlines themselves are never counted as evidence: each
+    // candidate still has to fetch, parse, and pass publisher provenance checks.
+    if (verifiedNewsCount < 3) {
+      try {
+        const bingUrl = `https://www.bing.com/news/search?q=${encodeURIComponent(query)}&format=rss&setlang=en-us`;
+        const bingResponse = await fetch(bingUrl, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36' },
+          signal: AbortSignal.timeout(this.timeoutMs)
+        });
+        if (!bingResponse.ok) {
+          record({ provider: 'bing_news_rss', query, attemptedAt: new Date().toISOString(),
+            ok: false, httpStatus: bingResponse.status, resultCount: 0,
+            error: `HTTP ${bingResponse.status}`, stage: 'SEARCH' });
+        } else {
+          const hits = parseBingNewsRss(await bingResponse.text());
+          const bingCandidates: EvidenceItem[] = [];
+          for (const hit of hits.slice(0, 4)) {
+            if (seenUrls.has(hit.url)) continue;
+            seenUrls.add(hit.url);
+            const sourceType = determineSourceType(hit.url, hit.sourceName);
+            const { score, explanation } = calculateRelevance(claim, hit.title, hit.title);
+            const numConsistency = checkNumericalConsistency(claim, hit.title);
+            const tempConsistency = checkTemporalConsistency(claim, hit.publishedAt);
+            bingCandidates.push({
+              id: `bing-ev-${bingCandidates.length + 1}`,
+              sourceName: hit.sourceName,
+              sourceUrl: hit.url,
+              title: hit.title,
+              publishedAt: hit.publishedAt,
+              retrievedAt: new Date().toISOString(),
+              sourceType,
+              snippet: hit.title,
+              relation: classifyEvidenceRelation(claim, hit.title, score, numConsistency),
+              relevanceScore: score,
+              relevanceExplanation: explanation,
+              numericalConsistency: numConsistency,
+              temporalConsistency: tempConsistency
+            });
+          }
+
+          const hydratedBing: EvidenceItem[] = [];
+          for (const item of bingCandidates) {
+            hydratedBing.push(await this.hydrateEvidenceItem(item, claim, diagnostics));
+          }
+          results.push(...hydratedBing);
+          verifiedNewsCount += hydratedBing.filter(
+            item => item.sourceFetchStatus === 'FETCHED' && item.provenanceVerified === true
+          ).length;
+          record({ provider: 'bing_news_rss', query, attemptedAt: new Date().toISOString(),
+            ok: true, httpStatus: bingResponse.status, resultCount: hits.length, stage: 'SEARCH' });
+        }
+      } catch (err: any) {
+        record({ provider: 'bing_news_rss', query, attemptedAt: new Date().toISOString(),
+          ok: false, resultCount: 0, error: err?.message || 'network error', stage: 'SEARCH' });
+      }
+    }
+
     const newsResultCount = results.length;
 
     // Search Wikipedia when fewer than three publisher pages actually survive
