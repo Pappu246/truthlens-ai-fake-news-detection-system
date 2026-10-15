@@ -171,6 +171,19 @@ async function main(): Promise<void> {
       JSON.stringify(ev.json.evidence.map((e: any) => ({
         domain: e.source_domain, relevance: e.relevance_signal?.score, band: e.relevance_signal?.band
       }))));
+    const sourceDomains = ev.json.evidence.map((e: any) => String(e.source_domain || '').toLowerCase());
+    if (sourceDomains.length > 0 && sourceDomains.every((domain: string) =>
+      domain === 'wikipedia.org' || domain.endsWith('.wikipedia.org'))) {
+      check('GDELT fallback is attempted when Wikipedia is the only source family',
+        ev.json.retrieval.providers.some((provider: any) => provider.provider === 'gdelt_doc_api'),
+        JSON.stringify(ev.json.retrieval.providers.map((provider: any) => ({
+          provider: provider.provider, ok: provider.ok, resultCount: provider.resultCount
+        }))));
+    }
+    console.log(`  INFO  evidence detail: ` + JSON.stringify(ev.json.evidence.map((e: any) => ({
+      domain: e.source_domain, title: e.source_title,
+      relevance: e.relevance_signal?.score, stance: e.stance
+    }))));
     console.log(`  INFO  retrieved ${ev.json.evidence.length} source(s): ` +
       ev.json.evidence.map((e: any) => e.source_domain).join(', '));
   } else {
