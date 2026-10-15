@@ -19,7 +19,7 @@ import { EvidenceItem } from '../src/types';
 import { buildArticleVerification } from '../server/verification/assessmentEngine';
 import { ClaimVerificationResult } from '../src/types';
 import { extractClaimsHeuristic } from '../server/verification/claimExtractor';
-import { extractReadableArticleText, shouldSearchWikipediaForEvidence, parsePublicationDate } from '../server/verification/evidenceProvider';
+import { extractReadableArticleText, shouldSearchWikipediaForEvidence, parsePublicationDate, parseBingNewsRss, verifyEvidenceProvenance } from '../server/verification/evidenceProvider';
 import { checkNumericalConsistency, classifyEvidenceRelation } from '../server/verification/evidenceAnalyzer';
 
 let passed = 0;
@@ -90,7 +90,64 @@ async function main(): Promise<void> {
   check('valid RSS publication date is normalized safely',
     parsePublicationDate('Tue, 10 Oct 2023 12:00:00 GMT') === '2023-10-10T12:00:00.000Z');
 
-  section('0. Publisher article text extraction');
+  section('0. Claim extraction quality and secondary RSS search');
+
+  const teaserRumorClaims = extractClaimsHeuristic(
+    'SHOCKING SECRET EXPOSED BY MILITARY WHISTLEBLOWER!',
+    'An alien mothership cloaked behind the moon has been detected by independent observers in October 2026.'
+  );
+  check('sensational teaser headline is not promoted as the primary factual claim',
+    !teaserRumorClaims.some(c => /shocking secret exposed/i.test(c.originalText)),
+    teaserRumorClaims.map(c => c.originalText).join(' | '));
+  const detectionClaim = teaserRumorClaims.find(c => /alien mothership.*detected/i.test(c.originalText));
+  check('passive factual assertion with “has been detected” is extracted',
+    Boolean(detectionClaim), teaserRumorClaims.map(c => c.originalText).join(' | '));
+  check('search terms retain the specific subject and detection predicate',
+    Boolean(detectionClaim && /alien mothership/i.test(detectionClaim.searchQueries.join(' ')) &&
+      /detected/i.test(detectionClaim.searchQueries.join(' '))),
+    detectionClaim?.searchQueries.join(' | ') || 'no detection claim extracted');
+
+  const speculativeHeadlineClaims = extractClaimsHeuristic(
+    'Quantum computing: A tech race Europe could win?',
+    'The European Quantum Computing Consortium announced a new processor in June 2025.'
+  );
+  check('speculative question headline is not treated as a factual assertion',
+    !speculativeHeadlineClaims.some(c => /could win\?/i.test(c.originalText)),
+    speculativeHeadlineClaims.map(c => c.originalText).join(' | '));
+  check('a concrete body claim survives when a headline is speculative',
+    speculativeHeadlineClaims.some(c => /announced a new processor/i.test(c.originalText)),
+    speculativeHeadlineClaims.map(c => c.originalText).join(' | '));
+
+  const bingFixture = `<?xml version="1.0"?>
+    <rss><channel>
+      <item>
+        <title>Quantum computing research advances - BBC News</title>
+        <link>https://www.bing.com/news/apiclick.aspx?ref=feed&amp;aid=1</link>
+        <pubDate>Tue, 10 Oct 2023 12:00:00 GMT</pubDate>
+        <source url="https://www.bbc.com">BBC News</source>
+      </item>
+      <item>
+        <title>Unsafe result</title>
+        <link>javascript:alert(1)</link>
+        <source>Unknown publisher</source>
+      </item>
+    </channel></rss>`;
+  const bingItems = parseBingNewsRss(bingFixture);
+  check('Bing RSS parser decodes and normalizes a publisher item',
+    bingItems.length === 1 &&
+      bingItems[0].title === 'Quantum computing research advances' &&
+      bingItems[0].sourceName === 'BBC News' &&
+      bingItems[0].url.includes('&aid=1'),
+    JSON.stringify(bingItems));
+  check('Bing RSS provenance must resolve to the named publisher',
+    bingItems.length === 1 && verifyEvidenceProvenance(
+      bingItems[0].sourceName,
+      bingItems[0].url,
+      'https://www.bbc.com/news/articles/c20q4nv89yzo',
+      'MAJOR_NEWS'
+    ));
+
+  section('0a. Publisher article text extraction');
 
   section('0a. Wikipedia navigation is not evidence text');
   const wikipediaArticleText =
