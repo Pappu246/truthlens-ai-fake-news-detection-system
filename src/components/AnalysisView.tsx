@@ -1,5 +1,6 @@
-import React from 'react';
-import { AnalysisResult, ModelComparisonData, isNeedsMoreContextLabel } from '../types';
+import React, { useCallback, useEffect, useState } from 'react';
+import { AnalysisResult, ArticleVerificationResponse, ModelComparisonData, isNeedsMoreContextLabel } from '../types';
+import { shouldAutoVerifyArticleContent } from '../utils/articleVerificationPolicy';
 import { CheckCircle, AlertTriangle, XCircle, Info, ExternalLink, ShieldAlert, FileText, Search, HelpCircle, Layers } from 'lucide-react';
 import { TruthLensVerificationSection } from './TruthLensVerificationSection';
 
@@ -21,6 +22,29 @@ interface AnalysisViewProps {
 }
 
 export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, articleText }) => {
+  const [evidenceSummary, setEvidenceSummary] = useState<{
+    analysisId: string | number;
+    response: ArticleVerificationResponse;
+  } | null>(null);
+  const resultId = result?.id;
+  useEffect(() => {
+    setEvidenceSummary(null);
+  }, [resultId]);
+  const handleEvidenceReportChange = useCallback((response: ArticleVerificationResponse) => {
+    if (resultId === undefined) return;
+    setEvidenceSummary({ analysisId: resultId, response });
+  }, [resultId]);
+  const currentEvidenceReport = result
+    ? result.verification || (evidenceSummary?.analysisId === result.id ? evidenceSummary.response : undefined)
+    : undefined;
+  const hasSubstantialClaimText = result
+    ? shouldAutoVerifyArticleContent(
+        (articleText || result.text_snippet || '').trim(),
+        result.content_source,
+        result.is_headline_only
+      )
+    : false;
+
   const activeModelMetrics = metrics.best_model === 'linear_svm'
     ? metrics.linear_svm
     : metrics.logistic_regression;
@@ -77,14 +101,32 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
               <HelpCircle className="w-7 h-7" />
             </div>
             <span className="px-3 py-1 bg-amber-100 text-amber-800 text-[11px] font-black uppercase tracking-wider rounded-full inline-block mb-3">
-              Needs More Context
+              {currentEvidenceReport ? 'Independent Evidence Assessment' : 'ML Classification Withheld'}
             </span>
-            <h2 className="text-3xl font-black text-slate-900 mb-3 tracking-tight">
-              Need More Context
+            <h2 className={`text-3xl font-black mb-3 tracking-tight ${
+              currentEvidenceReport?.finalAssessment === 'LIKELY SUPPORTED' ? 'text-emerald-700' :
+              currentEvidenceReport?.finalAssessment === 'LIKELY FALSE' ? 'text-red-700' :
+              currentEvidenceReport?.finalAssessment === 'MIXED / CONTESTED' ? 'text-orange-700' : 'text-slate-900'
+            }`}>
+              {currentEvidenceReport?.finalAssessment || 'Need More Context'}
             </h2>
             <p className="text-slate-600 text-base leading-relaxed mb-6 max-w-lg mx-auto">
-              {result.reason || result.message || 'The backend could not reach a reliable verdict for this input. More context is required.'}
+              {currentEvidenceReport?.finalAssessmentReasoning ||
+                result.reason || result.message ||
+                'The backend could not reach a reliable verdict for this input. More context is required.'}
             </p>
+            {currentEvidenceReport && (
+              <p className="text-xs text-slate-500 mb-5">
+                The statistical article classifier remains withheld because its production artifact is uncalibrated.
+                The assessment above comes from the independent evidence engine.
+              </p>
+            )}
+            {!currentEvidenceReport && hasSubstantialClaimText && (
+              <p className="text-xs text-blue-700 mb-5">
+                Independent claim verification is running below. Its evidence result will appear here; it may report
+                insufficient or conflicting evidence instead of guessing.
+              </p>
+            )}
 
             <div className="bg-slate-50 rounded-xl p-4 text-left border border-slate-200 mb-6 text-xs text-slate-600 space-y-2 font-mono">
               {typeof result.input_length === 'number' && (
@@ -144,11 +186,9 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
               (result.status === 'INSUFFICIENT_INFORMATION' ||
                 isNeedsMoreContextLabel(result.verdict) ||
                 isNeedsMoreContextLabel(result.prediction)) &&
-              (result.content_source === 'FULL_ARTICLE_EXTRACTED' ||
-                result.content_source === 'PARTIAL_ARTICLE_EXTRACTED' ||
-                result.content_source === 'TEXT_DIRECT') &&
-              (articleText || result.text_snippet || '').trim().length >= 300
+              hasSubstantialClaimText
             }
+            onVerificationChange={handleEvidenceReportChange}
           />
         </div>
       </section>
@@ -569,10 +609,9 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
         analysisId={result.id}
         autoVerify={
           isNeedsMoreContextLabel(result.prediction) &&
-          (result.content_source === 'FULL_ARTICLE_EXTRACTED' ||
-          result.content_source === 'PARTIAL_ARTICLE_EXTRACTED' ||
-          result.content_source === 'TEXT_DIRECT')
+          hasSubstantialClaimText
         }
+        onVerificationChange={handleEvidenceReportChange}
       />
 
       {/* SECTION 7: LIMITATIONS & NOTE */}
