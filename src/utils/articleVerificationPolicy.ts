@@ -12,7 +12,7 @@ export function shouldAutoVerifyArticleContent(
   isHeadlineOnly = false
 ): boolean {
   const text = (content || '').trim();
-  const words = text.split(/\\s+/).filter(Boolean).length;
+  const words = text.split(/\s+/).filter(Boolean).length;
   if (isHeadlineOnly || text.length < 300 || words < 40) return false;
 
   return contentSource === 'FULL_ARTICLE_EXTRACTED' ||
