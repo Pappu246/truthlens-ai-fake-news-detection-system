@@ -3,6 +3,7 @@ import { validateUrlSecurity, safeFetchHtml } from '../server/security/urlValida
 import { extractArticleFromHtml } from '../server/extraction/articleExtractor';
 import { buildAbpRssFeedUrls, parseAbpRssSummary } from '../server/extraction/abpRssFallback';
 import { shouldAutoVerifyArticleContent } from '../src/utils/articleVerificationPolicy';
+import { cachedArticleMatchesTarget, normalizeArticleUrlForCache } from '../src/utils/articleUrl';
 import { TruthLensMLEngine } from '../server/mlEngine';
 import { SqliteHistoryManager } from '../server/sqliteHistory';
 
@@ -296,6 +297,22 @@ async function main() {
     !shouldAutoVerifyArticleContent(abpWords, 'EXTRACTION_BLOCKED', false));
   check('short publisher excerpts are not auto-verified',
     !shouldAutoVerifyArticleContent(abpWords.slice(0, 250), 'PARTIAL_ARTICLE_EXTRACTED', false));
+
+  check('cached extraction matches the same canonical article URL',
+    cachedArticleMatchesTarget(
+      'https://www.bbc.com/news/articles/c20q4nv89yzo',
+      'https://www.bbc.com/news/articles/c20q4nv89yzo/'
+    ));
+  check('changing from one publisher URL to another rejects stale article text',
+    !cachedArticleMatchesTarget(
+      'https://www.bbc.com/news/articles/c20q4nv89yzo',
+      'https://apnews.com/article/new-story-123'
+    ));
+  check('URL cache identity ignores a fragment but preserves a different path',
+    normalizeArticleUrlForCache('https://example.org/article/story#comments') ===
+      normalizeArticleUrlForCache('https://example.org/article/story') &&
+    normalizeArticleUrlForCache('https://example.org/article/story') !==
+      normalizeArticleUrlForCache('https://example.org/other/story'));
 
   const headlineOnly = extractArticleFromHtml({
     url: 'https://safe.test/headline',
