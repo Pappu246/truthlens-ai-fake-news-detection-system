@@ -419,7 +419,9 @@ export class EvidenceProvider {
   private timeoutMs: number;
 
   constructor(options?: { timeoutMs?: number }) {
-    this.timeoutMs = options?.timeoutMs || 8000;
+    // Keep one live claim-verification request within the API's 12s budget.
+    // A blocked publisher is a failed candidate, not a reason to stall all other sources.
+    this.timeoutMs = options?.timeoutMs || 3000;
   }
 
   private extractReadableText(html: string): string {
@@ -446,11 +448,12 @@ export class EvidenceProvider {
   private async hydrateEvidenceItem(
     item: EvidenceItem,
     claim: ExtractedClaim,
-    diagnostics?: RetrievalDiagnostic[]
+    diagnostics?: RetrievalDiagnostic[],
+    timeoutMs = this.timeoutMs
   ): Promise<EvidenceItem> {
     try {
       const fetched = await safeFetchHtml(item.sourceUrl, {
-        timeoutMs: this.timeoutMs,
+        timeoutMs,
         maxBytes: 2.5 * 1024 * 1024,
         maxRedirects: 5,
         // Use the same ordinary browser UA as direct extraction. Some publishers
@@ -565,11 +568,19 @@ export class EvidenceProvider {
   public async search(
     query: string,
     claim: ExtractedClaim,
-    diagnostics?: RetrievalDiagnostic[]
+    diagnostics?: RetrievalDiagnostic[],
+    runGdeltInParallel = false
   ): Promise<EvidenceItem[]> {
+    const searchStartedAt = Date.now();
     const results: EvidenceItem[] = [];
     const seenUrls = new Set<string>();
     const record = (d: RetrievalDiagnostic) => { if (diagnostics) diagnostics.push(d); };
+    // Start the slower publisher-index fallback concurrently with Google News,
+    // rather than waiting until after Bing + Wikipedia have exhausted the request
+    // budget. It is only started for the first query of a claim.
+    const gdeltPromise: Promise<EvidenceItem[]> = runGdeltInParallel
+      ? this.searchGdeltForClaim(query, claim, diagnostics, new Set())
+      : Promise.resolve([]);
     let newsCount = 0;
 
     // 1. Search Google News RSS live index
@@ -654,7 +665,7 @@ export class EvidenceProvider {
 
     // Hydrate news candidates before deciding whether Wikipedia fallback is needed.
     // Raw RSS hit counts are not an evidence count; publisher pages can fail to fetch.
-    const newsCandidates = results.splice(0, results.length).slice(0, 3);
+    const newsCandidates = results.splice(0, results.length).slice(0, 2);
     const hydratedNews = await Promise.all(
       newsCandidates.map(item => this.hydrateEvidenceItem(item, claim, diagnostics))
     );
@@ -663,11 +674,25 @@ export class EvidenceProvider {
       item => item.sourceFetchStatus === 'FETCHED' && item.provenanceVerified === true
     ).length;
 
-    // Google News often returns headlines for publisher pages that block server-side
-    // retrieval. Try Bing News RSS as a second source-discovery path before falling
-    // back to Wikipedia. Headlines themselves are never counted as evidence: each
-    // candidate still has to fetch, parse, and pass publisher provenance checks.
-    if (verifiedNewsCount < 3) {
+    const gdeltItems = runGdeltInParallel ? await gdeltPromise : [];
+    if (gdeltItems.length > 0) {
+      const existingUrls = new Set(results.map(item => item.sourceFinalUrl || item.sourceUrl));
+      for (const item of gdeltItems) {
+        const url = item.sourceFinalUrl || item.sourceUrl;
+        if (existingUrls.has(url)) continue;
+        existingUrls.add(url);
+        results.push(item);
+        if (!isWikipediaEvidence(item)) verifiedNewsCount++;
+      }
+    }
+
+    // If GDELT supplied verified publisher pages, don't spend the remaining
+    // request budget on another broad RSS/Wikipedia cascade. The next claim query
+    // can add corroboration if enough budget remains.
+    const canTryBing = verifiedNewsCount < 3 &&
+      !(runGdeltInParallel && gdeltItems.length > 0) &&
+      Date.now() - searchStartedAt < 7500;
+    if (canTryBing) {
       try {
         const bingUrl = `https://www.bing.com/news/search?q=${encodeURIComponent(query)}&format=rss&setlang=en-us`;
         const bingResponse = await fetch(bingUrl, {
@@ -706,7 +731,7 @@ export class EvidenceProvider {
           }
 
           const hydratedBing = await Promise.all(
-            bingCandidates.slice(0, 3).map(item => this.hydrateEvidenceItem(item, claim, diagnostics))
+            bingCandidates.slice(0, 2).map(item => this.hydrateEvidenceItem(item, claim, diagnostics))
           );
           results.push(...hydratedBing);
           verifiedNewsCount += hydratedBing.filter(
@@ -725,7 +750,11 @@ export class EvidenceProvider {
 
     // Search Wikipedia when fewer than three publisher pages actually survive
     // fetch and provenance checks, or when the claim type requires that source.
-    if (shouldSearchWikipediaForEvidence(verifiedNewsCount, claim.claimType)) {
+    if (
+      shouldSearchWikipediaForEvidence(verifiedNewsCount, claim.claimType) &&
+      !(runGdeltInParallel && gdeltItems.length > 0) &&
+      Date.now() - searchStartedAt < 6500
+    ) {
       try {
         const wikiQuery = encodeURIComponent(query);
         const wikiUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${wikiQuery}&format=json&origin=*`;
@@ -788,7 +817,7 @@ export class EvidenceProvider {
     if (firstUnhydratedIndex >= 0) {
       const wikiCandidates = results.slice(firstUnhydratedIndex);
       const hydratedWiki = await Promise.all(
-        wikiCandidates.slice(0, 3).map(item => this.hydrateEvidenceItem(item, claim, diagnostics))
+        wikiCandidates.slice(0, 2).map(item => this.hydrateEvidenceItem(item, claim, diagnostics))
       );
       results.splice(firstUnhydratedIndex, wikiCandidates.length, ...hydratedWiki);
     }
@@ -825,18 +854,22 @@ export class EvidenceProvider {
     seenUrls: Set<string>
   ): Promise<EvidenceItem[]> {
     const startedAt = new Date().toISOString();
+    const diagnostic: RetrievalDiagnostic = {
+      provider: 'gdelt_doc_api', query, attemptedAt: startedAt, ok: false,
+      resultCount: 0, error: 'GDELT request started; result not yet available.', stage: 'SEARCH'
+    };
+    diagnostics?.push(diagnostic);
     try {
       const searchUrl = buildGdeltArticleSearchUrl(query);
 
       const response = await fetch(searchUrl, {
         headers: { 'User-Agent': 'TruthLens-EvidenceBot/1.0 (academic; fact-checking)' },
-        signal: AbortSignal.timeout(Math.min(this.timeoutMs, 5000))
+        signal: AbortSignal.timeout(Math.min(this.timeoutMs, 2000))
       });
       if (!response.ok) {
-        diagnostics?.push({
-          provider: 'gdelt_doc_api', query, attemptedAt: startedAt, ok: false,
-          httpStatus: response.status, resultCount: 0,
-          error: `HTTP ${response.status}`, stage: 'SEARCH'
+        Object.assign(diagnostic, {
+          httpStatus: response.status,
+          error: `HTTP ${response.status}`
         });
         return [];
       }
@@ -851,7 +884,7 @@ export class EvidenceProvider {
 
       const candidates = parseGdeltArticleList(payload)
         .filter(candidate => !seenUrls.has(candidate.url))
-        .slice(0, 3);
+        .slice(0, 2);
 
       // Publisher fetches run concurrently but remain strictly bounded.
       const hydrated = await Promise.all(candidates.map(async (candidate, index) => {
@@ -872,21 +905,18 @@ export class EvidenceProvider {
           numericalConsistency: checkNumericalConsistency(claim, candidate.title),
           temporalConsistency: checkTemporalConsistency(claim, candidate.publishedAt)
         };
-        return this.hydrateEvidenceItem(base, claim, diagnostics);
+        return this.hydrateEvidenceItem(base, claim, diagnostics, Math.min(this.timeoutMs, 2500));
       }));
 
       const admissible = hydrated.filter(isAdmissibleEvidence);
       // The caller owns seenUrls and adds returned sources to its evidence list.
       // Do not mark returned items as seen here or the caller would skip them.
-      diagnostics?.push({
-        provider: 'gdelt_doc_api', query, attemptedAt: startedAt, ok: true,
-        resultCount: admissible.length, stage: 'SEARCH'
-      });
+      Object.assign(diagnostic, { ok: true, resultCount: admissible.length });
+      delete diagnostic.error;
       return admissible;
     } catch (err: any) {
-      diagnostics?.push({
-        provider: 'gdelt_doc_api', query, attemptedAt: startedAt, ok: false,
-        resultCount: 0, error: err?.message || 'GDELT search failed', stage: 'SEARCH'
+      Object.assign(diagnostic, {
+        ok: false, resultCount: 0, error: err?.message || 'GDELT search failed'
       });
       return [];
     }
@@ -907,7 +937,8 @@ export class EvidenceProvider {
       : [claim.normalizedText];
 
     const publisherDomains = new Set<string>();
-    let gdeltAttempted = false;
+    const totalBudgetMs = 10_500;
+    const retrievalStartedAt = Date.now();
 
     const addAdmissibleItems = (items: EvidenceItem[]) => {
       for (const item of items) {
@@ -928,19 +959,17 @@ export class EvidenceProvider {
     };
 
     for (const [queryIndex, q] of queriesToRun.entries()) {
-      const items = await this.search(q, claim, diagnostics);
+      const elapsed = Date.now() - retrievalStartedAt;
+      const remaining = totalBudgetMs - elapsed;
+      if (remaining < 3000) break;
+
+      const items = await this.search(q, claim, diagnostics, queryIndex === 0);
       addAdmissibleItems(items);
 
-      // Wikipedia is a fallback, not independent news corroboration. Trigger
-      // GDELT based on distinct verified publisher domains, not total evidence
-      // cards, so three generic Wikipedia pages cannot suppress the fallback.
-      if (queryIndex === 0 && publisherDomains.size < 3 && !gdeltAttempted) {
-        gdeltAttempted = true;
-        const gdeltItems = await this.searchGdeltForClaim(q, claim, diagnostics, seenUrls);
-        addAdmissibleItems(gdeltItems);
-      }
-
       if (publisherDomains.size >= 3) break;
+      // One parallel Google/GDELT/Bing pass is preferred to repeatedly issuing
+      // near-identical queries after most of the 12s route budget is consumed.
+      if (Date.now() - retrievalStartedAt >= 7500) break;
     }
 
     return preferPublisherEvidence(allEvidence);
