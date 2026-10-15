@@ -21,7 +21,7 @@ function parseAbpUrl(value: string): URL | null {
 
 function articlePath(value: string): string | null {
   const parsed = parseAbpUrl(value);
-  return parsed ? parsed.pathname.replace(/\\/+$/, '').toLowerCase() : null;
+  return parsed ? parsed.pathname.replace(/\/+$/, '').toLowerCase() : null;
 }
 
 /**
@@ -78,10 +78,10 @@ export function parseAbpRssSummary(
       const rawDescription = item.find('description').first().text().trim() ||
         item.find('content\\:encoded').first().text().trim();
       const summary = cheerio.load(rawDescription).text()
-        .replace(/\\s*(?:read more|read full story)\\s*$/i, '')
-        .replace(/\\s+/g, ' ')
+        .replace(/\s*(?:read more|read full story)\s*$/i, '')
+        .replace(/\s+/g, ' ')
         .trim();
-      const words = summary.split(/\\s+/).filter(Boolean);
+      const words = summary.split(/\s+/).filter(Boolean);
       // A headline or tiny summary cannot safely start claim verification.
       if (!title || summary.length < 300 || words.length < 40) return null;
 
