@@ -19,7 +19,7 @@ import { EvidenceItem } from '../src/types';
 import { buildArticleVerification } from '../server/verification/assessmentEngine';
 import { ClaimVerificationResult } from '../src/types';
 import { extractClaimsHeuristic } from '../server/verification/claimExtractor';
-import { extractReadableArticleText, shouldSearchWikipediaForEvidence, parsePublicationDate, parseBingNewsRss, parseGdeltArticleList, isAdmissibleEvidence, verifyEvidenceProvenance } from '../server/verification/evidenceProvider';
+import { extractReadableArticleText, shouldSearchWikipediaForEvidence, parsePublicationDate, parseBingNewsRss, parseGdeltArticleList, buildGdeltArticleSearchUrl, isAdmissibleEvidence, verifyEvidenceProvenance } from '../server/verification/evidenceProvider';
 import { checkNumericalConsistency, classifyEvidenceRelation } from '../server/verification/evidenceAnalyzer';
 
 let passed = 0;
@@ -146,6 +146,15 @@ async function main(): Promise<void> {
       'https://www.bbc.com/news/articles/c20q4nv89yzo',
       'MAJOR_NEWS'
     ));
+
+  const gdeltSearchUrl = new URL(buildGdeltArticleSearchUrl('NASA James Webb NGC 346'));
+  check('GDELT fallback searches beyond the previous three-month window',
+    gdeltSearchUrl.searchParams.get('timespan') === '1y',
+    gdeltSearchUrl.toString());
+  check('GDELT query URL is bounded and requests article-list JSON',
+    gdeltSearchUrl.searchParams.get('mode') === 'ArtList' &&
+      gdeltSearchUrl.searchParams.get('format') === 'json' &&
+      gdeltSearchUrl.searchParams.get('maxrecords') === '5');
 
   const gdeltHits = parseGdeltArticleList({
     articles: [
