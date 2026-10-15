@@ -31,6 +31,18 @@ const NON_CLAIM_PATTERNS = [
   /^(?:click here|read more|subscribe|share this|follow us)/i
 ];
 
+const RHETORICAL_HEADLINE_PATTERNS = [
+  /^(?:shocking|jaw-dropping|unbelievable|secret exposed|you won't believe)\b/i,
+  /^(?:what|why|how)\b.{0,180}\b(?:could|might|may|would|should)\b.{0,80}\?$/i,
+  /\b(?:could|might|may|would|should)\s+(?:win|change everything|be the|become the)\b[^.!?]*\?$/i
+];
+
+function isRhetoricalHeadline(text: string): boolean {
+  const value = (text || '').trim();
+  return RHETORICAL_HEADLINE_PATTERNS.some(pattern => pattern.test(value)) ||
+    (/^[A-Z\s!'":-]{20,}$/.test(value) && !/\b(?:NASA|NIH|FDA|CDC|WHO|FBI|UN|EU|UK|US|USA|AP)\b/.test(value));
+}
+
 const CATEGORY_KEYWORDS: Record<ClaimType, RegExp[]> = {
   'Government / Policy': [
     /\b(?:government|ministry|parliament|congress|senate|bill|legislation|policy|executive order|cabinet|regulator|sanction|subsidy|official announcement)\b/i
@@ -210,22 +222,36 @@ export function generateSearchQueries(claim: {
 }): string[] {
   const queries: string[] = [];
 
-  // Query 1: Entity + Action + Numbers
+  // Query 1: topic/entity + measurements + meaningful keywords.
+  // Remove sensational filler and modal verbs that do not help a search engine.
+  const queryStopWords = new Set([
+    'the', 'a', 'an', 'is', 'was', 'are', 'were', 'to', 'in', 'of', 'and', 'for',
+    'by', 'on', 'with', 'from', 'at', 'as', 'be', 'been', 'being', 'has', 'have',
+    'had', 'do', 'does', 'did', 'could', 'might', 'may', 'would', 'should', 'can',
+    'will', 'it', 'its', 'this', 'that', 'these', 'those', 'there', 'their',
+    'according', 'reportedly', 'shocking', 'secret', 'exclusive', 'breaking',
+    'unbelievable', 'revealed', 'exposed', 'whistleblower'
+  ]);
+  const meaningfulKeywords = claim.keywords
+    .map(word => word.trim())
+    .filter(word => word.length > 2 && !queryStopWords.has(word.toLowerCase()));
+
   const q1Parts: string[] = [];
   if (claim.entities.length > 0) q1Parts.push(claim.entities.slice(0, 2).join(' '));
   if (claim.numbers.length > 0) q1Parts.push(claim.numbers[0]);
-  if (claim.keywords.length > 0) q1Parts.push(claim.keywords.slice(0, 3).join(' '));
+  if (meaningfulKeywords.length > 0) q1Parts.push(meaningfulKeywords.slice(0, 4).join(' '));
 
   if (q1Parts.length > 0) {
-    queries.push(q1Parts.join(' ').replace(/[^\w\s$%€£₹.]/g, '').trim());
+    const q1 = q1Parts.join(' ').replace(/[^\w\s$%€£₹.-]/g, '').trim();
+    if (q1.length > 5) queries.push(q1);
   }
 
-  // Query 2: Direct salient search phrase from normalized text
+  // Query 2: Direct salient search phrase, retaining the claim subject and predicate.
   const cleanTokens = claim.normalizedText
-    .replace(/[^\w\s$%€£₹.]/g, '')
+    .replace(/[^\w\s$%€£₹.-]/g, '')
     .split(/\s+/)
-    .filter(t => !['the', 'a', 'an', 'is', 'was', 'are', 'were', 'to', 'in', 'of', 'and', 'for', 'by', 'on', 'with', 'from'].includes(t.toLowerCase()))
-    .slice(0, 7)
+    .filter(t => t.length > 2 && !queryStopWords.has(t.toLowerCase()))
+    .slice(0, 9)
     .join(' ');
 
   if (cleanTokens && !queries.includes(cleanTokens)) {
@@ -255,11 +281,13 @@ export function extractClaimsHeuristic(
   const claims: ExtractedClaim[] = [];
   let claimIndex = 1;
 
-  // 1. Check title for high-priority claim
+  // 1. Check title for a concrete claim. Do not promote teaser copy or
+  // speculative questions (e.g. "SHOCKING SECRET EXPOSED...") to the top claim.
   const titleClean = title.trim();
   if (
     titleClean.length >= 15 &&
     !NON_CLAIM_PATTERNS.some(p => p.test(titleClean)) &&
+    !isRhetoricalHeadline(titleClean) &&
     !containsPromptInjectionAttempt(titleClean)
   ) {
     const comp = extractClaimComponents(titleClean);
@@ -305,10 +333,16 @@ export function extractClaimsHeuristic(
     const hasNumbers = comp.numbers.length > 0;
     const hasEntities = comp.entities.length > 0;
     const hasDates = comp.dates.length > 0;
-    const hasAssertionVerb = /\b(?:announced?|confirmed?|reported?|stated?|passed?|approved?|launched?|discovered?|signed?|voted?|increased?|decreased?|fell|rose|dropped?|arrested?|revealed?|published?)\b/i.test(sentence);
+    const hasAssertionVerb = /\b(?:announced?|confirmed?|reported?|stated?|passed?|approved?|launched?|discovered?|detected?|observed?|measured?|demonstrated?|achieved?|signed?|voted?|increased?|decreased?|fell|rose|dropped?|arrested?|revealed?|published?|shows?|found?|identified?|recorded?|estimated?|concluded?)\b/i.test(sentence);
+    const hasConcretePassiveFinding = /\b(?:has|have|had|was|were|is|are)\s+(?:\w+\s+){0,3}(?:detected|observed|measured|discovered|demonstrated|identified|recorded|confirmed|found)\b/i.test(sentence);
 
-    // Only extract sentences with concrete factual indicators
-    if ((hasNumbers && (hasEntities || hasAssertionVerb)) || (hasEntities && hasAssertionVerb) || (hasDates && hasAssertionVerb)) {
+    // Include concrete passive findings even when their subject is not a named
+    // entity ("an alien mothership ... has been detected"), but never turn
+    // arbitrary emotional headline copy into a claim.
+    if ((hasNumbers && (hasEntities || hasAssertionVerb)) ||
+        (hasEntities && hasAssertionVerb) ||
+        (hasDates && hasAssertionVerb) ||
+        hasConcretePassiveFinding) {
       // Avoid duplicate claims
       const norm = normalizeClaimText(sentence);
       if (claims.some(c => c.normalizedText.toLowerCase() === norm.toLowerCase())) continue;
