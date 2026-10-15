@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { DemoExample, AnalysisInputMode, ExtractedArticle, NewsArticle, ContentSource } from '../types';
 import { DEFAULT_DEMO_EXAMPLES } from '../data/mockData';
 import { extractArticleApi, fetchLiveNewsApi } from '../services/analysisEngine';
+import { cachedArticleMatchesTarget } from '../utils/articleUrl';
 import {
   Sparkles,
   Loader2,
@@ -151,7 +152,11 @@ export const InputSection: React.FC<InputSectionProps> = ({
       }
       return false;
     };
-    if (extractedData && extractedData.content) {
+    if (
+      extractedData &&
+      extractedData.content &&
+      cachedArticleMatchesTarget(extractedData.url, targetUrl)
+    ) {
       if (refuseNonSubstantiveArticle(extractedData)) return;
       onAnalyze({
         inputType: 'url',
@@ -172,7 +177,8 @@ export const InputSection: React.FC<InputSectionProps> = ({
       return;
     }
 
-    // If not extracted yet, extract first then analyze
+    // URL changed or no matching cached extraction: never analyse stale article text.
+    setExtractedData(null);
     setIsExtracting(true);
     setUrlError(null);
     try {
