@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { DemoExample, AnalysisInputMode, ExtractedArticle, NewsArticle, ContentSource } from '../types';
 import { DEFAULT_DEMO_EXAMPLES } from '../data/mockData';
 import { extractArticleApi, fetchLiveNewsApi } from '../services/analysisEngine';
+import { cachedArticleMatchesTarget } from '../utils/articleUrl';
 import {
   Sparkles,
   Loader2,
@@ -134,10 +135,29 @@ export const InputSection: React.FC<InputSectionProps> = ({
     const mapUrlContentSource = (a: ExtractedArticle): ContentSource => {
       if (a.extractionStatus === 'FAILED') return 'EXTRACTION_BLOCKED';
       if (a.isHeadlineOnly || a.wordCount < 40) return 'HEADLINE_ONLY';
+      if (a.extractionMethod === 'ABP_OFFICIAL_RSS_SUMMARY') return 'RSS_SUMMARY_ONLY';
       if (a.extractionStatus === 'PARTIAL') return 'PARTIAL_ARTICLE_EXTRACTED';
       return 'FULL_ARTICLE_EXTRACTED';
     };
-    if (extractedData && extractedData.content) {
+    const refuseNonSubstantiveArticle = (article: ExtractedArticle): boolean => {
+      const body = (article.content || '').trim();
+      const words = body.split(/\s+/).filter(Boolean).length;
+      if (article.extractionStatus === 'FAILED' || article.isHeadlineOnly ||
+          article.wordCount < 40 || words < 40 || body.length < 300) {
+        setUrlError(
+          article.warnings?.join(' ') ||
+          'Only a headline or short excerpt was extracted. Open the article in your browser and paste the full text before analysis.'
+        );
+        return true;
+      }
+      return false;
+    };
+    if (
+      extractedData &&
+      extractedData.content &&
+      cachedArticleMatchesTarget(extractedData.url, targetUrl)
+    ) {
+      if (refuseNonSubstantiveArticle(extractedData)) return;
       onAnalyze({
         inputType: 'url',
         originalUrl: extractedData.url,
@@ -157,7 +177,8 @@ export const InputSection: React.FC<InputSectionProps> = ({
       return;
     }
 
-    // If not extracted yet, extract first then analyze
+    // URL changed or no matching cached extraction: never analyse stale article text.
+    setExtractedData(null);
     setIsExtracting(true);
     setUrlError(null);
     try {
@@ -165,6 +186,7 @@ export const InputSection: React.FC<InputSectionProps> = ({
       setExtractedData(article);
       onTextChange(article.content);
       onSourceUrlChange(article.url);
+      if (refuseNonSubstantiveArticle(article)) return;
       onAnalyze({
         inputType: 'url',
         originalUrl: article.url,
