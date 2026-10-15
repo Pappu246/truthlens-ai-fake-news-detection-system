@@ -19,7 +19,7 @@ import { EvidenceItem } from '../src/types';
 import { buildArticleVerification } from '../server/verification/assessmentEngine';
 import { ClaimVerificationResult } from '../src/types';
 import { extractClaimsHeuristic } from '../server/verification/claimExtractor';
-import { extractReadableArticleText, shouldSearchWikipediaForEvidence, parsePublicationDate, parseBingNewsRss, verifyEvidenceProvenance } from '../server/verification/evidenceProvider';
+import { extractReadableArticleText, shouldSearchWikipediaForEvidence, parsePublicationDate, parseBingNewsRss, parseGdeltArticleList, isAdmissibleEvidence, verifyEvidenceProvenance } from '../server/verification/evidenceProvider';
 import { checkNumericalConsistency, classifyEvidenceRelation } from '../server/verification/evidenceAnalyzer';
 
 let passed = 0;
@@ -146,6 +146,37 @@ async function main(): Promise<void> {
       'https://www.bbc.com/news/articles/c20q4nv89yzo',
       'MAJOR_NEWS'
     ));
+
+  const gdeltHits = parseGdeltArticleList({
+    articles: [
+      { title: 'NASA reports Webb observations in NGC 346', url: 'https://www.nasa.gov/news/webb-ngc-346/', domain: 'nasa.gov', seendate: '20261015T141500Z' },
+      { title: 'Duplicate URL is ignored', url: 'https://www.nasa.gov/news/webb-ngc-346/', seendate: '20261015T141500Z' },
+      { title: 'Unsafe HTTP result', url: 'http://example.org/story', seendate: '20261015T141500Z' },
+      { title: 'Unsafe scheme', url: 'javascript:alert(1)' },
+      { title: 'Missing URL' }
+    ]
+  });
+  check('GDELT parser keeps only unique HTTPS publisher articles',
+    gdeltHits.length === 1 && gdeltHits[0].url === 'https://www.nasa.gov/news/webb-ngc-346/',
+    JSON.stringify(gdeltHits));
+  check('GDELT compact UTC publication time is parsed',
+    gdeltHits[0]?.publishedAt === '2026-10-15T14:15:00.000Z',
+    String(gdeltHits[0]?.publishedAt));
+
+  const admissibleBase = item({
+    sourceFetchStatus: 'FETCHED',
+    provenanceVerified: true,
+    relevanceScore: 0.7,
+    relation: 'INSUFFICIENT'
+  });
+  check('fetched, provenance-verified relevant page can be retained even without directional support',
+    isAdmissibleEvidence(admissibleBase));
+  check('irrelevant pages do not enter evidence lists',
+    !isAdmissibleEvidence({ ...admissibleBase, relevanceScore: 0.21, relation: 'IRRELEVANT' }));
+  check('unverified publisher provenance cannot enter evidence lists',
+    !isAdmissibleEvidence({ ...admissibleBase, provenanceVerified: false }));
+  check('search candidate without fetched publisher text cannot enter evidence lists',
+    !isAdmissibleEvidence({ ...admissibleBase, sourceFetchStatus: 'FAILED' }));
 
   section('0a. Publisher article text extraction');
 
