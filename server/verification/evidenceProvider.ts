@@ -141,6 +141,27 @@ export function isAdmissibleEvidence(
     item.relation !== 'IRRELEVANT';
 }
 
+function isWikipediaEvidence(item: Pick<EvidenceItem, 'sourceUrl' | 'sourceFinalUrl'>): boolean {
+  try {
+    const host = new URL(item.sourceFinalUrl || item.sourceUrl).hostname.toLowerCase().replace(/^www\\./, '');
+    return host === 'wikipedia.org' || host.endsWith('.wikipedia.org') ||
+      host === 'wikimedia.org' || host.endsWith('.wikimedia.org');
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Prefer actual publisher pages whenever any are available. Wikipedia is a
+ * last-resort discovery source: multiple encyclopedia pages must not crowd
+ * out publisher evidence or masquerade as independent news corroboration.
+ */
+export function preferPublisherEvidence(items: EvidenceItem[]): EvidenceItem[] {
+  const publisherItems = items.filter(item => !isWikipediaEvidence(item));
+  if (publisherItems.length > 0) return publisherItems.slice(0, 6);
+  return items.filter(isWikipediaEvidence).slice(0, 3);
+}
+
 /** Parse a small, bounded set of Bing News RSS results without trusting feed markup. */
 export function parseBingNewsRss(xml: string): BingNewsRssItem[] {
   const decodeXml = (raw: string): string => raw
@@ -885,34 +906,44 @@ export class EvidenceProvider {
       ? claim.searchQueries 
       : [claim.normalizedText];
 
-    for (const [queryIndex, q] of queriesToRun.entries()) {
-      const items = await this.search(q, claim, diagnostics);
+    const publisherDomains = new Set<string>();
+    let gdeltAttempted = false;
+
+    const addAdmissibleItems = (items: EvidenceItem[]) => {
       for (const item of items) {
         if (!isAdmissibleEvidence(item)) continue;
         const dedupeUrl = item.sourceFinalUrl || item.sourceUrl;
-        if (!seenUrls.has(dedupeUrl)) {
-          seenUrls.add(dedupeUrl);
-          allEvidence.push(item);
-        }
-      }
+        if (seenUrls.has(dedupeUrl)) continue;
+        seenUrls.add(dedupeUrl);
+        allEvidence.push(item);
 
-      // GDELT is a third discovery path, invoked at most once per claim. It is
-      // only needed if the first search query still lacks three usable pages.
-      if (queryIndex === 0 && allEvidence.length < 3) {
-        const gdeltItems = await this.searchGdeltForClaim(q, claim, diagnostics, seenUrls);
-        for (const item of gdeltItems) {
-          const dedupeUrl = item.sourceFinalUrl || item.sourceUrl;
-          if (!seenUrls.has(dedupeUrl)) {
-            seenUrls.add(dedupeUrl);
-            allEvidence.push(item);
+        if (!isWikipediaEvidence(item)) {
+          try {
+            publisherDomains.add(new URL(item.sourceFinalUrl || item.sourceUrl).hostname.toLowerCase().replace(/^www\\./, ''));
+          } catch {
+            // A malformed URL will already have failed the source-fetch/provenance gates.
           }
         }
       }
+    };
 
-      if (allEvidence.length >= 3) break;
+    for (const [queryIndex, q] of queriesToRun.entries()) {
+      const items = await this.search(q, claim, diagnostics);
+      addAdmissibleItems(items);
+
+      // Wikipedia is a fallback, not independent news corroboration. Trigger
+      // GDELT based on distinct verified publisher domains, not total evidence
+      // cards, so three generic Wikipedia pages cannot suppress the fallback.
+      if (queryIndex === 0 && publisherDomains.size < 3 && !gdeltAttempted) {
+        gdeltAttempted = true;
+        const gdeltItems = await this.searchGdeltForClaim(q, claim, diagnostics, seenUrls);
+        addAdmissibleItems(gdeltItems);
+      }
+
+      if (publisherDomains.size >= 3) break;
     }
 
-    return allEvidence;
+    return preferPublisherEvidence(allEvidence);
   }
 
   /**
