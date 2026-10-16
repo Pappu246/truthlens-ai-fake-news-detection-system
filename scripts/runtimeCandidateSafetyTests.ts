@@ -63,6 +63,16 @@ check(
   fake.prediction !== 'LIKELY REAL',
   JSON.stringify({ prediction: fake.prediction, fake_probability: fake.fake_probability })
 );
+check(
+  'real-leaning model output with multiple sensational markers triggers conservative abstention',
+  fake.prediction === 'NEEDS MORE CONTEXT',
+  JSON.stringify({ prediction: fake.prediction, indicators: fake.indicators?.map((item: any) => item.name) })
+);
+check(
+  'sensational-conflict abstention withholds both class probabilities and confidence',
+  fake.fake_probability === null && fake.real_probability === null && fake.confidence === null,
+  JSON.stringify({ fake_probability: fake.fake_probability, real_probability: fake.real_probability, confidence: fake.confidence })
+);
 for (const [label, result] of [['real', real], ['fake', fake]] as const) {
   const pFake = result.fake_probability;
   const pReal = result.real_probability;
