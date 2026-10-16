@@ -21,6 +21,10 @@ import { refineEvidenceRelationSemantically } from './semanticRelation.js';
 // does not silently prevent the fallback from returning usable discovery hits.
 export const GDELT_SEARCH_TIMEOUT_MS = 7_500;
 
+// Google News RSS wrapper pages can take longer than ordinary publisher/RSS requests.
+// Keep this separate and bounded so slow wrapper fetches do not make all outbound fetches unbounded.
+export const GOOGLE_NEWS_WRAPPER_FETCH_TIMEOUT_MS = 4_500;
+
 /**
  * Hydrate the full bounded RSS result set (up to five publisher candidates)
  * concurrently. Production traces showed the first three Google News links
@@ -620,7 +624,7 @@ export class EvidenceProvider {
     }
     try {
       let fetched = await safeFetchHtml(effectiveSourceUrl, {
-        timeoutMs,
+        timeoutMs: sourceHost === 'news.google.com' ? GOOGLE_NEWS_WRAPPER_FETCH_TIMEOUT_MS : timeoutMs,
         maxBytes: 2.5 * 1024 * 1024,
         maxRedirects: 5,
         cookie: sourceHost === 'news.google.com' ? 'CONSENT=PENDING+987' : undefined,
