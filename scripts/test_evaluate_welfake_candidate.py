@@ -62,3 +62,33 @@ def test_runtime_policy_does_not_reward_abstaining_on_every_article():
     assert report["abstention_rate"] == 1.0
     assert report["operational_balanced_accuracy_abstentions_count_as_not_correct"] == 0.0
     assert report["selective_accuracy_on_decided_only"] is None
+
+
+def test_runtime_policy_mirrors_low_vocabulary_abstention():
+    report = compute_runtime_policy_metrics(
+        np.asarray([0, 1]),
+        np.asarray([0.10, 0.90]),
+        texts=["real item", "fake item"],
+        coverage_ratio=np.asarray([0.01, 0.90]),
+    )
+    assert report["coverage"] == 0.5
+    assert report["low_vocabulary_abstentions"] == 1
+    assert report["abstained_real_samples"] == 1
+    assert report["fake_recall_all_fake_samples"] == 1.0
+    assert report["real_recall_all_real_samples"] == 0.0
+
+
+def test_runtime_policy_abstains_on_real_lean_with_sensational_conflict():
+    report = compute_runtime_policy_metrics(
+        np.asarray([0, 1]),
+        np.asarray([0.10, 0.90]),
+        texts=[
+            "SHOCKING SECRET EXPOSED material requires independent evidence.",
+            "Ordinary validated budget report with audited numerical tables.",
+        ],
+        coverage_ratio=np.asarray([0.90, 0.90]),
+    )
+    assert report["coverage"] == 0.5
+    assert report["sensational_conflict_abstentions"] == 1
+    assert report["abstained_real_samples"] == 1
+    assert report["fake_recall_all_fake_samples"] == 1.0
