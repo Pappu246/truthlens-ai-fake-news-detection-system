@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Train an exact, compact production-runtime ISOT candidate.
+"""Train an exact compact production-runtime calibrated candidate.
 
-This pipeline is deliberately separate from scripts/train_isot.py:
-- uses the verified Phase 2 group-aware splits;
-- reproduces the Node tokenizer/TF-IDF term construction exactly;
-- trains LinearSVC on train, fits Platt calibration only on disjoint validation;
-- evaluates untouched test + temporal test;
-- evaluates the exact same runtime scorer on LIAR OOD;
-- writes a compact candidate artifact with one SVM + one Platt calibrator.
-It NEVER modifies data/saved_model_artifacts.json.
+Without --welfake, this reproduces an ISOT-only research candidate. With the
+verified WELFake CSV, it trains on ISOT's leak-aware train split plus WELFake's
+40% train partition, fits calibration/model selection on the combined ISOT and
+WELFake validation partitions, and reserves a disjoint 50% WELFake hash holdout
+that is never used for fitting/calibration/selection. Exact normalized-text
+overlaps with the complete ISOT corpus and duplicate/conflicting WELFake groups
+are removed first. The artifact format remains the exact runtime SVM + Platt
+calibrator contract. This script NEVER modifies production model artifacts.
 """
 import argparse
 import csv
