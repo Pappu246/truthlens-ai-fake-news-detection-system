@@ -122,7 +122,7 @@ jobs:
       - name: Verify canonical production artifact was not modified
         run: cmp /tmp/truthlens-production-artifact.before.json data/saved_model_artifacts.json
 
-      - name: Enforce full-article external release gate; report LIAR separately
+      - name: Enforce held-out full-article quality gate; report LIAR separately
         run: |
           set -euo pipefail
           python - <<'PY'
@@ -155,6 +155,10 @@ jobs:
               "artifact_hash_matches": report.get("candidate_artifact_sha256") == artifact_sha == manifest.get("artifact_sha256"),
               "dataset_checksum_matches": report.get("dataset_md5") == "73c9675a4b3d09f86a6933d0b8d7d908",
               "sample_count": report.get("eligible_samples", 0) >= 10000,
+              "holdout_scope_is_not_mislabeled_external": report.get("partition_scope", {}).get("is_source_independent_external_test") is False,
+              "holdout_never_used_for_fit_calibration_or_selection": report.get("partition_scope", {}).get("holdout_is_never_fit_calibrated_or_selected") is True,
+              "holdout_hashes_disjoint_from_train": report.get("partition_scope", {}).get("holdout_overlaps_train") is False,
+              "holdout_hashes_disjoint_from_validation": report.get("partition_scope", {}).get("holdout_overlaps_validation") is False,
               "balanced_accuracy": metrics.get("balanced_accuracy", 0) >= 0.70,
               "fake_recall": metrics.get("fake_recall", 0) >= 0.70,
               "real_recall": metrics.get("real_recall", 0) >= 0.70,
@@ -197,9 +201,10 @@ jobs:
           summary = [
               "## Candidate production eligibility — separate task metrics",
               "",
-              "### Held-out full-article benchmark (primary gate)",
+              "### Held-out full-article benchmark (same WELFake corpus; not source-independent)",
               f"- Dataset: {report.get('dataset')}",
-              f"- Eligible non-overlap articles: {report.get('eligible_samples')}",
+              f"- Eligible untouched holdout articles: {report.get('eligible_samples')}",
+              "- Scope: WELFake train/validation partitions are used for fitting/calibration; the held-out partition is not source-independent external validation.",
               f"- Balanced accuracy: {metrics.get('balanced_accuracy')}",
               f"- Fake recall: {metrics.get('fake_recall')}",
               f"- Real recall: {metrics.get('real_recall')}",
@@ -229,7 +234,7 @@ jobs:
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as f:
               f.write("\n".join(summary) + "\n")
           if not all(checks.values()):
-              print("BLOCKED: do not promote this candidate. Full-article external release gate did not pass.")
+              print("BLOCKED: do not promote this candidate. Held-out full-article quality gate did not pass.")
               sys.exit(1)
           PY
 
