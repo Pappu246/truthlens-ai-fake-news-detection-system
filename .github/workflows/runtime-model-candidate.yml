@@ -7,6 +7,7 @@ on:
     paths:
       - "scripts/train_isot_runtime_candidate.py"
       - "scripts/runtimeModelParityTests.ts"
+      - "scripts/runtimeCandidateSafetyTests.ts"
       - "scripts/isot_data_pipeline.py"
       - "server/mlEngine.ts"
       - "package.json"
@@ -54,6 +55,9 @@ jobs:
       - name: Rebuild verified Phase 2 splits
         run: python scripts/isot_data_pipeline.py
 
+      - name: Snapshot canonical production artifact before candidate training
+        run: cp data/saved_model_artifacts.json /tmp/truthlens-production-artifact.before.json
+
       - name: Train exact compact runtime candidate
         run: python scripts/train_isot_runtime_candidate.py
 
@@ -72,17 +76,60 @@ jobs:
       - name: Runtime artifact Python-to-Node parity
         run: npm run test:runtime-model-parity
 
+      - name: Candidate-specific real/fake safety regression
+        run: |
+          set -euo pipefail
+          CANDIDATE_ARTIFACT="$(find artifacts/models -type f -name model_artifact.json -print -quit)"
+          test -n "$CANDIDATE_ARTIFACT"
+          npx tsx scripts/runtimeCandidateSafetyTests.ts "$CANDIDATE_ARTIFACT"
+
       - name: Existing article model safety regression
         run: npm run test:model-safety
 
       - name: Existing verdict regression
         run: npm run test:verdicts
 
+      - name: Verify canonical production artifact was not modified
+        run: cmp /tmp/truthlens-production-artifact.before.json data/saved_model_artifacts.json
+
+      - name: Enforce production model out-of-domain release gate
+        run: |
+          python - <<'PY'
+          import glob, json, sys
+          paths = glob.glob("artifacts/models/*/external_validation.json")
+          if not paths:
+              print("BLOCKED: candidate external-validation report is missing.")
+              sys.exit(1)
+          path = sorted(paths)[-1]
+          report = json.load(open(path, encoding="utf-8"))
+          metrics = report.get("metrics", {})
+          balanced = metrics.get("balanced_accuracy")
+          print(json.dumps({
+              "report": path,
+              "eligible_binary_samples": report.get("eligible_binary_samples"),
+              "balanced_accuracy": balanced,
+              "accuracy": metrics.get("accuracy"),
+              "macro_f1": metrics.get("macro_f1")
+          }, indent=2))
+          summary = (
+              "## Candidate production eligibility\n\n"
+              f"- LIAR eligible binary samples: {report.get('eligible_binary_samples')}\n"
+              f"- LIAR balanced accuracy: {balanced}\n"
+              "- Required by scripts/promote_model.py: balanced accuracy > 0.50\n"
+          )
+          with open(__import__("os").environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as f:
+              f.write(summary)
+          if report.get("status") != "COMPLETED" or not isinstance(balanced, (int, float)) or balanced <= 0.50:
+              print("BLOCKED: do not promote this candidate; the existing out-of-domain release gate did not pass.")
+              sys.exit(1)
+          PY
+
       - name: Upload runtime candidate evidence
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: truthlens-runtime-model-candidate
           path: |
             artifacts/models/**
             data/isot_prepared/stats.json
-          if-no-files-found: error
+          if-no-files-found: warn
