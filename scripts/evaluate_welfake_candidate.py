@@ -37,6 +37,16 @@ WELFAKE_MD5 = "73c9675a4b3d09f86a6933d0b8d7d908"
 MIN_ARTICLE_CHARS = 300
 MIN_ARTICLE_WORDS = 50
 MIN_GATE_SAMPLES = 10_000
+LOW_VOCABULARY_COVERAGE_THRESHOLD = 0.10
+# Must mirror server/mlEngine.ts. These cues trigger abstention only when the
+# calibrated model strongly leans REAL; they never independently label an
+# article fake.
+SENSATIONAL_TERMS = (
+    "shocking", "unbelievable", "secret", "exposed", "censored", "miracle", "bombshell",
+    "banned", "terrifying", "mind control", "clones", "whistleblower", "alien", "suppressed",
+    "hidden truth", "deep state", "globalist", "poisons", "furious", "wake up", "conspiracy",
+    "mutant", "occult", "chemtrails", "nano-circuits", "brainwash",
+)
 
 
 def md5(path: Path) -> str:
@@ -55,18 +65,44 @@ def text_hash(text: str) -> str | None:
 
 
 
-def compute_runtime_policy_metrics(y_fake: np.ndarray, p_fake: np.ndarray,
-                                  fake_threshold: float = 0.65,
-                                  real_threshold: float = 0.35) -> dict:
-    """Score using TruthLens' actual calibrated runtime policy, including abstention.
+def compute_runtime_policy_metrics(
+    y_fake: np.ndarray,
+    p_fake: np.ndarray,
+    texts: list[str] | None = None,
+    coverage_ratio: np.ndarray | None = None,
+    fake_threshold: float = 0.65,
+    real_threshold: float = 0.35,
+) -> dict:
+    """Score the operational runtime policy, including its safety abstentions.
 
-    Positive class is FAKE=1; p_fake in the open interval (real_threshold,
-    fake_threshold) deliberately abstains and is counted as incorrect in the
-    operational metrics, while selective metrics are reported separately.
+    Positive class is FAKE=1. The policy abstains in the calibrated gray zone,
+    below the runtime vocabulary-coverage threshold, or when a calibrated
+    prediction strongly leans REAL despite >=3 sensational/conspiracy markers.
+    Style markers never independently classify an article as fake.
     """
-    prediction = np.full(len(p_fake), -1, dtype=int)
-    prediction[p_fake <= real_threshold] = 0
-    prediction[p_fake >= fake_threshold] = 1
+    count = len(p_fake)
+    if coverage_ratio is None:
+        coverage_ratio = np.ones(count, dtype=float)
+    else:
+        coverage_ratio = np.asarray(coverage_ratio, dtype=float)
+    if len(coverage_ratio) != count:
+        raise ValueError("coverage_ratio length must match p_fake.")
+    if texts is not None and len(texts) != count:
+        raise ValueError("texts length must match p_fake.")
+
+    low_vocabulary = coverage_ratio < LOW_VOCABULARY_COVERAGE_THRESHOLD
+    sensational_counts = np.asarray([
+        sum(1 for term in SENSATIONAL_TERMS if term in text.lower())
+        for text in (texts if texts is not None else [""] * count)
+    ], dtype=int)
+    sensational_conflict = (
+        (p_fake <= real_threshold) & (sensational_counts >= 3) & (~low_vocabulary)
+    )
+
+    prediction = np.full(count, -1, dtype=int)
+    can_decide = ~low_vocabulary & ~sensational_conflict
+    prediction[can_decide & (p_fake <= real_threshold)] = 0
+    prediction[can_decide & (p_fake >= fake_threshold)] = 1
     decided = prediction >= 0
     real_mask = y_fake == 0
     fake_mask = y_fake == 1
@@ -76,7 +112,7 @@ def compute_runtime_policy_metrics(y_fake: np.ndarray, p_fake: np.ndarray,
     tp = int(np.sum(fake_mask & (prediction == 1)))
     abstain_real = int(np.sum(real_mask & (prediction == -1)))
     abstain_fake = int(np.sum(fake_mask & (prediction == -1)))
-    total = max(1, len(y_fake))
+    total = max(1, count)
     decided_count = int(decided.sum())
     decided_balanced = None
     decided_accuracy = None
@@ -88,13 +124,19 @@ def compute_runtime_policy_metrics(y_fake: np.ndarray, p_fake: np.ndarray,
     real_recall = tn / real_total
     fake_recall = tp / fake_total
     return {
-        "policy": "p_fake >= 0.65 => LIKELY FAKE; p_fake <= 0.35 => LIKELY REAL; otherwise NEEDS MORE CONTEXT",
+        "policy": (
+            "p_fake >= 0.65 => LIKELY FAKE; p_fake <= 0.35 => LIKELY REAL; "
+            "otherwise NEEDS MORE CONTEXT; also abstain if vocabulary coverage < 0.10 "
+            "or if p_fake <= 0.35 with >=3 sensational markers"
+        ),
         "fake_threshold": fake_threshold,
         "real_threshold": real_threshold,
-        "sample_count": int(len(y_fake)),
+        "sample_count": int(count),
         "decided_count": decided_count,
         "coverage": float(decided_count / total),
         "abstention_rate": float(1.0 - decided_count / total),
+        "low_vocabulary_abstentions": int(low_vocabulary.sum()),
+        "sensational_conflict_abstentions": int(sensational_conflict.sum()),
         "operational_accuracy_abstentions_count_as_not_correct": float((tn + tp) / total),
         "operational_balanced_accuracy_abstentions_count_as_not_correct": float((fake_recall + real_recall) / 2.0),
         "fake_recall_all_fake_samples": float(fake_recall),
@@ -273,9 +315,16 @@ def main() -> None:
         raise SystemExit("No eligible WELFake full-article samples remained after quality/deduplication checks.")
 
     y_fake = np.asarray([entry["y_fake"] for entry in samples], dtype=int)
-    p_fake = np.asarray([score_runtime(entry["text"], artifact)[0] for entry in samples], dtype=float)
+    scored = [score_runtime(entry["text"], artifact) for entry in samples]
+    p_fake = np.asarray([item[0] for item in scored], dtype=float)
+    coverage_ratio = np.asarray([
+        item[2] / item[1] if item[1] else 0.0 for item in scored
+    ], dtype=float)
+    sample_texts = [entry["text"] for entry in samples]
     metrics = compute_metrics(y_fake, p_fake)
-    runtime_policy_metrics = compute_runtime_policy_metrics(y_fake, p_fake)
+    runtime_policy_metrics = compute_runtime_policy_metrics(
+        y_fake, p_fake, texts=sample_texts, coverage_ratio=coverage_ratio
+    )
     # This inverse-score statistic is diagnostic only. It helps distinguish a
     # likely domain/style inversion from a mediocre ranking, but it must never
     # reverse dataset labels or be used to make a candidate eligible.
@@ -284,11 +333,16 @@ def main() -> None:
         neutralize_source_attribution(entry["title"], entry["body"])
         for entry in samples
     ]
-    p_fake_neutralized = np.asarray([
-        score_runtime(text, artifact)[0] for text in neutralized_texts
+    neutralized_scored = [score_runtime(text, artifact) for text in neutralized_texts]
+    p_fake_neutralized = np.asarray([item[0] for item in neutralized_scored], dtype=float)
+    neutralized_coverage_ratio = np.asarray([
+        item[2] / item[1] if item[1] else 0.0 for item in neutralized_scored
     ], dtype=float)
     neutralized_metrics = compute_metrics(y_fake, p_fake_neutralized)
-    neutralized_runtime_policy_metrics = compute_runtime_policy_metrics(y_fake, p_fake_neutralized)
+    neutralized_runtime_policy_metrics = compute_runtime_policy_metrics(
+        y_fake, p_fake_neutralized, texts=neutralized_texts,
+        coverage_ratio=neutralized_coverage_ratio
+    )
     release_thresholds = {
         "minimum_eligible_samples": MIN_GATE_SAMPLES,
         "minimum_balanced_accuracy": 0.70,
