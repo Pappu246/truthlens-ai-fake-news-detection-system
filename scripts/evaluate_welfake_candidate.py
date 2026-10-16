@@ -162,6 +162,18 @@ def main() -> None:
     y_fake = np.asarray([entry["y_fake"] for entry in samples], dtype=int)
     p_fake = np.asarray([score_runtime(entry["text"], artifact)[0] for entry in samples], dtype=float)
     metrics = compute_metrics(y_fake, p_fake)
+    release_thresholds = {
+        "minimum_eligible_samples": MIN_GATE_SAMPLES,
+        "minimum_balanced_accuracy": 0.70,
+        "minimum_fake_recall": 0.70,
+        "minimum_real_recall": 0.70,
+    }
+    release_gate_passed = (
+        len(samples) >= release_thresholds["minimum_eligible_samples"]
+        and metrics["balanced_accuracy"] >= release_thresholds["minimum_balanced_accuracy"]
+        and metrics["fake_recall"] >= release_thresholds["minimum_fake_recall"]
+        and metrics["real_recall"] >= release_thresholds["minimum_real_recall"]
+    )
 
     report = {
         "status": "COMPLETED",
@@ -184,11 +196,15 @@ def main() -> None:
             "minimum_words": MIN_ARTICLE_WORDS,
         },
         "metrics": metrics,
-        "release_thresholds": {
-            "minimum_eligible_samples": MIN_GATE_SAMPLES,
-            "minimum_balanced_accuracy": 0.70,
-            "minimum_fake_recall": 0.70,
-            "minimum_real_recall": 0.70,
+        "release_thresholds": release_thresholds,
+        "release_gate": {
+            "passed": release_gate_passed,
+            "result": "PASS" if release_gate_passed else "BLOCKED",
+            "reason": (
+                "All full-article external release thresholds passed."
+                if release_gate_passed
+                else "One or more full-article external release thresholds failed."
+            ),
         },
         "limitations": [
             "WELFake is a historical benchmark assembled from multiple corpora; it does not establish present-day real-world accuracy.",
@@ -200,8 +216,11 @@ def main() -> None:
 
     out_path = candidate_dir / "article_ood_validation.json"
     out_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    manifest["production_eligible"] = bool(release_gate_passed)
+    manifest["promotion_status"] = "CANDIDATE_VALIDATED" if release_gate_passed else "CANDIDATE_ONLY"
     manifest["article_external_validation"] = {
         "status": report["status"],
+        "release_gate_passed": bool(release_gate_passed),
         "path": "article_ood_validation.json",
         "dataset": report["dataset"],
         "dataset_md5": dataset_md5,
@@ -222,6 +241,8 @@ def main() -> None:
         "deduplication": report["deduplication"],
         "metrics": metrics,
         "release_thresholds": report["release_thresholds"],
+        "release_gate": report["release_gate"],
+        "production_eligible": manifest["production_eligible"],
         "candidate_artifact_hash_verified": True,
         "full_article_text_persisted": False,
     }, indent=2))
