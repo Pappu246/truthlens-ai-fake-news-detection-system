@@ -16,6 +16,11 @@ import {
 } from './evidenceAnalyzer.js';
 import { refineEvidenceRelationSemantically } from './semanticRelation.js';
 
+// GDELT's document index is slower than RSS feeds. Keep its timeout explicit,
+// bounded, and separate from the shorter publisher/RSS timeout so a 2s abort
+// does not silently prevent the fallback from returning usable discovery hits.
+export const GDELT_SEARCH_TIMEOUT_MS = 4_500;
+
 export interface EvidenceSearchOptions {
   maxResultsPerClaim?: number;
   timeoutMs?: number;
@@ -864,7 +869,7 @@ export class EvidenceProvider {
 
       const response = await fetch(searchUrl, {
         headers: { 'User-Agent': 'TruthLens-EvidenceBot/1.0 (academic; fact-checking)' },
-        signal: AbortSignal.timeout(Math.min(this.timeoutMs, 2000))
+        signal: AbortSignal.timeout(GDELT_SEARCH_TIMEOUT_MS)
       });
       if (!response.ok) {
         Object.assign(diagnostic, {
