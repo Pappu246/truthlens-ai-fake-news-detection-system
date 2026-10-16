@@ -240,6 +240,12 @@ export interface RetrievalDiagnostic {
   resultCount: number;
   error?: string;
   stage?: 'SEARCH' | 'PUBLISHER_FETCH' | 'PROVENANCE';
+  /** Safe host-only telemetry; never stores full article URLs. */
+  sourceName?: string;
+  sourceHost?: string;
+  finalHost?: string;
+  readableTextChars?: number;
+  elapsedMs?: number;
 }
 
 export function verifyEvidenceProvenance(
@@ -469,6 +475,15 @@ export class EvidenceProvider {
     diagnostics?: RetrievalDiagnostic[],
     timeoutMs = this.timeoutMs
   ): Promise<EvidenceItem> {
+    const startedAtMs = Date.now();
+    let sourceHost: string | undefined;
+    let finalHost: string | undefined;
+    let readableTextChars: number | undefined;
+    try {
+      sourceHost = new URL(item.sourceUrl).hostname.toLowerCase();
+    } catch {
+      // The URL validator will report an invalid source; keep telemetry host-only.
+    }
     try {
       const fetched = await safeFetchHtml(item.sourceUrl, {
         timeoutMs,
@@ -478,7 +493,13 @@ export class EvidenceProvider {
         // reject an identifiable bot UA even for public, non-paywalled pages.
         userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36'
       });
+      try {
+        finalHost = new URL(fetched.finalUrl).hostname.toLowerCase();
+      } catch {
+        finalHost = undefined;
+      }
       const body = this.extractReadableText(fetched.html);
+      readableTextChars = body.length;
       if (body.length < 120) throw new Error('Publisher page did not expose enough readable article text.');
       const excerpt = this.selectEvidenceExcerpt(claim, body, item.title);
       const { score, explanation } = calculateRelevance(claim, excerpt, item.title);
@@ -492,6 +513,11 @@ export class EvidenceProvider {
         attemptedAt: new Date().toISOString(),
         ok: true,
         resultCount: 1,
+        sourceName: item.sourceName,
+        sourceHost,
+        finalHost,
+        readableTextChars,
+        elapsedMs: Date.now() - startedAtMs,
         stage: 'PUBLISHER_FETCH'
       });
 
@@ -551,6 +577,11 @@ export class EvidenceProvider {
         attemptedAt: new Date().toISOString(),
         ok: false,
         resultCount: 0,
+        sourceName: item.sourceName,
+        sourceHost,
+        finalHost,
+        readableTextChars,
+        elapsedMs: Date.now() - startedAtMs,
         error: err?.message || 'source fetch failed',
         stage: 'PUBLISHER_FETCH'
       });
@@ -880,7 +911,8 @@ export class EvidenceProvider {
     diagnostics: RetrievalDiagnostic[] | undefined,
     seenUrls: Set<string>
   ): Promise<EvidenceItem[]> {
-    const startedAt = new Date().toISOString();
+    const startedAtMs = Date.now();
+    const startedAt = new Date(startedAtMs).toISOString();
     const diagnostic: RetrievalDiagnostic = {
       provider: 'gdelt_doc_api', query, attemptedAt: startedAt, ok: false,
       resultCount: 0, error: 'GDELT request started; result not yet available.', stage: 'SEARCH'
@@ -896,6 +928,7 @@ export class EvidenceProvider {
       if (!response.ok) {
         Object.assign(diagnostic, {
           httpStatus: response.status,
+          elapsedMs: Date.now() - startedAtMs,
           error: `HTTP ${response.status}`
         });
         return [];
@@ -938,12 +971,15 @@ export class EvidenceProvider {
       const admissible = hydrated.filter(isAdmissibleEvidence);
       // The caller owns seenUrls and adds returned sources to its evidence list.
       // Do not mark returned items as seen here or the caller would skip them.
-      Object.assign(diagnostic, { ok: true, resultCount: admissible.length });
+      Object.assign(diagnostic, { ok: true, resultCount: admissible.length, elapsedMs: Date.now() - startedAtMs });
       delete diagnostic.error;
       return admissible;
     } catch (err: any) {
       Object.assign(diagnostic, {
-        ok: false, resultCount: 0, error: err?.message || 'GDELT search failed'
+        ok: false,
+        resultCount: 0,
+        elapsedMs: Date.now() - startedAtMs,
+        error: err?.message || 'GDELT search failed'
       });
       return [];
     }
