@@ -70,6 +70,18 @@ def main():
         raise SystemExit("Promotion blocked: WELFake full-article real recall must be at least 0.70.")
     if article_report.get("release_gate", {}).get("passed") is not True:
         raise SystemExit("Promotion blocked: WELFake release-gate decision is not PASS.")
+    runtime_policy = article_report.get("runtime_decision_policy", {})
+    runtime_metrics = runtime_policy.get("metrics", {})
+    if runtime_policy.get("passed") is not True:
+        raise SystemExit("Promotion blocked: actual runtime decision/abstention policy did not pass.")
+    if runtime_metrics.get("coverage", 0) < 0.50:
+        raise SystemExit("Promotion blocked: actual runtime policy coverage must be at least 0.50.")
+    if runtime_metrics.get("operational_balanced_accuracy_abstentions_count_as_not_correct", 0) < 0.70:
+        raise SystemExit("Promotion blocked: actual runtime policy operational balanced accuracy must be at least 0.70.")
+    if runtime_metrics.get("fake_recall_all_fake_samples", 0) < 0.70:
+        raise SystemExit("Promotion blocked: runtime policy fake recall must be at least 0.70.")
+    if runtime_metrics.get("real_recall_all_real_samples", 0) < 0.70:
+        raise SystemExit("Promotion blocked: runtime policy real recall must be at least 0.70.")
     ablation = article_report.get("source_attribution_ablation", {})
     ablation_metrics = ablation.get("metrics", {})
     if ablation.get("passed") is not True:
@@ -80,6 +92,18 @@ def main():
         raise SystemExit("Promotion blocked: byline-ablation fake recall must be at least 0.65.")
     if ablation_metrics.get("real_recall", 0) < 0.65:
         raise SystemExit("Promotion blocked: byline-ablation real recall must be at least 0.65.")
+    ablation_runtime_policy = ablation.get("runtime_decision_policy", {})
+    ablation_runtime_metrics = ablation_runtime_policy.get("metrics", {})
+    if ablation_runtime_policy.get("passed") is not True:
+        raise SystemExit("Promotion blocked: runtime decision policy failed the publisher-byline ablation.")
+    if ablation_runtime_metrics.get("coverage", 0) < 0.50:
+        raise SystemExit("Promotion blocked: byline-ablation runtime-policy coverage must be at least 0.50.")
+    if ablation_runtime_metrics.get("operational_balanced_accuracy_abstentions_count_as_not_correct", 0) < 0.65:
+        raise SystemExit("Promotion blocked: byline-ablation runtime-policy balanced accuracy must be at least 0.65.")
+    if ablation_runtime_metrics.get("fake_recall_all_fake_samples", 0) < 0.65:
+        raise SystemExit("Promotion blocked: byline-ablation runtime-policy fake recall must be at least 0.65.")
+    if ablation_runtime_metrics.get("real_recall_all_real_samples", 0) < 0.65:
+        raise SystemExit("Promotion blocked: byline-ablation runtime-policy real recall must be at least 0.65.")
 
     # LIAR is a sentence/claim benchmark, not a full-article benchmark. Keep
     # its result mandatory and auditable, but do not use it as the primary
@@ -97,9 +121,15 @@ def main():
             "balanced_accuracy": article_balanced,
             "fake_recall": fake_recall,
             "real_recall": real_recall,
+            "runtime_policy_coverage": runtime_metrics.get("coverage"),
+            "runtime_policy_operational_balanced_accuracy": runtime_metrics.get("operational_balanced_accuracy_abstentions_count_as_not_correct"),
+            "runtime_policy_fake_recall": runtime_metrics.get("fake_recall_all_fake_samples"),
+            "runtime_policy_real_recall": runtime_metrics.get("real_recall_all_real_samples"),
             "byline_ablation_balanced_accuracy": ablation_metrics.get("balanced_accuracy"),
             "byline_ablation_fake_recall": ablation_metrics.get("fake_recall"),
-            "byline_ablation_real_recall": ablation_metrics.get("real_recall")
+            "byline_ablation_real_recall": ablation_metrics.get("real_recall"),
+            "byline_ablation_runtime_policy_coverage": ablation_runtime_metrics.get("coverage"),
+            "byline_ablation_runtime_policy_operational_balanced_accuracy": ablation_runtime_metrics.get("operational_balanced_accuracy_abstentions_count_as_not_correct")
         },
         "liar_claim_diagnostic": {
             "eligible_binary_samples": ext.get("eligible_binary_samples"),
