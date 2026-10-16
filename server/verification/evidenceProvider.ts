@@ -19,7 +19,7 @@ import { refineEvidenceRelationSemantically } from './semanticRelation.js';
 // GDELT's document index is slower than RSS feeds. Keep its timeout explicit,
 // bounded, and separate from the shorter publisher/RSS timeout so a 2s abort
 // does not silently prevent the fallback from returning usable discovery hits.
-export const GDELT_SEARCH_TIMEOUT_MS = 4_500;
+export const GDELT_SEARCH_TIMEOUT_MS = 7_500;
 
 export interface EvidenceSearchOptions {
   maxResultsPerClaim?: number;
@@ -583,8 +583,12 @@ export class EvidenceProvider {
     // Start the slower publisher-index fallback concurrently with Google News,
     // rather than waiting until after Bing + Wikipedia have exhausted the request
     // budget. It is only started for the first query of a claim.
+    let gdeltResult: EvidenceItem[] | undefined;
     const gdeltPromise: Promise<EvidenceItem[]> = runGdeltInParallel
-      ? this.searchGdeltForClaim(query, claim, diagnostics, new Set())
+      ? this.searchGdeltForClaim(query, claim, diagnostics, new Set()).then(items => {
+          gdeltResult = items;
+          return items;
+        })
       : Promise.resolve([]);
     let newsCount = 0;
 
@@ -679,24 +683,14 @@ export class EvidenceProvider {
       item => item.sourceFetchStatus === 'FETCHED' && item.provenanceVerified === true
     ).length;
 
-    const gdeltItems = runGdeltInParallel ? await gdeltPromise : [];
-    if (gdeltItems.length > 0) {
-      const existingUrls = new Set(results.map(item => item.sourceFinalUrl || item.sourceUrl));
-      for (const item of gdeltItems) {
-        const url = item.sourceFinalUrl || item.sourceUrl;
-        if (existingUrls.has(url)) continue;
-        existingUrls.add(url);
-        results.push(item);
-        if (!isWikipediaEvidence(item)) verifiedNewsCount++;
-      }
-    }
-
     // If GDELT supplied verified publisher pages, don't spend the remaining
     // request budget on another broad RSS/Wikipedia cascade. The next claim query
     // can add corroboration if enough budget remains.
+    // Do not wait for the slower GDELT endpoint before starting Bing. A
+    // GDELT timeout must not consume the entire time window for other fallbacks.
     const canTryBing = verifiedNewsCount < 3 &&
-      !(runGdeltInParallel && gdeltItems.length > 0) &&
-      Date.now() - searchStartedAt < 7500;
+      !(gdeltResult && gdeltResult.length > 0) &&
+      Date.now() - searchStartedAt < 5_500;
     if (canTryBing) {
       try {
         const bingUrl = `https://www.bing.com/news/search?q=${encodeURIComponent(query)}&format=rss&setlang=en-us`;
@@ -757,8 +751,8 @@ export class EvidenceProvider {
     // fetch and provenance checks, or when the claim type requires that source.
     if (
       shouldSearchWikipediaForEvidence(verifiedNewsCount, claim.claimType) &&
-      !(runGdeltInParallel && gdeltItems.length > 0) &&
-      Date.now() - searchStartedAt < 6500
+      !(gdeltResult && gdeltResult.length > 0) &&
+      Date.now() - searchStartedAt < 6_500
     ) {
       try {
         const wikiQuery = encodeURIComponent(query);
@@ -825,6 +819,21 @@ export class EvidenceProvider {
         wikiCandidates.slice(0, 2).map(item => this.hydrateEvidenceItem(item, claim, diagnostics))
       );
       results.splice(firstUnhydratedIndex, wikiCandidates.length, ...hydratedWiki);
+    }
+
+    // Merge GDELT after the RSS/knowledge fallbacks have had a chance to run.
+    // Its request remains concurrent with them, so a slow DOC API cannot block
+    // Bing from starting; all returned pages still pass the same hydration,
+    // provenance, and relevance gates before they are included.
+    const gdeltItems = runGdeltInParallel ? await gdeltPromise : [];
+    if (gdeltItems.length > 0) {
+      const existingUrls = new Set(results.map(item => item.sourceFinalUrl || item.sourceUrl));
+      for (const item of gdeltItems) {
+        const url = item.sourceFinalUrl || item.sourceUrl;
+        if (existingUrls.has(url)) continue;
+        existingUrls.add(url);
+        results.push(item);
+      }
     }
 
     // Sort results by relevance score descending and source priority
