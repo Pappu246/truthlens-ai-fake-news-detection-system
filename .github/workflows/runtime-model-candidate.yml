@@ -68,13 +68,16 @@ jobs:
         run: python scripts/isot_data_pipeline.py
 
       - name: Download and verify WELFake full-article external evaluation corpus
+        timeout-minutes: 8
         env:
           WELFAKE_URL: https://zenodo.org/records/4561253/files/WELFake_Dataset.csv?download=1
           WELFAKE_MD5: 73c9675a4b3d09f86a6933d0b8d7d908
         run: |
           set -euo pipefail
           mkdir -p data
-          curl --fail --location --retry 3 --retry-delay 2 "$WELFAKE_URL" -o data/WELFake_Dataset.csv
+          curl --fail --location --show-error --connect-timeout 20 --max-time 360 --retry 2 --retry-all-errors --retry-delay 2 "$WELFAKE_URL" -o data/WELFake_Dataset.csv
+          test -s data/WELFake_Dataset.csv
+          ls -lh data/WELFake_Dataset.csv
           printf "%s  %s\\n" "$WELFAKE_MD5" "data/WELFake_Dataset.csv" | md5sum --check -
 
       - name: Snapshot canonical production artifact before candidate training
