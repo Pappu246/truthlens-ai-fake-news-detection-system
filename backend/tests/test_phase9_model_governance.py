@@ -38,8 +38,10 @@ def test_promotion_requires_exact_calibrated_runtime_contract():
 
 def test_promotion_requires_task_matched_full_article_validation():
     source=PROMOTE.read_text()
-    assert 'article_ood_validation.json' in source
-    assert 'WELFake full-article validation is not COMPLETED' in source
+    assert 'article_heldout_validation.json' in source
+    assert 'WELFake held-out full-article validation is not COMPLETED' in source
+    assert 'held-out report must accurately identify its same-corpus scope' in source
+    assert 'holdout hash sets overlap train or validation' in source
     assert 'publisher-byline ablation did not pass' in source
     assert 'byline-ablation balanced accuracy must be at least 0.65' in source
     assert 'byline-ablation fake recall must be at least 0.65' in source
