@@ -122,7 +122,7 @@ def main():
     ext_metrics = ext.get("metrics", {})
     print(json.dumps({
         "candidate_model_version": args.model_version,
-        "article_external_validation": {
+        "article_heldout_validation": {
             "dataset": article_report.get("dataset"),
             "eligible_samples": article_report.get("eligible_samples"),
             "balanced_accuracy": article_balanced,
