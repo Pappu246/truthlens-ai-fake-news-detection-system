@@ -21,6 +21,17 @@ import { refineEvidenceRelationSemantically } from './semanticRelation.js';
 // does not silently prevent the fallback from returning usable discovery hits.
 export const GDELT_SEARCH_TIMEOUT_MS = 7_500;
 
+/**
+ * Fetch a small, bounded set of Google/Bing publisher candidates concurrently.
+ * Trying only the first two often failed on sites with blocked/lightweight HTML,
+ * even when later RSS entries pointed to readable independent publishers.
+ */
+export const MAX_PUBLISHER_FETCH_CANDIDATES_PER_PROVIDER = 3;
+
+export function selectPublisherFetchCandidates<T>(items: readonly T[]): T[] {
+  return items.slice(0, MAX_PUBLISHER_FETCH_CANDIDATES_PER_PROVIDER);
+}
+
 export interface EvidenceSearchOptions {
   maxResultsPerClaim?: number;
   timeoutMs?: number;
@@ -674,7 +685,7 @@ export class EvidenceProvider {
 
     // Hydrate news candidates before deciding whether Wikipedia fallback is needed.
     // Raw RSS hit counts are not an evidence count; publisher pages can fail to fetch.
-    const newsCandidates = results.splice(0, results.length).slice(0, 2);
+    const newsCandidates = selectPublisherFetchCandidates(results.splice(0, results.length));
     const hydratedNews = await Promise.all(
       newsCandidates.map(item => this.hydrateEvidenceItem(item, claim, diagnostics))
     );
@@ -730,7 +741,7 @@ export class EvidenceProvider {
           }
 
           const hydratedBing = await Promise.all(
-            bingCandidates.slice(0, 2).map(item => this.hydrateEvidenceItem(item, claim, diagnostics))
+            selectPublisherFetchCandidates(bingCandidates).map(item => this.hydrateEvidenceItem(item, claim, diagnostics))
           );
           results.push(...hydratedBing);
           verifiedNewsCount += hydratedBing.filter(
