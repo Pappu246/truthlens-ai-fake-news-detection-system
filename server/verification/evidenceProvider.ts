@@ -1027,9 +1027,17 @@ export class EvidenceProvider {
     const newsCandidates = selectPublisherFetchCandidates(results.splice(0, results.length));
     const resolvedGoogleNewsUrls = await this.resolveGoogleNewsArticleUrls(newsCandidates, claim, diagnostics);
     const hydratedNews = await Promise.all(
-      newsCandidates.map(item => this.hydrateEvidenceItem(
-        item, claim, diagnostics, this.timeoutMs, resolvedGoogleNewsUrls.get(item.sourceUrl), true
-      ))
+      newsCandidates.map(item => {
+        const resolvedPublisherUrl = resolvedGoogleNewsUrls.get(item.sourceUrl);
+        return this.hydrateEvidenceItem(
+          item,
+          claim,
+          diagnostics,
+          resolvedPublisherUrl ? Math.min(this.timeoutMs, 2500) : this.timeoutMs,
+          resolvedPublisherUrl,
+          true
+        );
+      })
     );
     results.push(...hydratedNews);
     let verifiedNewsCount = hydratedNews.filter(
