@@ -214,7 +214,8 @@ export function isAdmissibleEvidence(
     item.provenanceVerified === true &&
     Number.isFinite(item.relevanceScore) &&
     item.relevanceScore >= 0.22 &&
-    item.relation !== 'IRRELEVANT';
+    item.relation !== 'IRRELEVANT' &&
+    item.relation !== 'INSUFFICIENT';
 }
 
 function isWikipediaEvidence(item: Pick<EvidenceItem, 'sourceUrl' | 'sourceFinalUrl'>): boolean {
