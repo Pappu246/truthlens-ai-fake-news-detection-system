@@ -70,6 +70,16 @@ def main():
         raise SystemExit("Promotion blocked: WELFake full-article real recall must be at least 0.70.")
     if article_report.get("release_gate", {}).get("passed") is not True:
         raise SystemExit("Promotion blocked: WELFake release-gate decision is not PASS.")
+    ablation = article_report.get("source_attribution_ablation", {})
+    ablation_metrics = ablation.get("metrics", {})
+    if ablation.get("passed") is not True:
+        raise SystemExit("Promotion blocked: publisher-byline ablation did not pass.")
+    if ablation_metrics.get("balanced_accuracy", 0) < 0.65:
+        raise SystemExit("Promotion blocked: byline-ablation balanced accuracy must be at least 0.65.")
+    if ablation_metrics.get("fake_recall", 0) < 0.65:
+        raise SystemExit("Promotion blocked: byline-ablation fake recall must be at least 0.65.")
+    if ablation_metrics.get("real_recall", 0) < 0.65:
+        raise SystemExit("Promotion blocked: byline-ablation real recall must be at least 0.65.")
 
     # LIAR is a sentence/claim benchmark, not a full-article benchmark. Keep
     # its result mandatory and auditable, but do not use it as the primary
@@ -86,7 +96,10 @@ def main():
             "eligible_samples": article_report.get("eligible_samples"),
             "balanced_accuracy": article_balanced,
             "fake_recall": fake_recall,
-            "real_recall": real_recall
+            "real_recall": real_recall,
+            "byline_ablation_balanced_accuracy": ablation_metrics.get("balanced_accuracy"),
+            "byline_ablation_fake_recall": ablation_metrics.get("fake_recall"),
+            "byline_ablation_real_recall": ablation_metrics.get("real_recall")
         },
         "liar_claim_diagnostic": {
             "eligible_binary_samples": ext.get("eligible_binary_samples"),
