@@ -10,6 +10,7 @@ import argparse
 import csv
 import hashlib
 import json
+import re
 from collections import defaultdict
 from pathlib import Path
 
@@ -48,6 +49,36 @@ def text_hash(text: str) -> str | None:
     if not cleaned:
         return None
     return hashlib.sha256(cleaned.encode("utf-8")).hexdigest()
+
+
+def neutralize_source_attribution(title: str, body: str) -> str:
+    """Remove common wire-service byline strings for a source-cue stress test.
+
+    This is a deliberately conservative ablation: it does not remove publisher
+    names throughout article prose, entities, figures, or factual claims.
+    """
+    safe_title = re.sub(
+        r"\\s*(?:[-|–—]\\s*)(?:Reuters|Associated Press|AP News|AFP|Agence France-Presse|Bloomberg News)\\s*$",
+        "",
+        (title or "").strip(),
+        flags=re.IGNORECASE,
+    )
+    safe_body = (body or "").strip()
+    safe_body = re.sub(
+        r"^\\s*(?:[A-Z][A-Z0-9 .,'’/-]{2,60}\\s+)?\\(\\s*(?:Reuters|Associated Press|AP News|AP|AFP|Bloomberg News)\\s*\\)\\s*[-—:]\\s*",
+        "",
+        safe_body,
+        count=1,
+        flags=re.IGNORECASE,
+    )
+    safe_body = re.sub(
+        r"^\\s*(?:Reuters|Associated Press|AP News|AP|AFP|Bloomberg News)\\s*[-—:]\\s*",
+        "",
+        safe_body,
+        count=1,
+        flags=re.IGNORECASE,
+    )
+    return (safe_title + " " + safe_body).strip()
 
 
 def compute_metrics(y_fake: np.ndarray, p_fake: np.ndarray) -> dict:
@@ -143,6 +174,8 @@ def main() -> None:
 
         grouped[digest].append({
             "text": full_text,
+            "title": title,
+            "body": body,
             # WELFake: 0=FAKE, 1=REAL. TruthLens runtime: 1=FAKE, 0=REAL.
             "y_fake": 1 if dataset_label == 0 else 0,
         })
@@ -162,18 +195,35 @@ def main() -> None:
     y_fake = np.asarray([entry["y_fake"] for entry in samples], dtype=int)
     p_fake = np.asarray([score_runtime(entry["text"], artifact)[0] for entry in samples], dtype=float)
     metrics = compute_metrics(y_fake, p_fake)
+    neutralized_texts = [
+        neutralize_source_attribution(entry["title"], entry["body"])
+        for entry in samples
+    ]
+    p_fake_neutralized = np.asarray([
+        score_runtime(text, artifact)[0] for text in neutralized_texts
+    ], dtype=float)
+    neutralized_metrics = compute_metrics(y_fake, p_fake_neutralized)
     release_thresholds = {
         "minimum_eligible_samples": MIN_GATE_SAMPLES,
         "minimum_balanced_accuracy": 0.70,
         "minimum_fake_recall": 0.70,
         "minimum_real_recall": 0.70,
+        "minimum_byline_ablation_balanced_accuracy": 0.65,
+        "minimum_byline_ablation_fake_recall": 0.65,
+        "minimum_byline_ablation_real_recall": 0.65,
     }
-    release_gate_passed = (
+    raw_gate_passed = (
         len(samples) >= release_thresholds["minimum_eligible_samples"]
         and metrics["balanced_accuracy"] >= release_thresholds["minimum_balanced_accuracy"]
         and metrics["fake_recall"] >= release_thresholds["minimum_fake_recall"]
         and metrics["real_recall"] >= release_thresholds["minimum_real_recall"]
     )
+    byline_ablation_passed = (
+        neutralized_metrics["balanced_accuracy"] >= release_thresholds["minimum_byline_ablation_balanced_accuracy"]
+        and neutralized_metrics["fake_recall"] >= release_thresholds["minimum_byline_ablation_fake_recall"]
+        and neutralized_metrics["real_recall"] >= release_thresholds["minimum_byline_ablation_real_recall"]
+    )
+    release_gate_passed = raw_gate_passed and byline_ablation_passed
 
     report = {
         "status": "COMPLETED",
@@ -196,14 +246,28 @@ def main() -> None:
             "minimum_words": MIN_ARTICLE_WORDS,
         },
         "metrics": metrics,
+        "source_attribution_ablation": {
+            "method": "Remove common wire-service byline strings at the start of body and publisher suffixes at title end; do not remove names throughout factual prose.",
+            "metrics": neutralized_metrics,
+            "thresholds": {
+                "minimum_balanced_accuracy": release_thresholds["minimum_byline_ablation_balanced_accuracy"],
+                "minimum_fake_recall": release_thresholds["minimum_byline_ablation_fake_recall"],
+                "minimum_real_recall": release_thresholds["minimum_byline_ablation_real_recall"],
+            },
+            "passed": byline_ablation_passed,
+        },
         "release_thresholds": release_thresholds,
         "release_gate": {
             "passed": release_gate_passed,
+            "checks": {
+                "raw_full_article_gate": raw_gate_passed,
+                "source_attribution_ablation_gate": byline_ablation_passed,
+            },
             "result": "PASS" if release_gate_passed else "BLOCKED",
             "reason": (
-                "All full-article external release thresholds passed."
+                "Raw full-article and byline-ablation thresholds passed."
                 if release_gate_passed
-                else "One or more full-article external release thresholds failed."
+                else "One or more full-article or byline-ablation release thresholds failed."
             ),
         },
         "limitations": [
@@ -228,7 +292,11 @@ def main() -> None:
         "balanced_accuracy": metrics["balanced_accuracy"],
         "fake_recall": metrics["fake_recall"],
         "real_recall": metrics["real_recall"],
-        "metrics_sha256": hashlib.sha256(json.dumps(metrics, sort_keys=True).encode()).hexdigest(),
+        "source_attribution_ablation_passed": byline_ablation_passed,
+        "source_attribution_ablation_balanced_accuracy": neutralized_metrics["balanced_accuracy"],
+        "metrics_sha256": hashlib.sha256(json.dumps({
+            "raw": metrics, "source_attribution_ablation": neutralized_metrics
+        }, sort_keys=True).encode()).hexdigest(),
     }
     manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
@@ -240,6 +308,7 @@ def main() -> None:
         "real_samples": report["real_samples"],
         "deduplication": report["deduplication"],
         "metrics": metrics,
+        "source_attribution_ablation": report["source_attribution_ablation"],
         "release_thresholds": report["release_thresholds"],
         "release_gate": report["release_gate"],
         "production_eligible": manifest["production_eligible"],
