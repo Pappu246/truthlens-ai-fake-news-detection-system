@@ -18,7 +18,7 @@ import {
 import { EvidenceItem } from '../src/types';
 import { buildArticleVerification } from '../server/verification/assessmentEngine';
 import { ClaimVerificationResult } from '../src/types';
-import { extractClaimsHeuristic } from '../server/verification/claimExtractor';
+import { extractClaimsHeuristic, generateSearchQueries } from '../server/verification/claimExtractor';
 import { extractReadableArticleText, shouldSearchWikipediaForEvidence, parsePublicationDate, parseBingNewsRss, parseGdeltArticleList, buildGdeltArticleSearchUrl, GDELT_SEARCH_TIMEOUT_MS, GDELT_RESULT_JOIN_GRACE_MS, GDELT_EMPTY_RESULT_JOIN_GRACE_MS, getGdeltJoinGraceMs, settleWithinGrace, GOOGLE_NEWS_WRAPPER_FETCH_TIMEOUT_MS, MAX_PUBLISHER_FETCH_CANDIDATES_PER_PROVIDER, selectPublisherFetchCandidates, MAX_GOOGLE_NEWS_WRAPPER_CANDIDATES_PER_PROVIDER, selectGoogleNewsHydrationCandidates, countAdmissiblePublisherEvidence, getGoogleNewsArticleId, buildGoogleNewsDecodeRequest, parseGoogleNewsDecodedUrlResponse, isAdmissibleEvidence, preferPublisherEvidence, verifyEvidenceProvenance } from '../server/verification/evidenceProvider';
 import { checkNumericalConsistency, classifyEvidenceRelation } from '../server/verification/evidenceAnalyzer';
 import { summarizeProviderDiagnostics } from '../server/verification/observability';
@@ -90,6 +90,23 @@ async function main(): Promise<void> {
     parsePublicationDate('not a real date') === undefined);
   check('valid RSS publication date is normalized safely',
     parsePublicationDate('Tue, 10 Oct 2023 12:00:00 GMT') === '2023-10-10T12:00:00.000Z');
+
+  const unemploymentClaimText = 'The United States unemployment rate fell below four percent in 2023.';
+  const unemploymentClaims = extractClaimsHeuristic('', unemploymentClaimText);
+  const unemploymentQueries = unemploymentClaims[0]?.searchQueries || generateSearchQueries({
+    normalizedText: unemploymentClaimText,
+    entities: ['The United States'],
+    numbers: ['2023'],
+    dates: ['in 2023'],
+    locations: ['United States'],
+    keywords: ['united', 'states', 'unemployment', 'rate', 'fell', 'below', 'four', 'percent']
+  });
+  check('primary search query preserves the assertion predicate and threshold',
+    /unemployment.*rate.*fell.*below.*four.*percent.*2023/i.test(unemploymentQueries[0] || ''),
+    JSON.stringify(unemploymentQueries));
+  check('generated fallback queries retain an action or direction term',
+    unemploymentQueries.some(query => /fell|below/i.test(query)),
+    JSON.stringify(unemploymentQueries));
 
   section('0. Claim extraction quality and secondary RSS search');
 
@@ -346,10 +363,12 @@ async function main(): Promise<void> {
     sourceFetchStatus: 'FETCHED',
     provenanceVerified: true,
     relevanceScore: 0.7,
-    relation: 'INSUFFICIENT'
+    relation: 'SUPPORTS'
   });
-  check('fetched, provenance-verified relevant page can be retained even without directional support',
+  check('fetched, provenance-verified claim-linked page can enter evidence lists',
     isAdmissibleEvidence(admissibleBase));
+  check('fetched but claim-unlinked publisher text is not admitted as evidence',
+    !isAdmissibleEvidence({ ...admissibleBase, relevanceScore: 0.58, relation: 'INSUFFICIENT' }));
   check('irrelevant pages do not enter evidence lists',
     !isAdmissibleEvidence({ ...admissibleBase, relevanceScore: 0.21, relation: 'IRRELEVANT' }));
   check('unverified publisher provenance cannot enter evidence lists',
