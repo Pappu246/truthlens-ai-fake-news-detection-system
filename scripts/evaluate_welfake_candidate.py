@@ -334,11 +334,11 @@ def main() -> None:
 
     report = {
         "status": "COMPLETED",
-        "dataset": "WELFake stratified held-out partition (Zenodo record 4561253)",
+        "dataset": "WELFake untouched held-out full-article partition (Zenodo record 4561253)",
         "dataset_url": WELFAKE_URL,
         "dataset_md5": dataset_md5,
         "label_mapping": {"dataset_0": "FAKE", "dataset_1": "REAL", "runtime_fake_positive": 1},
-        "task": "Full-article fake-vs-real classification on an untouched partition. WELFake train/validation partitions are used for fitting/calibration, so this is not source-independent external validation.",
+        "task": "Full-article fake-vs-real classification on held-out article hashes not used in fitting, calibration or model selection. WELFake train/validation partitions are included in the multi-source candidate; this is not source-independent external validation.",
         "partition_scope": {
             "is_source_independent_external_test": False,
             "split_manifest": "welfake_split_manifest.json",
@@ -348,6 +348,7 @@ def main() -> None:
             "holdout_overlaps_train": bool(holdout_hashes & train_hashes),
             "holdout_overlaps_validation": bool(holdout_hashes & validation_hashes),
             "holdout_is_never_fit_calibrated_or_selected": True,
+            "note": "Same-corpus holdout only; no claim of source-independent external validation.",
         },
         "candidate_model_version": manifest.get("model_version"),
         "candidate_artifact_sha256": artifact_digest,
@@ -416,14 +417,14 @@ def main() -> None:
         ],
     }
 
-    out_path = candidate_dir / "article_ood_validation.json"
+    out_path = candidate_dir / "article_heldout_validation.json"
     out_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     manifest["production_eligible"] = bool(release_gate_passed)
     manifest["promotion_status"] = "CANDIDATE_VALIDATED" if release_gate_passed else "CANDIDATE_ONLY"
     manifest["article_validation"] = {
         "status": report["status"],
         "release_gate_passed": bool(release_gate_passed),
-        "path": "article_ood_validation.json",
+        "path": "article_heldout_validation.json",
         "dataset": report["dataset"],
         "dataset_md5": dataset_md5,
         "is_source_independent_external_test": False,
