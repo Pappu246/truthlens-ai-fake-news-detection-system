@@ -148,8 +148,8 @@ async function main(): Promise<void> {
     ));
 
   const gdeltSearchUrl = new URL(buildGdeltArticleSearchUrl('NASA James Webb NGC 346'));
-  check('GDELT fallback searches beyond the previous three-month window',
-    gdeltSearchUrl.searchParams.get('timespan') === '1y',
+  check('GDELT fallback uses the documented three-month rolling window',
+    gdeltSearchUrl.searchParams.get('timespan') === '3m',
     gdeltSearchUrl.toString());
   check('GDELT query URL is bounded and requests article-list JSON',
     gdeltSearchUrl.searchParams.get('mode') === 'ArtList' &&
