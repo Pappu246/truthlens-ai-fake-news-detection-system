@@ -27,7 +27,7 @@ import { ExtractedClaim, EvidenceItem } from '../../src/types.js';
 import { extractClaimsHeuristic, generateSearchQueries, classifyClaimType, normalizeClaimText } from './claimExtractor.js';
 import { evidenceProvider, RetrievalDiagnostic } from './evidenceProvider.js';
 import { aggregateClaimAssessment, evaluateSourceDiversity } from './evidenceAnalyzer.js';
-import { recordEvidenceTelemetry } from './observability.js';
+import { MAX_TELEMETRY_PROVIDER_DIAGNOSTICS, recordEvidenceTelemetry, summarizeProviderDiagnostics } from './observability.js';
 
 export type VerificationStatus =
   | 'SUPPORTED'
@@ -326,7 +326,9 @@ export class EvidenceEngine {
         provenanceRejections: diagnostics.filter(d => d.stage === 'PROVENANCE' && d.ok).length,
         semanticNliEnabled: /^(1|true|yes)$/i.test(process.env.TRUTHLENS_ENABLE_REMOTE_NLI ?? '') &&
           Boolean(process.env.HF_TOKEN?.trim()),
-        durationMs: report.retrieval.duration_ms
+        durationMs: report.retrieval.duration_ms,
+        providers: summarizeProviderDiagnostics(diagnostics),
+        providerDiagnosticsTruncated: diagnostics.length > MAX_TELEMETRY_PROVIDER_DIAGNOSTICS
       });
       return report;
     };
@@ -530,7 +532,9 @@ export class EvidenceEngine {
       publisherFetchFailures: diagnostics.filter(d => d.stage === 'PUBLISHER_FETCH' && !d.ok).length,
       provenanceRejections: diagnostics.filter(d => d.stage === 'PROVENANCE' && d.ok).length,
       semanticNliEnabled: semanticEnabled,
-      durationMs: finalReport.retrieval.duration_ms
+      durationMs: finalReport.retrieval.duration_ms,
+      providers: summarizeProviderDiagnostics(diagnostics),
+      providerDiagnosticsTruncated: diagnostics.length > MAX_TELEMETRY_PROVIDER_DIAGNOSTICS
     });
     return finalReport;
   }

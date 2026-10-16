@@ -20,6 +20,27 @@ import { refineEvidenceRelationSemantically } from './semanticRelation.js';
 // bounded, and separate from the shorter publisher/RSS timeout so a 2s abort
 // does not silently prevent the fallback from returning usable discovery hits.
 export const GDELT_SEARCH_TIMEOUT_MS = 7_500;
+/** Maximum extra latency tolerated while joining an unfinished optional GDELT fallback. */
+export const GDELT_RESULT_JOIN_GRACE_MS = 250;
+
+/**
+ * Wait briefly for an optional concurrent fallback without letting it block the
+ * evidence already retrieved from other providers. The underlying request is
+ * still independently bounded by its own AbortSignal timeout.
+ */
+export async function settleWithinGrace<T>(promise: Promise<T>, graceMs: number, fallback: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((resolve) => {
+        timer = setTimeout(() => resolve(fallback), Math.max(0, Math.min(graceMs, 5_000)));
+      })
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
 
 // Google News RSS wrapper pages can take longer than ordinary publisher/RSS requests.
 // Keep this separate and bounded so slow wrapper fetches do not make all outbound fetches unbounded.
@@ -1035,7 +1056,9 @@ export class EvidenceProvider {
     // Its request remains concurrent with them, so a slow DOC API cannot block
     // Bing from starting; all returned pages still pass the same hydration,
     // provenance, and relevance gates before they are included.
-    const gdeltItems = runGdeltInParallel ? await gdeltPromise : [];
+    const gdeltItems = runGdeltInParallel
+      ? await settleWithinGrace(gdeltPromise, GDELT_RESULT_JOIN_GRACE_MS, gdeltResult ?? [])
+      : [];
     if (gdeltItems.length > 0) {
       const existingUrls = new Set(results.map(item => item.sourceFinalUrl || item.sourceUrl));
       for (const item of gdeltItems) {
