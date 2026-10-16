@@ -198,7 +198,7 @@ function deriveEvidenceOutcome(
 ): EvidenceRetrievalOutcome {
   if (!attempted) return 'NOT_ATTEMPTED';
   if (items.length > 0) return 'AVAILABLE';
-  const search = diagnostics.filter(d => (d.stage ?? 'SEARCH') === 'SEARCH');
+  const search = diagnostics.filter(d => (d.stage ?? 'SEARCH') === 'SEARCH' && d.state !== 'PENDING');
   if (search.length > 0 && search.every(d => !d.ok)) return 'SEARCH_FAILED';
   if (diagnostics.some(d => d.stage === 'PUBLISHER_FETCH' && !d.ok)) return 'PUBLISHER_FETCH_FAILED';
   if (diagnostics.some(d => d.stage === 'PROVENANCE' && d.ok)) return 'PROVENANCE_REJECTED';
@@ -304,8 +304,8 @@ export class EvidenceEngine {
           attempted,
           providers: diagnostics,
           all_providers_failed: attempted &&
-            diagnostics.filter(d => (d.stage ?? 'SEARCH') === 'SEARCH').length > 0 &&
-            diagnostics.filter(d => (d.stage ?? 'SEARCH') === 'SEARCH').every(d => !d.ok),
+            diagnostics.filter(d => (d.stage ?? 'SEARCH') === 'SEARCH' && d.state !== 'PENDING').length > 0 &&
+            diagnostics.filter(d => (d.stage ?? 'SEARCH') === 'SEARCH' && d.state !== 'PENDING').every(d => !d.ok),
           duration_ms: Date.now() - started
         },
         security: { evidence_treated_as: 'UNTRUSTED_DATA', injection_markers_neutralised: 0, guarantees: securityGuarantees },
@@ -321,7 +321,7 @@ export class EvidenceEngine {
         unclearCount: 0,
         retrievalAttempted: attempted,
         providerCount: diagnostics.length,
-        providerFailures: diagnostics.filter(d => !d.ok).length,
+        providerFailures: diagnostics.filter(d => !d.ok && d.state !== 'PENDING').length,
         publisherFetchFailures: diagnostics.filter(d => d.stage === 'PUBLISHER_FETCH' && !d.ok).length,
         provenanceRejections: diagnostics.filter(d => d.stage === 'PROVENANCE' && d.ok).length,
         semanticNliEnabled: /^(1|true|yes)$/i.test(process.env.TRUTHLENS_ENABLE_REMOTE_NLI ?? '') &&
@@ -528,7 +528,7 @@ export class EvidenceEngine {
       unclearCount: counts.unclear,
       retrievalAttempted: true,
       providerCount: diagnostics.length,
-      providerFailures: diagnostics.filter(d => !d.ok).length,
+      providerFailures: diagnostics.filter(d => !d.ok && d.state !== 'PENDING').length,
       publisherFetchFailures: diagnostics.filter(d => d.stage === 'PUBLISHER_FETCH' && !d.ok).length,
       provenanceRejections: diagnostics.filter(d => d.stage === 'PROVENANCE' && d.ok).length,
       semanticNliEnabled: semanticEnabled,
