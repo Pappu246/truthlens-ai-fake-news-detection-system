@@ -164,19 +164,35 @@ def main() -> None:
     candidate_dir = Path(args.candidate_dir).resolve()
     artifact_path = candidate_dir / "model_artifact.json"
     manifest_path = candidate_dir / "manifest.json"
+    split_manifest_path = candidate_dir / "welfake_split_manifest.json"
     welfake_path = Path(args.welfake).resolve()
-    for path in (artifact_path, manifest_path, welfake_path):
+    for path in (artifact_path, manifest_path, split_manifest_path, welfake_path):
         if not path.is_file():
             raise SystemExit(f"Missing required evaluation input: {path}")
 
     artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    split_manifest = json.loads(split_manifest_path.read_text(encoding="utf-8"))
     artifact_digest = sha256(artifact_path)
     if artifact_digest != manifest.get("artifact_sha256"):
         raise SystemExit("Candidate artifact hash does not match its manifest.")
     dataset_md5 = md5(welfake_path)
     if args.expected_md5 and dataset_md5.lower() != args.expected_md5.lower():
         raise SystemExit(f"WELFake checksum mismatch: expected {args.expected_md5}, got {dataset_md5}")
+    if split_manifest.get("dataset_md5") != dataset_md5:
+        raise SystemExit("WELFake split manifest checksum does not match the supplied CSV.")
+    if split_manifest.get("is_source_independent_external_test") is not False:
+        raise SystemExit("WELFake split manifest must explicitly declare same-corpus holdout scope.")
+    train_hashes = set(split_manifest.get("train_hashes", []))
+    validation_hashes = set(split_manifest.get("validation_hashes", []))
+    holdout_hashes = set(split_manifest.get("holdout_hashes", []))
+    if not holdout_hashes or (
+        train_hashes & validation_hashes or train_hashes & holdout_hashes or
+        validation_hashes & holdout_hashes
+    ):
+        raise SystemExit("WELFake split manifest is missing holdout hashes or has overlapping partitions.")
+    if len(holdout_hashes) < MIN_GATE_SAMPLES:
+        raise SystemExit(f"WELFake holdout has only {len(holdout_hashes)} hashes; at least {MIN_GATE_SAMPLES} are required.")
 
     # Hash all normalized ISOT article bodies so exact cross-corpus duplicates
     # cannot inflate external benchmark performance.
@@ -201,6 +217,7 @@ def main() -> None:
         "isot_exact_overlap_rows_removed": 0,
         "same_label_duplicate_rows_removed": 0,
         "conflicting_duplicate_group_rows_removed": 0,
+        "non_holdout_partition_rows_excluded": 0,
     }
 
     for row in frame[["title", "text", "label"]].to_dict("records"):
@@ -235,8 +252,15 @@ def main() -> None:
             "y_fake": 1 if dataset_label == 0 else 0,
         })
 
+    if holdout_hashes - set(grouped):
+        missing = len(holdout_hashes - set(grouped))
+        raise SystemExit(f"WELFake holdout integrity failure: {missing} expected holdout hashes were not found after input filtering.")
+
     samples = []
     for digest, duplicates in grouped.items():
+        if digest not in holdout_hashes:
+            counters["non_holdout_partition_rows_excluded"] += len(duplicates)
+            continue
         labels = {entry["y_fake"] for entry in duplicates}
         if len(labels) != 1:
             counters["conflicting_duplicate_group_rows_removed"] += len(duplicates)
@@ -310,11 +334,21 @@ def main() -> None:
 
     report = {
         "status": "COMPLETED",
-        "dataset": "WELFake (Zenodo record 4561253)",
+        "dataset": "WELFake stratified held-out partition (Zenodo record 4561253)",
         "dataset_url": WELFAKE_URL,
         "dataset_md5": dataset_md5,
         "label_mapping": {"dataset_0": "FAKE", "dataset_1": "REAL", "runtime_fake_positive": 1},
-        "task": "Full-article fake-vs-real classification; external evaluation only, not training data",
+        "task": "Full-article fake-vs-real classification on an untouched partition. WELFake train/validation partitions are used for fitting/calibration, so this is not source-independent external validation.",
+        "partition_scope": {
+            "is_source_independent_external_test": False,
+            "split_manifest": "welfake_split_manifest.json",
+            "train_article_hash_count": len(train_hashes),
+            "validation_article_hash_count": len(validation_hashes),
+            "holdout_article_hash_count": len(holdout_hashes),
+            "holdout_overlaps_train": bool(holdout_hashes & train_hashes),
+            "holdout_overlaps_validation": bool(holdout_hashes & validation_hashes),
+            "holdout_is_never_fit_calibrated_or_selected": True,
+        },
         "candidate_model_version": manifest.get("model_version"),
         "candidate_artifact_sha256": artifact_digest,
         "isot_source_dataset_fingerprint": manifest.get("dataset_fingerprint"),
@@ -386,12 +420,13 @@ def main() -> None:
     out_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     manifest["production_eligible"] = bool(release_gate_passed)
     manifest["promotion_status"] = "CANDIDATE_VALIDATED" if release_gate_passed else "CANDIDATE_ONLY"
-    manifest["article_external_validation"] = {
+    manifest["article_validation"] = {
         "status": report["status"],
         "release_gate_passed": bool(release_gate_passed),
         "path": "article_ood_validation.json",
         "dataset": report["dataset"],
         "dataset_md5": dataset_md5,
+        "is_source_independent_external_test": False,
         "eligible_samples": len(samples),
         "balanced_accuracy": metrics["balanced_accuracy"],
         "fake_recall": metrics["fake_recall"],
@@ -419,6 +454,7 @@ def main() -> None:
         "runtime_decision_policy": report["runtime_decision_policy"],
         "score_orientation_diagnostic_only": report["score_orientation_diagnostic_only"],
         "source_attribution_ablation": report["source_attribution_ablation"],
+        "partition_scope": report["partition_scope"],
         "release_thresholds": report["release_thresholds"],
         "release_gate": report["release_gate"],
         "production_eligible": manifest["production_eligible"],
