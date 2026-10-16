@@ -172,6 +172,13 @@ async function main(): Promise<void> {
   check('Google News wrapper provenance rejects a publisher-host mismatch',
     !verifyEvidenceProvenance('Economic Policy Institute', 'https://news.google.com/rss/articles/CBMiABC123', 'https://example.com/unrelated', 'REPUTABLE_SOURCE'));
 
+  check('live smoke publisher aliases match the named publisher to its verified host',
+    verifyEvidenceProvenance('Federal Reserve Bank of Boston', 'https://news.google.com/rss/articles/CBMiABC127', 'https://www.bostonfed.org/news-releases/example', 'REPUTABLE_SOURCE') &&
+    verifyEvidenceProvenance('Yahoo Finance', 'https://www.bing.com/news/apiclick.aspx?ref=feed&aid=2', 'https://finance.yahoo.com/news/example', 'REPUTABLE_SOURCE') &&
+    verifyEvidenceProvenance('Prison Policy Initiative', 'https://news.google.com/rss/articles/CBMiABC128', 'https://www.prisonpolicy.org/reports/example.html', 'REPUTABLE_SOURCE') &&
+    verifyEvidenceProvenance('Eagle Country 99.3', 'https://news.google.com/rss/articles/CBMiABC129', 'https://www.eaglecountryonline.com/news/example', 'REPUTABLE_SOURCE') &&
+    verifyEvidenceProvenance('University of Tennessee at Chattanooga', 'https://news.google.com/rss/articles/CBMiABC130', 'https://blog.utc.edu/example', 'REPUTABLE_SOURCE'));
+
   const googleNewsUrl = 'https://news.google.com/rss/articles/CBMiABC123?oc=5';
   check('Google News RSS article ID is extracted only from trusted wrapper URLs',
     getGoogleNewsArticleId(googleNewsUrl) === 'CBMiABC123' &&
