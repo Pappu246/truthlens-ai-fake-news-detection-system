@@ -19,7 +19,7 @@ import { EvidenceItem } from '../src/types';
 import { buildArticleVerification } from '../server/verification/assessmentEngine';
 import { ClaimVerificationResult } from '../src/types';
 import { extractClaimsHeuristic } from '../server/verification/claimExtractor';
-import { extractReadableArticleText, shouldSearchWikipediaForEvidence, parsePublicationDate, parseBingNewsRss, parseGdeltArticleList, buildGdeltArticleSearchUrl, GDELT_SEARCH_TIMEOUT_MS, GOOGLE_NEWS_WRAPPER_FETCH_TIMEOUT_MS, MAX_PUBLISHER_FETCH_CANDIDATES_PER_PROVIDER, selectPublisherFetchCandidates, getGoogleNewsArticleId, buildGoogleNewsDecodeRequest, parseGoogleNewsDecodedUrlResponse, isAdmissibleEvidence, preferPublisherEvidence, verifyEvidenceProvenance } from '../server/verification/evidenceProvider';
+import { extractReadableArticleText, shouldSearchWikipediaForEvidence, parsePublicationDate, parseBingNewsRss, parseGdeltArticleList, buildGdeltArticleSearchUrl, GDELT_SEARCH_TIMEOUT_MS, GDELT_RESULT_JOIN_GRACE_MS, settleWithinGrace, GOOGLE_NEWS_WRAPPER_FETCH_TIMEOUT_MS, MAX_PUBLISHER_FETCH_CANDIDATES_PER_PROVIDER, selectPublisherFetchCandidates, getGoogleNewsArticleId, buildGoogleNewsDecodeRequest, parseGoogleNewsDecodedUrlResponse, isAdmissibleEvidence, preferPublisherEvidence, verifyEvidenceProvenance } from '../server/verification/evidenceProvider';
 import { checkNumericalConsistency, classifyEvidenceRelation } from '../server/verification/evidenceAnalyzer';
 import { summarizeProviderDiagnostics } from '../server/verification/observability';
 
@@ -185,6 +185,19 @@ async function main(): Promise<void> {
   check('GDELT fallback has a bounded timeout that accommodates slower DOC responses',
     GDELT_SEARCH_TIMEOUT_MS >= 7_000 && GDELT_SEARCH_TIMEOUT_MS <= 8_000,
     String(GDELT_SEARCH_TIMEOUT_MS));
+  check('optional GDELT join grace is much shorter than its own network timeout',
+    GDELT_RESULT_JOIN_GRACE_MS > 0 && GDELT_RESULT_JOIN_GRACE_MS < 1_000 &&
+      GDELT_RESULT_JOIN_GRACE_MS < GDELT_SEARCH_TIMEOUT_MS,
+    String(GDELT_RESULT_JOIN_GRACE_MS));
+  const immediatelyAvailableGdelt = await settleWithinGrace(Promise.resolve(['verified-publisher']), 500, []);
+  check('completed GDELT fallback results are retained',
+    immediatelyAvailableGdelt.length === 1 && immediatelyAvailableGdelt[0] === 'verified-publisher');
+  const pendingGdeltStartedAt = Date.now();
+  const boundedPendingGdelt = await settleWithinGrace(new Promise<string[]>(() => {}), 10, []);
+  check('a pending optional GDELT result does not block other completed evidence',
+    boundedPendingGdelt.length === 0 && Date.now() - pendingGdeltStartedAt < 250,
+    'elapsed=' + (Date.now() - pendingGdeltStartedAt) + 'ms');
+
   check('Google News wrapper fetch has its own bounded latency allowance',
     GOOGLE_NEWS_WRAPPER_FETCH_TIMEOUT_MS >= 4_000 &&
     GOOGLE_NEWS_WRAPPER_FETCH_TIMEOUT_MS <= 5_000 &&
