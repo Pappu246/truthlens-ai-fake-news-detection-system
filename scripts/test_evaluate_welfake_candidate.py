@@ -1,5 +1,10 @@
 """Regression tests for the task-matched WELFake evaluation utility."""
-from scripts.evaluate_welfake_candidate import neutralize_source_attribution
+import numpy as np
+
+from scripts.evaluate_welfake_candidate import (
+    compute_runtime_policy_metrics,
+    neutralize_source_attribution,
+)
 
 
 def test_removes_common_wire_service_byline_and_title_suffix():
@@ -30,3 +35,30 @@ def test_ablation_does_not_delete_the_actual_claim_predicate_or_number():
     )
     assert "fell to 4.1 percent" in result
     assert "Reuters" not in result
+
+
+
+def test_runtime_policy_reports_abstention_separately_and_counts_it_as_not_correct():
+    report = compute_runtime_policy_metrics(
+        np.asarray([0, 0, 1, 1]),
+        np.asarray([0.10, 0.50, 0.80, 0.20]),
+    )
+    assert report["fake_threshold"] == 0.65
+    assert report["real_threshold"] == 0.35
+    assert report["coverage"] == 0.75
+    assert report["abstention_rate"] == 0.25
+    assert report["abstained_real_samples"] == 1
+    assert report["fake_recall_all_fake_samples"] == 0.5
+    assert report["real_recall_all_real_samples"] == 0.5
+    assert report["operational_balanced_accuracy_abstentions_count_as_not_correct"] == 0.5
+
+
+def test_runtime_policy_does_not_reward_abstaining_on_every_article():
+    report = compute_runtime_policy_metrics(
+        np.asarray([0, 1, 0, 1]),
+        np.asarray([0.50, 0.50, 0.50, 0.50]),
+    )
+    assert report["coverage"] == 0.0
+    assert report["abstention_rate"] == 1.0
+    assert report["operational_balanced_accuracy_abstentions_count_as_not_correct"] == 0.0
+    assert report["selective_accuracy_on_decided_only"] is None
