@@ -151,6 +151,16 @@ const SENSATIONAL_TERMS = [
   'mutant', 'occult', 'chemtrails', 'nano-circuits', 'brainwash'
 ];
 
+// Narrow release guard: avoid treating ordinary journalistic words such as
+// "secret", "exposed", or "whistleblower" as a cluster. These phrases still
+// never classify an article as fake; combined with a strong REAL model signal,
+// they only trigger abstention until independent evidence is checked.
+const SENSATIONAL_CONFLICT_TERMS = [
+  'alien mothership', 'cloaking technology', 'deep state', 'shadow government',
+  'global elites', 'hidden truth', 'mind control', 'chemtrails', 'nano circuits',
+  'lizard people', 'reptilian', 'false flag', 'illuminati', 'brainwash conspiracy'
+];
+
 const CERTAINTY_TERMS = [
   'guaranteed', '100%', 'never before', 'undeniable', 'proven fact', 'absolute proof',
   'every single', 'cure all', 'miracle cure', 'completely destroys', 'cures all'
@@ -1542,11 +1552,12 @@ export class TruthLensMLEngine {
     // strongly leans REAL despite several independent sensational/conspiracy
     // markers, abstain rather than publishing a potentially misleading REAL
     // verdict. This is a conflict safeguard, not a substitute for evidence.
-    const matchedSensationalTerms = SENSATIONAL_TERMS.filter(term =>
-      textTrimmed.toLowerCase().includes(term)
+    const normalizedConflictText = textTrimmed.toLowerCase().replace(/[-_]+/g, ' ');
+    const matchedSensationalTerms = SENSATIONAL_CONFLICT_TERMS.filter(term =>
+      normalizedConflictText.includes(term)
     );
     const sensationalConflict = predictionDetails.calibrated &&
-      fakeProb <= tReal && matchedSensationalTerms.length >= 3;
+      fakeProb <= tReal && matchedSensationalTerms.length >= 2;
     const legacySafetyMode = !predictionDetails.calibrated;
 
     // 4. Verdict contract (backend = single source of truth).
@@ -1576,7 +1587,7 @@ export class TruthLensMLEngine {
       riskLevel = 'UNDETERMINED';
       confidence = null;
       verdictReason =
-        `The calibrated model leans REAL, but the text contains ${matchedSensationalTerms.length} distinct high-arousal or conspiratorial markers. These style signals are not proof of falsity; TruthLens abstains and requires independent evidence before presenting a directional verdict.`;
+        `The calibrated model leans REAL, but the text contains ${matchedSensationalTerms.length} distinct high-risk conspiracy/hoax narrative markers. These style signals are not proof of falsity; TruthLens abstains and requires independent evidence before presenting a directional verdict.`;
     } else if (legacySafetyMode) {
       // The raw margin is not a calibrated probability. Only margins well
       // outside this conservative band support a directional model signal.
