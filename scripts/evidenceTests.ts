@@ -19,7 +19,7 @@ import { EvidenceItem } from '../src/types';
 import { buildArticleVerification } from '../server/verification/assessmentEngine';
 import { ClaimVerificationResult } from '../src/types';
 import { extractClaimsHeuristic } from '../server/verification/claimExtractor';
-import { extractReadableArticleText, shouldSearchWikipediaForEvidence, parsePublicationDate, parseBingNewsRss, parseGdeltArticleList, buildGdeltArticleSearchUrl, GDELT_SEARCH_TIMEOUT_MS, MAX_PUBLISHER_FETCH_CANDIDATES_PER_PROVIDER, selectPublisherFetchCandidates, getGoogleNewsArticleId, buildGoogleNewsDecodeRequest, parseGoogleNewsDecodedUrlResponse, isAdmissibleEvidence, preferPublisherEvidence, verifyEvidenceProvenance } from '../server/verification/evidenceProvider';
+import { extractReadableArticleText, shouldSearchWikipediaForEvidence, parsePublicationDate, parseBingNewsRss, parseGdeltArticleList, buildGdeltArticleSearchUrl, GDELT_SEARCH_TIMEOUT_MS, GOOGLE_NEWS_WRAPPER_FETCH_TIMEOUT_MS, MAX_PUBLISHER_FETCH_CANDIDATES_PER_PROVIDER, selectPublisherFetchCandidates, getGoogleNewsArticleId, buildGoogleNewsDecodeRequest, parseGoogleNewsDecodedUrlResponse, isAdmissibleEvidence, preferPublisherEvidence, verifyEvidenceProvenance } from '../server/verification/evidenceProvider';
 import { checkNumericalConsistency, classifyEvidenceRelation } from '../server/verification/evidenceAnalyzer';
 
 let passed = 0;
@@ -184,6 +184,11 @@ async function main(): Promise<void> {
   check('GDELT fallback has a bounded timeout that accommodates slower DOC responses',
     GDELT_SEARCH_TIMEOUT_MS >= 7_000 && GDELT_SEARCH_TIMEOUT_MS <= 8_000,
     String(GDELT_SEARCH_TIMEOUT_MS));
+  check('Google News wrapper fetch has its own bounded latency allowance',
+    GOOGLE_NEWS_WRAPPER_FETCH_TIMEOUT_MS >= 4_000 &&
+    GOOGLE_NEWS_WRAPPER_FETCH_TIMEOUT_MS <= 5_000 &&
+    GOOGLE_NEWS_WRAPPER_FETCH_TIMEOUT_MS < 6_000,
+    String(GOOGLE_NEWS_WRAPPER_FETCH_TIMEOUT_MS));
   check('Google/Bing candidate selection tries all five bounded RSS hits',
     MAX_PUBLISHER_FETCH_CANDIDATES_PER_PROVIDER === 5 &&
     selectPublisherFetchCandidates(['first', 'second', 'third', 'fourth', 'fifth', 'sixth']).join(',') === 'first,second,third,fourth,fifth');
