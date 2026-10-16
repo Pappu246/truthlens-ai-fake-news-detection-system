@@ -78,12 +78,12 @@ def test_runtime_policy_mirrors_low_vocabulary_abstention():
     assert report["real_recall_all_real_samples"] == 0.0
 
 
-def test_runtime_policy_abstains_on_real_lean_with_sensational_conflict():
+def test_runtime_policy_abstains_on_real_lean_with_high_risk_conspiracy_cluster():
     report = compute_runtime_policy_metrics(
         np.asarray([0, 1]),
         np.asarray([0.10, 0.90]),
         texts=[
-            "SHOCKING SECRET EXPOSED material requires independent evidence.",
+            "An alien mothership uses cloaking technology as part of a deep-state shadow government plan.",
             "Ordinary validated budget report with audited numerical tables.",
         ],
         coverage_ratio=np.asarray([0.90, 0.90]),
@@ -92,3 +92,15 @@ def test_runtime_policy_abstains_on_real_lean_with_sensational_conflict():
     assert report["sensational_conflict_abstentions"] == 1
     assert report["abstained_real_samples"] == 1
     assert report["fake_recall_all_fake_samples"] == 1.0
+
+
+def test_runtime_policy_does_not_abstain_on_generic_journalistic_style_terms():
+    report = compute_runtime_policy_metrics(
+        np.asarray([0]),
+        np.asarray([0.10]),
+        texts=["A whistleblower exposed secret records in a report after the committee released a statement."],
+        coverage_ratio=np.asarray([0.90]),
+    )
+    assert report["coverage"] == 1.0
+    assert report["sensational_conflict_abstentions"] == 0
+    assert report["real_recall_all_real_samples"] == 1.0
