@@ -61,10 +61,10 @@ export interface GdeltArticleItem {
 }
 
 /**
- * Build a bounded historical GDELT DOC query. The default short horizon missed
- * relevant follow-up coverage for official science/health articles. DOC search
- * supports a one-year window, while results still must pass the same publisher
- * fetch, provenance, and relevance checks.
+ * Build a bounded GDELT DOC query over the documented rolling three-month
+ * window. The public DOC API documents month/week/day/hour/minute timespans;
+ * do not send unsupported one-year timespans. Results remain discovery metadata
+ * until publisher fetch, provenance, and relevance checks all pass.
  */
 export function buildGdeltArticleSearchUrl(query: string): string {
   const url = new URL('https://api.gdeltproject.org/api/v2/doc/doc');
@@ -72,7 +72,7 @@ export function buildGdeltArticleSearchUrl(query: string): string {
   url.searchParams.set('mode', 'ArtList');
   url.searchParams.set('format', 'json');
   url.searchParams.set('maxrecords', '5');
-  url.searchParams.set('timespan', '1y');
+  url.searchParams.set('timespan', '3m');
   url.searchParams.set('sort', 'HybridRel');
   return url.toString();
 }
