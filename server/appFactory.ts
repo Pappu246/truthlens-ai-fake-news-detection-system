@@ -134,6 +134,11 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
       status: degradedReasons.length === 0 ? 'ok' : 'degraded',
       degraded_reasons: degradedReasons,
       service: 'TruthLens ML Engine',
+      deployment: {
+        provider: process.env.RENDER_SERVICE_ID ? 'render' : process.env.VERCEL === '1' ? 'vercel' : 'local',
+        commit: process.env.RENDER_GIT_COMMIT || process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || null,
+        branch: process.env.RENDER_GIT_BRANCH || process.env.VERCEL_GIT_COMMIT_REF || null
+      },
       model: 'Linear SVM (Safety-Gated Legacy)',
       model_trained: modelTrained,
       article_model_version: mlEngine.getMetrics()?.model_version || null,
