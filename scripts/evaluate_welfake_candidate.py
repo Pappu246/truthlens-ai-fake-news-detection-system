@@ -58,21 +58,21 @@ def neutralize_source_attribution(title: str, body: str) -> str:
     names throughout article prose, entities, figures, or factual claims.
     """
     safe_title = re.sub(
-        r"\\s*(?:[-|–—]\\s*)(?:Reuters|Associated Press|AP News|AFP|Agence France-Presse|Bloomberg News)\\s*$",
+        r"\s*(?:[-|–—]\s*)(?:Reuters|Associated Press|AP News|AFP|Agence France-Presse|Bloomberg News)\s*$",
         "",
         (title or "").strip(),
         flags=re.IGNORECASE,
     )
     safe_body = (body or "").strip()
     safe_body = re.sub(
-        r"^\\s*(?:[A-Z][A-Z0-9 .,'’/-]{2,60}\\s+)?\\(\\s*(?:Reuters|Associated Press|AP News|AP|AFP|Bloomberg News)\\s*\\)\\s*[-—:]\\s*",
+        r"^\s*(?:[A-Z][A-Z0-9 .,'’/-]{2,60}\s+)?\(\s*(?:Reuters|Associated Press|AP News|AP|AFP|Bloomberg News)\s*\)\s*[-—:]\s*",
         "",
         safe_body,
         count=1,
         flags=re.IGNORECASE,
     )
     safe_body = re.sub(
-        r"^\\s*(?:Reuters|Associated Press|AP News|AP|AFP|Bloomberg News)\\s*[-—:]\\s*",
+        r"^\s*(?:Reuters|Associated Press|AP News|AP|AFP|Bloomberg News)\s*[-—:]\s*",
         "",
         safe_body,
         count=1,
