@@ -1548,16 +1548,16 @@ export class TruthLensMLEngine {
     const demoModel = this.isDemoModel();
     const lowVocabularyCoverage = predictionDetails.coverage_ratio < LEGACY_MIN_VOCAB_COVERAGE;
     const limitedContentSource = LIMITED_CONTENT_SOURCES.has(options?.contentSource || '');
-    // Style cues never label an article as fake. But when a calibrated model
-    // strongly leans REAL despite several independent sensational/conspiracy
-    // markers, abstain rather than publishing a potentially misleading REAL
-    // verdict. This is a conflict safeguard, not a substitute for evidence.
+    // Style cues never label an article as fake. When a calibrated model
+    // strongly leans REAL despite multiple high-risk conspiracy/hoax markers,
+    // abstain rather than publishing a potentially misleading REAL verdict.
+    // This is a conflict safeguard, not a substitute for independent evidence.
     const normalizedConflictText = textTrimmed.toLowerCase().replace(/[-_]+/g, ' ');
-    const matchedSensationalTerms = SENSATIONAL_CONFLICT_TERMS.filter(term =>
+    const matchedConflictTerms = SENSATIONAL_CONFLICT_TERMS.filter(term =>
       normalizedConflictText.includes(term)
     );
     const sensationalConflict = predictionDetails.calibrated &&
-      fakeProb <= tReal && matchedSensationalTerms.length >= 2;
+      fakeProb <= tReal && matchedConflictTerms.length >= 2;
     const legacySafetyMode = !predictionDetails.calibrated;
 
     // 4. Verdict contract (backend = single source of truth).
@@ -1587,7 +1587,7 @@ export class TruthLensMLEngine {
       riskLevel = 'UNDETERMINED';
       confidence = null;
       verdictReason =
-        `The calibrated model leans REAL, but the text contains ${matchedSensationalTerms.length} distinct high-risk conspiracy/hoax narrative markers. These style signals are not proof of falsity; TruthLens abstains and requires independent evidence before presenting a directional verdict.`;
+        `The calibrated model leans REAL, but the text contains ${matchedConflictTerms.length} distinct high-risk conspiracy/hoax narrative markers. These style signals are not proof of falsity; TruthLens abstains and requires independent evidence before presenting a directional verdict.`;
     } else if (legacySafetyMode) {
       // The raw margin is not a calibrated probability. Only margins well
       // outside this conservative band support a directional model signal.
@@ -1631,7 +1631,7 @@ export class TruthLensMLEngine {
     const probabilityCaveat = limitedContentSource
       ? 'Only partial article content is available (headline/RSS summary or extraction-blocked fallback). TruthLens withholds probability/confidence from the classification panel until full article text or independent evidence is available.'
       : sensationalConflict
-        ? 'The model leans REAL despite multiple high-arousal or conspiratorial markers. TruthLens withholds the verdict and probabilities until the claims can be checked against independent evidence; style alone is not proof of falsity.'
+        ? 'The model leans REAL despite multiple high-risk conspiracy/hoax markers. TruthLens withholds the verdict and probabilities until the claims can be checked against independent evidence; writing style alone is not proof of falsity.'
         : demoModel
         ? (fakeProb >= 0.9 || realProb >= 0.9
           ? 'The active model was trained on a small demo dataset; extreme scores are not statistically supported and must not be treated as verified truth.'
@@ -1787,7 +1787,7 @@ export class TruthLensMLEngine {
               mode: 'SENSATIONAL_CONFLICT_ABSTENTION',
               fake_threshold: tFake,
               real_threshold: tReal,
-              matched_sensational_terms: matchedSensationalTerms.length,
+              matched_conflict_terms: matchedConflictTerms.length,
               probability_output: 'WITHHELD'
             }
           : {
