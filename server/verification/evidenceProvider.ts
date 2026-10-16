@@ -22,11 +22,12 @@ import { refineEvidenceRelationSemantically } from './semanticRelation.js';
 export const GDELT_SEARCH_TIMEOUT_MS = 7_500;
 
 /**
- * Fetch a small, bounded set of Google/Bing publisher candidates concurrently.
- * Trying only the first two often failed on sites with blocked/lightweight HTML,
- * even when later RSS entries pointed to readable independent publishers.
+ * Hydrate the full bounded RSS result set (up to five publisher candidates)
+ * concurrently. Production traces showed the first three Google News links
+ * were unreadable/aborted while the feed had five hits, so stopping at three
+ * could discard the only fetchable publisher result.
  */
-export const MAX_PUBLISHER_FETCH_CANDIDATES_PER_PROVIDER = 3;
+export const MAX_PUBLISHER_FETCH_CANDIDATES_PER_PROVIDER = 5;
 
 export function selectPublisherFetchCandidates<T>(items: readonly T[]): T[] {
   return items.slice(0, MAX_PUBLISHER_FETCH_CANDIDATES_PER_PROVIDER);
