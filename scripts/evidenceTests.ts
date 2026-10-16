@@ -146,6 +146,13 @@ async function main(): Promise<void> {
       'https://www.bbc.com/news/articles/c20q4nv89yzo',
       'MAJOR_NEWS'
     ));
+  check('Google News wrapper provenance maps common named publishers to their actual hosts',
+    verifyEvidenceProvenance('Economic Policy Institute', 'https://news.google.com/rss/articles/CBMiABC123', 'https://www.epi.org/article/example', 'REPUTABLE_SOURCE') &&
+    verifyEvidenceProvenance('Deloitte', 'https://news.google.com/rss/articles/CBMiABC124', 'https://www.deloitte.com/us/en/insights/example', 'REPUTABLE_SOURCE') &&
+    verifyEvidenceProvenance('University of Wisconsin–Madison', 'https://news.google.com/rss/articles/CBMiABC125', 'https://news.wisc.edu/example', 'REPUTABLE_SOURCE') &&
+    verifyEvidenceProvenance('PBS', 'https://news.google.com/rss/articles/CBMiABC126', 'https://www.pbs.org/newshour/example', 'REPUTABLE_SOURCE'));
+  check('Google News wrapper provenance rejects a publisher-host mismatch',
+    !verifyEvidenceProvenance('Economic Policy Institute', 'https://news.google.com/rss/articles/CBMiABC123', 'https://example.com/unrelated', 'REPUTABLE_SOURCE'));
 
   const googleNewsUrl = 'https://news.google.com/rss/articles/CBMiABC123?oc=5';
   check('Google News RSS article ID is extracted only from trusted wrapper URLs',
