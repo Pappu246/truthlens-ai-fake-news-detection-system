@@ -19,7 +19,7 @@ import { EvidenceItem } from '../src/types';
 import { buildArticleVerification } from '../server/verification/assessmentEngine';
 import { ClaimVerificationResult } from '../src/types';
 import { extractClaimsHeuristic } from '../server/verification/claimExtractor';
-import { extractReadableArticleText, shouldSearchWikipediaForEvidence, parsePublicationDate, parseBingNewsRss, parseGdeltArticleList, buildGdeltArticleSearchUrl, GDELT_SEARCH_TIMEOUT_MS, isAdmissibleEvidence, preferPublisherEvidence, verifyEvidenceProvenance } from '../server/verification/evidenceProvider';
+import { extractReadableArticleText, shouldSearchWikipediaForEvidence, parsePublicationDate, parseBingNewsRss, parseGdeltArticleList, buildGdeltArticleSearchUrl, GDELT_SEARCH_TIMEOUT_MS, MAX_PUBLISHER_FETCH_CANDIDATES_PER_PROVIDER, selectPublisherFetchCandidates, isAdmissibleEvidence, preferPublisherEvidence, verifyEvidenceProvenance } from '../server/verification/evidenceProvider';
 import { checkNumericalConsistency, classifyEvidenceRelation } from '../server/verification/evidenceAnalyzer';
 
 let passed = 0;
@@ -158,6 +158,9 @@ async function main(): Promise<void> {
   check('GDELT fallback has a bounded timeout that accommodates slower DOC responses',
     GDELT_SEARCH_TIMEOUT_MS >= 7_000 && GDELT_SEARCH_TIMEOUT_MS <= 8_000,
     String(GDELT_SEARCH_TIMEOUT_MS));
+  check('Google/Bing candidate selection tries three publishers while keeping a hard cap',
+    MAX_PUBLISHER_FETCH_CANDIDATES_PER_PROVIDER === 3 &&
+    selectPublisherFetchCandidates(['first', 'second', 'third', 'fourth']).join(',') === 'first,second,third');
 
   const gdeltHits = parseGdeltArticleList({
     articles: [
