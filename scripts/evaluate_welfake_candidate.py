@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Evaluate a runtime article-model candidate on a task-matched external corpus.
+"""Evaluate a candidate only on its untouched WELFake full-article holdout.
 
-WELFake is used here as an external *evaluation-only* dataset, not as training
-input. Exact normalized-text duplicates overlapping the ISOT source corpus are
-excluded. The CSV and full article text are not copied into artifacts; only
-aggregate metrics and hashes are retained.
+WELFake has train/validation/holdout partitions from the same corpus. This
+evaluator validates the hash-only split manifest and scores only the held-out
+partition. It removes normalized exact-text overlap with ISOT and verifies the
+dataset checksum. Article text is never written into the report. This is a
+same-corpus split test, not source-independent external validation.
 """
 import argparse
 import csv
@@ -194,8 +195,8 @@ def main() -> None:
     if len(holdout_hashes) < MIN_GATE_SAMPLES:
         raise SystemExit(f"WELFake holdout has only {len(holdout_hashes)} hashes; at least {MIN_GATE_SAMPLES} are required.")
 
-    # Hash all normalized ISOT article bodies so exact cross-corpus duplicates
-    # cannot inflate external benchmark performance.
+    # Hash all normalized ISOT article bodies so exact text overlap cannot
+    # contaminate the held-out WELFake evaluation.
     isot_rows = read_isot()
     isot_hashes = {
         digest for digest in (
@@ -439,7 +440,11 @@ def main() -> None:
         "source_attribution_ablation_balanced_accuracy": neutralized_metrics["balanced_accuracy"],
         "source_attribution_runtime_policy_gate_passed": byline_runtime_policy_passed,
         "metrics_sha256": hashlib.sha256(json.dumps({
-            "raw": metrics, "source_attribution_ablation": neutralized_metrics
+            "raw_0_50_diagnostic": metrics,
+            "runtime_policy": runtime_policy_metrics,
+            "source_attribution_ablation_0_50_diagnostic": neutralized_metrics,
+            "source_attribution_runtime_policy": neutralized_runtime_policy_metrics,
+            "score_orientation_auc_diagnostic_only": inverse_score_auc_diagnostic_only,
         }, sort_keys=True).encode()).hexdigest(),
     }
     manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
