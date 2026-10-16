@@ -24,12 +24,15 @@ def main():
     if not args.yes or not args.approve:
         raise SystemExit("Promotion is intentionally blocked: explicit confirmation is required. Review the candidate first, then re-run with both --approve and --yes.")
     d=CANDIDATES/args.model_version
-    artifact=d/"model_artifact.json"; manifest=d/"manifest.json"; liar=d/"external_validation.json"
-    for p in (artifact,manifest,liar):
+    artifact=d/"model_artifact.json"; manifest=d/"manifest.json"
+    liar=d/"external_validation.json"; article_ood=d/"article_ood_validation.json"
+    for p in (artifact,manifest,liar,article_ood):
         if not p.exists(): raise SystemExit(f"Promotion blocked: missing {p}")
-    m=json.loads(manifest.read_text()); ext=json.loads(liar.read_text())
+    m=json.loads(manifest.read_text()); ext=json.loads(liar.read_text()); article_report=json.loads(article_ood.read_text())
     if m.get("model_version")!=args.model_version: raise SystemExit("Promotion blocked: manifest/model version mismatch.")
     if not m.get("dataset_fingerprint"): raise SystemExit("Promotion blocked: missing dataset fingerprint.")
+    if m.get("production_eligible") is not True: raise SystemExit("Promotion blocked: manifest does not mark candidate production_eligible after all automated gates.")
+    if m.get("article_external_validation", {}).get("release_gate_passed") is not True: raise SystemExit("Promotion blocked: task-matched article-level external gate did not pass.")
 
     candidate = json.loads(artifact.read_text())
     selected = candidate.get("selected_model", {})
@@ -45,23 +48,54 @@ def main():
     candidate_metrics = candidate.get("metrics", {})
     if not candidate_metrics.get("test") or not candidate_metrics.get("temporal_test"):
         raise SystemExit("Promotion blocked: untouched test and temporal-test metrics are required.")
+    # Primary gate is task-matched full-article external validation.
+    article_metrics = article_report.get("metrics", {})
+    expected_md5 = "73c9675a4b3d09f86a6933d0b8d7d908"
+    if article_report.get("status") != "COMPLETED":
+        raise SystemExit("Promotion blocked: WELFake full-article validation is not COMPLETED.")
+    if article_report.get("dataset_md5") != expected_md5:
+        raise SystemExit("Promotion blocked: WELFake dataset checksum does not match the approved evaluation corpus.")
+    if article_report.get("candidate_artifact_sha256") != sha256(artifact):
+        raise SystemExit("Promotion blocked: WELFake report is not bound to this exact candidate artifact.")
+    if article_report.get("eligible_samples", 0) < 10000:
+        raise SystemExit("Promotion blocked: fewer than 10,000 eligible non-overlap full articles were evaluated.")
+    article_balanced = article_metrics.get("balanced_accuracy")
+    fake_recall = article_metrics.get("fake_recall")
+    real_recall = article_metrics.get("real_recall")
+    if not isinstance(article_balanced, (int, float)) or article_balanced < 0.70:
+        raise SystemExit("Promotion blocked: WELFake full-article balanced accuracy must be at least 0.70.")
+    if not isinstance(fake_recall, (int, float)) or fake_recall < 0.70:
+        raise SystemExit("Promotion blocked: WELFake full-article fake recall must be at least 0.70.")
+    if not isinstance(real_recall, (int, float)) or real_recall < 0.70:
+        raise SystemExit("Promotion blocked: WELFake full-article real recall must be at least 0.70.")
+    if article_report.get("release_gate", {}).get("passed") is not True:
+        raise SystemExit("Promotion blocked: WELFake release-gate decision is not PASS.")
+
+    # LIAR is a sentence/claim benchmark, not a full-article benchmark. Keep
+    # its result mandatory and auditable, but do not use it as the primary
+    # metric gate for the different article-classification task.
+    if ext.get("status") != "COMPLETED":
+        raise SystemExit("Promotion blocked: LIAR claim-level diagnostic is not COMPLETED.")
+    if ext.get("eligible_binary_samples", 0) <= 0:
+        raise SystemExit("Promotion blocked: no LIAR claim samples were evaluated.")
     ext_metrics = ext.get("metrics", {})
-    balanced = ext_metrics.get("balanced_accuracy")
-    if not isinstance(balanced, (int, float)):
-        raise SystemExit("Promotion blocked: LIAR balanced accuracy is required.")
-    if balanced <= 0.50:
-        raise SystemExit(
-            f"Promotion blocked: out-of-domain LIAR balanced accuracy {balanced:.4f} is not above chance."
-        )
-    # NOTE: the unconditional gate above already guarantees args.approve is
-    # True by this point (execution cannot reach here otherwise), which
-    # makes this specific check currently unreachable. Kept intentionally
-    # as defense-in-depth in case the gate above is ever relaxed to accept
-    # --yes alone -- do not delete this without re-verifying the gate above
-    # still enforces both --approve and --yes unconditionally.
-    if not args.approve and m.get("production_eligible") is not True: raise SystemExit("Promotion blocked: explicit human approval is required.")
-    if ext.get("status")!="COMPLETED": raise SystemExit("Promotion blocked: LIAR validation is not COMPLETED.")
-    if ext.get("eligible_binary_samples",0)<=0: raise SystemExit("Promotion blocked: no LIAR samples were evaluated.")
+    print(json.dumps({
+        "candidate_model_version": args.model_version,
+        "article_external_validation": {
+            "dataset": article_report.get("dataset"),
+            "eligible_samples": article_report.get("eligible_samples"),
+            "balanced_accuracy": article_balanced,
+            "fake_recall": fake_recall,
+            "real_recall": real_recall
+        },
+        "liar_claim_diagnostic": {
+            "eligible_binary_samples": ext.get("eligible_binary_samples"),
+            "accuracy": ext_metrics.get("accuracy"),
+            "balanced_accuracy": ext_metrics.get("balanced_accuracy"),
+            "macro_f1": ext_metrics.get("macro_f1")
+        },
+        "explicit_human_approval": True
+    }, indent=2))
     if sha256(artifact)!=m.get("artifact_sha256"): raise SystemExit("Promotion blocked: candidate artifact hash mismatch.")
     BACKUPS.mkdir(parents=True,exist_ok=True)
     stamp=datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
