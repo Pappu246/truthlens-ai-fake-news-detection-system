@@ -231,6 +231,63 @@ export function parseBingNewsRss(xml: string): BingNewsRssItem[] {
  * backend was unreachable". Those two cases must never produce the same
  * verification status.
  */
+/**
+ * Google News RSS links point to a Google-hosted wrapper, not the publisher.
+ * New-format IDs require Google's undocumented batchexecute resolver; treat it
+ * as best-effort and never treat the wrapper page itself as article evidence.
+ */
+export function getGoogleNewsArticleId(sourceUrl: string): string | undefined {
+  try {
+    const parsed = new URL(sourceUrl);
+    if (parsed.protocol !== 'https:' || parsed.hostname.toLowerCase() !== 'news.google.com') return undefined;
+    const match = parsed.pathname.match(/^\/(?:rss\/)?(?:articles|read)\/([^/]+)\/?$/);
+    return match?.[1];
+  } catch {
+    return undefined;
+  }
+}
+
+export function buildGoogleNewsDecodeRequest(articleId: string, signature: string, timestamp: string): string {
+  const numericTimestamp = Number(timestamp);
+  if (!articleId || !signature || !Number.isSafeInteger(numericTimestamp) || numericTimestamp <= 0) {
+    throw new Error('Invalid Google News URL-resolution parameters.');
+  }
+  const innerPayload = [
+    'garturlreq',
+    [['X', 'X', ['X', 'X'], null, null, 1, 1, 'US:en', null, 1, null, null, null, null, null, 0, 1],
+      'X', 'X', 1, [1, 1, 1], 1, 1, null, 0, 0, null, 0],
+    articleId,
+    numericTimestamp,
+    signature
+  ];
+  const outerPayload = JSON.stringify([[['Fbv4je', JSON.stringify(innerPayload)]]]);
+  return `f.req=${encodeURIComponent(outerPayload)}`;
+}
+
+export function parseGoogleNewsDecodedUrlResponse(responseText: string): string | undefined {
+  try {
+    const separator = responseText.indexOf('\n\n');
+    if (separator < 0) return undefined;
+    const frames: unknown = JSON.parse(responseText.slice(separator + 2));
+    if (!Array.isArray(frames)) return undefined;
+    const frame = frames.find((entry: any) =>
+      Array.isArray(entry) &&
+      (entry[0] === 'wrb.fr' || entry[0] === 'w779db') &&
+      entry[1] === 'Fbv4je' &&
+      typeof entry[2] === 'string'
+    ) as any;
+    if (!frame?.[2]) return undefined;
+    const decodedPayload = JSON.parse(frame[2]);
+    const candidate = typeof decodedPayload?.[1] === 'string' ? decodedPayload[1] : '';
+    const parsed = new URL(candidate);
+    if (parsed.protocol !== 'https:' || parsed.hostname.toLowerCase() === 'news.google.com' ||
+        parsed.username || parsed.password) return undefined;
+    return parsed.toString();
+  } catch {
+    return undefined;
+  }
+}
+
 export interface RetrievalDiagnostic {
   provider: string;
   query: string;
@@ -239,7 +296,7 @@ export interface RetrievalDiagnostic {
   httpStatus?: number;
   resultCount: number;
   error?: string;
-  stage?: 'SEARCH' | 'PUBLISHER_FETCH' | 'PROVENANCE';
+  stage?: 'SEARCH' | 'PUBLISHER_FETCH' | 'PROVENANCE' | 'URL_RESOLUTION';
   /** Safe host-only telemetry; never stores full article URLs. */
   sourceName?: string;
   sourceHost?: string;
@@ -273,6 +330,10 @@ export function verifyEvidenceProvenance(
       reuters: ['reuters.com'], 'associated press': ['apnews.com'], ap: ['apnews.com'],
       bbc: ['bbc.com', 'bbc.co.uk'], npr: ['npr.org'], bloomberg: ['bloomberg.com'],
       afp: ['afp.com'], wikipedia: ['wikipedia.org', 'wikimedia.org'],
+      'economic policy institute': ['epi.org'],
+      deloitte: ['deloitte.com'],
+      'university of wisconsin': ['wisc.edu', 'wisconsin.edu'],
+      pbs: ['pbs.org'],
       nasa: ['nasa.gov'], nih: ['nih.gov', 'ncbi.nlm.nih.gov'],
       'national institutes of health': ['nih.gov', 'ncbi.nlm.nih.gov'],
       'the guardian': ['theguardian.com'], cnn: ['cnn.com'], cnbc: ['cnbc.com'],
@@ -469,6 +530,78 @@ export class EvidenceProvider {
   }
 
 
+  private async resolveGoogleNewsArticleUrl(
+    sourceUrl: string,
+    wrapperHtml: string,
+    claim: ExtractedClaim,
+    diagnostics?: RetrievalDiagnostic[],
+    timeoutMs = 1500,
+    sourceName?: string
+  ): Promise<string | undefined> {
+    const startedAtMs = Date.now();
+    const articleId = getGoogleNewsArticleId(sourceUrl);
+    const originalHost = 'news.google.com';
+    const diagnostic: RetrievalDiagnostic = {
+      provider: 'google_news_url_resolution',
+      query: claim.normalizedText,
+      attemptedAt: new Date().toISOString(),
+      ok: false,
+      resultCount: 0,
+      sourceName,
+      sourceHost: originalHost,
+      stage: 'URL_RESOLUTION'
+    };
+    diagnostics?.push(diagnostic);
+
+    try {
+      if (!articleId) throw new Error('Unsupported Google News RSS URL format.');
+      const signature = wrapperHtml.match(/data-n-a-sg=["']([^"']+)["']/)?.[1];
+      const timestamp = wrapperHtml.match(/data-n-a-ts=["']([^"']+)["']/)?.[1];
+      if (!signature || !timestamp) {
+        throw new Error('Google News wrapper did not expose a decode signature/timestamp (consent wall or format change).');
+      }
+
+      const response = await fetch('https://news.google.com/_/DotsSplashUi/data/batchexecute', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36',
+          'Accept': '*/*',
+          'Origin': 'https://news.google.com',
+          'Referer': 'https://news.google.com/',
+          'X-Same-Domain': '1',
+          'Cookie': 'CONSENT=PENDING+987'
+        },
+        body: buildGoogleNewsDecodeRequest(articleId, signature, timestamp),
+        signal: AbortSignal.timeout(Math.min(Math.max(timeoutMs, 500), 1500))
+      });
+      if (!response.ok) {
+        await response.body?.cancel().catch(() => undefined);
+        throw new Error(`Google News URL resolver returned HTTP ${response.status}.`);
+      }
+      const responseText = await response.text();
+      const resolvedUrl = parseGoogleNewsDecodedUrlResponse(responseText);
+      if (!resolvedUrl) throw new Error('Google News URL resolver returned no valid HTTPS publisher URL.');
+
+      Object.assign(diagnostic, {
+        ok: true,
+        resultCount: 1,
+        finalHost: new URL(resolvedUrl).hostname.toLowerCase(),
+        elapsedMs: Date.now() - startedAtMs
+      });
+      delete diagnostic.error;
+      return resolvedUrl;
+    } catch (err: any) {
+      Object.assign(diagnostic, {
+        ok: false,
+        resultCount: 0,
+        elapsedMs: Date.now() - startedAtMs,
+        error: err?.message || 'Google News URL resolution failed'
+      });
+      return undefined;
+    }
+  }
+
   private async hydrateEvidenceItem(
     item: EvidenceItem,
     claim: ExtractedClaim,
@@ -476,19 +609,21 @@ export class EvidenceProvider {
     timeoutMs = this.timeoutMs
   ): Promise<EvidenceItem> {
     const startedAtMs = Date.now();
+    let effectiveSourceUrl = item.sourceUrl;
     let sourceHost: string | undefined;
     let finalHost: string | undefined;
     let readableTextChars: number | undefined;
     try {
-      sourceHost = new URL(item.sourceUrl).hostname.toLowerCase();
+      sourceHost = new URL(effectiveSourceUrl).hostname.toLowerCase();
     } catch {
       // The URL validator will report an invalid source; keep telemetry host-only.
     }
     try {
-      const fetched = await safeFetchHtml(item.sourceUrl, {
+      let fetched = await safeFetchHtml(effectiveSourceUrl, {
         timeoutMs,
         maxBytes: 2.5 * 1024 * 1024,
         maxRedirects: 5,
+        cookie: sourceHost === 'news.google.com' ? 'CONSENT=PENDING+987' : undefined,
         // Use the same ordinary browser UA as direct extraction. Some publishers
         // reject an identifiable bot UA even for public, non-paywalled pages.
         userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36'
@@ -498,8 +633,34 @@ export class EvidenceProvider {
       } catch {
         finalHost = undefined;
       }
-      const body = this.extractReadableText(fetched.html);
+      let body = this.extractReadableText(fetched.html);
       readableTextChars = body.length;
+
+      // Modern Google News RSS URLs return a 200 Google wrapper page instead of
+      // redirecting to the publisher. Resolve the source URL before extraction;
+      // never use the wrapper page's markup as factual evidence.
+      if (sourceHost === 'news.google.com' && finalHost === 'news.google.com') {
+        const resolvedUrl = await this.resolveGoogleNewsArticleUrl(
+          effectiveSourceUrl, fetched.html, claim, diagnostics, Math.min(timeoutMs, 1500), item.sourceName
+        );
+        if (resolvedUrl) {
+          effectiveSourceUrl = resolvedUrl;
+          sourceHost = new URL(effectiveSourceUrl).hostname.toLowerCase();
+          fetched = await safeFetchHtml(effectiveSourceUrl, {
+            timeoutMs: Math.min(timeoutMs, 2500),
+            maxBytes: 2.5 * 1024 * 1024,
+            maxRedirects: 5,
+            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36'
+          });
+          try {
+            finalHost = new URL(fetched.finalUrl).hostname.toLowerCase();
+          } catch {
+            finalHost = undefined;
+          }
+          body = this.extractReadableText(fetched.html);
+          readableTextChars = body.length;
+        }
+      }
       if (body.length < 120) throw new Error('Publisher page did not expose enough readable article text.');
       const excerpt = this.selectEvidenceExcerpt(claim, body, item.title);
       const { score, explanation } = calculateRelevance(claim, excerpt, item.title);
@@ -559,6 +720,7 @@ export class EvidenceProvider {
 
       return {
         ...item,
+        sourceUrl: effectiveSourceUrl,
         sourceFinalUrl: fetched.finalUrl,
         evidenceExcerpt: excerpt,
         sourceFetchStatus: 'FETCHED',

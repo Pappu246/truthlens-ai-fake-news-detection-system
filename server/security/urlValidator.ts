@@ -14,6 +14,8 @@ export interface SafeFetchOptions {
   maxBytes?: number;
   maxRedirects?: number;
   userAgent?: string;
+  /** Optional fixed cookie for known public sites with consent interstitials. */
+  cookie?: string;
 }
 
 export interface SafeFetchResult {
@@ -368,7 +370,8 @@ export async function safeFetchHtml(
             'Upgrade-Insecure-Requests': '1',
             'Sec-Fetch-Dest': 'document',
             'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Site': 'none'
+            'Sec-Fetch-Site': 'none',
+            ...(options.cookie ? { Cookie: options.cookie } : {})
           },
           redirect: 'manual',
           signal: controller.signal,
