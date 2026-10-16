@@ -330,6 +330,10 @@ export function verifyEvidenceProvenance(
       reuters: ['reuters.com'], 'associated press': ['apnews.com'], ap: ['apnews.com'],
       bbc: ['bbc.com', 'bbc.co.uk'], npr: ['npr.org'], bloomberg: ['bloomberg.com'],
       afp: ['afp.com'], wikipedia: ['wikipedia.org', 'wikimedia.org'],
+      'economic policy institute': ['epi.org'],
+      deloitte: ['deloitte.com'],
+      'university of wisconsin': ['wisc.edu', 'wisconsin.edu'],
+      pbs: ['pbs.org'],
       nasa: ['nasa.gov'], nih: ['nih.gov', 'ncbi.nlm.nih.gov'],
       'national institutes of health': ['nih.gov', 'ncbi.nlm.nih.gov'],
       'the guardian': ['theguardian.com'], cnn: ['cnn.com'], cnbc: ['cnbc.com'],
@@ -663,7 +667,7 @@ export class EvidenceProvider {
       const numericalConsistency = checkNumericalConsistency(claim, excerpt);
       const temporalConsistency = checkTemporalConsistency(claim, item.publishedAt);
       const lexicalRelation = classifyEvidenceRelation(claim, excerpt, score, numericalConsistency);
-      const provenanceVerified = verifyEvidenceProvenance(item.sourceName, effectiveSourceUrl, fetched.finalUrl, item.sourceType);
+      const provenanceVerified = verifyEvidenceProvenance(item.sourceName, item.sourceUrl, fetched.finalUrl, item.sourceType);
       diagnostics?.push({
         provider: 'publisher_source_fetch',
         query: claim.normalizedText,
