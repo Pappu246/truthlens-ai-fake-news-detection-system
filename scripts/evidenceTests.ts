@@ -19,7 +19,7 @@ import { EvidenceItem } from '../src/types';
 import { buildArticleVerification } from '../server/verification/assessmentEngine';
 import { ClaimVerificationResult } from '../src/types';
 import { extractClaimsHeuristic } from '../server/verification/claimExtractor';
-import { extractReadableArticleText, shouldSearchWikipediaForEvidence, parsePublicationDate, parseBingNewsRss, parseGdeltArticleList, buildGdeltArticleSearchUrl, GDELT_SEARCH_TIMEOUT_MS, GDELT_RESULT_JOIN_GRACE_MS, GDELT_EMPTY_RESULT_JOIN_GRACE_MS, getGdeltJoinGraceMs, settleWithinGrace, GOOGLE_NEWS_WRAPPER_FETCH_TIMEOUT_MS, MAX_PUBLISHER_FETCH_CANDIDATES_PER_PROVIDER, selectPublisherFetchCandidates, MAX_GOOGLE_NEWS_WRAPPER_CANDIDATES_PER_PROVIDER, selectGoogleNewsHydrationCandidates, countAdmissiblePublisherEvidence, getGoogleNewsArticleId, buildGoogleNewsDecodeRequest, parseGoogleNewsDecodedUrlResponse, isAdmissibleEvidence, preferPublisherEvidence, verifyEvidenceProvenance } from '../server/verification/evidenceProvider';
+import { extractReadableArticleText, shouldSearchWikipediaForEvidence, parsePublicationDate, parseBingNewsRss, parseGdeltArticleList, buildGdeltArticleSearchUrl, GDELT_SEARCH_TIMEOUT_MS, GDELT_RESULT_JOIN_GRACE_MS, GDELT_EMPTY_RESULT_JOIN_GRACE_MS, getGdeltJoinGraceMs, settleWithinGrace, GOOGLE_NEWS_WRAPPER_FETCH_TIMEOUT_MS, MAX_PUBLISHER_FETCH_CANDIDATES_PER_PROVIDER, selectPublisherFetchCandidates, MAX_GOOGLE_NEWS_WRAPPER_CANDIDATES_PER_PROVIDER, selectGoogleNewsHydrationCandidates, countAdmissiblePublisherEvidence, getGoogleNewsArticleId, buildGoogleNewsDecodeRequest, buildGoogleNewsDecodeBatchRequest, parseGoogleNewsDecodedUrlResponse, parseGoogleNewsDecodedUrlBatchResponse, isAdmissibleEvidence, preferPublisherEvidence, verifyEvidenceProvenance } from '../server/verification/evidenceProvider';
 import { checkNumericalConsistency, classifyEvidenceRelation } from '../server/verification/evidenceAnalyzer';
 import { summarizeProviderDiagnostics } from '../server/verification/observability';
 
@@ -173,6 +173,38 @@ async function main(): Promise<void> {
     parseGoogleNewsDecodedUrlResponse(googleReply) === 'https://www.epi.org/article/example');
   check('Google News URL resolver rejects wrapper URLs returned as decoded URLs',
     parseGoogleNewsDecodedUrlResponse(`)]}'\n\n${JSON.stringify([['wrb.fr', 'Fbv4je', JSON.stringify(['garturlres', 'https://news.google.com/rss/articles/abc']), null]])}`) === undefined);
+
+  const batchBody = buildGoogleNewsDecodeBatchRequest([
+    { articleId: 'CBMiABC123', signature: 'sig-a', timestamp: '1730000000', sequence: 'g0' },
+    { articleId: 'CBMiXYZ789', signature: 'sig-b', timestamp: '1730000001', sequence: 'g1' }
+  ]);
+  const batchParams = new URLSearchParams(batchBody);
+  const batchPayload = JSON.parse(batchParams.get('f.req') || 'null');
+  const batchEntries = Array.isArray(batchPayload?.[0]) ? batchPayload[0] : [];
+  const firstBatchInner = JSON.parse(batchEntries[0]?.[1] || 'null');
+  const secondBatchInner = JSON.parse(batchEntries[1]?.[1] || 'null');
+  check('Google News batchexecute request packs every RPC entry into one shared batch array',
+    batchPayload?.length === 1 && batchEntries.length === 2 &&
+    batchEntries.every((entry: any) => Array.isArray(entry) && entry[0] === 'Fbv4je') &&
+    batchEntries[0]?.[3] === 'g0' && batchEntries[1]?.[3] === 'g1' &&
+    firstBatchInner?.[2] === 'CBMiABC123' && secondBatchInner?.[2] === 'CBMiXYZ789');
+
+  const batchReply = `)]}'\n\n${JSON.stringify([
+    ['wrb.fr', 'Fbv4je', JSON.stringify(['garturlres', 'https://www.pbs.org/news/example']), null, null, null, 'g1'],
+    ['wrb.fr', 'Fbv4je', JSON.stringify(['garturlres', 'https://www.epi.org/article/example']), null, null, null, 'g0']
+  ])}`;
+  const decodedBatch = parseGoogleNewsDecodedUrlBatchResponse(batchReply);
+  check('Google News batch response correlates publisher URLs by sequence, not response order',
+    decodedBatch.size === 2 &&
+    decodedBatch.get('g0') === 'https://www.epi.org/article/example' &&
+    decodedBatch.get('g1') === 'https://www.pbs.org/news/example');
+
+  const invalidBatchReply = `)]}'\n\n${JSON.stringify([
+    ['wrb.fr', 'Fbv4je', JSON.stringify(['garturlres', 'http://insecure.example/article']), null, null, null, 'g0'],
+    ['wrb.fr', 'Fbv4je', JSON.stringify(['garturlres', 'https://news.google.com/rss/articles/wrapper']), null, null, null, 'g1']
+  ])}`;
+  check('Google News batch parser fails closed on insecure URLs and wrapper URLs',
+    parseGoogleNewsDecodedUrlBatchResponse(invalidBatchReply).size === 0);
 
   const gdeltSearchUrl = new URL(buildGdeltArticleSearchUrl('NASA James Webb NGC 346'));
   check('GDELT fallback can use the documented full-year search horizon',
