@@ -8,6 +8,7 @@ on:
       - "scripts/train_isot_runtime_candidate.py"
       - "scripts/runtimeModelParityTests.ts"
       - "scripts/runtimeCandidateSafetyTests.ts"
+      - "scripts/evaluate_welfake_candidate.py"
       - "scripts/isot_data_pipeline.py"
       - "server/mlEngine.ts"
       - "package.json"
@@ -61,6 +62,24 @@ jobs:
       - name: Train exact compact runtime candidate
         run: python scripts/train_isot_runtime_candidate.py
 
+      - name: Download and verify WELFake full-article external evaluation corpus
+        env:
+          WELFAKE_URL: https://zenodo.org/records/4561253/files/WELFake_Dataset.csv?download=1
+          WELFAKE_MD5: 73c9675a4b3d09f86a6933d0b8d7d908
+        run: |
+          set -euo pipefail
+          mkdir -p data
+          curl --fail --location --retry 3 --retry-delay 2 "$WELFAKE_URL" -o data/WELFake_Dataset.csv
+          printf "%s  %s\\n" "$WELFAKE_MD5" "data/WELFake_Dataset.csv" | md5sum --check -
+
+      - name: Evaluate candidate on WELFake full-article OOD benchmark
+        run: |
+          set -euo pipefail
+          CANDIDATE_ARTIFACT="$(find artifacts/models -type f -name model_artifact.json -print -quit)"
+          test -n "$CANDIDATE_ARTIFACT"
+          CANDIDATE_DIR="$(dirname "$CANDIDATE_ARTIFACT")"
+          python scripts/evaluate_welfake_candidate.py --candidate-dir "$CANDIDATE_DIR" --welfake data/WELFake_Dataset.csv
+
       - name: Set up Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
@@ -92,35 +111,74 @@ jobs:
       - name: Verify canonical production artifact was not modified
         run: cmp /tmp/truthlens-production-artifact.before.json data/saved_model_artifacts.json
 
-      - name: Enforce production model out-of-domain release gate
+      - name: Enforce full-article external release gate; report LIAR separately
         run: |
+          set -euo pipefail
           python - <<'PY'
-          import glob, json, sys
-          paths = glob.glob("artifacts/models/*/external_validation.json")
+          import glob, hashlib, json, os, sys
+          paths = sorted(glob.glob("artifacts/models/*/article_ood_validation.json"))
           if not paths:
-              print("BLOCKED: candidate external-validation report is missing.")
+              print("BLOCKED: task-matched full-article external validation is missing.")
               sys.exit(1)
-          path = sorted(paths)[-1]
-          report = json.load(open(path, encoding="utf-8"))
+          report_path = paths[-1]
+          with open(report_path, encoding="utf-8") as f:
+              report = json.load(f)
+          candidate_dir = os.path.dirname(report_path)
+          artifact_path = os.path.join(candidate_dir, "model_artifact.json")
+          manifest_path = os.path.join(candidate_dir, "manifest.json")
+          with open(artifact_path, "rb") as f:
+              artifact_sha = hashlib.sha256(f.read()).hexdigest()
+          with open(manifest_path, encoding="utf-8") as f:
+              manifest = json.load(f)
+          with open(os.path.join(candidate_dir, "external_validation.json"), encoding="utf-8") as f:
+              liar = json.load(f)
           metrics = report.get("metrics", {})
-          balanced = metrics.get("balanced_accuracy")
+          checks = {
+              "report_completed": report.get("status") == "COMPLETED",
+              "artifact_hash_matches": report.get("candidate_artifact_sha256") == artifact_sha == manifest.get("artifact_sha256"),
+              "dataset_checksum_matches": report.get("dataset_md5") == "73c9675a4b3d09f86a6933d0b8d7d908",
+              "sample_count": report.get("eligible_samples", 0) >= 10000,
+              "balanced_accuracy": metrics.get("balanced_accuracy", 0) >= 0.70,
+              "fake_recall": metrics.get("fake_recall", 0) >= 0.70,
+              "real_recall": metrics.get("real_recall", 0) >= 0.70,
+              "manifest_marks_candidate_eligible": manifest.get("production_eligible") is True,
+              "report_release_gate": report.get("release_gate", {}).get("passed") is True,
+          }
           print(json.dumps({
-              "report": path,
-              "eligible_binary_samples": report.get("eligible_binary_samples"),
-              "balanced_accuracy": balanced,
-              "accuracy": metrics.get("accuracy"),
-              "macro_f1": metrics.get("macro_f1")
+              "article_external_report": report_path,
+              "eligible_samples": report.get("eligible_samples"),
+              "metrics": metrics,
+              "checks": checks,
+              "LIAR_DIAGNOSTIC_ONLY": {
+                  "eligible_binary_samples": liar.get("eligible_binary_samples"),
+                  "accuracy": liar.get("metrics", {}).get("accuracy"),
+                  "balanced_accuracy": liar.get("metrics", {}).get("balanced_accuracy"),
+                  "macro_f1": liar.get("metrics", {}).get("macro_f1")
+              }
           }, indent=2))
-          summary = (
-              "## Candidate production eligibility\n\n"
-              f"- LIAR eligible binary samples: {report.get('eligible_binary_samples')}\n"
-              f"- LIAR balanced accuracy: {balanced}\n"
-              "- Required by scripts/promote_model.py: balanced accuracy > 0.50\n"
-          )
-          with open(__import__("os").environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as f:
-              f.write(summary)
-          if report.get("status") != "COMPLETED" or not isinstance(balanced, (int, float)) or balanced <= 0.50:
-              print("BLOCKED: do not promote this candidate; the existing out-of-domain release gate did not pass.")
+          summary = [
+              "## Candidate production eligibility — separate task metrics",
+              "",
+              "### Full-article external benchmark (primary gate)",
+              f"- Dataset: {report.get('dataset')}",
+              f"- Eligible non-overlap articles: {report.get('eligible_samples')}",
+              f"- Balanced accuracy: {metrics.get('balanced_accuracy')}",
+              f"- Fake recall: {metrics.get('fake_recall')}",
+              f"- Real recall: {metrics.get('real_recall')}",
+              f"- Macro F1: {metrics.get('macro_f1')}",
+              "",
+              "### LIAR claim benchmark (different task; diagnostic, not article-model gate)",
+              f"- Eligible binary claims: {liar.get('eligible_binary_samples')}",
+              f"- Accuracy: {liar.get('metrics', {}).get('accuracy')}",
+              f"- Balanced accuracy: {liar.get('metrics', {}).get('balanced_accuracy')}",
+              "",
+              "### Release gate checks"
+          ]
+          summary += [f"- {'PASS' if ok else 'BLOCKED'}: {name}" for name, ok in checks.items()]
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as f:
+              f.write("\\n".join(summary) + "\\n")
+          if not all(checks.values()):
+              print("BLOCKED: do not promote this candidate. Full-article external release gate did not pass.")
               sys.exit(1)
           PY
 
