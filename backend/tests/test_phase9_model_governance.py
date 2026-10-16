@@ -36,8 +36,20 @@ def test_promotion_requires_exact_calibrated_runtime_contract():
     assert "candidate runtime inference mode is not an exact calibrated contract" in source
 
 
-def test_promotion_rejects_below_chance_ood_validation():
+def test_promotion_requires_task_matched_full_article_validation():
     source=PROMOTE.read_text()
-    assert "LIAR balanced accuracy is required" in source
-    assert "is not above chance" in source
-    assert "balanced <= 0.50" in source
+    assert 'article_ood_validation.json' in source
+    assert 'WELFake full-article validation is not COMPLETED' in source
+    assert 'eligible_samples", 0) < 10000' in source
+    assert 'balanced < 0.70' in source
+    assert 'fake_recall' in source and 'real_recall' in source
+    assert 'production_eligible' in source
+    assert 'candidate_artifact_sha256' in source
+
+def test_liar_claim_metrics_are_retained_but_not_used_as_article_gate():
+    source=PROMOTE.read_text()
+    assert 'LIAR is a sentence/claim benchmark' in source
+    assert 'LIAR claim samples were evaluated' in source
+    assert 'WELFake full-article balanced accuracy must be at least 0.70' in source
+    assert 'LIAR balanced accuracy is required' not in source
+    assert 'balanced <= 0.50' not in source
