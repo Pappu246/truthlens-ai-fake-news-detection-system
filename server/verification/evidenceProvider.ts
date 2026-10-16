@@ -23,7 +23,7 @@ export const GDELT_SEARCH_TIMEOUT_MS = 7_500;
 /** Maximum extra latency tolerated while joining an unfinished optional GDELT fallback. */
 export const GDELT_RESULT_JOIN_GRACE_MS = 250;
 /** When no non-GDELT evidence survives, allow more time for the optional fallback. */
-export const GDELT_EMPTY_RESULT_JOIN_GRACE_MS = 1_500;
+export const GDELT_EMPTY_RESULT_JOIN_GRACE_MS = 4_000;
 
 export function getGdeltJoinGraceMs(hasUsableEvidence: boolean): number {
   return hasUsableEvidence ? GDELT_RESULT_JOIN_GRACE_MS : GDELT_EMPTY_RESULT_JOIN_GRACE_MS;

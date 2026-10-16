@@ -194,6 +194,10 @@ async function main(): Promise<void> {
       GDELT_EMPTY_RESULT_JOIN_GRACE_MS < GDELT_SEARCH_TIMEOUT_MS &&
       getGdeltJoinGraceMs(true) === GDELT_RESULT_JOIN_GRACE_MS &&
       getGdeltJoinGraceMs(false) === GDELT_EMPTY_RESULT_JOIN_GRACE_MS);
+  check('empty-evidence grace leaves a late join window for the 7.5s GDELT provider',
+    GDELT_EMPTY_RESULT_JOIN_GRACE_MS >= 3_500 &&
+      GDELT_EMPTY_RESULT_JOIN_GRACE_MS < GDELT_SEARCH_TIMEOUT_MS,
+    String(GDELT_EMPTY_RESULT_JOIN_GRACE_MS));
 
   const immediatelyAvailableGdelt = await settleWithinGrace(Promise.resolve(['verified-publisher']), 500, []);
   check('completed GDELT fallback results are retained',
