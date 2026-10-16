@@ -174,7 +174,8 @@ async function main(): Promise<void> {
   }
   console.log('  INFO  retrieval provider diagnostics: ' + JSON.stringify(providerDiagnostics.map((provider: any) => ({
     provider: provider.provider, ok: provider.ok, resultCount: provider.resultCount,
-    stage: provider.stage, error: provider.error
+    stage: provider.stage, httpStatus: provider.httpStatus, error: provider.error,
+    query: provider.provider === 'gdelt_doc_api' ? provider.query : undefined
   }))));
   if (ev.json?.available) {
     check('every citation has a real URL',
