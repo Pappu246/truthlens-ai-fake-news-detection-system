@@ -36,6 +36,12 @@ const REAL_ARTICLE =
 const FAKE_ARTICLE =
   'SHOCKING SECRET EXPOSED BY MILITARY WHISTLEBLOWER! Alien mothership over five miles wide is hovering in lunar orbit completely concealed from civilian telescopes using cloaking technology! The mainstream corrupt media and shadow government are desperately attempting to scrub this unbelievable miracle truth from the internet! Insiders confirm that world leaders signed a secret treaty allowing deep-state extraction operations in exchange for zero-point energy weapons! Share this before the global elites delete it forever! Wake up people!';
 
+// A separate fabricated sample without sensational-lexicon markers exercises
+// the calibrated probability path; the clickbait sample above is expected to
+// abstain, not expose probabilities, when model/style signals conflict.
+const FAKE_REPRESENTATIVE_ARTICLE =
+  'A pharmaceutical company confirmed that its new tablet eliminates diabetes in every patient after a single dose. The company claimed the treatment has completed all required clinical trials, but its filing number is absent from the public trial registry and the regulator has not issued an approval notice.';
+
 check('candidate artifact loaded as a trained runtime model', engine.isModelTrained());
 check('candidate uses an exact calibrated inference contract', engine.isCalibrationExact());
 check(
@@ -46,6 +52,7 @@ check(
 
 const real = engine.analyzeArticle(REAL_ARTICLE);
 const fake = engine.analyzeArticle(FAKE_ARTICLE);
+const representativeFake = engine.analyzeArticle(FAKE_REPRESENTATIVE_ARTICLE);
 const zeroVocabulary =
   'qzxvultra qzxvultra2 qzxvultra3 qzxvultra4 qzxvultra5 qzxvultra6 ' +
   'qzxvultra7 qzxvultra8 qzxvultra9 qzxvultra10 qzxvultra11 qzxvultra12 ' +
@@ -73,7 +80,18 @@ check(
   fake.fake_probability === null && fake.real_probability === null && fake.confidence === null,
   JSON.stringify({ fake_probability: fake.fake_probability, real_probability: fake.real_probability, confidence: fake.confidence })
 );
-for (const [label, result] of [['real', real], ['fake', fake]] as const) {
+check(
+  'non-sensational fabricated article receives the calibrated LIKELY FAKE verdict',
+  representativeFake.prediction === 'LIKELY FAKE' &&
+    typeof representativeFake.fake_probability === 'number' &&
+    representativeFake.fake_probability >= 0.65,
+  JSON.stringify({
+    prediction: representativeFake.prediction,
+    fake_probability: representativeFake.fake_probability,
+    real_probability: representativeFake.real_probability
+  })
+);
+for (const [label, result] of [['real', real], ['fake', representativeFake]] as const) {
   const pFake = result.fake_probability;
   const pReal = result.real_probability;
   check(
