@@ -19,7 +19,7 @@ import { EvidenceItem } from '../src/types';
 import { buildArticleVerification } from '../server/verification/assessmentEngine';
 import { ClaimVerificationResult } from '../src/types';
 import { extractClaimsHeuristic } from '../server/verification/claimExtractor';
-import { extractReadableArticleText, shouldSearchWikipediaForEvidence, parsePublicationDate, parseBingNewsRss, parseGdeltArticleList, buildGdeltArticleSearchUrl, isAdmissibleEvidence, preferPublisherEvidence, verifyEvidenceProvenance } from '../server/verification/evidenceProvider';
+import { extractReadableArticleText, shouldSearchWikipediaForEvidence, parsePublicationDate, parseBingNewsRss, parseGdeltArticleList, buildGdeltArticleSearchUrl, GDELT_SEARCH_TIMEOUT_MS, isAdmissibleEvidence, preferPublisherEvidence, verifyEvidenceProvenance } from '../server/verification/evidenceProvider';
 import { checkNumericalConsistency, classifyEvidenceRelation } from '../server/verification/evidenceAnalyzer';
 
 let passed = 0;
@@ -155,6 +155,9 @@ async function main(): Promise<void> {
     gdeltSearchUrl.searchParams.get('mode') === 'ArtList' &&
       gdeltSearchUrl.searchParams.get('format') === 'json' &&
       gdeltSearchUrl.searchParams.get('maxrecords') === '5');
+  check('GDELT fallback has a bounded timeout above the previous 2s abort window',
+    GDELT_SEARCH_TIMEOUT_MS >= 4_000 && GDELT_SEARCH_TIMEOUT_MS <= 5_000,
+    String(GDELT_SEARCH_TIMEOUT_MS));
 
   const gdeltHits = parseGdeltArticleList({
     articles: [
