@@ -11,6 +11,7 @@ import csv
 import hashlib
 import json
 import re
+import sys
 from collections import defaultdict
 from pathlib import Path
 
@@ -27,6 +28,7 @@ from sklearn.metrics import (
     roc_auc_score,
 )
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from train_isot_runtime_candidate import article_text, clean_text, read_isot, score_runtime, sha256
 
 WELFAKE_URL = "https://zenodo.org/records/4561253/files/WELFake_Dataset.csv?download=1"
