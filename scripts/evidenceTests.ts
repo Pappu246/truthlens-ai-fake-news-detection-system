@@ -160,11 +160,11 @@ async function main(): Promise<void> {
     googleInner?.[2] === 'CBMiABC123' &&
     googleInner?.[3] === 1730000000 &&
     googleInner?.[4] === 'sig');
-  const googleReply = `)]}'\\n\\n${JSON.stringify([['wrb.fr', 'Fbv4je', JSON.stringify(['garturlres', 'https://www.epi.org/article/example']), null])}`;
+  const googleReply = `)]}'\n\n${JSON.stringify([['wrb.fr', 'Fbv4je', JSON.stringify(['garturlres', 'https://www.epi.org/article/example']), null])}`;
   check('Google News batchexecute response resolves to a validated HTTPS publisher URL',
     parseGoogleNewsDecodedUrlResponse(googleReply) === 'https://www.epi.org/article/example');
   check('Google News URL resolver rejects wrapper URLs returned as decoded URLs',
-    parseGoogleNewsDecodedUrlResponse(`)]}'\\n\\n${JSON.stringify([['wrb.fr', 'Fbv4je', JSON.stringify(['garturlres', 'https://news.google.com/rss/articles/abc']), null])}`) === undefined);
+    parseGoogleNewsDecodedUrlResponse(`)]}'\n\n${JSON.stringify([['wrb.fr', 'Fbv4je', JSON.stringify(['garturlres', 'https://news.google.com/rss/articles/abc']), null])}`) === undefined);
 
   const gdeltSearchUrl = new URL(buildGdeltArticleSearchUrl('NASA James Webb NGC 346'));
   check('GDELT fallback can use the documented full-year search horizon',
