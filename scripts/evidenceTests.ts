@@ -19,7 +19,7 @@ import { EvidenceItem } from '../src/types';
 import { buildArticleVerification } from '../server/verification/assessmentEngine';
 import { ClaimVerificationResult } from '../src/types';
 import { extractClaimsHeuristic } from '../server/verification/claimExtractor';
-import { extractReadableArticleText, shouldSearchWikipediaForEvidence, parsePublicationDate, parseBingNewsRss, parseGdeltArticleList, buildGdeltArticleSearchUrl, GDELT_SEARCH_TIMEOUT_MS, GDELT_RESULT_JOIN_GRACE_MS, GDELT_EMPTY_RESULT_JOIN_GRACE_MS, getGdeltJoinGraceMs, settleWithinGrace, GOOGLE_NEWS_WRAPPER_FETCH_TIMEOUT_MS, MAX_PUBLISHER_FETCH_CANDIDATES_PER_PROVIDER, selectPublisherFetchCandidates, getGoogleNewsArticleId, buildGoogleNewsDecodeRequest, parseGoogleNewsDecodedUrlResponse, isAdmissibleEvidence, preferPublisherEvidence, verifyEvidenceProvenance } from '../server/verification/evidenceProvider';
+import { extractReadableArticleText, shouldSearchWikipediaForEvidence, parsePublicationDate, parseBingNewsRss, parseGdeltArticleList, buildGdeltArticleSearchUrl, GDELT_SEARCH_TIMEOUT_MS, GDELT_RESULT_JOIN_GRACE_MS, GDELT_EMPTY_RESULT_JOIN_GRACE_MS, getGdeltJoinGraceMs, settleWithinGrace, GOOGLE_NEWS_WRAPPER_FETCH_TIMEOUT_MS, MAX_PUBLISHER_FETCH_CANDIDATES_PER_PROVIDER, selectPublisherFetchCandidates, MAX_GOOGLE_NEWS_WRAPPER_CANDIDATES_PER_PROVIDER, selectGoogleNewsHydrationCandidates, countAdmissiblePublisherEvidence, getGoogleNewsArticleId, buildGoogleNewsDecodeRequest, parseGoogleNewsDecodedUrlResponse, isAdmissibleEvidence, preferPublisherEvidence, verifyEvidenceProvenance } from '../server/verification/evidenceProvider';
 import { checkNumericalConsistency, classifyEvidenceRelation } from '../server/verification/evidenceAnalyzer';
 import { summarizeProviderDiagnostics } from '../server/verification/observability';
 
@@ -216,6 +216,51 @@ async function main(): Promise<void> {
   check('Google/Bing candidate selection tries all five bounded RSS hits',
     MAX_PUBLISHER_FETCH_CANDIDATES_PER_PROVIDER === 5 &&
     selectPublisherFetchCandidates(['first', 'second', 'third', 'fourth', 'fifth', 'sixth']).join(',') === 'first,second,third,fourth,fifth');
+
+  const candidateFixture = [
+    { id: 'g1', sourceUrl: 'https://news.google.com/rss/articles/CBMi1' },
+    { id: 'g2', sourceUrl: 'https://news.google.com/rss/articles/CBMi2' },
+    { id: 'g3', sourceUrl: 'https://news.google.com/rss/articles/CBMi3' },
+    { id: 'direct1', sourceUrl: 'https://www.reuters.com/world/example-one' },
+    { id: 'direct2', sourceUrl: 'https://www.bbc.com/news/example-two' }
+  ];
+  const selectedGoogleCandidates = selectGoogleNewsHydrationCandidates(candidateFixture);
+  check('Google wrapper hydration caps resolver bursts but retains direct publisher URLs',
+    MAX_GOOGLE_NEWS_WRAPPER_CANDIDATES_PER_PROVIDER === 2 &&
+      selectedGoogleCandidates.filter(candidate => new URL(candidate.sourceUrl).hostname === 'news.google.com').length === 2 &&
+      selectedGoogleCandidates.some(candidate => candidate.id === 'direct1') &&
+      selectedGoogleCandidates.some(candidate => candidate.id === 'direct2'),
+    JSON.stringify(selectedGoogleCandidates.map(candidate => candidate.id)));
+
+  const admissiblePublisher = item({
+    sourceName: 'Reuters',
+    sourceUrl: 'https://www.reuters.com/world/example-article',
+    sourceFinalUrl: 'https://www.reuters.com/world/example-article',
+    sourceFetchStatus: 'FETCHED',
+    provenanceVerified: true,
+    relevanceScore: 0.8,
+    relation: 'SUPPORTS'
+  });
+  const irrelevantPublisher = item({
+    sourceName: 'BBC News',
+    sourceUrl: 'https://www.bbc.com/news/example-article',
+    sourceFinalUrl: 'https://www.bbc.com/news/example-article',
+    sourceFetchStatus: 'FETCHED',
+    provenanceVerified: true,
+    relevanceScore: 0.1,
+    relation: 'SUPPORTS'
+  });
+  const wikipediaFallback = item({
+    sourceName: 'Wikipedia / Wikimedia Foundation',
+    sourceUrl: 'https://en.wikipedia.org/wiki/Example',
+    sourceFinalUrl: 'https://en.wikipedia.org/wiki/Example',
+    sourceFetchStatus: 'FETCHED',
+    provenanceVerified: true,
+    relevanceScore: 0.9,
+    relation: 'SUPPORTS'
+  });
+  check('only relevant verified publisher pages count toward the search fallback threshold',
+    countAdmissiblePublisherEvidence([admissiblePublisher, irrelevantPublisher, wikipediaFallback]) === 1);
   
   const providerTelemetry = summarizeProviderDiagnostics([
     {
