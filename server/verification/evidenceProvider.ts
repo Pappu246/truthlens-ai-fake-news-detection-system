@@ -330,6 +330,82 @@ export function buildGoogleNewsDecodeRequest(articleId: string, signature: strin
   return `f.req=${encodeURIComponent(outerPayload)}`;
 }
 
+
+export interface GoogleNewsDecodeBatchEntry {
+  articleId: string;
+  signature: string;
+  timestamp: string;
+  sequence: string;
+}
+
+/**
+ * Build one batchexecute request containing every article entry in a single
+ * inner array. Google may accept multiple outer arrays but silently process
+ * only the first entry; keep all RPC entries together in [[entry1, entry2]].
+ */
+export function buildGoogleNewsDecodeBatchRequest(entries: readonly GoogleNewsDecodeBatchEntry[]): string {
+  if (entries.length === 0) throw new Error('At least one Google News article is required for batch resolution.');
+  const sequences = new Set<string>();
+  const rpcEntries = entries.map(entry => {
+    const numericTimestamp = Number(entry.timestamp);
+    if (
+      !entry.articleId || !entry.signature ||
+      !Number.isSafeInteger(numericTimestamp) || numericTimestamp <= 0 ||
+      !/^[a-zA-Z0-9_-]{1,24}$/.test(entry.sequence) || sequences.has(entry.sequence)
+    ) {
+      throw new Error('Invalid or duplicate Google News batch-resolution parameters.');
+    }
+    sequences.add(entry.sequence);
+    const innerPayload = [
+      'garturlreq',
+      [['X', 'X', ['X', 'X'], null, null, 1, 1, 'US:en', null, 1, null, null, null, null, null, 0, 1],
+        'X', 'X', 1, [1, 1, 1], 1, 1, null, 0, 0, null, 0],
+      entry.articleId,
+      numericTimestamp,
+      entry.signature
+    ];
+    return ['Fbv4je', JSON.stringify(innerPayload), null, entry.sequence];
+  });
+  return `f.req=${encodeURIComponent(JSON.stringify([rpcEntries]))}`;
+}
+
+/** Return only decoded HTTPS publisher URLs, correlated by Google's response sequence. */
+export function parseGoogleNewsDecodedUrlBatchResponse(responseText: string): Map<string, string> {
+  try {
+    const separator = responseText.indexOf('\n\n');
+    const jsonText = separator >= 0
+      ? responseText.slice(separator + 2)
+      : responseText.replace(/^\)\]\}'\n?/, '');
+    const frames: unknown = JSON.parse(jsonText);
+    if (!Array.isArray(frames)) return new Map();
+    const resolved = new Map<string, string>();
+    for (const frame of frames) {
+      if (
+        !Array.isArray(frame) || frame[0] !== 'wrb.fr' ||
+        frame[1] !== 'Fbv4je' || typeof frame[2] !== 'string' ||
+        typeof frame[6] !== 'string'
+      ) continue;
+      let decodedPayload: unknown;
+      try { decodedPayload = JSON.parse(frame[2]); } catch { continue; }
+      const candidate = Array.isArray(decodedPayload) && decodedPayload[0] === 'garturlres' &&
+        typeof decodedPayload[1] === 'string' ? decodedPayload[1] : '';
+      try {
+        const parsed = new URL(candidate);
+        if (
+          parsed.protocol !== 'https:' || parsed.hostname.toLowerCase() === 'news.google.com' ||
+          parsed.username || parsed.password
+        ) continue;
+        resolved.set(frame[6], parsed.toString());
+      } catch {
+        // Ignore malformed URLs and retain the fail-closed result for that sequence.
+      }
+    }
+    return resolved;
+  } catch {
+    return new Map();
+  }
+}
+
 export function parseGoogleNewsDecodedUrlResponse(responseText: string): string | undefined {
   try {
     const separator = responseText.indexOf('\n\n');
@@ -597,37 +673,77 @@ export class EvidenceProvider {
   }
 
 
-  private async resolveGoogleNewsArticleUrl(
-    sourceUrl: string,
-    wrapperHtml: string,
+  private async resolveGoogleNewsArticleUrls(
+    items: readonly EvidenceItem[],
     claim: ExtractedClaim,
-    diagnostics?: RetrievalDiagnostic[],
-    timeoutMs = 1500,
-    sourceName?: string
-  ): Promise<string | undefined> {
-    const startedAtMs = Date.now();
-    const articleId = getGoogleNewsArticleId(sourceUrl);
-    const originalHost = 'news.google.com';
-    const diagnostic: RetrievalDiagnostic = {
-      provider: 'google_news_url_resolution',
-      query: claim.normalizedText,
-      attemptedAt: new Date().toISOString(),
-      ok: false,
-      resultCount: 0,
-      sourceName,
-      sourceHost: originalHost,
-      stage: 'URL_RESOLUTION'
-    };
-    diagnostics?.push(diagnostic);
+    diagnostics?: RetrievalDiagnostic[]
+  ): Promise<Map<string, string>> {
+    const resolvedUrls = new Map<string, string>();
+    const googleItems = items.filter(item => getGoogleNewsArticleId(item.sourceUrl));
+    if (googleItems.length === 0) return resolvedUrls;
+
+    const signatureRows = await Promise.all(googleItems.map(async (item, index) => {
+      const startedAtMs = Date.now();
+      const diagnostic: RetrievalDiagnostic = {
+        provider: 'google_news_url_resolution',
+        query: claim.normalizedText,
+        attemptedAt: new Date().toISOString(),
+        ok: false,
+        resultCount: 0,
+        sourceName: item.sourceName,
+        sourceHost: 'news.google.com',
+        stage: 'URL_RESOLUTION'
+      };
+      diagnostics?.push(diagnostic);
+      try {
+        const wrapper = await safeFetchHtml(item.sourceUrl, {
+          timeoutMs: GOOGLE_NEWS_WRAPPER_FETCH_TIMEOUT_MS,
+          maxBytes: 2.5 * 1024 * 1024,
+          maxRedirects: 5,
+          cookie: 'CONSENT=PENDING+987',
+          userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36'
+        });
+        let finalHost = '';
+        try { finalHost = new URL(wrapper.finalUrl).hostname.toLowerCase(); } catch { /* invalid redirect is rejected below */ }
+
+        // Retain a legitimate direct redirect, but never treat another Google
+        // interstitial or wrapper as the destination publisher.
+        if (
+          finalHost && finalHost !== 'news.google.com' &&
+          finalHost !== 'consent.google.com' &&
+          !finalHost.endsWith('.google.com') &&
+          new URL(wrapper.finalUrl).protocol === 'https:'
+        ) {
+          resolvedUrls.set(item.sourceUrl, wrapper.finalUrl);
+          Object.assign(diagnostic, {
+            ok: true, resultCount: 1, finalHost,
+            elapsedMs: Date.now() - startedAtMs
+          });
+          delete diagnostic.error;
+          return undefined;
+        }
+
+        const articleId = getGoogleNewsArticleId(item.sourceUrl);
+        const signature = wrapper.html.match(/data-n-a-sg=["']([^"']+)["']/)?.[1];
+        const timestamp = wrapper.html.match(/data-n-a-ts=["']([^"']+)["']/)?.[1];
+        if (!articleId) throw new Error('Unsupported Google News RSS URL format.');
+        if (!signature || !timestamp) {
+          throw new Error('Google News wrapper did not expose a decode signature/timestamp (consent wall or format change).');
+        }
+        return { item, articleId, signature, timestamp, diagnostic, startedAtMs, sequence: `g${index}` };
+      } catch (err: any) {
+        Object.assign(diagnostic, {
+          ok: false, resultCount: 0, elapsedMs: Date.now() - startedAtMs,
+          error: err?.message || 'Google News wrapper signature fetch failed'
+        });
+        return undefined;
+      }
+    }));
+
+    const entries = signatureRows.filter((entry): entry is NonNullable<typeof entry> => !!entry);
+    if (entries.length === 0) return resolvedUrls;
 
     try {
-      if (!articleId) throw new Error('Unsupported Google News RSS URL format.');
-      const signature = wrapperHtml.match(/data-n-a-sg=["']([^"']+)["']/)?.[1];
-      const timestamp = wrapperHtml.match(/data-n-a-ts=["']([^"']+)["']/)?.[1];
-      if (!signature || !timestamp) {
-        throw new Error('Google News wrapper did not expose a decode signature/timestamp (consent wall or format change).');
-      }
-
       const response = await fetch('https://news.google.com/_/DotsSplashUi/data/batchexecute', {
         method: 'POST',
         headers: {
@@ -639,41 +755,49 @@ export class EvidenceProvider {
           'X-Same-Domain': '1',
           'Cookie': 'CONSENT=PENDING+987'
         },
-        body: buildGoogleNewsDecodeRequest(articleId, signature, timestamp),
-        signal: AbortSignal.timeout(Math.min(Math.max(timeoutMs, 500), 1500))
+        body: buildGoogleNewsDecodeBatchRequest(entries),
+        signal: AbortSignal.timeout(2_500)
       });
       if (!response.ok) {
         await response.body?.cancel().catch(() => undefined);
-        throw new Error(`Google News URL resolver returned HTTP ${response.status}.`);
+        throw new Error(`Google News batched URL resolver returned HTTP ${response.status}.`);
       }
       const responseText = await response.text();
-      const resolvedUrl = parseGoogleNewsDecodedUrlResponse(responseText);
-      if (!resolvedUrl) throw new Error('Google News URL resolver returned no valid HTTPS publisher URL.');
-
-      Object.assign(diagnostic, {
-        ok: true,
-        resultCount: 1,
-        finalHost: new URL(resolvedUrl).hostname.toLowerCase(),
-        elapsedMs: Date.now() - startedAtMs
-      });
-      delete diagnostic.error;
-      return resolvedUrl;
+      const decodedBySequence = parseGoogleNewsDecodedUrlBatchResponse(responseText);
+      for (const entry of entries) {
+        const destination = decodedBySequence.get(entry.sequence);
+        if (!destination) {
+          Object.assign(entry.diagnostic, {
+            ok: false, resultCount: 0, elapsedMs: Date.now() - entry.startedAtMs,
+            error: 'Google News batched resolver returned no valid HTTPS publisher URL for this article.'
+          });
+          continue;
+        }
+        resolvedUrls.set(entry.item.sourceUrl, destination);
+        Object.assign(entry.diagnostic, {
+          ok: true, resultCount: 1, finalHost: new URL(destination).hostname.toLowerCase(),
+          elapsedMs: Date.now() - entry.startedAtMs
+        });
+        delete entry.diagnostic.error;
+      }
     } catch (err: any) {
-      Object.assign(diagnostic, {
-        ok: false,
-        resultCount: 0,
-        elapsedMs: Date.now() - startedAtMs,
-        error: err?.message || 'Google News URL resolution failed'
-      });
-      return undefined;
+      for (const entry of entries) {
+        Object.assign(entry.diagnostic, {
+          ok: false, resultCount: 0, elapsedMs: Date.now() - entry.startedAtMs,
+          error: err?.message || 'Google News batch URL resolution failed'
+        });
+      }
     }
+    return resolvedUrls;
   }
 
   private async hydrateEvidenceItem(
     item: EvidenceItem,
     claim: ExtractedClaim,
     diagnostics?: RetrievalDiagnostic[],
-    timeoutMs = this.timeoutMs
+    timeoutMs = this.timeoutMs,
+    resolvedGoogleNewsUrl?: string,
+    googleResolutionAttempted = false
   ): Promise<EvidenceItem> {
     const startedAtMs = Date.now();
     let effectiveSourceUrl = item.sourceUrl;
@@ -684,6 +808,37 @@ export class EvidenceProvider {
       sourceHost = new URL(effectiveSourceUrl).hostname.toLowerCase();
     } catch {
       // The URL validator will report an invalid source; keep telemetry host-only.
+    }
+    // Batch resolution is performed before publisher hydration. Fail closed for
+    // unresolved Google wrappers and return item-level insufficient evidence,
+    // rather than crashing the whole Promise.all or treating wrapper HTML as text.
+    if (sourceHost === 'news.google.com' && googleResolutionAttempted) {
+      if (!resolvedGoogleNewsUrl) {
+        const error = 'Google News publisher URL could not be resolved by the bounded batch resolver.';
+        diagnostics?.push({
+          provider: 'publisher_source_fetch',
+          query: claim.normalizedText,
+          attemptedAt: new Date().toISOString(),
+          ok: false,
+          resultCount: 0,
+          sourceName: item.sourceName,
+          sourceHost,
+          elapsedMs: Date.now() - startedAtMs,
+          error,
+          stage: 'PUBLISHER_FETCH'
+        });
+        return {
+          ...item,
+          sourceFetchStatus: 'FAILED',
+          provenanceVerified: false,
+          relation: 'INSUFFICIENT',
+          relevanceScore: 0,
+          relevanceExplanation: error + ' No wrapper-page text was used as evidence.',
+          evidenceExcerpt: undefined
+        };
+      }
+      effectiveSourceUrl = resolvedGoogleNewsUrl;
+      sourceHost = new URL(effectiveSourceUrl).hostname.toLowerCase();
     }
     try {
       let fetched = await safeFetchHtml(effectiveSourceUrl, {
@@ -703,30 +858,10 @@ export class EvidenceProvider {
       let body = this.extractReadableText(fetched.html);
       readableTextChars = body.length;
 
-      // Modern Google News RSS URLs return a 200 Google wrapper page instead of
-      // redirecting to the publisher. Resolve the source URL before extraction;
-      // never use the wrapper page's markup as factual evidence.
+      // The wrapper was mapped to a publisher URL before hydration. If a
+      // wrapper still returns a Google page, never treat its HTML as evidence.
       if (sourceHost === 'news.google.com' && finalHost === 'news.google.com') {
-        const resolvedUrl = await this.resolveGoogleNewsArticleUrl(
-          effectiveSourceUrl, fetched.html, claim, diagnostics, Math.min(timeoutMs, 1500), item.sourceName
-        );
-        if (resolvedUrl) {
-          effectiveSourceUrl = resolvedUrl;
-          sourceHost = new URL(effectiveSourceUrl).hostname.toLowerCase();
-          fetched = await safeFetchHtml(effectiveSourceUrl, {
-            timeoutMs: Math.min(timeoutMs, 2500),
-            maxBytes: 2.5 * 1024 * 1024,
-            maxRedirects: 5,
-            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36'
-          });
-          try {
-            finalHost = new URL(fetched.finalUrl).hostname.toLowerCase();
-          } catch {
-            finalHost = undefined;
-          }
-          body = this.extractReadableText(fetched.html);
-          readableTextChars = body.length;
-        }
+        throw new Error('Unresolved Google News wrapper cannot be used as article evidence.');
       }
       if (body.length < 120) throw new Error('Publisher page did not expose enough readable article text.');
       const excerpt = this.selectEvidenceExcerpt(claim, body, item.title);
@@ -1032,9 +1167,25 @@ export class EvidenceProvider {
     // first could take >5.5s, after which the old time gate silently skipped Bing.
     const newsCandidates = selectPublisherFetchCandidates(results.splice(0, results.length));
     const googleCandidates = selectGoogleNewsHydrationCandidates(newsCandidates);
+    const googleHydrationPromise = (async () => {
+      const resolvedGoogleNewsUrls = await this.resolveGoogleNewsArticleUrls(googleCandidates, claim, diagnostics);
+      return Promise.all(googleCandidates.map(item => {
+        const requiresBatchResolution = isGoogleNewsWrapperUrl(item.sourceUrl);
+        const resolvedPublisherUrl = resolvedGoogleNewsUrls.get(item.sourceUrl);
+        return this.hydrateEvidenceItem(
+          item,
+          claim,
+          diagnostics,
+          resolvedPublisherUrl ? Math.min(this.timeoutMs, 2500) : this.timeoutMs,
+          resolvedPublisherUrl,
+          requiresBatchResolution
+        );
+      }));
+    })();
+    // Keep the existing Bing fallback parallel with the Google wrapper pipeline.
     const bingHydrationPromise = this.searchBingForClaim(query, claim, diagnostics, seenUrls);
     const [hydratedNews, hydratedBing] = await Promise.all([
-      Promise.all(googleCandidates.map(item => this.hydrateEvidenceItem(item, claim, diagnostics))),
+      googleHydrationPromise,
       bingHydrationPromise
     ]);
     results.push(...hydratedNews, ...hydratedBing);
