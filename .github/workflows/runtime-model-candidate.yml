@@ -144,8 +144,12 @@ jobs:
           with open(os.path.join(candidate_dir, "external_validation.json"), encoding="utf-8") as f:
               liar = json.load(f)
           metrics = report.get("metrics", {})
+          runtime_policy = report.get("runtime_decision_policy", {})
+          runtime_metrics = runtime_policy.get("metrics", {})
           ablation = report.get("source_attribution_ablation", {})
           ablation_metrics = ablation.get("metrics", {})
+          ablation_runtime = ablation.get("runtime_decision_policy", {})
+          ablation_runtime_metrics = ablation_runtime.get("metrics", {})
           checks = {
               "report_completed": report.get("status") == "COMPLETED",
               "artifact_hash_matches": report.get("candidate_artifact_sha256") == artifact_sha == manifest.get("artifact_sha256"),
@@ -154,19 +158,32 @@ jobs:
               "balanced_accuracy": metrics.get("balanced_accuracy", 0) >= 0.70,
               "fake_recall": metrics.get("fake_recall", 0) >= 0.70,
               "real_recall": metrics.get("real_recall", 0) >= 0.70,
+              "runtime_policy_gate_passed": runtime_policy.get("passed") is True,
+              "runtime_policy_coverage": runtime_metrics.get("coverage", 0) >= 0.50,
+              "runtime_policy_operational_balanced_accuracy": runtime_metrics.get("operational_balanced_accuracy_abstentions_count_as_not_correct", 0) >= 0.70,
+              "runtime_policy_fake_recall": runtime_metrics.get("fake_recall_all_fake_samples", 0) >= 0.70,
+              "runtime_policy_real_recall": runtime_metrics.get("real_recall_all_real_samples", 0) >= 0.70,
               "byline_ablation_passed": ablation.get("passed") is True,
               "byline_ablation_balanced_accuracy": ablation_metrics.get("balanced_accuracy", 0) >= 0.65,
               "byline_ablation_fake_recall": ablation_metrics.get("fake_recall", 0) >= 0.65,
               "byline_ablation_real_recall": ablation_metrics.get("real_recall", 0) >= 0.65,
+              "byline_runtime_policy_gate_passed": ablation_runtime.get("passed") is True,
+              "byline_runtime_policy_coverage": ablation_runtime_metrics.get("coverage", 0) >= 0.50,
+              "byline_runtime_policy_operational_balanced_accuracy": ablation_runtime_metrics.get("operational_balanced_accuracy_abstentions_count_as_not_correct", 0) >= 0.65,
+              "byline_runtime_policy_fake_recall": ablation_runtime_metrics.get("fake_recall_all_fake_samples", 0) >= 0.65,
+              "byline_runtime_policy_real_recall": ablation_runtime_metrics.get("real_recall_all_real_samples", 0) >= 0.65,
               "manifest_marks_candidate_eligible": manifest.get("production_eligible") is True,
               "report_release_gate": report.get("release_gate", {}).get("passed") is True,
           }
           print(json.dumps({
               "article_external_report": report_path,
               "eligible_samples": report.get("eligible_samples"),
-              "metrics": metrics,
+              "metrics_at_0_50_diagnostic": metrics,
+              "runtime_decision_policy": runtime_policy,
+              "score_orientation_diagnostic_only": report.get("score_orientation_diagnostic_only"),
               "source_attribution_ablation": {
-                  "metrics": ablation_metrics,
+                  "metrics_at_0_50_diagnostic": ablation_metrics,
+                  "runtime_decision_policy": ablation_runtime,
                   "passed": ablation.get("passed")
               },
               "checks": checks,
@@ -186,12 +203,20 @@ jobs:
               f"- Balanced accuracy: {metrics.get('balanced_accuracy')}",
               f"- Fake recall: {metrics.get('fake_recall')}",
               f"- Real recall: {metrics.get('real_recall')}",
-              f"- Macro F1: {metrics.get('macro_f1')}",
+              f"- Macro F1 at p_fake=0.50 diagnostic threshold: {metrics.get('macro_f1')}",
+              f"- Runtime-policy coverage: {runtime_metrics.get('coverage')}",
+              f"- Runtime-policy balanced accuracy (abstentions count as not correct): {runtime_metrics.get('operational_balanced_accuracy_abstentions_count_as_not_correct')}",
+              f"- Runtime-policy fake recall: {runtime_metrics.get('fake_recall_all_fake_samples')}",
+              f"- Runtime-policy real recall: {runtime_metrics.get('real_recall_all_real_samples')}",
               "",
               "### Publisher-byline ablation stress test",
               f"- Balanced accuracy: {ablation_metrics.get('balanced_accuracy')}",
               f"- Fake recall: {ablation_metrics.get('fake_recall')}",
-              f"- Real recall: {ablation_metrics.get('real_recall')}",
+              f"- Real recall at p_fake=0.50: {ablation_metrics.get('real_recall')}",
+              f"- Byline runtime-policy coverage: {ablation_runtime_metrics.get('coverage')}",
+              f"- Byline runtime-policy balanced accuracy: {ablation_runtime_metrics.get('operational_balanced_accuracy_abstentions_count_as_not_correct')}",
+              f"- Byline runtime-policy fake recall: {ablation_runtime_metrics.get('fake_recall_all_fake_samples')}",
+              f"- Byline runtime-policy real recall: {ablation_runtime_metrics.get('real_recall_all_real_samples')}",
               "",
               "### LIAR claim benchmark (different task; diagnostic, not article-model gate)",
               f"- Eligible binary claims: {liar.get('eligible_binary_samples')}",
