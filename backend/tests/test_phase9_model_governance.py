@@ -52,7 +52,7 @@ def test_promotion_requires_task_matched_full_article_validation():
     assert 'actual runtime decision/abstention policy did not pass' in source
     assert 'runtime policy coverage must be at least 0.50' in source
     assert 'runtime policy operational balanced accuracy must be at least 0.70' in source
-    assert 'byline-ablation runtime policy failed' in source
+    assert 'runtime decision policy failed the publisher-byline ablation' in source
     assert 'byline-ablation runtime-policy coverage must be at least 0.50' in source
 
 def test_liar_claim_metrics_are_retained_but_not_used_as_article_gate():
