@@ -336,10 +336,10 @@ export function buildGoogleNewsDecodeBatchRequest(entries: readonly GoogleNewsDe
 /** Return only decoded HTTPS publisher URLs, correlated by Google's response sequence. */
 export function parseGoogleNewsDecodedUrlBatchResponse(responseText: string): Map<string, string> {
   try {
-    const separator = responseText.indexOf('\\n\\n');
+    const separator = responseText.indexOf('\n\n');
     const jsonText = separator >= 0
       ? responseText.slice(separator + 2)
-      : responseText.replace(/^\\)\\]\\}'\\n?/, '');
+      : responseText.replace(/^\)\]\}'\n?/, '');
     const frames: unknown = JSON.parse(jsonText);
     if (!Array.isArray(frames)) return new Map();
     const resolved = new Map<string, string>();
@@ -369,7 +369,6 @@ export function parseGoogleNewsDecodedUrlBatchResponse(responseText: string): Ma
     return new Map();
   }
 }
-
 export function parseGoogleNewsDecodedUrlResponse(responseText: string): string | undefined {
   try {
     const separator = responseText.indexOf('\n\n');
