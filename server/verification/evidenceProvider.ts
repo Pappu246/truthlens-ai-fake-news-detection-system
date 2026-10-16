@@ -22,6 +22,12 @@ import { refineEvidenceRelationSemantically } from './semanticRelation.js';
 export const GDELT_SEARCH_TIMEOUT_MS = 7_500;
 /** Maximum extra latency tolerated while joining an unfinished optional GDELT fallback. */
 export const GDELT_RESULT_JOIN_GRACE_MS = 250;
+/** When no non-GDELT evidence survives, allow more time for the optional fallback. */
+export const GDELT_EMPTY_RESULT_JOIN_GRACE_MS = 1_500;
+
+export function getGdeltJoinGraceMs(hasUsableEvidence: boolean): number {
+  return hasUsableEvidence ? GDELT_RESULT_JOIN_GRACE_MS : GDELT_EMPTY_RESULT_JOIN_GRACE_MS;
+}
 
 /**
  * Wait briefly for an optional concurrent fallback without letting it block the
@@ -322,6 +328,7 @@ export interface RetrievalDiagnostic {
   resultCount: number;
   error?: string;
   stage?: 'SEARCH' | 'PUBLISHER_FETCH' | 'PROVENANCE' | 'URL_RESOLUTION';
+  state?: 'PENDING' | 'SUCCEEDED' | 'FAILED';
   /** Safe host-only telemetry; never stores full article URLs. */
   sourceName?: string;
   sourceHost?: string;
@@ -1056,8 +1063,9 @@ export class EvidenceProvider {
     // Its request remains concurrent with them, so a slow DOC API cannot block
     // Bing from starting; all returned pages still pass the same hydration,
     // provenance, and relevance gates before they are included.
+    const hasUsableNonGdeltEvidence = results.some(isAdmissibleEvidence);
     const gdeltItems = runGdeltInParallel
-      ? await settleWithinGrace(gdeltPromise, GDELT_RESULT_JOIN_GRACE_MS, gdeltResult ?? [])
+      ? await settleWithinGrace(gdeltPromise, getGdeltJoinGraceMs(hasUsableNonGdeltEvidence), gdeltResult ?? [])
       : [];
     if (gdeltItems.length > 0) {
       const existingUrls = new Set(results.map(item => item.sourceFinalUrl || item.sourceUrl));
@@ -1103,7 +1111,7 @@ export class EvidenceProvider {
     const startedAtMs = Date.now();
     const startedAt = new Date(startedAtMs).toISOString();
     const diagnostic: RetrievalDiagnostic = {
-      provider: 'gdelt_doc_api', query, attemptedAt: startedAt, ok: false,
+      provider: 'gdelt_doc_api', query, attemptedAt: startedAt, ok: false, state: 'PENDING',
       resultCount: 0, error: 'GDELT request started; result not yet available.', stage: 'SEARCH'
     };
     diagnostics?.push(diagnostic);
@@ -1116,6 +1124,7 @@ export class EvidenceProvider {
       });
       if (!response.ok) {
         Object.assign(diagnostic, {
+          state: 'FAILED',
           httpStatus: response.status,
           elapsedMs: Date.now() - startedAtMs,
           error: `HTTP ${response.status}`
@@ -1160,11 +1169,12 @@ export class EvidenceProvider {
       const admissible = hydrated.filter(isAdmissibleEvidence);
       // The caller owns seenUrls and adds returned sources to its evidence list.
       // Do not mark returned items as seen here or the caller would skip them.
-      Object.assign(diagnostic, { ok: true, resultCount: admissible.length, elapsedMs: Date.now() - startedAtMs });
+      Object.assign(diagnostic, { state: 'SUCCEEDED', ok: true, resultCount: admissible.length, elapsedMs: Date.now() - startedAtMs });
       delete diagnostic.error;
       return admissible;
     } catch (err: any) {
       Object.assign(diagnostic, {
+        state: 'FAILED',
         ok: false,
         resultCount: 0,
         elapsedMs: Date.now() - startedAtMs,
@@ -1240,7 +1250,7 @@ export class EvidenceProvider {
   }> {
     const allEvidence = await this.searchEvidenceForClaim(claim, diagnostics);
     const entries = diagnostics ?? [];
-    const searchEntries = entries.filter(d => (d.stage ?? 'SEARCH') === 'SEARCH');
+    const searchEntries = entries.filter(d => (d.stage ?? 'SEARCH') === 'SEARCH' && d.state !== 'PENDING');
     const fetchFailures = entries.filter(d => d.stage === 'PUBLISHER_FETCH' && !d.ok);
     const provenanceRejections = entries.filter(d => d.stage === 'PROVENANCE' && d.ok);
 

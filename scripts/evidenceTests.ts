@@ -19,7 +19,7 @@ import { EvidenceItem } from '../src/types';
 import { buildArticleVerification } from '../server/verification/assessmentEngine';
 import { ClaimVerificationResult } from '../src/types';
 import { extractClaimsHeuristic } from '../server/verification/claimExtractor';
-import { extractReadableArticleText, shouldSearchWikipediaForEvidence, parsePublicationDate, parseBingNewsRss, parseGdeltArticleList, buildGdeltArticleSearchUrl, GDELT_SEARCH_TIMEOUT_MS, GDELT_RESULT_JOIN_GRACE_MS, settleWithinGrace, GOOGLE_NEWS_WRAPPER_FETCH_TIMEOUT_MS, MAX_PUBLISHER_FETCH_CANDIDATES_PER_PROVIDER, selectPublisherFetchCandidates, getGoogleNewsArticleId, buildGoogleNewsDecodeRequest, parseGoogleNewsDecodedUrlResponse, isAdmissibleEvidence, preferPublisherEvidence, verifyEvidenceProvenance } from '../server/verification/evidenceProvider';
+import { extractReadableArticleText, shouldSearchWikipediaForEvidence, parsePublicationDate, parseBingNewsRss, parseGdeltArticleList, buildGdeltArticleSearchUrl, GDELT_SEARCH_TIMEOUT_MS, GDELT_RESULT_JOIN_GRACE_MS, GDELT_EMPTY_RESULT_JOIN_GRACE_MS, getGdeltJoinGraceMs, settleWithinGrace, GOOGLE_NEWS_WRAPPER_FETCH_TIMEOUT_MS, MAX_PUBLISHER_FETCH_CANDIDATES_PER_PROVIDER, selectPublisherFetchCandidates, getGoogleNewsArticleId, buildGoogleNewsDecodeRequest, parseGoogleNewsDecodedUrlResponse, isAdmissibleEvidence, preferPublisherEvidence, verifyEvidenceProvenance } from '../server/verification/evidenceProvider';
 import { checkNumericalConsistency, classifyEvidenceRelation } from '../server/verification/evidenceAnalyzer';
 import { summarizeProviderDiagnostics } from '../server/verification/observability';
 
@@ -189,6 +189,12 @@ async function main(): Promise<void> {
     GDELT_RESULT_JOIN_GRACE_MS > 0 && GDELT_RESULT_JOIN_GRACE_MS < 1_000 &&
       GDELT_RESULT_JOIN_GRACE_MS < GDELT_SEARCH_TIMEOUT_MS,
     String(GDELT_RESULT_JOIN_GRACE_MS));
+  check('GDELT gets a longer bounded grace only when other usable evidence is absent',
+    GDELT_EMPTY_RESULT_JOIN_GRACE_MS > GDELT_RESULT_JOIN_GRACE_MS &&
+      GDELT_EMPTY_RESULT_JOIN_GRACE_MS < GDELT_SEARCH_TIMEOUT_MS &&
+      getGdeltJoinGraceMs(true) === GDELT_RESULT_JOIN_GRACE_MS &&
+      getGdeltJoinGraceMs(false) === GDELT_EMPTY_RESULT_JOIN_GRACE_MS);
+
   const immediatelyAvailableGdelt = await settleWithinGrace(Promise.resolve(['verified-publisher']), 500, []);
   check('completed GDELT fallback results are retained',
     immediatelyAvailableGdelt.length === 1 && immediatelyAvailableGdelt[0] === 'verified-publisher');
@@ -219,6 +225,15 @@ async function main(): Promise<void> {
       elapsedMs: 840
     }
   ]);
+
+  const pendingGdeltTelemetry = summarizeProviderDiagnostics([{
+    provider: 'gdelt_doc_api', stage: 'SEARCH', state: 'PENDING',
+    ok: false, resultCount: 0,
+    error: 'GDELT request started; result not yet available.'
+  }]);
+  check('an in-flight GDELT request is logged as PENDING, not PROVIDER_ERROR',
+    pendingGdeltTelemetry[0]?.state === 'PENDING' &&
+      pendingGdeltTelemetry[0]?.failureCode === undefined);
   const providerTelemetryJson = JSON.stringify(providerTelemetry);
   check('production telemetry classifies a GDELT timeout without logging its raw error',
     providerTelemetry[0]?.provider === 'gdelt_doc_api' && providerTelemetry[0]?.failureCode === 'TIMEOUT' &&

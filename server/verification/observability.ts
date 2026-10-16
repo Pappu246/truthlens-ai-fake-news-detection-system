@@ -8,6 +8,7 @@
 export interface EvidenceProviderDiagnosticInput {
   provider: string;
   stage?: string;
+  state?: 'PENDING' | 'SUCCEEDED' | 'FAILED';
   ok: boolean;
   httpStatus?: number;
   resultCount?: number;
@@ -21,6 +22,7 @@ export interface EvidenceProviderDiagnosticInput {
 export interface EvidenceProviderTelemetry {
   provider: string;
   stage: 'SEARCH' | 'PUBLISHER_FETCH' | 'PROVENANCE' | 'URL_RESOLUTION' | 'OTHER';
+  state: 'PENDING' | 'SUCCEEDED' | 'FAILED';
   ok: boolean;
   resultCount: number;
   httpStatus?: number;
@@ -96,18 +98,24 @@ function classifyFailureCode(error: unknown, httpStatus?: number): string {
 export function summarizeProviderDiagnostics(
   diagnostics: readonly EvidenceProviderDiagnosticInput[]
 ): EvidenceProviderTelemetry[] {
+  const stateOf = (diagnostic: EvidenceProviderDiagnosticInput): 'PENDING' | 'SUCCEEDED' | 'FAILED' =>
+    diagnostic.state === 'PENDING' || diagnostic.state === 'SUCCEEDED' || diagnostic.state === 'FAILED'
+      ? diagnostic.state
+      : diagnostic.ok ? 'SUCCEEDED' : 'FAILED';
   return [...diagnostics]
-    .sort((a, b) => Number(!b.ok) - Number(!a.ok))
+    .sort((a, b) => Number(stateOf(b) === 'FAILED') - Number(stateOf(a) === 'FAILED'))
     .slice(0, MAX_TELEMETRY_PROVIDER_DIAGNOSTICS)
     .map((diagnostic) => {
       const stage = diagnostic.stage === 'SEARCH' || diagnostic.stage === 'PUBLISHER_FETCH' ||
         diagnostic.stage === 'PROVENANCE' || diagnostic.stage === 'URL_RESOLUTION'
         ? diagnostic.stage
         : 'OTHER';
+      const state = stateOf(diagnostic);
       const summary: EvidenceProviderTelemetry = {
         provider: safeIdentifier(diagnostic.provider, 'unknown'),
         stage,
-        ok: Boolean(diagnostic.ok),
+        state,
+        ok: state === 'SUCCEEDED' && Boolean(diagnostic.ok),
         resultCount: boundedInteger(diagnostic.resultCount, 1000) ?? 0
       };
       const httpStatus = boundedInteger(diagnostic.httpStatus, 599);
@@ -120,7 +128,7 @@ export function summarizeProviderDiagnostics(
       if (readableTextChars !== undefined) summary.readableTextChars = readableTextChars;
       if (sourceHost) summary.sourceHost = sourceHost;
       if (finalHost) summary.finalHost = finalHost;
-      if (!diagnostic.ok) summary.failureCode = classifyFailureCode(diagnostic.error, summary.httpStatus);
+      if (state === 'FAILED') summary.failureCode = classifyFailureCode(diagnostic.error, summary.httpStatus);
       return summary;
     });
 }
