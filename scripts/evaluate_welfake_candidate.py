@@ -38,14 +38,13 @@ MIN_ARTICLE_CHARS = 300
 MIN_ARTICLE_WORDS = 50
 MIN_GATE_SAMPLES = 10_000
 LOW_VOCABULARY_COVERAGE_THRESHOLD = 0.10
-# Must mirror server/mlEngine.ts. These cues trigger abstention only when the
-# calibrated model strongly leans REAL; they never independently label an
-# article fake.
-SENSATIONAL_TERMS = (
-    "shocking", "unbelievable", "secret", "exposed", "censored", "miracle", "bombshell",
-    "banned", "terrifying", "mind control", "clones", "whistleblower", "alien", "suppressed",
-    "hidden truth", "deep state", "globalist", "poisons", "furious", "wake up", "conspiracy",
-    "mutant", "occult", "chemtrails", "nano-circuits", "brainwash",
+# Must mirror server/mlEngine.ts. These are narrow, high-risk conspiracy/hoax
+# clusters, not ordinary journalistic style words. They only trigger abstention
+# when a calibrated model strongly leans REAL; they never label an article fake.
+SENSATIONAL_CONFLICT_TERMS = (
+    "alien mothership", "cloaking technology", "deep state", "shadow government",
+    "global elites", "hidden truth", "mind control", "chemtrails", "nano circuits",
+    "lizard people", "reptilian", "false flag", "illuminati", "brainwash conspiracy",
 )
 
 
@@ -91,12 +90,16 @@ def compute_runtime_policy_metrics(
         raise ValueError("texts length must match p_fake.")
 
     low_vocabulary = coverage_ratio < LOW_VOCABULARY_COVERAGE_THRESHOLD
-    sensational_counts = np.asarray([
-        sum(1 for term in SENSATIONAL_TERMS if term in text.lower())
+    normalized_texts = [
+        re.sub(r"[-_]+", " ", text.lower())
         for text in (texts if texts is not None else [""] * count)
+    ]
+    sensational_counts = np.asarray([
+        sum(1 for term in SENSATIONAL_CONFLICT_TERMS if term in text)
+        for text in normalized_texts
     ], dtype=int)
     sensational_conflict = (
-        (p_fake <= real_threshold) & (sensational_counts >= 3) & (~low_vocabulary)
+        (p_fake <= real_threshold) & (sensational_counts >= 2) & (~low_vocabulary)
     )
 
     prediction = np.full(count, -1, dtype=int)
@@ -127,7 +130,7 @@ def compute_runtime_policy_metrics(
         "policy": (
             "p_fake >= 0.65 => LIKELY FAKE; p_fake <= 0.35 => LIKELY REAL; "
             "otherwise NEEDS MORE CONTEXT; also abstain if vocabulary coverage < 0.10 "
-            "or if p_fake <= 0.35 with >=3 sensational markers"
+            "or if p_fake <= 0.35 with at least two high-risk conspiracy/hoax markers"
         ),
         "fake_threshold": fake_threshold,
         "real_threshold": real_threshold,
