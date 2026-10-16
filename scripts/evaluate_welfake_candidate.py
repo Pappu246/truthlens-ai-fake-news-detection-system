@@ -53,6 +53,59 @@ def text_hash(text: str) -> str | None:
     return hashlib.sha256(cleaned.encode("utf-8")).hexdigest()
 
 
+
+def compute_runtime_policy_metrics(y_fake: np.ndarray, p_fake: np.ndarray,
+                                  fake_threshold: float = 0.65,
+                                  real_threshold: float = 0.35) -> dict:
+    """Score using TruthLens' actual calibrated runtime policy, including abstention.
+
+    Positive class is FAKE=1; p_fake in the open interval (real_threshold,
+    fake_threshold) deliberately abstains and is counted as incorrect in the
+    operational metrics, while selective metrics are reported separately.
+    """
+    prediction = np.full(len(p_fake), -1, dtype=int)
+    prediction[p_fake <= real_threshold] = 0
+    prediction[p_fake >= fake_threshold] = 1
+    decided = prediction >= 0
+    real_mask = y_fake == 0
+    fake_mask = y_fake == 1
+    tn = int(np.sum(real_mask & (prediction == 0)))
+    fp = int(np.sum(real_mask & (prediction == 1)))
+    fn = int(np.sum(fake_mask & (prediction == 0)))
+    tp = int(np.sum(fake_mask & (prediction == 1)))
+    abstain_real = int(np.sum(real_mask & (prediction == -1)))
+    abstain_fake = int(np.sum(fake_mask & (prediction == -1)))
+    total = max(1, len(y_fake))
+    decided_count = int(decided.sum())
+    decided_balanced = None
+    decided_accuracy = None
+    if decided_count:
+        decided_balanced = float(balanced_accuracy_score(y_fake[decided], prediction[decided]))
+        decided_accuracy = float(accuracy_score(y_fake[decided], prediction[decided]))
+    real_total = max(1, int(real_mask.sum()))
+    fake_total = max(1, int(fake_mask.sum()))
+    real_recall = tn / real_total
+    fake_recall = tp / fake_total
+    return {
+        "policy": "p_fake >= 0.65 => LIKELY FAKE; p_fake <= 0.35 => LIKELY REAL; otherwise NEEDS MORE CONTEXT",
+        "fake_threshold": fake_threshold,
+        "real_threshold": real_threshold,
+        "sample_count": int(len(y_fake)),
+        "decided_count": decided_count,
+        "coverage": float(decided_count / total),
+        "abstention_rate": float(1.0 - decided_count / total),
+        "operational_accuracy_abstentions_count_as_not_correct": float((tn + tp) / total),
+        "operational_balanced_accuracy_abstentions_count_as_not_correct": float((fake_recall + real_recall) / 2.0),
+        "fake_recall_all_fake_samples": float(fake_recall),
+        "real_recall_all_real_samples": float(real_recall),
+        "selective_accuracy_on_decided_only": decided_accuracy,
+        "selective_balanced_accuracy_on_decided_only": decided_balanced,
+        "confusion_matrix_decided_only": [[tn, fp], [fn, tp]],
+        "abstained_real_samples": abstain_real,
+        "abstained_fake_samples": abstain_fake,
+        "confusion_matrix_layout": "[[TN, FP], [FN, TP]]; abstentions are counted separately; positive class is FAKE (1)",
+    }
+
 def neutralize_source_attribution(title: str, body: str) -> str:
     """Remove common wire-service byline strings for a source-cue stress test.
 
@@ -197,6 +250,11 @@ def main() -> None:
     y_fake = np.asarray([entry["y_fake"] for entry in samples], dtype=int)
     p_fake = np.asarray([score_runtime(entry["text"], artifact)[0] for entry in samples], dtype=float)
     metrics = compute_metrics(y_fake, p_fake)
+    runtime_policy_metrics = compute_runtime_policy_metrics(y_fake, p_fake)
+    # This inverse-score statistic is diagnostic only. It helps distinguish a
+    # likely domain/style inversion from a mediocre ranking, but it must never
+    # reverse dataset labels or be used to make a candidate eligible.
+    inverse_score_auc_diagnostic_only = float(roc_auc_score(y_fake, 1.0 - p_fake))
     neutralized_texts = [
         neutralize_source_attribution(entry["title"], entry["body"])
         for entry in samples
@@ -205,6 +263,7 @@ def main() -> None:
         score_runtime(text, artifact)[0] for text in neutralized_texts
     ], dtype=float)
     neutralized_metrics = compute_metrics(y_fake, p_fake_neutralized)
+    neutralized_runtime_policy_metrics = compute_runtime_policy_metrics(y_fake, p_fake_neutralized)
     release_thresholds = {
         "minimum_eligible_samples": MIN_GATE_SAMPLES,
         "minimum_balanced_accuracy": 0.70,
@@ -213,6 +272,10 @@ def main() -> None:
         "minimum_byline_ablation_balanced_accuracy": 0.65,
         "minimum_byline_ablation_fake_recall": 0.65,
         "minimum_byline_ablation_real_recall": 0.65,
+        "minimum_runtime_policy_coverage": 0.50,
+        "minimum_runtime_policy_balanced_accuracy": 0.70,
+        "minimum_byline_runtime_policy_coverage": 0.50,
+        "minimum_byline_runtime_policy_balanced_accuracy": 0.65,
     }
     raw_gate_passed = (
         len(samples) >= release_thresholds["minimum_eligible_samples"]
@@ -225,7 +288,25 @@ def main() -> None:
         and neutralized_metrics["fake_recall"] >= release_thresholds["minimum_byline_ablation_fake_recall"]
         and neutralized_metrics["real_recall"] >= release_thresholds["minimum_byline_ablation_real_recall"]
     )
-    release_gate_passed = raw_gate_passed and byline_ablation_passed
+    runtime_policy_passed = (
+        runtime_policy_metrics["coverage"] >= release_thresholds["minimum_runtime_policy_coverage"]
+        and runtime_policy_metrics["operational_balanced_accuracy_abstentions_count_as_not_correct"]
+            >= release_thresholds["minimum_runtime_policy_balanced_accuracy"]
+        and runtime_policy_metrics["fake_recall_all_fake_samples"] >= 0.70
+        and runtime_policy_metrics["real_recall_all_real_samples"] >= 0.70
+    )
+    byline_runtime_policy_passed = (
+        neutralized_runtime_policy_metrics["coverage"]
+            >= release_thresholds["minimum_byline_runtime_policy_coverage"]
+        and neutralized_runtime_policy_metrics["operational_balanced_accuracy_abstentions_count_as_not_correct"]
+            >= release_thresholds["minimum_byline_runtime_policy_balanced_accuracy"]
+        and neutralized_runtime_policy_metrics["fake_recall_all_fake_samples"] >= 0.65
+        and neutralized_runtime_policy_metrics["real_recall_all_real_samples"] >= 0.65
+    )
+    release_gate_passed = (
+        raw_gate_passed and byline_ablation_passed and
+        runtime_policy_passed and byline_runtime_policy_passed
+    )
 
     report = {
         "status": "COMPLETED",
@@ -248,9 +329,28 @@ def main() -> None:
             "minimum_words": MIN_ARTICLE_WORDS,
         },
         "metrics": metrics,
+        "runtime_decision_policy": {
+            "metrics": runtime_policy_metrics,
+            "passed": runtime_policy_passed,
+            "required_minimum_coverage": release_thresholds["minimum_runtime_policy_coverage"],
+            "required_minimum_operational_balanced_accuracy": release_thresholds["minimum_runtime_policy_balanced_accuracy"],
+            "required_minimum_recall_per_class": 0.70,
+        },
+        "score_orientation_diagnostic_only": {
+            "roc_auc_fake_with_correct_label_mapping": metrics["roc_auc_fake"],
+            "roc_auc_if_scores_were_inverted": inverse_score_auc_diagnostic_only,
+            "note": "Diagnostic only. Dataset labels and production score orientation were not reversed; this field never participates in the release gate.",
+        },
         "source_attribution_ablation": {
             "method": "Remove common wire-service byline strings at the start of body and publisher suffixes at title end; do not remove names throughout factual prose.",
             "metrics": neutralized_metrics,
+            "runtime_decision_policy": {
+                "metrics": neutralized_runtime_policy_metrics,
+                "passed": byline_runtime_policy_passed,
+                "required_minimum_coverage": release_thresholds["minimum_byline_runtime_policy_coverage"],
+                "required_minimum_operational_balanced_accuracy": release_thresholds["minimum_byline_runtime_policy_balanced_accuracy"],
+                "required_minimum_recall_per_class": 0.65,
+            },
             "thresholds": {
                 "minimum_balanced_accuracy": release_thresholds["minimum_byline_ablation_balanced_accuracy"],
                 "minimum_fake_recall": release_thresholds["minimum_byline_ablation_fake_recall"],
@@ -264,6 +364,8 @@ def main() -> None:
             "checks": {
                 "raw_full_article_gate": raw_gate_passed,
                 "source_attribution_ablation_gate": byline_ablation_passed,
+                "runtime_decision_policy_gate": runtime_policy_passed,
+                "byline_runtime_decision_policy_gate": byline_runtime_policy_passed,
             },
             "result": "PASS" if release_gate_passed else "BLOCKED",
             "reason": (
@@ -294,8 +396,12 @@ def main() -> None:
         "balanced_accuracy": metrics["balanced_accuracy"],
         "fake_recall": metrics["fake_recall"],
         "real_recall": metrics["real_recall"],
+        "runtime_policy_gate_passed": runtime_policy_passed,
+        "runtime_policy_coverage": runtime_policy_metrics["coverage"],
+        "runtime_policy_operational_balanced_accuracy": runtime_policy_metrics["operational_balanced_accuracy_abstentions_count_as_not_correct"],
         "source_attribution_ablation_passed": byline_ablation_passed,
         "source_attribution_ablation_balanced_accuracy": neutralized_metrics["balanced_accuracy"],
+        "source_attribution_runtime_policy_gate_passed": byline_runtime_policy_passed,
         "metrics_sha256": hashlib.sha256(json.dumps({
             "raw": metrics, "source_attribution_ablation": neutralized_metrics
         }, sort_keys=True).encode()).hexdigest(),
@@ -309,7 +415,9 @@ def main() -> None:
         "fake_samples": report["fake_samples"],
         "real_samples": report["real_samples"],
         "deduplication": report["deduplication"],
-        "metrics": metrics,
+        "metrics_at_0_50_diagnostic": metrics,
+        "runtime_decision_policy": report["runtime_decision_policy"],
+        "score_orientation_diagnostic_only": report["score_orientation_diagnostic_only"],
         "source_attribution_ablation": report["source_attribution_ablation"],
         "release_thresholds": report["release_thresholds"],
         "release_gate": report["release_gate"],
