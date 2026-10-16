@@ -777,7 +777,28 @@ export class EvidenceProvider {
     // never let wrapper HTML become evidence.
     if (sourceHost === 'news.google.com' && googleResolutionAttempted) {
       if (!resolvedGoogleNewsUrl) {
-        throw new Error('Google News publisher URL could not be resolved by the bounded batch resolver.');
+        const error = 'Google News publisher URL could not be resolved by the bounded batch resolver.';
+        diagnostics?.push({
+          provider: 'publisher_source_fetch',
+          query: claim.normalizedText,
+          attemptedAt: new Date().toISOString(),
+          ok: false,
+          resultCount: 0,
+          sourceName: item.sourceName,
+          sourceHost,
+          elapsedMs: Date.now() - startedAtMs,
+          error,
+          stage: 'PUBLISHER_FETCH'
+        });
+        return {
+          ...item,
+          sourceFetchStatus: 'FAILED',
+          provenanceVerified: false,
+          relation: 'INSUFFICIENT',
+          relevanceScore: 0,
+          relevanceExplanation: error + ' No wrapper-page text was used as evidence.',
+          evidenceExcerpt: undefined
+        };
       }
       effectiveSourceUrl = resolvedGoogleNewsUrl;
       sourceHost = new URL(effectiveSourceUrl).hostname.toLowerCase();
