@@ -52,6 +52,12 @@ async function main(): Promise<void> {
   section('/api/health');
   const health = await req('GET', '/api/health');
   check('health returns 200', health.status === 200, String(health.status));
+  const expectedDeployCommit = (process.env.EXPECTED_DEPLOY_COMMIT || '').trim();
+  if (expectedDeployCommit) {
+    check('live deployment serves the expected source commit',
+      health.json?.deployment?.commit === expectedDeployCommit,
+      `expected ${expectedDeployCommit}; actual ${health.json?.deployment?.commit ?? 'missing'}`);
+  }
   check('article model component reported', health.json?.components?.article_model?.ready === true);
   check('claim model component reported READY',
     health.json?.components?.claim_model?.status === 'READY',
