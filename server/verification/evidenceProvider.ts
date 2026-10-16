@@ -64,6 +64,33 @@ export function selectPublisherFetchCandidates<T>(items: readonly T[]): T[] {
   return items.slice(0, MAX_PUBLISHER_FETCH_CANDIDATES_PER_PROVIDER);
 }
 
+/**
+ * Google News RSS wrapper URLs need a fragile secondary resolver. Sending five
+ * wrappers through it at once has produced HTTP 429 and timeout bursts in live
+ * production. Bound that fragile path separately while preserving direct URLs.
+ */
+export const MAX_GOOGLE_NEWS_WRAPPER_CANDIDATES_PER_PROVIDER = 2;
+
+function isGoogleNewsWrapperUrl(sourceUrl: string): boolean {
+  try {
+    return new URL(sourceUrl).hostname.toLowerCase() === 'news.google.com';
+  } catch {
+    return false;
+  }
+}
+
+/** Prefer direct publisher URLs; probe only two Google wrappers per search pass. */
+export function selectGoogleNewsHydrationCandidates<T extends { sourceUrl: string }>(
+  items: readonly T[]
+): T[] {
+  const bounded = selectPublisherFetchCandidates(items);
+  const direct = bounded.filter(item => !isGoogleNewsWrapperUrl(item.sourceUrl));
+  const wrappers = bounded
+    .filter(item => isGoogleNewsWrapperUrl(item.sourceUrl))
+    .slice(0, MAX_GOOGLE_NEWS_WRAPPER_CANDIDATES_PER_PROVIDER);
+  return [...direct, ...wrappers].slice(0, MAX_PUBLISHER_FETCH_CANDIDATES_PER_PROVIDER);
+}
+
 export interface EvidenceSearchOptions {
   maxResultsPerClaim?: number;
   timeoutMs?: number;
@@ -198,6 +225,14 @@ function isWikipediaEvidence(item: Pick<EvidenceItem, 'sourceUrl' | 'sourceFinal
   } catch {
     return false;
   }
+}
+
+/**
+ * Count publisher sources that actually survived fetch, provenance, relevance,
+ * and relation checks. A fetched-but-irrelevant page must not suppress fallback search.
+ */
+export function countAdmissiblePublisherEvidence(items: EvidenceItem[]): number {
+  return items.filter(item => !isWikipediaEvidence(item) && isAdmissibleEvidence(item)).length;
 }
 
 /**
@@ -805,6 +840,88 @@ export class EvidenceProvider {
   }
 
   /**
+   * Fetch Bing News alongside Google wrapper hydration. Bing RSS usually points
+   * directly to publisher redirects; starting it in parallel avoids losing the
+   * alternate provider merely because Google wrapper extraction consumed the
+   * request's first few seconds.
+   */
+  private async searchBingForClaim(
+    query: string,
+    claim: ExtractedClaim,
+    diagnostics: RetrievalDiagnostic[] | undefined,
+    seenUrls: Set<string>
+  ): Promise<EvidenceItem[]> {
+    const startedAtMs = Date.now();
+    const attemptedAt = new Date().toISOString();
+    try {
+      const bingUrl = `https://www.bing.com/news/search?q=${encodeURIComponent(query)}&format=rss&setlang=en-us`;
+      const bingResponse = await fetch(bingUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36'
+        },
+        signal: AbortSignal.timeout(Math.min(this.timeoutMs, 3_000))
+      });
+      if (!bingResponse.ok) {
+        diagnostics?.push({
+          provider: 'bing_news_rss', query, attemptedAt, ok: false,
+          httpStatus: bingResponse.status, resultCount: 0,
+          error: `HTTP ${bingResponse.status}`, stage: 'SEARCH',
+          elapsedMs: Date.now() - startedAtMs
+        });
+        await bingResponse.body?.cancel().catch(() => undefined);
+        return [];
+      }
+
+      const hits = parseBingNewsRss(await bingResponse.text());
+      const candidates: EvidenceItem[] = [];
+      for (const hit of hits.slice(0, 4)) {
+        if (seenUrls.has(hit.url)) continue;
+        seenUrls.add(hit.url);
+        const sourceType = determineSourceType(hit.url, hit.sourceName);
+        const { score, explanation } = calculateRelevance(claim, hit.title, hit.title);
+        const numConsistency = checkNumericalConsistency(claim, hit.title);
+        const tempConsistency = checkTemporalConsistency(claim, hit.publishedAt);
+        candidates.push({
+          id: `bing-ev-${candidates.length + 1}`,
+          sourceName: hit.sourceName,
+          sourceUrl: hit.url,
+          title: hit.title,
+          publishedAt: hit.publishedAt,
+          retrievedAt: new Date().toISOString(),
+          sourceType,
+          snippet: hit.title,
+          relation: classifyEvidenceRelation(claim, hit.title, score, numConsistency),
+          relevanceScore: score,
+          relevanceExplanation: explanation,
+          numericalConsistency: numConsistency,
+          temporalConsistency: tempConsistency
+        });
+      }
+
+      // Keep outbound publisher fan-out bounded; one blocked site must not
+      // prevent the other candidates from being tried.
+      const hydrated = await mapWithConcurrency(
+        selectPublisherFetchCandidates(candidates).slice(0, 3),
+        3,
+        item => this.hydrateEvidenceItem(item, claim, diagnostics)
+      );
+      diagnostics?.push({
+        provider: 'bing_news_rss', query, attemptedAt, ok: true,
+        httpStatus: bingResponse.status, resultCount: hits.length,
+        stage: 'SEARCH', elapsedMs: Date.now() - startedAtMs
+      });
+      return hydrated;
+    } catch (err: any) {
+      diagnostics?.push({
+        provider: 'bing_news_rss', query, attemptedAt, ok: false,
+        resultCount: 0, error: err?.message || 'network error',
+        stage: 'SEARCH', elapsedMs: Date.now() - startedAtMs
+      });
+      return [];
+    }
+  }
+
+  /**
    * Searches live web news and knowledge indexes for authentic sources.
    * Real sources only. Absolutely zero fabricated results.
    */
@@ -910,78 +1027,22 @@ export class EvidenceProvider {
                ok: false, resultCount: 0, error: err.message || 'network error', stage: 'SEARCH' });
     }
 
-    // Hydrate news candidates before deciding whether Wikipedia fallback is needed.
-    // Raw RSS hit counts are not an evidence count; publisher pages can fail to fetch.
+    // Search/fetch the two fragile Google wrappers and Bing publisher candidates
+    // concurrently. Production telemetry showed that hydrating five Google wrappers
+    // first could take >5.5s, after which the old time gate silently skipped Bing.
     const newsCandidates = selectPublisherFetchCandidates(results.splice(0, results.length));
-    const hydratedNews = await Promise.all(
-      newsCandidates.map(item => this.hydrateEvidenceItem(item, claim, diagnostics))
-    );
-    results.push(...hydratedNews);
-    let verifiedNewsCount = hydratedNews.filter(
-      item => item.sourceFetchStatus === 'FETCHED' && item.provenanceVerified === true
-    ).length;
+    const googleCandidates = selectGoogleNewsHydrationCandidates(newsCandidates);
+    const bingHydrationPromise = this.searchBingForClaim(query, claim, diagnostics, seenUrls);
+    const [hydratedNews, hydratedBing] = await Promise.all([
+      Promise.all(googleCandidates.map(item => this.hydrateEvidenceItem(item, claim, diagnostics))),
+      bingHydrationPromise
+    ]);
+    results.push(...hydratedNews, ...hydratedBing);
 
-    // If GDELT supplied verified publisher pages, don't spend the remaining
-    // request budget on another broad RSS/Wikipedia cascade. The next claim query
-    // can add corroboration if enough budget remains.
-    // Do not wait for the slower GDELT endpoint before starting Bing. A
-    // GDELT timeout must not consume the entire time window for other fallbacks.
-    const canTryBing = verifiedNewsCount < 3 &&
-      !(gdeltResult && gdeltResult.length > 0) &&
-      Date.now() - searchStartedAt < 5_500;
-    if (canTryBing) {
-      try {
-        const bingUrl = `https://www.bing.com/news/search?q=${encodeURIComponent(query)}&format=rss&setlang=en-us`;
-        const bingResponse = await fetch(bingUrl, {
-          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36' },
-          signal: AbortSignal.timeout(this.timeoutMs)
-        });
-        if (!bingResponse.ok) {
-          record({ provider: 'bing_news_rss', query, attemptedAt: new Date().toISOString(),
-            ok: false, httpStatus: bingResponse.status, resultCount: 0,
-            error: `HTTP ${bingResponse.status}`, stage: 'SEARCH' });
-        } else {
-          const hits = parseBingNewsRss(await bingResponse.text());
-          const bingCandidates: EvidenceItem[] = [];
-          for (const hit of hits.slice(0, 4)) {
-            if (seenUrls.has(hit.url)) continue;
-            seenUrls.add(hit.url);
-            const sourceType = determineSourceType(hit.url, hit.sourceName);
-            const { score, explanation } = calculateRelevance(claim, hit.title, hit.title);
-            const numConsistency = checkNumericalConsistency(claim, hit.title);
-            const tempConsistency = checkTemporalConsistency(claim, hit.publishedAt);
-            bingCandidates.push({
-              id: `bing-ev-${bingCandidates.length + 1}`,
-              sourceName: hit.sourceName,
-              sourceUrl: hit.url,
-              title: hit.title,
-              publishedAt: hit.publishedAt,
-              retrievedAt: new Date().toISOString(),
-              sourceType,
-              snippet: hit.title,
-              relation: classifyEvidenceRelation(claim, hit.title, score, numConsistency),
-              relevanceScore: score,
-              relevanceExplanation: explanation,
-              numericalConsistency: numConsistency,
-              temporalConsistency: tempConsistency
-            });
-          }
-
-          const hydratedBing = await Promise.all(
-            selectPublisherFetchCandidates(bingCandidates).map(item => this.hydrateEvidenceItem(item, claim, diagnostics))
-          );
-          results.push(...hydratedBing);
-          verifiedNewsCount += hydratedBing.filter(
-            item => item.sourceFetchStatus === 'FETCHED' && item.provenanceVerified === true
-          ).length;
-          record({ provider: 'bing_news_rss', query, attemptedAt: new Date().toISOString(),
-            ok: true, httpStatus: bingResponse.status, resultCount: hits.length, stage: 'SEARCH' });
-        }
-      } catch (err: any) {
-        record({ provider: 'bing_news_rss', query, attemptedAt: new Date().toISOString(),
-          ok: false, resultCount: 0, error: err?.message || 'network error', stage: 'SEARCH' });
-      }
-    }
+    // Only admissible publisher pages count toward the publisher threshold. A
+    // page that fetched successfully but failed relevance/admissibility must not
+    // stop alternate search or make an empty final evidence set look complete.
+    const verifiedNewsCount = countAdmissiblePublisherEvidence(results);
 
     const newsResultCount = results.length;
 
