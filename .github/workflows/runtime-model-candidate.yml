@@ -67,12 +67,6 @@ jobs:
       - name: Rebuild verified Phase 2 splits
         run: python scripts/isot_data_pipeline.py
 
-      - name: Snapshot canonical production artifact before candidate training
-        run: cp data/saved_model_artifacts.json /tmp/truthlens-production-artifact.before.json
-
-      - name: Train exact compact runtime candidate
-        run: python scripts/train_isot_runtime_candidate.py
-
       - name: Download and verify WELFake full-article external evaluation corpus
         env:
           WELFAKE_URL: https://zenodo.org/records/4561253/files/WELFake_Dataset.csv?download=1
@@ -83,7 +77,13 @@ jobs:
           curl --fail --location --retry 3 --retry-delay 2 "$WELFAKE_URL" -o data/WELFake_Dataset.csv
           printf "%s  %s\\n" "$WELFAKE_MD5" "data/WELFake_Dataset.csv" | md5sum --check -
 
-      - name: Evaluate candidate on WELFake full-article OOD benchmark
+      - name: Snapshot canonical production artifact before candidate training
+        run: cp data/saved_model_artifacts.json /tmp/truthlens-production-artifact.before.json
+
+      - name: Train exact compact runtime candidate
+        run: python scripts/train_isot_runtime_candidate.py --welfake data/WELFake_Dataset.csv
+
+      - name: Evaluate candidate on untouched WELFake held-out full-article partition
         run: |
           set -euo pipefail
           CANDIDATE_ARTIFACT="$(find artifacts/models -type f -name model_artifact.json -print -quit)"
@@ -127,7 +127,7 @@ jobs:
           set -euo pipefail
           python - <<'PY'
           import glob, hashlib, json, os, sys
-          paths = sorted(glob.glob("artifacts/models/*/article_ood_validation.json"))
+          paths = sorted(glob.glob("artifacts/models/*/article_heldout_validation.json"))
           if not paths:
               print("BLOCKED: task-matched full-article external validation is missing.")
               sys.exit(1)
@@ -176,7 +176,7 @@ jobs:
               "report_release_gate": report.get("release_gate", {}).get("passed") is True,
           }
           print(json.dumps({
-              "article_external_report": report_path,
+              "article_heldout_report": report_path,
               "eligible_samples": report.get("eligible_samples"),
               "metrics_at_0_50_diagnostic": metrics,
               "runtime_decision_policy": runtime_policy,
@@ -197,7 +197,7 @@ jobs:
           summary = [
               "## Candidate production eligibility — separate task metrics",
               "",
-              "### Full-article external benchmark (primary gate)",
+              "### Held-out full-article benchmark (primary gate)",
               f"- Dataset: {report.get('dataset')}",
               f"- Eligible non-overlap articles: {report.get('eligible_samples')}",
               f"- Balanced accuracy: {metrics.get('balanced_accuracy')}",
