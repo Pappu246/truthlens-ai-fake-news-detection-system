@@ -158,9 +158,9 @@ async function main(): Promise<void> {
   check('GDELT fallback has a bounded timeout that accommodates slower DOC responses',
     GDELT_SEARCH_TIMEOUT_MS >= 7_000 && GDELT_SEARCH_TIMEOUT_MS <= 8_000,
     String(GDELT_SEARCH_TIMEOUT_MS));
-  check('Google/Bing candidate selection tries three publishers while keeping a hard cap',
-    MAX_PUBLISHER_FETCH_CANDIDATES_PER_PROVIDER === 3 &&
-    selectPublisherFetchCandidates(['first', 'second', 'third', 'fourth']).join(',') === 'first,second,third');
+  check('Google/Bing candidate selection tries all five bounded RSS hits',
+    MAX_PUBLISHER_FETCH_CANDIDATES_PER_PROVIDER === 5 &&
+    selectPublisherFetchCandidates(['first', 'second', 'third', 'fourth', 'fifth', 'sixth']).join(',') === 'first,second,third,fourth,fifth');
 
   const gdeltHits = parseGdeltArticleList({
     articles: [
