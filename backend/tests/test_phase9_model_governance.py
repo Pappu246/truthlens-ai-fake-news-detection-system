@@ -57,6 +57,27 @@ def test_promotion_requires_task_matched_full_article_validation():
     assert 'runtime decision policy failed the publisher-byline ablation' in source
     assert 'byline-ablation runtime-policy coverage must be at least 0.50' in source
 
+def test_promotion_requires_source_independent_full_article_validation():
+    source=PROMOTE.read_text()
+    assert 'external_article_validation.json' in source
+    assert 'source-independent full-article validation is not COMPLETED' in source
+    assert 'article benchmark is not source-independent' in source
+    assert 'independent article report is not bound to this exact candidate artifact' in source
+    assert 'independent article balanced accuracy must be at least 0.70' in source
+    assert 'independent article fake recall must be at least 0.70' in source
+    assert 'independent article real recall must be at least 0.70' in source
+    assert 'external article benchmark was used for fitting, calibration or model selection' in source
+
+
+def test_promotion_requires_artifact_bound_passing_runtime_safety_report():
+    source=PROMOTE.read_text()
+    assert 'runtime_safety_validation.json' in source
+    assert 'runtime model safety regression has not passed' in source
+    assert 'runtime safety report model version does not match' in source
+    assert 'runtime safety report is not bound to this exact candidate artifact' in source
+    assert 'runtime safety report is incomplete or contains failed assertions' in source
+
+
 def test_liar_claim_metrics_are_retained_but_not_used_as_article_gate():
     source=PROMOTE.read_text()
     assert 'LIAR is a sentence/claim benchmark' in source
