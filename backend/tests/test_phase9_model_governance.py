@@ -49,6 +49,11 @@ def test_promotion_requires_task_matched_full_article_validation():
     assert 'fake_recall' in source and 'real_recall' in source
     assert 'production_eligible' in source
     assert 'candidate_artifact_sha256' in source
+    assert 'actual runtime decision/abstention policy did not pass' in source
+    assert 'runtime policy coverage must be at least 0.50' in source
+    assert 'runtime policy operational balanced accuracy must be at least 0.70' in source
+    assert 'byline-ablation runtime policy failed' in source
+    assert 'byline-ablation runtime-policy coverage must be at least 0.50' in source
 
 def test_liar_claim_metrics_are_retained_but_not_used_as_article_gate():
     source=PROMOTE.read_text()
