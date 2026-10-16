@@ -155,8 +155,8 @@ async function main(): Promise<void> {
     gdeltSearchUrl.searchParams.get('mode') === 'ArtList' &&
       gdeltSearchUrl.searchParams.get('format') === 'json' &&
       gdeltSearchUrl.searchParams.get('maxrecords') === '5');
-  check('GDELT fallback has a bounded timeout above the previous 2s abort window',
-    GDELT_SEARCH_TIMEOUT_MS >= 4_000 && GDELT_SEARCH_TIMEOUT_MS <= 5_000,
+  check('GDELT fallback has a bounded timeout that accommodates slower DOC responses',
+    GDELT_SEARCH_TIMEOUT_MS >= 7_000 && GDELT_SEARCH_TIMEOUT_MS <= 8_000,
     String(GDELT_SEARCH_TIMEOUT_MS));
 
   const gdeltHits = parseGdeltArticleList({
