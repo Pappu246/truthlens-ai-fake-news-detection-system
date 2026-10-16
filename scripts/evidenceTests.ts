@@ -190,7 +190,7 @@ async function main(): Promise<void> {
     parseGoogleNewsDecodedUrlResponse(googleReply) === 'https://www.epi.org/article/example');
 
   check('Google News URL resolver rejects wrapper URLs returned as decoded URLs',
-    parseGoogleNewsDecodedUrlResponse(")]}'\\n\\n" + JSON.stringify([['wrb.fr', 'Fbv4je', JSON.stringify(['garturlres', 'https://news.google.com/rss/articles/abc']), null]])) === undefined);
+    parseGoogleNewsDecodedUrlResponse(")]}'\n\n" + JSON.stringify([['wrb.fr', 'Fbv4je', JSON.stringify(['garturlres', 'https://news.google.com/rss/articles/abc']), null]])) === undefined);
 
   const batchBody = buildGoogleNewsDecodeBatchRequest([
     { articleId: 'CBMiABC123', signature: 'sig-a', timestamp: '1730000000', sequence: 'g0' },
