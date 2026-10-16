@@ -19,7 +19,7 @@ import { EvidenceItem } from '../src/types';
 import { buildArticleVerification } from '../server/verification/assessmentEngine';
 import { ClaimVerificationResult } from '../src/types';
 import { extractClaimsHeuristic } from '../server/verification/claimExtractor';
-import { extractReadableArticleText, shouldSearchWikipediaForEvidence, parsePublicationDate, parseBingNewsRss, parseGdeltArticleList, buildGdeltArticleSearchUrl, GDELT_SEARCH_TIMEOUT_MS, MAX_PUBLISHER_FETCH_CANDIDATES_PER_PROVIDER, selectPublisherFetchCandidates, isAdmissibleEvidence, preferPublisherEvidence, verifyEvidenceProvenance } from '../server/verification/evidenceProvider';
+import { extractReadableArticleText, shouldSearchWikipediaForEvidence, parsePublicationDate, parseBingNewsRss, parseGdeltArticleList, buildGdeltArticleSearchUrl, GDELT_SEARCH_TIMEOUT_MS, MAX_PUBLISHER_FETCH_CANDIDATES_PER_PROVIDER, selectPublisherFetchCandidates, getGoogleNewsArticleId, buildGoogleNewsDecodeRequest, parseGoogleNewsDecodedUrlResponse, isAdmissibleEvidence, preferPublisherEvidence, verifyEvidenceProvenance } from '../server/verification/evidenceProvider';
 import { checkNumericalConsistency, classifyEvidenceRelation } from '../server/verification/evidenceAnalyzer';
 
 let passed = 0;
@@ -146,6 +146,25 @@ async function main(): Promise<void> {
       'https://www.bbc.com/news/articles/c20q4nv89yzo',
       'MAJOR_NEWS'
     ));
+
+  const googleNewsUrl = 'https://news.google.com/rss/articles/CBMiABC123?oc=5';
+  check('Google News RSS article ID is extracted only from trusted wrapper URLs',
+    getGoogleNewsArticleId(googleNewsUrl) === 'CBMiABC123' &&
+    getGoogleNewsArticleId('https://example.com/rss/articles/CBMiABC123') === undefined);
+  const googleDecodeRequest = new URLSearchParams(buildGoogleNewsDecodeRequest('CBMiABC123', 'sig', '1730000000'));
+  const googleOuter = JSON.parse(googleDecodeRequest.get('f.req') || 'null');
+  const googleInner = JSON.parse(googleOuter?.[0]?.[0]?.[1] || 'null');
+  check('Google News URL resolver request has the expected bounded RPC envelope',
+    googleOuter?.[0]?.[0]?.[0] === 'Fbv4je' &&
+    googleInner?.[0] === 'garturlreq' &&
+    googleInner?.[2] === 'CBMiABC123' &&
+    googleInner?.[3] === 1730000000 &&
+    googleInner?.[4] === 'sig');
+  const googleReply = `)]}'\\n\\n${JSON.stringify([['wrb.fr', 'Fbv4je', JSON.stringify(['garturlres', 'https://www.epi.org/article/example']), null])}`;
+  check('Google News batchexecute response resolves to a validated HTTPS publisher URL',
+    parseGoogleNewsDecodedUrlResponse(googleReply) === 'https://www.epi.org/article/example');
+  check('Google News URL resolver rejects wrapper URLs returned as decoded URLs',
+    parseGoogleNewsDecodedUrlResponse(`)]}'\\n\\n${JSON.stringify([['wrb.fr', 'Fbv4je', JSON.stringify(['garturlres', 'https://news.google.com/rss/articles/abc']), null])}`) === undefined);
 
   const gdeltSearchUrl = new URL(buildGdeltArticleSearchUrl('NASA James Webb NGC 346'));
   check('GDELT fallback can use the documented full-year search horizon',
