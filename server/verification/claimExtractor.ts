@@ -232,40 +232,65 @@ export function generateSearchQueries(claim: {
     'according', 'reportedly', 'shocking', 'secret', 'exclusive', 'breaking',
     'unbelievable', 'revealed', 'exposed', 'whistleblower'
   ]);
+  const normalizedTokens = claim.normalizedText
+    .replace(/[^\w\s$%€£₹.-]/g, '')
+    .split(/\s+/)
+    .map(token => token.trim())
+    .filter(token => token.length > 2 && !queryStopWords.has(token.toLowerCase()));
+
+  // Primary query: preserve the factual action, direction, threshold and period.
+  // The old query put the year before the topic and dropped predicates such as
+  // "fell below four percent", which pulled adjacent economic stories instead.
+  const compactClaimQuery = normalizedTokens.slice(0, 12).join(' ');
+  if (compactClaimQuery.length > 5) queries.push(compactClaimQuery);
+
+  const directionalTerms = new Set([
+    'fall', 'falls', 'fell', 'fallen', 'falling', 'below', 'under', 'decline',
+    'declined', 'decrease', 'decreased', 'dropped', 'drop', 'rose', 'rise',
+    'increased', 'increase', 'grew', 'growth', 'exceeded', 'above', 'over',
+    'more', 'less', 'higher', 'lower', 'reduced', 'reduction', 'cut', 'raised',
+    'approved', 'rejected', 'denied', 'confirmed', 'reported', 'announced',
+    'opened', 'closed', 'launched', 'delayed', 'cancelled', 'canceled',
+    'won', 'lost', 'convicted', 'acquitted', 'detected', 'discovered',
+    'measured', 'recorded', 'published', 'found'
+  ]);
   const meaningfulKeywords = claim.keywords
     .map(word => word.trim())
     .filter(word => word.length > 2 && !queryStopWords.has(word.toLowerCase()));
+  const actionKeywords = [
+    ...new Set([
+      ...normalizedTokens.filter(token => directionalTerms.has(token.toLowerCase())),
+      ...meaningfulKeywords.filter(token => directionalTerms.has(token.toLowerCase()))
+    ])
+  ];
+  const entityParts = claim.entities
+    .map(entity => entity.replace(/^(?:the|a|an)\s+/i, '').trim())
+    .filter(Boolean)
+    .slice(0, 2);
+  const topicKeywords = meaningfulKeywords
+    .filter(token => !directionalTerms.has(token.toLowerCase()))
+    .slice(0, 4);
 
-  const q1Parts: string[] = [];
-  if (claim.entities.length > 0) q1Parts.push(claim.entities.slice(0, 2).join(' '));
-  if (claim.numbers.length > 0) q1Parts.push(claim.numbers[0]);
-  if (meaningfulKeywords.length > 0) q1Parts.push(meaningfulKeywords.slice(0, 4).join(' '));
+  // Secondary query: explicit subject + topic + action + measurement/time.
+  const q2Parts = [
+    ...entityParts,
+    ...topicKeywords,
+    ...actionKeywords,
+    ...claim.numbers.slice(0, 2),
+    ...claim.dates.slice(0, 1)
+  ];
+  const q2 = [...new Set(q2Parts)].join(' ').replace(/[^\w\s$%€£₹.-]/g, '').trim();
+  if (q2.length > 5 && !queries.includes(q2)) queries.push(q2);
 
-  if (q1Parts.length > 0) {
-    const q1 = q1Parts.join(' ').replace(/[^\w\s$%€£₹.-]/g, '').trim();
-    if (q1.length > 5) queries.push(q1);
-  }
-
-  // Query 2: Direct salient search phrase, retaining the claim subject and predicate.
-  const cleanTokens = claim.normalizedText
-    .replace(/[^\w\s$%€£₹.-]/g, '')
-    .split(/\s+/)
-    .filter(t => t.length > 2 && !queryStopWords.has(t.toLowerCase()))
-    .slice(0, 9)
-    .join(' ');
-
-  if (cleanTokens && !queries.includes(cleanTokens)) {
-    queries.push(cleanTokens);
-  }
-
-  // Query 3: Entity + Topic + Date / official announcement
-  if (claim.entities.length > 0 && claim.dates.length > 0) {
-    const q3 = `${claim.entities[0]} ${claim.keywords.slice(0, 2).join(' ')} ${claim.dates[0]}`.trim();
-    if (!queries.includes(q3)) queries.push(q3);
-  } else if (claim.entities.length > 0) {
-    const q3 = `${claim.entities[0]} official announcement ${claim.keywords.slice(0, 2).join(' ')}`.trim();
-    if (!queries.includes(q3)) queries.push(q3);
-  }
+  // Tertiary broader topic/time variant. Keep it behind action-preserving queries.
+  const broadParts = [
+    ...entityParts.slice(0, 1),
+    ...topicKeywords.slice(0, 3),
+    ...claim.dates.slice(0, 1),
+    ...claim.numbers.slice(0, 1)
+  ];
+  const q3 = [...new Set(broadParts)].join(' ').replace(/[^\w\s$%€£₹.-]/g, '').trim();
+  if (q3.length > 5 && !queries.includes(q3)) queries.push(q3);
 
   return queries.filter(q => q.length > 5).slice(0, 3);
 }
