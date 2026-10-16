@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Train an exact, compact production-runtime ISOT candidate.
+"""Train an exact compact production-runtime calibrated candidate.
 
-This pipeline is deliberately separate from scripts/train_isot.py:
-- uses the verified Phase 2 group-aware splits;
-- reproduces the Node tokenizer/TF-IDF term construction exactly;
-- trains LinearSVC on train, fits Platt calibration only on disjoint validation;
-- evaluates untouched test + temporal test;
-- evaluates the exact same runtime scorer on LIAR OOD;
-- writes a compact candidate artifact with one SVM + one Platt calibrator.
-It NEVER modifies data/saved_model_artifacts.json.
+Without --welfake, this reproduces an ISOT-only research candidate. With the
+verified WELFake CSV, it trains on ISOT's leak-aware train split plus WELFake's
+40% train partition, fits calibration/model selection on the combined ISOT and
+WELFake validation partitions, and reserves a disjoint 50% WELFake hash holdout
+that is never used for fitting/calibration/selection. Exact normalized-text
+overlaps with the complete ISOT corpus and duplicate/conflicting WELFake groups
+are removed first. The artifact format remains the exact runtime SVM + Platt
+calibrator contract. This script NEVER modifies production model artifacts.
 """
 import argparse
 import csv
@@ -29,6 +29,7 @@ from sklearn.metrics import (
     accuracy_score, average_precision_score, balanced_accuracy_score, brier_score_loss,
     confusion_matrix, f1_score, precision_score, recall_score, roc_auc_score,
 )
+from sklearn.model_selection import train_test_split
 from sklearn.svm import LinearSVC
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -139,6 +140,147 @@ def sha256(path):
             h.update(chunk)
     return h.hexdigest()
 
+
+
+def file_md5(path: Path) -> str:
+    digest = hashlib.md5()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def normalized_text_hash(text: str) -> str | None:
+    normalized = clean_text(text)
+    if not normalized:
+        return None
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def prepare_welfake_partitions(welfake_path: Path, isot_articles: dict) -> dict:
+    """Create deterministic source-overlap-free WELFake train/val/holdout partitions.
+
+    WELFake labels: 0=FAKE, 1=REAL. Runtime labels: 1=FAKE, 0=REAL.
+    All normalized exact-text overlaps with the complete ISOT corpus are removed
+    before any split. Duplicate groups are deduplicated; conflicting-label groups
+    are excluded. Only train and validation are returned for model fitting;
+    holdout texts and labels are never used by fitting/calibration/model selection.
+    """
+    if not welfake_path.is_file():
+        raise SystemExit(f"WELFake CSV is required but missing: {welfake_path}")
+    dataset_md5 = file_md5(welfake_path)
+    expected_md5 = "73c9675a4b3d09f86a6933d0b8d7d908"
+    if dataset_md5.lower() != expected_md5:
+        raise SystemExit(f"WELFake checksum mismatch: expected {expected_md5}, got {dataset_md5}")
+
+    isot_hashes = {
+        digest for digest in (
+            normalized_text_hash(article_text(article)) for article in isot_articles.values()
+        ) if digest
+    }
+    frame = pd.read_csv(welfake_path, dtype=str, keep_default_na=False, low_memory=False)
+    frame.columns = [str(column).strip().lower() for column in frame.columns]
+    required = {"title", "text", "label"}
+    if not required.issubset(frame.columns):
+        raise SystemExit(f"WELFake schema mismatch; expected {sorted(required)}, got {list(frame.columns)}")
+
+    counters = {
+        "rows_read": int(len(frame)),
+        "invalid_label_rows": 0,
+        "short_or_empty_rows": 0,
+        "isot_exact_overlap_rows_removed": 0,
+        "same_label_duplicate_rows_removed": 0,
+        "conflicting_duplicate_group_rows_removed": 0,
+    }
+    grouped: dict[str, list[dict]] = {}
+    for row in frame[["title", "text", "label"]].to_dict("records"):
+        try:
+            label = int(str(row["label"]).strip())
+        except (TypeError, ValueError):
+            counters["invalid_label_rows"] += 1
+            continue
+        if label not in (0, 1):
+            counters["invalid_label_rows"] += 1
+            continue
+        title = str(row["title"]).strip()
+        body = str(row["text"]).strip()
+        article = (title + " " + body).strip()
+        if len(article) < 300 or len(article.split()) < 50:
+            counters["short_or_empty_rows"] += 1
+            continue
+        digest = normalized_text_hash(article)
+        if not digest:
+            counters["short_or_empty_rows"] += 1
+            continue
+        if digest in isot_hashes:
+            counters["isot_exact_overlap_rows_removed"] += 1
+            continue
+        grouped.setdefault(digest, []).append({
+            "hash": digest,
+            "text": article,
+            "label": 1 if label == 0 else 0,
+        })
+
+    records = []
+    for digest, duplicates in sorted(grouped.items()):
+        labels = {item["label"] for item in duplicates}
+        if len(labels) != 1:
+            counters["conflicting_duplicate_group_rows_removed"] += len(duplicates)
+            continue
+        counters["same_label_duplicate_rows_removed"] += max(0, len(duplicates) - 1)
+        records.append(duplicates[0])
+
+    if len(records) < 12_000:
+        raise SystemExit(f"WELFake overlap/quality filtering left only {len(records)} unique rows; refusing a weak split.")
+
+    labels = np.asarray([item["label"] for item in records], dtype=int)
+    all_indices = np.arange(len(records))
+    # Reserve 50% as a never-touched holdout so it remains >=10k after filtering.
+    trainval_indices, holdout_indices = train_test_split(
+        all_indices, test_size=0.50, random_state=SEED, stratify=labels
+    )
+    train_indices, val_indices = train_test_split(
+        trainval_indices, test_size=0.20, random_state=SEED + 1,
+        stratify=labels[trainval_indices]
+    )
+
+    partitions = {
+        "train": [records[int(i)] for i in train_indices],
+        "validation": [records[int(i)] for i in val_indices],
+        "holdout": [records[int(i)] for i in holdout_indices],
+    }
+    hash_sets = {name: sorted(item["hash"] for item in values) for name, values in partitions.items()}
+    if (set(hash_sets["train"]) & set(hash_sets["validation"]) or
+            set(hash_sets["train"]) & set(hash_sets["holdout"]) or
+            set(hash_sets["validation"]) & set(hash_sets["holdout"])):
+        raise SystemExit("WELFake split integrity failure: normalized article hashes overlap between partitions.")
+
+    split_manifest = {
+        "schema_version": 1,
+        "dataset": "WELFake (Zenodo record 4561253)",
+        "dataset_md5": dataset_md5,
+        "label_mapping": {"source_0": "FAKE", "source_1": "REAL", "runtime_fake_positive": 1},
+        "is_source_independent_external_test": False,
+        "split_method": "deterministic stratified hash-group split; 40% train, 10% validation/calibration, 50% untouched holdout; seed=42",
+        "purpose": "WELFake train partition augments the ISOT training partition; validation is used for calibration/model selection; holdout is never passed to training, calibration, or model selection.",
+        "normalized_exact_text_hashes_only": True,
+        "isot_exact_overlap_hash_count": len(isot_hashes),
+        "eligible_unique_articles_after_filtering": len(records),
+        "split_counts": {name: len(values) for name, values in partitions.items()},
+        "label_counts": {
+            name: {
+                "fake": sum(item["label"] == 1 for item in values),
+                "real": sum(item["label"] == 0 for item in values),
+            } for name, values in partitions.items()
+        },
+        "deduplication": counters,
+        "train_hashes": hash_sets["train"],
+        "validation_hashes": hash_sets["validation"],
+        "holdout_hashes": hash_sets["holdout"],
+        "note": "Hash identifiers only; no article text is stored in this manifest. This is a same-corpus held-out partition, not independent source-domain validation.",
+    }
+    return {"partitions": partitions, "manifest": split_manifest}
+
 def score_runtime(text, artifact):
     cleaned = clean_text(text)
     words = cleaned.split()
@@ -171,6 +313,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-dir", default=str(DEFAULT_OUT))
     parser.add_argument("--max-features", type=int, default=8000)
+    parser.add_argument("--welfake", default=None, help="optional verified WELFake CSV for multi-source candidate training")
     args = parser.parse_args()
 
     fake = DATA / "Fake.csv"
@@ -182,6 +325,7 @@ def main():
 
     articles = read_isot()
     split = {name: load_ids(name) for name in ["train", "val", "test", "temporal_test"]}
+    welfake = prepare_welfake_partitions(Path(args.welfake), articles) if args.welfake else None
 
     train_x = [clean_text(article_text(articles[i])) for i in split["train"]]
     val_x = [clean_text(article_text(articles[i])) for i in split["val"]]
@@ -192,6 +336,14 @@ def main():
     val_y = np.array([articles[i]["label"] for i in split["val"]])
     test_y = np.array([articles[i]["label"] for i in split["test"]])
     temp_y = np.array([articles[i]["label"] for i in split["temporal_test"]])
+
+    if welfake:
+        wf_train = welfake["partitions"]["train"]
+        wf_val = welfake["partitions"]["validation"]
+        train_x.extend(clean_text(item["text"]) for item in wf_train)
+        val_x.extend(clean_text(item["text"]) for item in wf_val)
+        train_y = np.concatenate([train_y, np.asarray([item["label"] for item in wf_train], dtype=int)])
+        val_y = np.concatenate([val_y, np.asarray([item["label"] for item in wf_val], dtype=int)])
 
     vec = TfidfVectorizer(
         analyzer=runtime_analyzer,
@@ -234,15 +386,22 @@ def main():
         "source_fake_sha256": sha256(fake),
         "source_true_sha256": sha256(true),
         "prep_stats_sha256": sha256(PREP / "stats.json"),
+        "welfake_source_md5": welfake["manifest"]["dataset_md5"] if welfake else None,
+        "welfake_split_method": welfake["manifest"]["split_method"] if welfake else None,
         "seed": SEED,
         "max_features": args.max_features,
         "tokenizer": "TruthLens Node cleanText + unigram/bigram analyzer",
     }
-    version = "isot-runtime-svm-" + hashlib.sha256(
+    version_prefix = "multisource-runtime-svm-" if welfake else "isot-runtime-svm-"
+    version = version_prefix + hashlib.sha256(
         json.dumps(version_payload, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()[:12]
     out = Path(args.output_dir) / version
     out.mkdir(parents=True, exist_ok=False)
+    if welfake:
+        (out / "welfake_split_manifest.json").write_text(
+            json.dumps(welfake["manifest"], separators=(",", ":")), encoding="utf-8"
+        )
 
     selected_test = metrics(test_y, svm_test_p)
     selected_temp = metrics(temp_y, svm_temp_p)
@@ -264,19 +423,21 @@ def main():
         "model_version": version,
         "trained_at": datetime.now(timezone.utc).isoformat(),
         "is_demo": False,
-        "dataset_status": "ISOT CANDIDATE",
+        "dataset_status": "MULTI-SOURCE CANDIDATE" if welfake else "ISOT CANDIDATE",
         "dataset_info": {
-            "name": "ISOT Fake News Dataset",
-            "source_path": "data/True.csv & data/Fake.csv",
-            "total_samples": len(articles),
+            "name": "ISOT + WELFake" if welfake else "ISOT Fake News Dataset",
+            "source_path": "data/True.csv & data/Fake.csv plus WELFake train/validation partitions" if welfake else "data/True.csv & data/Fake.csv",
+            "total_samples": len(articles) + welfake["manifest"]["eligible_unique_articles_after_filtering"] if welfake else len(articles),
             "train_samples": len(train_x),
+            "validation_samples": len(val_x),
             "test_samples": len(test_x),
-            "real_samples": sum(a["label"] == 0 for a in articles.values()),
-            "fake_samples": sum(a["label"] == 1 for a in articles.values()),
+            "holdout_samples": len(welfake["partitions"]["holdout"]) if welfake else 0,
+            "real_samples": int(np.sum(train_y == 0) + np.sum(val_y == 0)),
+            "fake_samples": int(np.sum(train_y == 1) + np.sum(val_y == 1)),
             "vocabulary_size": len(vocab),
             "is_demo": False,
-            "dataset_status": "ISOT CANDIDATE",
-            "evaluation_status": "Group-aware Phase 2 split; candidate only",
+            "dataset_status": "MULTI-SOURCE CANDIDATE" if welfake else "ISOT CANDIDATE",
+            "evaluation_status": "ISOT leak-aware splits plus WELFake hash-group train/validation/untouched holdout; holdout is not source-independent external validation" if welfake else "Group-aware Phase 2 split; candidate only",
         },
         "preprocessing": {
             "lowercase": True,
@@ -384,11 +545,12 @@ def main():
         "model_version": version,
         "created_at": artifact["trained_at"],
         "git_commit": "runtime-candidate-pipeline",
-        "dataset_name": "ISOT Fake News Dataset",
+        "dataset_name": "ISOT + WELFake" if welfake else "ISOT Fake News Dataset",
         "dataset_fingerprint": version_payload,
         "preparation_config": {
             "phase2_splits": "group-aware near-duplicate split + temporal split",
             "seed": SEED,
+            "welfake_partitioning": welfake["manifest"]["split_method"] if welfake else None,
         },
         "software": {
             "python": platform.python_version(),
@@ -408,6 +570,14 @@ def main():
             },
         },
         "split_counts": {k: len(v) for k, v in split.items()},
+        "welfake_data": ({
+            "source_md5": welfake["manifest"]["dataset_md5"],
+            "deduplication": welfake["manifest"]["deduplication"],
+            "split_counts": welfake["manifest"]["split_counts"],
+            "label_counts": welfake["manifest"]["label_counts"],
+            "holdout_is_source_independent": False,
+            "split_manifest": "welfake_split_manifest.json",
+        } if welfake else None),
         "metrics": artifact["metrics"],
         "external_validation": {
             "status": "COMPLETED",
@@ -427,6 +597,10 @@ def main():
     print(json.dumps({
         "model_version": version,
         "candidate": str(out),
+        "training_sources": ["ISOT", "WELFake train partition"] if welfake else ["ISOT"],
+        "validation_sources": ["ISOT validation", "WELFake validation partition"] if welfake else ["ISOT validation"],
+        "welfake_partitions": welfake["manifest"]["split_counts"] if welfake else None,
+        "welfake_holdout_is_source_independent": False if welfake else None,
         "test": selected_test,
         "temporal_test": selected_temp,
         "ood_liar": ood,

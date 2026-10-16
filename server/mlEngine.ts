@@ -151,6 +151,16 @@ const SENSATIONAL_TERMS = [
   'mutant', 'occult', 'chemtrails', 'nano-circuits', 'brainwash'
 ];
 
+// Narrow release guard: avoid treating ordinary journalistic words such as
+// "secret", "exposed", or "whistleblower" as a cluster. These phrases still
+// never classify an article as fake; combined with a strong REAL model signal,
+// they only trigger abstention until independent evidence is checked.
+const SENSATIONAL_CONFLICT_TERMS = [
+  'alien mothership', 'cloaking technology', 'deep state', 'shadow government',
+  'global elites', 'hidden truth', 'mind control', 'chemtrails', 'nano circuits',
+  'lizard people', 'reptilian', 'false flag', 'illuminati', 'brainwash conspiracy'
+];
+
 const CERTAINTY_TERMS = [
   'guaranteed', '100%', 'never before', 'undeniable', 'proven fact', 'absolute proof',
   'every single', 'cure all', 'miracle cure', 'completely destroys', 'cures all'
@@ -1538,6 +1548,16 @@ export class TruthLensMLEngine {
     const demoModel = this.isDemoModel();
     const lowVocabularyCoverage = predictionDetails.coverage_ratio < LEGACY_MIN_VOCAB_COVERAGE;
     const limitedContentSource = LIMITED_CONTENT_SOURCES.has(options?.contentSource || '');
+    // Style cues never label an article as fake. When a calibrated model
+    // strongly leans REAL despite multiple high-risk conspiracy/hoax markers,
+    // abstain rather than publishing a potentially misleading REAL verdict.
+    // This is a conflict safeguard, not a substitute for independent evidence.
+    const normalizedConflictText = textTrimmed.toLowerCase().replace(/[-_]+/g, ' ');
+    const matchedConflictTerms = SENSATIONAL_CONFLICT_TERMS.filter(term =>
+      normalizedConflictText.includes(term)
+    );
+    const sensationalConflict = predictionDetails.calibrated &&
+      fakeProb <= tReal && matchedConflictTerms.length >= 2;
     const legacySafetyMode = !predictionDetails.calibrated;
 
     // 4. Verdict contract (backend = single source of truth).
@@ -1562,6 +1582,12 @@ export class TruthLensMLEngine {
       confidence = null;
       verdictReason =
         `Only ${predictionDetails.matched_term_count}/${predictionDetails.candidate_term_count} candidate vocabulary terms matched the active training space (${Math.round(predictionDetails.coverage_ratio * 100)}% coverage). This input is outside the model's learned vocabulary, so the classifier abstains rather than guessing.`;
+    } else if (sensationalConflict) {
+      prediction = VERDICT_NEEDS_MORE_CONTEXT;
+      riskLevel = 'UNDETERMINED';
+      confidence = null;
+      verdictReason =
+        `The calibrated model leans REAL, but the text contains ${matchedConflictTerms.length} distinct high-risk conspiracy/hoax narrative markers. These style signals are not proof of falsity; TruthLens abstains and requires independent evidence before presenting a directional verdict.`;
     } else if (legacySafetyMode) {
       // The raw margin is not a calibrated probability. Only margins well
       // outside this conservative band support a directional model signal.
@@ -1604,7 +1630,9 @@ export class TruthLensMLEngine {
 
     const probabilityCaveat = limitedContentSource
       ? 'Only partial article content is available (headline/RSS summary or extraction-blocked fallback). TruthLens withholds probability/confidence from the classification panel until full article text or independent evidence is available.'
-      : demoModel
+      : sensationalConflict
+        ? 'The model leans REAL despite multiple high-risk conspiracy/hoax markers. TruthLens withholds the verdict and probabilities until the claims can be checked against independent evidence; writing style alone is not proof of falsity.'
+        : demoModel
         ? (fakeProb >= 0.9 || realProb >= 0.9
           ? 'The active model was trained on a small demo dataset; extreme scores are not statistically supported and must not be treated as verified truth.'
           : undefined)
@@ -1615,7 +1643,7 @@ export class TruthLensMLEngine {
     const confidenceScore = confidence !== null && predictionDetails.calibrated && !limitedContentSource
       ? Math.round(confidence * 100)
       : null;
-    const uncertaintyScore = limitedContentSource || lowVocabularyCoverage || legacySafetyMode
+    const uncertaintyScore = limitedContentSource || lowVocabularyCoverage || sensationalConflict || legacySafetyMode
       ? null
       : Math.round((1.0 - Math.abs(fakeProb - realProb)) * 10000) / 10000;
 
@@ -1678,8 +1706,8 @@ export class TruthLensMLEngine {
       // Keep persisted history semantically aligned with the public response:
       // legacy/abstained inputs never store an uncalibrated score as a
       // probability that can later be rendered as 96–100% confidence.
-      fake_probability: predictionDetails.calibrated && !lowVocabularyCoverage && !limitedContentSource ? fakeProb : null,
-      real_probability: predictionDetails.calibrated && !lowVocabularyCoverage && !limitedContentSource ? realProb : null,
+      fake_probability: predictionDetails.calibrated && !lowVocabularyCoverage && !limitedContentSource && !sensationalConflict ? fakeProb : null,
+      real_probability: predictionDetails.calibrated && !lowVocabularyCoverage && !limitedContentSource && !sensationalConflict ? realProb : null,
       risk_level: riskLevel,
       model_name: legacySafetyMode ? 'Linear SVM (Safety-Gated Legacy)' : 'Linear SVM (Calibrated)',
       source_url: sourceUrl || options?.originalUrl || '',
@@ -1705,8 +1733,8 @@ export class TruthLensMLEngine {
       // Public probabilities are only exposed when the exact calibrated
       // ensemble is active. Legacy raw-margin scores are decision strength,
       // not probabilities, and must never be rendered as 96–100% confidence.
-      fake_probability: predictionDetails.calibrated && !lowVocabularyCoverage && !limitedContentSource ? fakeProb : null,
-      real_probability: predictionDetails.calibrated && !lowVocabularyCoverage && !limitedContentSource ? realProb : null,
+      fake_probability: predictionDetails.calibrated && !lowVocabularyCoverage && !limitedContentSource && !sensationalConflict ? fakeProb : null,
+      real_probability: predictionDetails.calibrated && !lowVocabularyCoverage && !limitedContentSource && !sensationalConflict ? realProb : null,
       confidence,
       confidence_score: confidenceScore,
       model_score: confidenceScore,
@@ -1754,7 +1782,15 @@ export class TruthLensMLEngine {
             real_margin: LEGACY_REAL_MARGIN,
             probability_output: 'WITHHELD'
           }
-        : {
+        : sensationalConflict
+          ? {
+              mode: 'SENSATIONAL_CONFLICT_ABSTENTION',
+              fake_threshold: tFake,
+              real_threshold: tReal,
+              matched_conflict_terms: matchedConflictTerms.length,
+              probability_output: 'WITHHELD'
+            }
+          : {
             mode: 'CALIBRATED_PROBABILITY',
             fake_threshold: tFake,
             real_threshold: tReal,
@@ -1783,7 +1819,9 @@ export class TruthLensMLEngine {
       },
       disclaimer: legacySafetyMode
         ? 'Model prediction is not proof that a claim is true or false. Legacy safety mode intentionally withholds calibrated probability percentages.'
-        : 'Model prediction is probabilistic and is not proof that a claim is true or false.'
+        : sensationalConflict
+          ? 'TruthLens detected conflicting model and style signals and abstained. Sensational writing alone does not prove falsity; verify factual claims against independent evidence.'
+          : 'Model prediction is probabilistic and is not proof that a claim is true or false.'
     };
   }
 
