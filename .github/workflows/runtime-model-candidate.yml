@@ -182,7 +182,7 @@ jobs:
           ]
           summary += [f"- {'PASS' if ok else 'BLOCKED'}: {name}" for name, ok in checks.items()]
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as f:
-              f.write("\\n".join(summary) + "\\n")
+              f.write("\n".join(summary) + "\n")
           if not all(checks.values()):
               print("BLOCKED: do not promote this candidate. Full-article external release gate did not pass.")
               sys.exit(1)
