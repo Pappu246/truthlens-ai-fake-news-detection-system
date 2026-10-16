@@ -25,14 +25,14 @@ def main():
         raise SystemExit("Promotion is intentionally blocked: explicit confirmation is required. Review the candidate first, then re-run with both --approve and --yes.")
     d=CANDIDATES/args.model_version
     artifact=d/"model_artifact.json"; manifest=d/"manifest.json"
-    liar=d/"external_validation.json"; article_ood=d/"article_ood_validation.json"
+    liar=d/"external_validation.json"; article_ood=d/"article_heldout_validation.json"
     for p in (artifact,manifest,liar,article_ood):
         if not p.exists(): raise SystemExit(f"Promotion blocked: missing {p}")
     m=json.loads(manifest.read_text()); ext=json.loads(liar.read_text()); article_report=json.loads(article_ood.read_text())
     if m.get("model_version")!=args.model_version: raise SystemExit("Promotion blocked: manifest/model version mismatch.")
     if not m.get("dataset_fingerprint"): raise SystemExit("Promotion blocked: missing dataset fingerprint.")
     if m.get("production_eligible") is not True: raise SystemExit("Promotion blocked: manifest does not mark candidate production_eligible after all automated gates.")
-    if m.get("article_external_validation", {}).get("release_gate_passed") is not True: raise SystemExit("Promotion blocked: task-matched article-level external gate did not pass.")
+    if m.get("article_validation", {}).get("release_gate_passed") is not True: raise SystemExit("Promotion blocked: full-article held-out quality gate did not pass.")
 
     candidate = json.loads(artifact.read_text())
     selected = candidate.get("selected_model", {})
@@ -52,7 +52,14 @@ def main():
     article_metrics = article_report.get("metrics", {})
     expected_md5 = "73c9675a4b3d09f86a6933d0b8d7d908"
     if article_report.get("status") != "COMPLETED":
-        raise SystemExit("Promotion blocked: WELFake full-article validation is not COMPLETED.")
+        raise SystemExit("Promotion blocked: WELFake held-out full-article validation is not COMPLETED.")
+    partition_scope = article_report.get("partition_scope", {})
+    if partition_scope.get("is_source_independent_external_test") is not False:
+        raise SystemExit("Promotion blocked: held-out report must accurately identify its same-corpus scope.")
+    if partition_scope.get("holdout_is_never_fit_calibrated_or_selected") is not True:
+        raise SystemExit("Promotion blocked: holdout partition usage is not verified.")
+    if partition_scope.get("holdout_overlaps_train") is not False or partition_scope.get("holdout_overlaps_validation") is not False:
+        raise SystemExit("Promotion blocked: holdout hash sets overlap train or validation.")
     if article_report.get("dataset_md5") != expected_md5:
         raise SystemExit("Promotion blocked: WELFake dataset checksum does not match the approved evaluation corpus.")
     if article_report.get("candidate_artifact_sha256") != sha256(artifact):
