@@ -189,7 +189,7 @@ async function main(): Promise<void> {
     batchEntries[0]?.[3] === 'g0' && batchEntries[1]?.[3] === 'g1' &&
     firstBatchInner?.[2] === 'CBMiABC123' && secondBatchInner?.[2] === 'CBMiXYZ789');
 
-  const batchReply = `)]}'\\n\\n${JSON.stringify([
+  const batchReply = `)]}'\n\n${JSON.stringify([
     ['wrb.fr', 'Fbv4je', JSON.stringify(['garturlres', 'https://www.pbs.org/news/example']), null, null, null, 'g1'],
     ['wrb.fr', 'Fbv4je', JSON.stringify(['garturlres', 'https://www.epi.org/article/example']), null, null, null, 'g0']
   ])}`;
@@ -199,7 +199,7 @@ async function main(): Promise<void> {
     decodedBatch.get('g0') === 'https://www.epi.org/article/example' &&
     decodedBatch.get('g1') === 'https://www.pbs.org/news/example');
 
-  const invalidBatchReply = `)]}'\\n\\n${JSON.stringify([
+  const invalidBatchReply = `)]}'\n\n${JSON.stringify([
     ['wrb.fr', 'Fbv4je', JSON.stringify(['garturlres', 'http://insecure.example/article']), null, null, null, 'g0'],
     ['wrb.fr', 'Fbv4je', JSON.stringify(['garturlres', 'https://news.google.com/rss/articles/wrapper']), null, null, null, 'g1']
   ])}`;
