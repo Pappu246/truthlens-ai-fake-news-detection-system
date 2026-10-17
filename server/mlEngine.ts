@@ -1479,6 +1479,7 @@ export class TruthLensMLEngine {
         status: 'INSUFFICIENT_INFORMATION',
         verdict: VERDICT_NEEDS_MORE_CONTEXT,
         prediction: VERDICT_NEEDS_MORE_CONTEXT,
+        model_directional_signal: 'UNAVAILABLE',
         reason: guardReason,
         message: 'More article context is required for reliable ML analysis.',
         fake_probability: null,
@@ -1539,6 +1540,12 @@ export class TruthLensMLEngine {
     const lowVocabularyCoverage = predictionDetails.coverage_ratio < LEGACY_MIN_VOCAB_COVERAGE;
     const limitedContentSource = LIMITED_CONTENT_SOURCES.has(options?.contentSource || '');
     const legacySafetyMode = !predictionDetails.calibrated;
+    // Presentation-only direction signal for the legacy, uncalibrated SVM.
+    // This is NOT a truth verdict and must never be converted into a probability.
+    const modelDirectionalSignal: 'LIKELY REAL' | 'LIKELY FAKE' | 'UNAVAILABLE' =
+      legacySafetyMode && !limitedContentSource && !lowVocabularyCoverage
+        ? (predictionDetails.decision_margin >= 0 ? VERDICT_LIKELY_FAKE : VERDICT_LIKELY_REAL)
+        : 'UNAVAILABLE';
 
     // 4. Verdict contract (backend = single source of truth).
     // Exact calibrated v3.1 artifacts use the configured probability zones.
@@ -1701,6 +1708,7 @@ export class TruthLensMLEngine {
       status: 'SUCCESS',
       verdict: prediction,
       prediction,
+      model_directional_signal: modelDirectionalSignal,
       reason: verdictReason,
       // Public probabilities are only exposed when the exact calibrated
       // ensemble is active. Legacy raw-margin scores are decision strength,
