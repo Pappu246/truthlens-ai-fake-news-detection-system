@@ -323,7 +323,9 @@ export function buildArticleContextSearchQuery(
     'confirmed', 'confirms', 'detection', 'discovery', 'using', 'used',
     'being', 'been', 'their', 'there', 'they', 'them', 'its', 'who', 'what',
     'when', 'where', 'which', 'while', 'than', 'then', 'also', 'more', 'most',
-    'very', 'near', 'such', 'each', 'both', 'only', 'other', 'some'
+    'very', 'near', 'such', 'each', 'both', 'only', 'other', 'some',
+    'uncovers', 'uncover', 'captures', 'captured', 'capture', 'view', 'views',
+    'ethereal', 'announces', 'announced', 'explores', 'explore', 'reveals'
   ]);
 
   const tokens = (value: string): string[] => decodeEntities(value)
@@ -348,13 +350,16 @@ export function buildArticleContextSearchQuery(
     // Title and claim context remain usable when a source URL is absent or malformed.
   }
 
+  // A title-focused fallback is intentionally broader than the exact claim
+  // queries. Lead with entities + measurements, then the publisher's distinctive
+  // headline words; only add claim prose after those topic anchors.
   const candidates = [
     ...entityTokens,
     ...numberTokens,
-    ...claimTopicTokens,
-    ...keywordTokens,
     ...titleTokens,
-    ...slugTokens
+    ...slugTokens,
+    ...claimTopicTokens,
+    ...keywordTokens
   ];
   const selected: string[] = [];
   const seen = new Set<string>();
