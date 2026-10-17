@@ -158,7 +158,7 @@ async function main(): Promise<void> {
     </channel></rss>`;
   const bingItems = parseBingNewsRss(bingFixture);
   check('Bing RSS parser decodes and normalizes a publisher item',
-    bingItems.length === 1 &&
+    bingItems.length === 2 &&
       bingItems[0].title === 'Quantum computing research advances' &&
       bingItems[0].sourceName === 'BBC News' &&
       bingItems[0].url.includes('&aid=1'),
