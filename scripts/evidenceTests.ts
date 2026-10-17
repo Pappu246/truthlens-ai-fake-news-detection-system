@@ -145,6 +145,12 @@ async function main(): Promise<void> {
         <source url="https://www.bbc.com">BBC News</source>
       </item>
       <item>
+        <title>Direct publisher target - BBC News</title>
+        <link>https://www.bing.com/news/apiclick.aspx?url=https%3A%2F%2Fwww.bbc.com%2Fnews%2Fscience&amp;ref=feed</link>
+        <pubDate>Tue, 10 Oct 2023 12:00:00 GMT</pubDate>
+        <source url="https://www.bbc.com">BBC News</source>
+      </item>
+      <item>
         <title>Unsafe result</title>
         <link>javascript:alert(1)</link>
         <source>Unknown publisher</source>
@@ -152,18 +158,23 @@ async function main(): Promise<void> {
     </channel></rss>`;
   const bingItems = parseBingNewsRss(bingFixture);
   check('Bing RSS parser decodes and normalizes a publisher item',
-    bingItems.length === 1 &&
+    bingItems.length === 2 &&
       bingItems[0].title === 'Quantum computing research advances' &&
       bingItems[0].sourceName === 'BBC News' &&
       bingItems[0].url.includes('&aid=1'),
     JSON.stringify(bingItems));
   check('Bing RSS provenance must resolve to the named publisher',
-    bingItems.length === 1 && verifyEvidenceProvenance(
+    bingItems.length === 2 && verifyEvidenceProvenance(
       bingItems[0].sourceName,
       bingItems[0].url,
       'https://www.bbc.com/news/articles/c20q4nv89yzo',
       'MAJOR_NEWS'
     ));
+  check('Bing RSS parser unwraps an explicit publisher target instead of keeping the tracking URL',
+    bingItems.length === 2 &&
+      bingItems[1].url === 'https://www.bbc.com/news/science' &&
+      !bingItems[1].url.includes('apiclick.aspx'),
+    JSON.stringify(bingItems[1]));
   check('Google News wrapper provenance maps common named publishers to their actual hosts',
     verifyEvidenceProvenance('Economic Policy Institute', 'https://news.google.com/rss/articles/CBMiABC123', 'https://www.epi.org/article/example', 'REPUTABLE_SOURCE') &&
     verifyEvidenceProvenance('Deloitte', 'https://news.google.com/rss/articles/CBMiABC124', 'https://www.deloitte.com/us/en/insights/example', 'REPUTABLE_SOURCE') &&
