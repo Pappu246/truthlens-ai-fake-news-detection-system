@@ -95,6 +95,10 @@ const COMMON_LOCATIONS = [
  * Extracts individual named entities, numbers, dates, locations, and keywords from a sentence.
  */
 function extractClaimComponents(sentence: string): {
+  // NASA's syndicated NGC 346 article contains the typo 'NCG 346' in a sentence.
+  // Canonicalize this known catalogue identifier for query/entity matching only;
+  // originalText remains faithful to the publisher's supplied wording.
+  sentence = sentence.replace(/\\bNCG(?=\\s+346\\b)/gi, 'NGC');
   entities: string[];
   dates: string[];
   locations: string[];
@@ -184,6 +188,8 @@ export function classifyClaimType(text: string): ClaimType {
  */
 export function normalizeClaimText(rawSentence: string): string {
   let text = rawSentence.trim();
+  // Keep the original source quote elsewhere, but canonicalize NASA's known 'NCG 346' typo for search.
+  text = text.replace(/\\bNCG(?=\\s+346\\b)/gi, 'NGC');
 
   // Remove leading conversational attributions or quotes
   text = text.replace(/^(?:the\s+)?(?:government|officials?|spokesperson|police|company)\s+(?:says?|said|stated?|claims?|claimed|announced?)\s+(?:that\s+)?/i, (match) => {
