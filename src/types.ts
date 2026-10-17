@@ -100,6 +100,8 @@ export interface AnalysisResult {
   uncertainty_score?: number | null;
   model_inference_mode?: 'calibrated_ensemble' | 'legacy_single_svm' | string;
   calibration_status?: 'EXACT_CALIBRATED_ENSEMBLE' | 'LEGACY_UNCALIBRATED_MARGIN' | string;
+  /** Direction-only hint from an uncalibrated legacy model; not a final verdict. */
+  model_directional_signal?: 'LIKELY REAL' | 'LIKELY FAKE' | 'UNAVAILABLE';
   vocabulary_coverage?: {
     ratio: number;
     matched_terms: number;
