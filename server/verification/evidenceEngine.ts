@@ -25,8 +25,7 @@
  */
 import { ExtractedClaim, EvidenceItem } from '../../src/types.js';
 import { extractClaimsHeuristic, generateSearchQueries, classifyClaimType, normalizeClaimText } from './claimExtractor.js';
-import { evidenceProvider, RetrievalDiagnostic } from './evidenceProvider.js';
-import { excludeOriginalPublisherEvidence } from './evidenceProvider.js';
+import { evidenceProvider, RetrievalDiagnostic, excludeOriginalPublisherEvidence } from './evidenceProvider.js';
 import { withArticleContextSearchQuery } from './claimExtractor.js';
 import { aggregateClaimAssessment, evaluateSourceDiversity } from './evidenceAnalyzer.js';
 import { MAX_TELEMETRY_PROVIDER_DIAGNOSTICS, recordEvidenceTelemetry, summarizeProviderDiagnostics } from './observability.js';
