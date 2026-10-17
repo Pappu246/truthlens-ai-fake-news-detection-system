@@ -1,0 +1,166 @@
+name: V3 Phase 2 Scoring Recovery
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'scripts/benchmarks/**'
+      - 'scripts/v3Phase2ResumableCoordinator.mjs'
+      - 'scripts/phase2ExitGate.mjs'
+      - 'research/multibenchmark-manifest.json'
+      - '.github/workflows/v3-phase2-scoring-recovery.yml'
+
+concurrency:
+  group: truthlens-v3-phase2-scoring-recovery-pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  syntax:
+    name: Benchmark scoring syntax and protocol
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: npm ci
+      - name: Validate recovered scoring scripts
+        run: |
+          node --check scripts/benchmarks/v3MaterializeScoringAssets.mjs
+          node --check scripts/benchmarks/v3FeverOfficialEvaluate.mjs
+          node --check scripts/v3Phase2ResumableCoordinator.mjs
+          node --check scripts/benchmarks/v3FeverousOfficialEvaluate.mjs
+          npx tsc --noEmit
+          python3 -m py_compile scripts/benchmarks/v3FeverPrepareCandidates.py scripts/benchmarks/v3FeverousPrepareCandidates.py
+          npm run check:phase2-protocol
+      - name: Assert full-split gate requirements
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const manifest = JSON.parse(fs.readFileSync('./research/multibenchmark-manifest.json', 'utf8'));
+          const required = { fever_v1: 37566, feverous: 7890, averitec: 500 };
+          for (const [id, expected] of Object.entries(required)) {
+            const item = manifest.benchmarks.find(x => x.id === id);
+            if (!item || item.expected_evaluation_claims !== expected) throw new Error(id + ' expected_evaluation_claims mismatch');
+          }
+          console.log('Full-split requirements verified:', JSON.stringify(required));
+          NODE
+
+  fever-full:
+    name: FEVER full 37,566-claim evaluation
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    needs: syntax
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Materialize exact FEVER inputs
+        run: node scripts/benchmarks/v3MaterializeScoringAssets.mjs --benchmark=fever
+      - name: Extract FEVER corpus
+        run: unzip -q artifacts/v3/benchmark-assets/fever/wiki-pages.zip -d artifacts/v3/benchmark-assets/fever/wiki-pages
+      - name: Locate FEVER shard
+        id: locate
+        run: |
+          shard="$(find artifacts/v3/benchmark-assets/fever/wiki-pages -name 'wiki-*.jsonl' -print -quit)"
+          test -n "$shard"
+          echo "wiki_dir=$(dirname "$shard")" >> "$GITHUB_OUTPUT"
+      - name: Prepare full FEVER candidates
+        run: |
+          python3 scripts/benchmarks/v3FeverPrepareCandidates.py             --wiki-dir="${{ steps.locate.outputs.wiki_dir }}"             --claims=artifacts/v3/benchmark-assets/fever/shared_task_dev.jsonl             --db=artifacts/v3/benchmark-assets/fever/fever-sentences.sqlite             --output=artifacts/v3/fever/candidates.jsonl             --build-index             --top-k=100
+      - name: Assert full FEVER candidate count
+        run: test "$(wc -l < artifacts/v3/fever/candidates.jsonl)" -eq 37566
+      - name: Run TruthLens FEVER full evaluation
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          npx tsx scripts/benchmarks/v3FeverEvaluate.ts             --input=artifacts/v3/fever/candidates.jsonl             --max-claims=37566             --output=artifacts/v3/fever/truthlens-adapter-report.json             --predictions-output=artifacts/v3/fever/truthlens-predictions.json             --claims-sha256="$(jq -r '.files[] | select(.name=="shared_task_dev.jsonl") | .sha256' artifacts/v3/benchmark-assets/fever/asset-manifest.json)"             --corpus-sha256="$(jq -r '.files[] | select(.name=="wiki-pages.zip") | .sha256' artifacts/v3/benchmark-assets/fever/asset-manifest.json)"             --commit-sha="$GITHUB_SHA"             --config-sha256="$(sha256sum research/multibenchmark-manifest.json | cut -d' ' -f1)"
+      - name: Run official FEVER scorer
+        run: |
+          python3 -m pip install --disable-pip-version-check --no-input six
+          node scripts/benchmarks/v3FeverOfficialEvaluate.mjs             --predictions=artifacts/v3/fever/truthlens-predictions.json             --actual=artifacts/v3/benchmark-assets/fever/shared_task_dev.jsonl             --output=artifacts/v3/fever/official-scorer-run.json
+      - name: Assert complete FEVER score artifact
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const a = JSON.parse(fs.readFileSync('artifacts/v3/fever/official-scorer-run.json','utf8'));
+          if (a.benchmark_id !== 'fever') throw new Error('benchmark_id mismatch');
+          if (a.evaluation_count !== 37566) throw new Error('evaluation_count mismatch: ' + a.evaluation_count);
+          for (const k of ['strict_score','label_accuracy','evidence_precision','evidence_recall','evidence_f1']) {
+            if (!Number.isFinite(a.metrics?.[k])) throw new Error('missing metric: ' + k);
+          }
+          console.log(JSON.stringify({benchmark_id:a.benchmark_id,evaluation_count:a.evaluation_count,metrics:a.metrics},null,2));
+          NODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: truthlens-v3-fever-full-${{ github.run_number }}
+          path: artifacts/v3/fever/
+          if-no-files-found: error
+          retention-days: 90
+
+  feverous-full:
+    name: FEVEROUS full 7,890-claim evaluation
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    needs: syntax
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Materialize exact FEVEROUS inputs
+        run: node scripts/benchmarks/v3MaterializeScoringAssets.mjs --benchmark=feverous
+      - name: Extract FEVEROUS database
+        run: unzip -q artifacts/v3/benchmark-assets/feverous/feverous-wiki-pages-db.zip -d artifacts/v3/benchmark-assets/feverous/wiki-db
+      - name: Locate FEVEROUS database
+        id: locate
+        run: |
+          db_path="$(find artifacts/v3/benchmark-assets/feverous/wiki-db -name '*.db' -print -quit)"
+          test -n "$db_path"
+          echo "db_path=$db_path" >> "$GITHUB_OUTPUT"
+      - name: Provision fast FEVEROUS JSON parser
+        run: python3 -m pip install --disable-pip-version-check --no-input orjson
+      - name: Prepare full FEVEROUS candidates
+        run: |
+          python3 scripts/benchmarks/v3FeverousPrepareCandidates.py             --db="${{ steps.locate.outputs.db_path }}"             --claims=artifacts/v3/benchmark-assets/feverous/dev.jsonl             --output=artifacts/v3/feverous/candidates.jsonl             --max-claims=7890
+      - name: Assert full FEVEROUS candidate count
+        run: test "$(wc -l < artifacts/v3/feverous/candidates.jsonl)" -eq 7890
+      - name: Run TruthLens FEVEROUS full evaluation
+        env:
+          TRUTHLENS_NLI_CONCURRENCY: '8'
+        run: |
+          npx tsx scripts/benchmarks/v3FeverousEvaluate.ts             --input=artifacts/v3/feverous/candidates.jsonl             --max-claims=7890             --output=artifacts/v3/feverous/truthlens-predictions.jsonl             --report=artifacts/v3/feverous/truthlens-adapter-report.json
+      - name: Run official FEVEROUS scorer
+        run: |
+          node scripts/benchmarks/v3FeverousOfficialEvaluate.mjs             --input=artifacts/v3/feverous/truthlens-predictions.jsonl             --output=artifacts/v3/feverous/official-scorer-run.json
+      - name: Assert complete FEVEROUS score artifact
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const a = JSON.parse(fs.readFileSync('artifacts/v3/feverous/official-scorer-run.json','utf8'));
+          if (a.benchmark_id !== 'feverous') throw new Error('benchmark_id mismatch');
+          if (a.evaluation_count !== 7890) throw new Error('evaluation_count mismatch: ' + a.evaluation_count);
+          for (const k of ['strict_score','label_accuracy','evidence_precision','evidence_recall','evidence_f1']) {
+            if (!Number.isFinite(a.metrics?.[k])) throw new Error('missing metric: ' + k);
+          }
+          console.log(JSON.stringify({benchmark_id:a.benchmark_id,evaluation_count:a.evaluation_count,metrics:a.metrics},null,2));
+          NODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: truthlens-v3-feverous-full-${{ github.run_number }}
+          path: artifacts/v3/feverous/
+          if-no-files-found: error
+          retention-days: 90
