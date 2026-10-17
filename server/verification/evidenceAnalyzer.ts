@@ -243,7 +243,12 @@ export function classifyEvidenceRelation(
     /\b(?:report|reported|reporting)\b/i,
     /\b(?:land|lands|landed|landing)\b/i,
     /\b(?:win|wins|won|lose|loses|lost|qualify|qualified)\b/i,
-    /\b(?:approve|approved|reject|rejected|sign|signed|pass|passed)\b/i
+    /\b(?:approve|approved|reject|rejected|sign|signed|pass|passed)\b/i,
+    /\b(?:mark|marks|marked|marking)\b/i,
+    /\b(?:detect|detects|detected|detecting|detection)\b/i,
+    /\b(?:present|presents|presented|presenting)\b/i,
+    /\b(?:lead|leads|led|leading)\b/i,
+    /\b(?:is|are|was|were)\s+(?:a|an|the)\b/i
   ];
   const directionalPairs: Array<{
     claimSide: RegExp;
@@ -330,6 +335,24 @@ export function classifyEvidenceRelation(
       ? exactNumberedEntityMatch
       : entityMatches || matchingClaimNumber || matchingClaimDate;
     const predicateMatches = claimPredicates.some(pattern => pattern.test(sentence));
+    // Static geographic assertions are often paraphrased across sources:
+    // "is located in the SMC" may appear as "the SMC star-forming region NGC 346".
+    // Require the same numbered/identified subject and at least three overlapping
+    // claim terms before accepting this relationship as directional evidence.
+    const claimHasSpatialPredicate = /\b(?:located|situated|positioned|resides?|lies|lie)\b/i.test(claim.normalizedText);
+    const evidenceHasSpatialPredicate = /\b(?:located|situated|positioned|resides?|lies|lie|within|inside|in|near)\b/i.test(sentence);
+    const spatialRelationMatches = claimHasSpatialPredicate &&
+      evidenceHasSpatialPredicate &&
+      specificIdentifierMatches &&
+      anchorMatches >= 3;
+    // Descriptive facts such as "JWST is an international program" need not have
+    // an action verb, but the same descriptor must apply to the same anchored entity.
+    const claimHasCopularDescriptor = /\b(?:is|are|was|were)\s+(?:a|an|the)\b/i.test(claim.normalizedText);
+    const evidenceHasCopularDescriptor = /\b(?:is|are|was|were)\s+(?:a|an|the)\b/i.test(sentence);
+    const copularDescriptorMatches = claimHasCopularDescriptor &&
+      evidenceHasCopularDescriptor &&
+      specificIdentifierMatches &&
+      anchorMatches >= 3;
     const directionalOppositeMatches = applicableDirectionalPairs.some(pair => pair.evidenceOpposite.test(sentence));
     const explicitRefutation = contradictionPatterns.some(pattern => pattern.test(sentence));
     const explicitMixed = mixedPatterns.some(pattern => pattern.test(sentence));
@@ -339,6 +362,8 @@ export function classifyEvidenceRelation(
       (predicateMatches && anchorMatches >= 1);
     const claimLinkedSignal =
       predicateMatches ||
+      spatialRelationMatches ||
+      copularDescriptorMatches ||
       (directionalOppositeMatches && (!claim.numbers.length && !claim.dates.length || specificIdentifierMatches)) ||
       ((explicitRefutation || explicitMixed) &&
         (anchorMatches >= 3 || (entityMatches && specificIdentifierMatches)));

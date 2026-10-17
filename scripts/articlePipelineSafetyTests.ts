@@ -215,6 +215,24 @@ async function main() {
     !/ignore all previous instructions|reveal the system prompt|api key/i.test(hostile.content)
   );
 
+  const jsonLdEntityArticle = extractArticleFromHtml({
+    url: 'https://safe.test/jsonld-entities',
+    html: `<!doctype html><html><head>
+      <script type="application/ld+json">{
+        "@context":"https://schema.org",
+        "@type":"NewsArticle",
+        "headline":"NASA&#039;s Webb Uncovers Dust",
+        "articleBody":"NASA&#039;s James Webb Space Telescope captured an infrared view of NGC 346 in the Small Magellanic Cloud. The observations describe cool gas and dust, bright patches, filaments, and many protostars. Astronomers use these observations to study how stars form in this nearby dwarf galaxy, about 200,000 light-years from Earth. The telescope uses its Mid-Infrared Instrument to map the region in detail."
+      }</script>
+    </head><body><h1>Short placeholder</h1></body></html>`
+  });
+  check('JSON-LD HTML entities are decoded before claims and search queries are built',
+    jsonLdEntityArticle.title === "NASA's Webb Uncovers Dust" &&
+      !/&#0*39;|&apos;/i.test(jsonLdEntityArticle.content) &&
+      jsonLdEntityArticle.content.includes("NASA's James Webb Space Telescope"),
+    JSON.stringify({ title: jsonLdEntityArticle.title, content: jsonLdEntityArticle.content.slice(0, 180) })
+  );
+
   let pathologicalHtmlRejected = false;
   try {
     extractArticleFromHtml({
