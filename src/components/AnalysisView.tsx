@@ -57,7 +57,7 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
             <Info className="w-8 h-8" />
           </div>
           <h2 className="text-4xl font-black uppercase tracking-tight text-slate-900 mb-3">
-            Ready for Safety-Gated ML Inference
+            Ready for Calibrated ML Inference
           </h2>
           <p className="text-slate-600 text-base max-w-lg mx-auto mb-8 leading-relaxed">
             Select a quick test sample or paste a news article, then click <strong>Analyze Article</strong> to run it through the production runtime safety and calibration policy.
@@ -65,11 +65,11 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-xl mx-auto text-left">
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
               <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block mb-1">Active Model</span>
-              <span className="text-sm font-bold text-slate-900">Linear SVM / Safety-Gated Runtime</span>
+              <span className="text-sm font-bold text-slate-900">Linear SVM (Calibrated) — ISOT dataset</span>
             </div>
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
               <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block mb-1">Calibration</span>
-              <span className="text-sm font-bold text-slate-900">Backend Calibration Status</span>
+              <span className="text-sm font-bold text-slate-900">Platt Sigmoid (CalibratedClassifierCV ensemble)</span>
             </div>
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
               <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block mb-1">Verdict Contract</span>
@@ -142,8 +142,10 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
             )}
             {currentEvidenceReport && (
               <p className="text-xs text-slate-500 mb-5">
-                The statistical article classifier remains withheld because its production artifact is uncalibrated.
-                The assessment above comes from the independent evidence engine.
+                The statistical article classifier withheld its verdict — typically because the submitted text is too short,
+                is a headline-only or RSS-summary extract, or falls below the vocabulary coverage threshold for a calibrated ML
+                evaluation. The assessment shown above comes from the independent evidence engine and is the authoritative result
+                for this input.
               </p>
             )}
             {!currentEvidenceReport && hasSubstantialClaimText && (
