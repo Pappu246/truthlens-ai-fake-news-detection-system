@@ -87,7 +87,7 @@ export async function verifyArticleContent(options: {
   const claims = await extractClaims(title, content);
 
   // 2. Search and verify evidence for claims
-  const verifiedClaims = await evidenceProvider.verifyClaims(claims);
+  const verifiedClaims = await evidenceProvider.verifyClaims(claims, { articleTitle: title, sourceUrl });
 
   // 3. Build article verification with rule-based aggregation
   const wordCount = content.trim().split(/\s+/).filter(w => w.length > 0).length;
