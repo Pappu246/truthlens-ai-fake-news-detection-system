@@ -1,6 +1,19 @@
 import * as cheerio from 'cheerio';
 import { ExtractedArticle } from '../../src/types.js';
 
+/**
+ * Decode HTML character references carried inside JSON-LD / metadata strings.
+ * Those values are JSON strings, not DOM text nodes, so Cheerio does not decode
+ * their entities when JSON.parse reads them. Escape literal markup delimiters
+ * before parsing so untrusted metadata is decoded as text, never interpreted
+ * as executable/structural HTML.
+ */
+function decodeHtmlEntities(value: string): string {
+  if (!value) return '';
+  const escaped = value.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return cheerio.load(`<span>${escaped}</span>`)('span').text().trim();
+}
+
 export interface RawExtractionOptions {
   url: string;
   html: string;
@@ -57,8 +70,8 @@ export function extractArticleFromHtml(options: RawExtractionOptions): Extracted
           type.includes('report') ||
           type.includes('webpage')
         ) {
-          if (item.headline && !jsonLdHeadline) jsonLdHeadline = String(item.headline).trim();
-          if (item.description && !jsonLdDescription) jsonLdDescription = String(item.description).trim();
+          if (item.headline && !jsonLdHeadline) jsonLdHeadline = decodeHtmlEntities(String(item.headline).trim());
+          if (item.description && !jsonLdDescription) jsonLdDescription = decodeHtmlEntities(String(item.description).trim());
           if (item.datePublished && !jsonLdDate) jsonLdDate = String(item.datePublished).trim();
 
           // Author parsing
@@ -83,7 +96,7 @@ export function extractArticleFromHtml(options: RawExtractionOptions): Extracted
 
           // Article body in JSON-LD
           if (item.articleBody && typeof item.articleBody === 'string' && !jsonLdArticleBody) {
-            jsonLdArticleBody = item.articleBody.trim();
+            jsonLdArticleBody = decodeHtmlEntities(item.articleBody.trim());
           }
         }
       }
@@ -108,7 +121,7 @@ export function extractArticleFromHtml(options: RawExtractionOptions): Extracted
   const h1Title = $('h1').first().text().trim();
   const docTitle = $('title').text().trim();
 
-  let title = jsonLdHeadline || ogTitle || twitterTitle || h1Title || docTitle || fallbackTitle || '';
+  let title = decodeHtmlEntities(jsonLdHeadline || ogTitle || twitterTitle || h1Title || docTitle || fallbackTitle || '');
   // Clean title: remove trailing pipe or dash site names (e.g. "News Title | BBC News" -> "News Title")
   if (title.includes(' | ')) {
     title = title.split(' | ')[0].trim();
