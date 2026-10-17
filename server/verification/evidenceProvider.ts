@@ -1481,18 +1481,28 @@ export class EvidenceProvider {
       }
     };
 
-    for (const [queryIndex, q] of queriesToRun.entries()) {
-      const elapsed = Date.now() - retrievalStartedAt;
-      const remaining = totalBudgetMs - elapsed;
-      if (remaining < 3000) break;
+    // Run the two strongest claim-preserving queries concurrently. Sequential
+    // retrieval often spent the whole serverless request budget waiting on the
+    // first news index, so the action/measurement fallback never ran. The
+    // existing provider timeouts and route budget still bound the overall work.
+    const selectedQueries = queriesToRun.slice(0, 2);
+    const queryResults = await Promise.all(selectedQueries.map((q, queryIndex) =>
+      this.search(q, claim, diagnostics, queryIndex === 0).catch((error: unknown) => {
+        diagnostics?.push({
+          provider: 'query_fallback',
+          query: q,
+          attemptedAt: new Date().toISOString(),
+          ok: false,
+          resultCount: 0,
+          error: error instanceof Error ? error.message : 'query failed',
+          stage: 'SEARCH'
+        });
+        return [] as EvidenceItem[];
+      })
+    ));
 
-      const items = await this.search(q, claim, diagnostics, queryIndex === 0);
+    for (const items of queryResults) {
       addAdmissibleItems(items);
-
-      if (publisherDomains.size >= 3) break;
-      // One parallel Google/GDELT/Bing pass is preferred to repeatedly issuing
-      // near-identical queries after most of the 12s route budget is consumed.
-      if (Date.now() - retrievalStartedAt >= 7500) break;
     }
 
     return preferPublisherEvidence(allEvidence);
