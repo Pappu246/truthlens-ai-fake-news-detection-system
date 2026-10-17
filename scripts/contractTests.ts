@@ -112,8 +112,8 @@ assert(headlineResult.confidence_score === null, 'Headline-only withholds confid
 assert(headlineResult.content_source === 'HEADLINE_ONLY', 'Headline-only content_source label preserved');
 
 // 8. Short substantive RSS summary (~45 words) should not be isHeadlineOnly but ML still requires sufficient length
-const rssSummary = 'Astronomers utilizing the James Webb Space Telescope have captured unprecedented infrared observations of star-forming regions in the nearby NGC 346 cluster. According to peer-reviewed findings published this week in the Astrophysical Journal, spectroscopic data confirms molecular hydrogen density variations consistent with theoretical models of stellar nurseries. Lead astrophysicists stated that observations provide critical calibration measurements.';
-const summaryResult = mlEngine.analyzeArticle(rssSummary, 'https://example.com/source', { inputType: 'live_news', contentSource: 'RSS_SUMMARY_ONLY', wordCount: rssSummary.split(/\s+/).length });
+const rssSummary = 'NASA\'s James Webb Space Telescope captured an infrared view of the star-forming region NGC 346 in the Small Magellanic Cloud using MIRI. NASA describes NGC 346 as the brightest and largest star-forming region in the Small Magellanic Cloud, about 200,000 light-years away. The image traces emission from cool gas and dust, and bright patches and filaments mark areas with abundant protostars. NASA published this article on October 10, 2023.';
+const summaryResult = mlEngine.analyzeArticle(rssSummary, 'https://www.nasa.gov/general/nasas-webb-captures-an-ethereal-view-of-ngc-346/', { inputType: 'live_news', contentSource: 'RSS_SUMMARY_ONLY', wordCount: rssSummary.split(/\s+/).length });
 assert(summaryResult.content_source === 'RSS_SUMMARY_ONLY', 'RSS summary content_source label preserved');
 // Should be a valid verdict (length is > minLength of 60 chars and has source)
 assert(typeof summaryResult.prediction === 'string', 'Substantive RSS summary returns a prediction string');
@@ -138,6 +138,8 @@ assert(/status = 404/.test(appFactorySrc), 'appFactory maps errors to HTTP 404')
 assert(/status = 429/.test(appFactorySrc), 'appFactory maps errors to HTTP 429');
 assert(/status = 504/.test(appFactorySrc), 'appFactory maps timeouts to HTTP 504');
 assert(/status = 400/.test(appFactorySrc), 'appFactory maps validation errors to HTTP 400');
+assert(appFactorySrc.includes('https://www.nasa.gov/general/nasas-webb-captures-an-ethereal-view-of-ngc-346/'), 'Real science demo points to the official NASA NGC 346 article');
+assert(!appFactorySrc.includes('Dr. Elena Vance'), 'Real science demo does not invent a scientist quote');
 
 console.log('=== LIVE NEWS CONTENT-SOURCE LABELLING (SERVER SIDE) ===');
 import { labelFeedContent, SUBSTANTIVE_RSS_WORD_COUNT } from '../server/news/rssProvider';
