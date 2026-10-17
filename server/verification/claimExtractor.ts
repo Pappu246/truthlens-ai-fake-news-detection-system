@@ -95,16 +95,16 @@ const COMMON_LOCATIONS = [
  * Extracts individual named entities, numbers, dates, locations, and keywords from a sentence.
  */
 function extractClaimComponents(sentence: string): {
-  // NASA's syndicated NGC 346 article contains the typo 'NCG 346' in a sentence.
-  // Canonicalize this known catalogue identifier for query/entity matching only;
-  // originalText remains faithful to the publisher's supplied wording.
-  sentence = sentence.replace(/\bNCG(?=\s+346\b)/gi, 'NGC');
   entities: string[];
   dates: string[];
   locations: string[];
   numbers: string[];
   keywords: string[];
 } {
+  // NASA's syndicated NGC 346 article contains the typo 'NCG 346' in a sentence.
+  // Canonicalize this known catalogue identifier for query/entity matching only;
+  // originalText remains faithful to the publisher's supplied wording.
+  sentence = sentence.replace(/\bNCG(?=\s+346\b)/gi, 'NGC');
   const entities: string[] = [];
   const dates: string[] = [];
   const locations: string[] = [];
