@@ -944,7 +944,8 @@ export class EvidenceProvider {
       const numericalConsistency = checkNumericalConsistency(claim, excerpt);
       const temporalConsistency = checkTemporalConsistency(claim, item.publishedAt);
       const lexicalRelation = classifyEvidenceRelation(claim, excerpt, score, numericalConsistency);
-      const provenanceVerified = verifyEvidenceProvenance(item.sourceName, item.sourceUrl, fetched.finalUrl, item.sourceType);
+      // Verify against the resolved publisher URL, not the Google News discovery wrapper.
+      const provenanceVerified = verifyEvidenceProvenance(item.sourceName, effectiveSourceUrl, fetched.finalUrl, item.sourceType);
       diagnostics?.push({
         provider: 'publisher_source_fetch',
         query: claim.normalizedText,
