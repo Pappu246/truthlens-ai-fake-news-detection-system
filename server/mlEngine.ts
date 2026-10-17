@@ -1593,6 +1593,7 @@ export class TruthLensMLEngine {
     let riskLevel: 'LOW' | 'MODERATE' | 'HIGH' | 'UNDETERMINED';
     let confidence: number | null;
     let verdictReason: string | null = null;
+    let oodGuardFired = false;
 
     if (limitedContentSource) {
       prediction = VERDICT_NEEDS_MORE_CONTEXT;
@@ -1615,10 +1616,20 @@ export class TruthLensMLEngine {
       // wire-style headline about a well-represented topic) is not flagged;
       // a long but low-coverage input (e.g. formal scientific prose) is
       // handled by the probability-zone logic below instead.
+      //
+      // IMPORTANT: the OOD guard is triggered BEFORE the probability-zone
+      // logic below. Inputs that pass through this block must NOT have their
+      // calibrated P(FAKE) or P(REAL) exposed, even if coverage_ratio is
+      // above LEGACY_MIN_VOCAB_COVERAGE (0.10) — the OOD guard, not the
+      // low-vocabulary-coverage check, is the reason for withholding.
+      // Track this explicitly so the probability-withholding logic below
+      // has an accurate signal independent of the LEGACY_MIN_VOCAB_COVERAGE
+      // threshold.
       prediction = VERDICT_NEEDS_MORE_CONTEXT;
       riskLevel = 'UNDETERMINED';
       confidence = null;
       verdictReason = OOD_ABSTENTION_REASON;
+      oodGuardFired = true;
     } else if (legacySafetyMode) {
       // The raw margin is not a calibrated probability. Only margins well
       // outside this conservative band support a directional model signal.
@@ -1735,8 +1746,10 @@ export class TruthLensMLEngine {
       // Keep persisted history semantically aligned with the public response:
       // legacy/abstained inputs never store an uncalibrated score as a
       // probability that can later be rendered as 96–100% confidence.
-      fake_probability: predictionDetails.calibrated && !lowVocabularyCoverage && !limitedContentSource ? fakeProb : null,
-      real_probability: predictionDetails.calibrated && !lowVocabularyCoverage && !limitedContentSource ? realProb : null,
+      // The OOD guard fires independently of the low-vocabulary-coverage
+      // threshold and must also withhold probabilities.
+      fake_probability: predictionDetails.calibrated && !lowVocabularyCoverage && !limitedContentSource && !oodGuardFired ? fakeProb : null,
+      real_probability: predictionDetails.calibrated && !lowVocabularyCoverage && !limitedContentSource && !oodGuardFired ? realProb : null,
       risk_level: riskLevel,
       model_name: legacySafetyMode ? 'Linear SVM (Safety-Gated Legacy)' : 'Linear SVM (Calibrated)',
       source_url: sourceUrl || options?.originalUrl || '',
@@ -1764,8 +1777,10 @@ export class TruthLensMLEngine {
       // Public probabilities are only exposed when the exact calibrated
       // ensemble is active. Legacy raw-margin scores are decision strength,
       // not probabilities, and must never be rendered as 96–100% confidence.
-      fake_probability: predictionDetails.calibrated && !lowVocabularyCoverage && !limitedContentSource ? fakeProb : null,
-      real_probability: predictionDetails.calibrated && !lowVocabularyCoverage && !limitedContentSource ? realProb : null,
+      // The OOD guard fires independently of the low-vocabulary-coverage
+      // threshold and must also withhold probabilities.
+      fake_probability: predictionDetails.calibrated && !lowVocabularyCoverage && !limitedContentSource && !oodGuardFired ? fakeProb : null,
+      real_probability: predictionDetails.calibrated && !lowVocabularyCoverage && !limitedContentSource && !oodGuardFired ? realProb : null,
       confidence,
       confidence_score: confidenceScore,
       model_score: confidenceScore,

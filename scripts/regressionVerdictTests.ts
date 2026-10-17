@@ -338,6 +338,106 @@ const zones = diag.thresholds;
 assert(zones.fake_threshold > zones.real_threshold, 'Zone: diagnostics thresholds consistent');
 
 // ======================================================================
+console.log('\n=== OOD GUARD PROBABILITY-WITHHOLDING REGRESSION (NASA/SCIENCE) ===');
+// These tests prove that the OOD guard withholds calibrated probabilities
+// for science/technical articles even when P(FAKE) would otherwise be ≥ 0.98.
+// The regression MUST fail if the probability-leak bug is reintroduced.
+
+const nasaMarsText =
+  "NASA's Perseverance rover has collected a new rock sample from the Jezero Crater " +
+  "on Mars that shows intriguing sedimentary features. The sample, taken from a " +
+  "location nicknamed Bright Angel, contains layered rock formations that scientists " +
+  "believe could preserve evidence of ancient microbial life. The rover's instruments " +
+  "detected organic compounds in the sample, though researchers caution that organic " +
+  "molecules can form through non-biological processes.";
+
+const nasaJWSTText =
+  "The James Webb Space Telescope captured an unprecedented infrared view of the " +
+  "Pillars of Creation, revealing newly formed stars within the dusty columns of the " +
+  "Eagle Nebula that were previously hidden from view. Astronomers say the new " +
+  "observations will help refine models of star formation in the Milky Way.";
+
+// Test: NASA Mars must NEVER expose P(FAKE) ≥ 0.98
+const marsResult = mlEngine.analyzeArticle(nasaMarsText, '');
+const marsCov = marsResult.vocabulary_coverage;
+const marsOOD = (marsCov?.candidate_terms ?? 0) < 100 && (marsCov?.ratio ?? 0) < 0.35;
+assert(
+  marsResult.prediction === 'NEEDS MORE CONTEXT',
+  'NASA Mars: OOD guard abstains (NEEDS MORE CONTEXT)',
+  `Expected NEEDS MORE CONTEXT, got ${marsResult.prediction}. Coverage=${marsCov?.ratio?.toFixed(4)} (${marsCov?.candidate_terms} terms).`
+);
+assert(
+  marsResult.fake_probability === null && marsResult.real_probability === null,
+  'NASA Mars: OOD guard withholds BOTH P(FAKE) and P(REAL)',
+  `P(FAKE)=${marsResult.fake_probability}, P(REAL)=${marsResult.real_probability}. These must be null when OOD guard fires.`
+);
+assert(
+  marsResult.confidence_score === null,
+  'NASA Mars: confidence_score is null when OOD guard fires',
+  `confidence_score=${marsResult.confidence_score}. Must be null.`
+);
+assert(
+  marsOOD === true,
+  'NASA Mars: OOD guard fires (word_count < 100 AND vocab_coverage < 0.35)',
+  `OOD conditions: cand=${marsCov?.candidate_terms} (<100 required), cov=${marsCov?.ratio?.toFixed(4)} (<0.35 required).`
+);
+// Prove the bug: without the OOD guard, this article would show P(FAKE) ≈ 0.989.
+// The regression explicitly asserts null — if the leak reappears, this assertion fails.
+assert(
+  marsResult.fake_probability === null,
+  'NASA Mars regression: P(FAKE) must be null — confirms the 0.989 probability-leak bug is fixed',
+  `If this fails, the probability-leak bug has been reintroduced. P(FAKE) was ${marsResult.fake_probability}.`
+);
+
+// Test: NASA JWST must also withhold
+const jwstResult = mlEngine.analyzeArticle(nasaJWSTText, '');
+const jwstCov = jwstResult.vocabulary_coverage;
+const jwstOOD = (jwstCov?.candidate_terms ?? 0) < 100 && (jwstCov?.ratio ?? 0) < 0.35;
+assert(
+  jwstResult.prediction === 'NEEDS MORE CONTEXT',
+  'NASA JWST: OOD guard abstains (NEEDS MORE CONTEXT)',
+  `Expected NEEDS MORE CONTEXT, got ${jwstResult.prediction}.`
+);
+assert(
+  jwstResult.fake_probability === null && jwstResult.real_probability === null,
+  'NASA JWST: OOD guard withholds BOTH P(FAKE) and P(REAL)',
+  `P(FAKE)=${jwstResult.fake_probability}, P(REAL)=${jwstResult.real_probability}. Must be null.`
+);
+assert(
+  jwstOOD === true,
+  'NASA JWST: OOD guard fires (word_count < 100 AND vocab_coverage < 0.35)',
+  `OOD conditions: cand=${jwstCov?.candidate_terms} (<100), cov=${jwstCov?.ratio?.toFixed(4)} (<0.35).`
+);
+
+// Test: Legitimate calibrated probabilities are still returned for non-OOD news articles.
+// This proves the fix does not accidentally suppress probabilities for normal inputs.
+const realArticle =
+  'WASHINGTON (Reuters) - The U.S. Department of Education on Tuesday announced a new ' +
+  'digital learning initiative to provide online educational resources to public school ' +
+  'students across the country, senior officials told reporters.';
+const realResult = mlEngine.analyzeArticle(realArticle, '');
+const realCov = realResult.vocabulary_coverage;
+assert(
+  realResult.prediction === 'LIKELY REAL',
+  'Reuters article: receives LIKELY REAL verdict',
+  `Expected LIKELY REAL, got ${realResult.prediction}.`
+);
+assert(
+  typeof realResult.fake_probability === 'number' && realResult.fake_probability <= 0.35,
+  'Reuters article: calibrated P(FAKE) is retained and low',
+  `P(FAKE)=${realResult.fake_probability}, expected number ≤ 0.35.`
+);
+assert(
+  typeof realResult.confidence_score === 'number' && realResult.confidence_score >= 90,
+  'Reuters article: confidence_score is retained',
+  `confidence_score=${realResult.confidence_score}, expected ≥ 90.`
+);
+assert(
+  (realCov?.candidate_terms ?? 0) >= 100 || (realCov?.ratio ?? 0) >= 0.35,
+  'Reuters article: NOT OOD (word_count ≥ 100 OR vocab_coverage ≥ 0.35)',
+  `cand=${realCov?.candidate_terms}, cov=${realCov?.ratio?.toFixed(4)}.`
+);
+
 console.log('\n====================================================');
 console.log(`VERDICT REGRESSION SUMMARY: ${passed} PASSED, ${failed} FAILED`);
 console.log('====================================================');

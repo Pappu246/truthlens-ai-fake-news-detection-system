@@ -479,6 +479,24 @@ console.log(`  Successful: ${predictedCount}`);
 console.log(`  Failed:     ${failedCount}`);
 console.log(`  Skipped:    ${skippedCount}`);
 console.log(`  Success rate: ${(predictedCount/loaded.realSamples.length*100).toFixed(1)}%`);
+
+// Verify the invariant: attempted = successful + failed + skipped
+assertEq(predictedCount + failedCount + skippedCount, loaded.realSamples.length,
+  'Attempted = successful + failed + skipped (invariant)',
+  `Expected ${loaded.realSamples.length} = ${predictedCount} + ${failedCount} + ${skippedCount}.`
+);
+
+// If any sample failed unexpectedly, the gate must fail.
+assert(failedCount === 0,
+  'LIAR safety gate: zero prediction failures required for release',
+  `${failedCount} sample(s) failed prediction unexpectedly. Each failure is reported above.`
+);
+
+// All expected evaluation samples must be successfully processed.
+assert(predictedCount === loaded.realSamples.length,
+  'LIAR safety gate: all expected samples must be processed successfully',
+  `Expected ${loaded.realSamples.length} successful predictions, got ${predictedCount}.`
+);
 console.log();
 
 console.log('REAL-labelled verdict distribution (n=' + realResults.length + '):');
