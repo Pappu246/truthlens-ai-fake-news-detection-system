@@ -139,7 +139,7 @@ assert(/status = 429/.test(appFactorySrc), 'appFactory maps errors to HTTP 429')
 assert(/status = 504/.test(appFactorySrc), 'appFactory maps timeouts to HTTP 504');
 assert(/status = 400/.test(appFactorySrc), 'appFactory maps validation errors to HTTP 400');
 assert(appFactorySrc.includes('https://www.nasa.gov/general/nasas-webb-captures-an-ethereal-view-of-ngc-346/'), 'Real science demo points to the official NASA NGC 346 article');
-assert(!/Dr\\. Elena Vance/.test(appFactorySrc), 'Real science demo does not invent a scientist quote');
+assert(!appFactorySrc.includes('Dr. Elena Vance'), 'Real science demo does not invent a scientist quote');
 
 console.log('=== LIVE NEWS CONTENT-SOURCE LABELLING (SERVER SIDE) ===');
 import { labelFeedContent, SUBSTANTIVE_RSS_WORD_COUNT } from '../server/news/rssProvider';
