@@ -275,16 +275,42 @@ export function parseBingNewsRss(xml: string): BingNewsRssItem[] {
     const title = rawTitle.replace(/\s+-\s+[^-]+$/, '').trim();
     if (!title || !url) continue;
     let safeHttpUrl = false;
+    let resolvedUrl = url;
     try {
       const parsedUrl = new URL(url);
       safeHttpUrl = parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:';
+      // Some Bing RSS entries expose the publisher URL inside the tracking
+      // wrapper. Prefer that explicit target over a wrapper which may redirect
+      // to a blocked MSN interstitial. Never infer a publisher URL from title
+      // text or an untrusted host name.
+      if (
+        safeHttpUrl &&
+        parsedUrl.hostname.toLowerCase().replace(/^www\\./, '') === 'bing.com' &&
+        /\\/news\\/apiclick\\.aspx$/i.test(parsedUrl.pathname)
+      ) {
+        const target = parsedUrl.searchParams.get('url') || parsedUrl.searchParams.get('u');
+        if (target) {
+          try {
+            const targetUrl = new URL(target);
+            if (
+              (targetUrl.protocol === 'https:' || targetUrl.protocol === 'http:') &&
+              !targetUrl.username && !targetUrl.password &&
+              !['bing.com', 'www.bing.com', 'msn.com', 'www.msn.com'].includes(targetUrl.hostname.toLowerCase())
+            ) {
+              resolvedUrl = targetUrl.toString();
+            }
+          } catch {
+            // Keep the original wrapper; normal provenance checks will fail closed.
+          }
+        }
+      }
     } catch {
       safeHttpUrl = false;
     }
     if (!safeHttpUrl) continue;
     parsed.push({
       title: title.slice(0, 500),
-      url,
+      url: resolvedUrl,
       publishedAt: parsePublicationDate(rawDate),
       sourceName: sourceName.slice(0, 100)
     });
