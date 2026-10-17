@@ -156,33 +156,102 @@ if (diag.inference_mode === 'legacy_single_svm') {
   );
 }
 
-const externalPath = path.join(process.cwd(), 'data', 'external_validation.json');
-if (fs.existsSync(externalPath)) {
-  const external = JSON.parse(fs.readFileSync(externalPath, 'utf8'));
-  const samples = Array.isArray(external.sample_predictions) ? external.sample_predictions : [];
-  const realSamples = samples.filter((x: any) => x.mapped_binary_label === 'REAL');
+// Load LIAR samples for OOD safety testing.
+// Prefer the full LIAR test set (test.tsv) when available, as it provides
+// statistically reliable measurement of OOD behavior (460 REAL-labeled
+// samples). Fall back to the small external_validation.json subset only
+// when test.tsv is not present.
+function loadLiarRealSamples(): Array<{ id: string; statement: string; original_liar_label: string }> {
+  const testTsvPath = path.join(process.cwd(), 'data', 'test.tsv');
+  if (fs.existsSync(testTsvPath)) {
+    const lines = fs.readFileSync(testTsvPath, 'utf-8').split('\n').filter(l => l.trim());
+    const samples: Array<{ id: string; statement: string; original_liar_label: string }> = [];
+    for (const line of lines) {
+      const parts = line.split('\t');
+      if (parts.length < 3) continue;
+      const label = parts[1];
+      if (label === 'true' || label === 'mostly-true') {
+        samples.push({ id: parts[0], statement: parts[2], original_liar_label: label });
+      }
+    }
+    return samples;
+  }
 
-  // The v3.0 artifact bug: averaged fold Platt parameters applied to the
-  // full-training SVM saturated unfamiliar inputs toward 99-100% FAKE.
-  // That bug is fixed by the calibrated_ensemble artifact, which uses each
-  // fold member's own weights/bias/Platt params and averages the resulting
-  // probabilities — the mathematically correct CalibratedClassifierCV repr.
+  // Fallback: small external validation subset.
+  const externalPath = path.join(process.cwd(), 'data', 'external_validation.json');
+  if (fs.existsSync(externalPath)) {
+    const external = JSON.parse(fs.readFileSync(externalPath, 'utf8'));
+    return (Array.isArray(external.sample_predictions) ? external.sample_predictions : [])
+      .filter((x: any) => x.mapped_binary_label === 'REAL')
+      .map((x: any) => ({ id: x.id, statement: x.statement, original_liar_label: x.original_liar_label }));
+  }
+
+  return [];
+}
+
+const realSamples = loadLiarRealSamples();
+console.log(`\nLoaded ${realSamples.length} LIAR REAL-labeled samples for OOD safety testing.`);
+
+if (realSamples.length === 0) {
+  console.log('[SKIP] No LIAR samples available — LIAR OOD gates skipped.');
+} else {
+  // ─── DOMAIN-SPECIFIC LIAR OOD GATES ───────────────────────────────
+  // The calibrated ensemble artifact (v3.1.0-isot) uses exact per-fold
+  // Platt parameters — the v3.0 averaged-Platt artifact bug is fixed.
   //
-  // The residual OOD overconfidence seen below is a DOMAIN-SHIFT limitation,
-  // not a reoccurrence of the artifact bug. ISOT trains on full news articles;
-  // LIAR is short political statements (government spending, tax policy,
-  // minimum wage). A properly calibrated IN-DOMAIN model will still be
-  // overconfident on true OOD data — that is honest model behavior, not
-  // a regression. We flag it here so it is visible, never silently ignored.
-  let extremeFalseFake = 0;
-  let extremeFalseFakeDetails: string[] = [];
+  // Unlike the old 70% tolerance (which merely required "not most LIAR
+  // samples are 95%+ FAKE"), these gates measure what actually matters for
+  // production safety:
+  //
+  //   Gate 1 — OOD abstention rate ≥ 50% of LIAR REAL samples.
+  //     The OOD guard (word_count < 100 AND vocab_coverage_ratio < 0.35)
+  //     should cause a majority of short, low-coverage LIAR statements to
+  //     abstain, rather than receive a confident-but-wrong FAKE label.
+  //
+  //   Gate 2 — High-confidence FP rate ≤ 20% of LIAR REAL samples.
+  //     "High-confidence FP" = LIKELY FAKE with confidence ≥ 98% AND
+  //     NOT OOD-abstained. This measures how many LIAR REAL samples pass
+  //     both the OOD guard and the 0.98 fake threshold and are still
+  //     incorrectly labeled FAKE with high confidence.
+  //
+  //   Gate 3 (legacy only) — Zero high-confidence FPs in legacy mode.
+  //     The v3.0 artifact bug must not recur. In legacy mode ANY extreme
+  //     false-fake is a bug and must be zero.
+  // ────────────────────────────────────────────────────────────────────
+
+  const OOD_COV_THRESHOLD = 0.35;
+  const OOD_CAND_THRESHOLD = 100;
+  const HIGH_CONFIDENCE_FP_THRESHOLD = 0.98; // fake_threshold in production
+
+  let oodAbstained = 0;
+  let highConfFP = 0;
+  let highConfFPDetails: string[] = [];
+  let oodDetails: string[] = [];
+
   for (const sample of realSamples) {
     try {
       const result = mlEngine.analyzeArticle(sample.statement);
-      if (result.prediction === 'LIKELY FAKE' && typeof result.confidence_score === 'number' && result.confidence_score >= 95) {
-        extremeFalseFake++;
-        extremeFalseFakeDetails.push(
-          `id=${sample.id} (liar_label=${sample.original_liar_label}, confidence=${result.confidence_score}%, fake_prob=${result.fake_probability?.toFixed(4)}): ${sample.statement.slice(0, 90)}...`
+      const cov = result.vocabulary_coverage;
+      const candCount = cov?.candidate_terms ?? 0;
+      const covRatio = cov?.ratio ?? 0;
+      const isOOD = candCount < OOD_CAND_THRESHOLD && covRatio < OOD_COV_THRESHOLD;
+
+      if (result.prediction === 'NEEDS MORE CONTEXT' && isOOD) {
+        oodAbstained++;
+        oodDetails.push(
+          `id=${sample.id} (liar_label=${sample.original_liar_label}, cov=${covRatio.toFixed(3)}, cand=${candCount}): ${sample.statement.slice(0, 70)}...`
+        );
+      }
+
+      if (
+        result.prediction === 'LIKELY FAKE' &&
+        typeof result.confidence_score === 'number' &&
+        result.confidence_score >= HIGH_CONFIDENCE_FP_THRESHOLD * 100 &&
+        !isOOD
+      ) {
+        highConfFP++;
+        highConfFPDetails.push(
+          `id=${sample.id} (liar_label=${sample.original_liar_label}, confidence=${result.confidence_score}%, fake_prob=${result.fake_probability?.toFixed(4)}, cov=${covRatio.toFixed(3)}): ${sample.statement.slice(0, 70)}...`
         );
       }
     } catch {
@@ -190,38 +259,47 @@ if (fs.existsSync(externalPath)) {
     }
   }
 
-  // Gate on the v3.0 artifact bug specifically: when the model is in legacy
-  // mode with the averaged-Platt parameters, ANY extreme false-fake is a bug.
-  // With the calibrated ensemble, we document the residual OOD overconfidence
-  // rather than asserting it away — suppressing it would hide a real limitation
-  // from operators and would be dishonest about model reliability.
   const isLegacy = mlEngine.getInferenceMode() === 'legacy_single_svm';
+
   if (isLegacy) {
+    // Gate 3: the v3.0 artifact bug must not recur. Legacy mode must produce
+    // ZERO high-confidence FAKE on LIAR REAL samples.
     assert(
-      extremeFalseFake === 0,
-      'Historical LIAR REAL samples do not produce 95%+ FAKE certainty (legacy mode)',
-      `extreme false-fake count=${extremeFalseFake}/${realSamples.length}`
+      highConfFP === 0 && oodAbstained === 0,
+      'Historical LIAR REAL samples produce no LIKELY FAKE verdicts in legacy mode ' +
+      '(artifact bug check: high_conf_fp=' + highConfFP + ', ood_abstained=' + oodAbstained + '/' + realSamples.length + ')',
+      highConfFPDetails.join('; ')
     );
   } else {
-    // Calibrated ensemble: the artifact bug is fixed. Document OOD overconfidence
-    // for transparency; warn when it affects more than a minority of samples.
-    console.log(
-      `\u26a0 [INFO] LIAR OOD overconfidence check (calibrated ensemble): ` +
-      `${extremeFalseFake}/${realSamples.length} REAL-labeled LIAR political statements ` +
-      `return 95%+ FAKE. This is a domain-shift limitation (ISOT news articles vs. ` +
-      `LIAR short political claims), not a reoccurrence of the v3.0 artifact bug.`
-    );
-    for (const detail of extremeFalseFakeDetails) {
-      console.log(`     — ${detail}`);
-    }
-    // Honest gate: if a large majority of LIAR REAL samples are 95%+ FAKE,
-    // the model's OOD behavior is too aggressive and should be investigated.
-    // A small minority is expected for any ISOT-trained model on LIAR data.
+    // Calibrated ensemble: Gates 1 and 2.
+    const oodRate = oodAbstained / realSamples.length;
+    const highConfFPRate = highConfFP / realSamples.length;
+
+    // Gate 1: OOD abstention rate ≥ 50%.
     assert(
-      extremeFalseFake <= realSamples.length * 0.7,
-      `LIAR OOD overconfidence is within documented domain-shift tolerance ` +
-      `(extreme_false_fake=${extremeFalseFake}/${realSamples.length}; threshold=70% of REAL samples)`,
-      extremeFalseFakeDetails.join('; ')
+      oodRate >= 0.50,
+      `LIAR OOD abstention gate: ≥ 50% of REAL-labeled LIAR samples must abstain via OOD guard ` +
+      `(OOD guard: word_count < ${OOD_CAND_THRESHOLD} AND vocab_coverage_ratio < ${OOD_COV_THRESHOLD}). ` +
+      `Got ${oodAbstained}/${realSamples.length} = ${oodRate.toFixed(3)} (${(oodRate * 100).toFixed(1)}%).`,
+      'OOD-abstained samples:\n  ' + oodDetails.slice(0, 10).join('\n  ')
+    );
+
+    // Gate 2: high-confidence FP rate ≤ 20%.
+    assert(
+      highConfFPRate <= 0.20,
+      `LIAR high-confidence false-positive gate: ≤ 20% of REAL-labeled LIAR samples may be ` +
+      `classified as LIKELY FAKE with confidence ≥ ${(HIGH_CONFIDENCE_FP_THRESHOLD * 100).toFixed(0)}% ` +
+      `after passing the OOD guard. Got ${highConfFP}/${realSamples.length} = ${highConfFPRate.toFixed(3)} (${(highConfFPRate * 100).toFixed(1)}%).`,
+      'High-confidence FP samples:\n  ' + highConfFPDetails.slice(0, 10).join('\n  ')
+    );
+
+    console.log(
+      `\u26a0 [INFO] LIAR OOD safety check (calibrated ensemble): ` +
+      `OOD-abstained=${oodAbstained}/${realSamples.length} (${(oodRate*100).toFixed(1)}%); ` +
+      `high-conf-FP=${highConfFP}/${realSamples.length} (${(highConfFPRate*100).toFixed(1)}%). ` +
+      `Gates [${oodRate >= 0.50 ? 'PASS' : 'FAIL'}, ${highConfFPRate <= 0.20 ? 'PASS' : 'FAIL'}]. ` +
+      `Domain-shift limitation (ISOT news articles vs. LIAR short political claims) — ` +
+      `not the v3.0 artifact bug, and not suppressed.`
     );
   }
 }

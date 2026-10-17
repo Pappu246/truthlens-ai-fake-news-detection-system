@@ -130,13 +130,35 @@ if (scienceArticle.model_inference_mode === 'legacy_single_svm' &&
 // as the actual correctness assertion for in-distribution content. A future
 // retrained model should be validated to reduce or eliminate this specific
 // science-content false-positive rate.
+//
+// PRODUCTION POLICY: Under production thresholds (fake_threshold=0.98 +
+// OOD guard: word_count<100 AND vocabulary_coverage_ratio<0.35), the NASA
+// science article MUST abstain (NEEDS MORE CONTEXT). If it returns LIKELY
+// FAKE, this test FAILS — the fix has not been correctly applied.
+//
+// The OOD guard fires when both conditions hold:
+//   - candidate_term_count < 100 (short input)
+//   - vocabulary_coverage_ratio < 0.35 (low vocabulary overlap with ISOT)
+// OR the probability falls in the uncertainty zone (0.35 <= P(FAKE) < 0.98).
 if (scienceArticle.model_inference_mode === 'calibrated_ensemble') {
-  console.log(`[KNOWN LIMITATION] NASA/science article in calibrated_ensemble mode: ` +
-    `P(FAKE)=${scienceArticle.fake_probability?.toFixed(4)}, ` +
-    `verdict=${scienceArticle.prediction}, ` +
+  // Primary assertion: NASA must ABSTAIN, never return LIKELY FAKE under production policy.
+  assert(
+    scienceArticle.prediction === 'NEEDS MORE CONTEXT',
+    'Case B: NASA/science article ABSTAINS in calibrated_ensemble mode under production policy (OOD guard OR uncertainty zone)',
+    `FAIL: got ${scienceArticle.prediction} (LIKELY FAKE), P(FAKE)=${scienceArticle.fake_probability?.toFixed(4)}, ` +
+    `vocab_coverage=${scienceArticle.vocabulary_coverage?.ratio?.toFixed(4)}/${scienceArticle.vocabulary_coverage?.candidate_terms}, ` +
     `decision_margin=${scienceArticle.decision_margin?.toFixed(4)}. ` +
-    `This is a documented ISOT-domain science-content false-positive — ` +
-    `not the v3.0 artifact bug, and not a regression of this commit.`);
+    `The calibrated model must NOT produce LIKELY FAKE for legitimate science articles. ` +
+    `Expected abstention via OOD guard (cov<0.35 AND cand<100) or uncertainty zone (0.35<=P<0.98).`
+  );
+  // Secondary: confirm the abstention reason is informative.
+  if (scienceArticle.prediction === 'NEEDS MORE CONTEXT') {
+    assert(
+      typeof scienceArticle.reason === 'string' && scienceArticle.reason.length > 40,
+      'Case B: NASA abstention carries an informative reason for the user',
+      `reason=${scienceArticle.reason?.slice(0, 100)}`
+    );
+  }
 }
 
 const caseB = mlEngine.analyzeArticle(REAL_ARTICLE, '');

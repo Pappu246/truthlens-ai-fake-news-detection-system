@@ -56319,7 +56319,7 @@
     }
   },
   "thresholds": {
-    "fake_threshold": 0.65,
+    "fake_threshold": 0.98,
     "real_threshold": 0.35,
     "min_text_length": 60
   }

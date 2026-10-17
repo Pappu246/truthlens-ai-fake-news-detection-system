@@ -61,6 +61,36 @@ const LEGACY_FAKE_MARGIN = 1.50;
 const LEGACY_REAL_MARGIN = -1.50;
 const LIMITED_CONTENT_SOURCES = new Set(['RSS_SUMMARY_ONLY', 'PARTIAL_ARTICLE_EXTRACTED', 'HEADLINE_ONLY', 'EXTRACTION_BLOCKED']);
 
+/**
+ * OOD (out-of-distribution) guard thresholds.
+ *
+ * The calibrated ensemble was fitted on ISOT news articles (mean ~300 words,
+ * journalistic style). Inputs that are both short AND have low vocabulary
+ * overlap with the training space are outside the model's learned domain, and
+ * the Platt-calibrated probability for such inputs is unreliable. Rather than
+ * expose a confident-but-likely-wrong FAKE/REAL label, the model abstains.
+ *
+ * Threshold values:
+ *   - OOD_SHORT_WORD_COUNT (100): word-count floor below which short-input
+ *     risk becomes material. Below this, even well-covered content is treated
+ *     cautiously.
+ *   - OOD_COVERAGE_THRESHOLD (0.35): coverage-ratio floor. At or below this
+ *     ratio, fewer than 35% of the candidate n-grams (unigrams + bigrams) are
+ *     represented in the training vocabulary, indicating significant thematic
+ *     or stylistic drift from the ISOT news-article corpus.
+ *
+ * Both conditions must hold simultaneously: short word count AND low coverage.
+ * This avoids flagging short, on-topic inputs (e.g. a 15-word wire headline
+ * about a known policy topic) while still catching genuinely OOD content such
+ * as formal scientific/technical writing, which typically has low vocabulary
+ * overlap with journalistic training corpora.
+ */
+const OOD_SHORT_WORD_COUNT = 100;
+const OOD_COVERAGE_THRESHOLD = 0.35;
+
+const OOD_ABSTENTION_REASON =
+  'This text shows both a short word count and low vocabulary coverage relative to the model\'s training distribution. The calibrated probability displayed for such inputs is unreliable, so TruthLens withholds the real/fake verdict rather than guess. Pasting a longer article with more varied vocabulary, or using the evidence-verification panel to fact-check individual claims against external sources, is recommended for a trustworthy assessment.';
+
 
 export interface ModelArtifacts {
   model_name: string;
@@ -325,7 +355,7 @@ export class TruthLensMLEngine {
   private isTrained = false;
   private trainedAt: string = new Date().toISOString();
   private metrics: any = null;
-  private thresholds: Thresholds = { fake_threshold: 0.65, real_threshold: 0.35, min_text_length: 60, min_word_count: 20 };
+  private thresholds: Thresholds = { fake_threshold: 0.98, real_threshold: 0.35, min_text_length: 60, min_word_count: 20 };
   private historyFile: string;
   private thresholdsFile: string;
   private artifactFile: string;
@@ -376,7 +406,7 @@ export class TruthLensMLEngine {
         const raw = fs.readFileSync(this.thresholdsFile, 'utf-8');
         const parsed = JSON.parse(raw);
         this.thresholds = {
-          fake_threshold: parsed.fake_threshold ?? 0.65,
+          fake_threshold: parsed.fake_threshold ?? 0.98,
           real_threshold: parsed.real_threshold ?? 0.35,
           min_text_length: parsed.min_text_length ?? 60,
           min_word_count: parsed.min_word_count ?? 20
@@ -1576,6 +1606,19 @@ export class TruthLensMLEngine {
       confidence = null;
       verdictReason =
         `Only ${predictionDetails.matched_term_count}/${predictionDetails.candidate_term_count} candidate vocabulary terms matched the active training space (${Math.round(predictionDetails.coverage_ratio * 100)}% coverage). This input is outside the model's learned vocabulary, so the classifier abstains rather than guessing.`;
+    } else if (
+      predictionDetails.candidate_term_count < OOD_SHORT_WORD_COUNT &&
+      predictionDetails.coverage_ratio < OOD_COVERAGE_THRESHOLD
+    ) {
+      // Out-of-distribution guard: short input AND low vocabulary coverage.
+      // Both conditions must hold — a short but well-covered input (e.g. a
+      // wire-style headline about a well-represented topic) is not flagged;
+      // a long but low-coverage input (e.g. formal scientific prose) is
+      // handled by the probability-zone logic below instead.
+      prediction = VERDICT_NEEDS_MORE_CONTEXT;
+      riskLevel = 'UNDETERMINED';
+      confidence = null;
+      verdictReason = OOD_ABSTENTION_REASON;
     } else if (legacySafetyMode) {
       // The raw margin is not a calibrated probability. Only margins well
       // outside this conservative band support a directional model signal.
@@ -1613,7 +1656,7 @@ export class TruthLensMLEngine {
       riskLevel = 'UNDETERMINED';
       confidence = null;
       verdictReason =
-        `The calibrated model probability (P(FAKE)=${fakeProb}) falls inside the configured uncertainty zone (${tReal} - ${tFake}); the model does not have sufficient certainty to classify this text as real or fake.`;
+        `The calibrated model probability (P(FAKE)=${fakeProb}) falls inside the configured uncertainty zone (${tReal} - ${tFake}); the model does not have sufficient certainty to classify this text as real or fake. Verifying individual claims against independent evidence sources is recommended for a trustworthy assessment.`;
     }
 
     const probabilityCaveat = limitedContentSource
