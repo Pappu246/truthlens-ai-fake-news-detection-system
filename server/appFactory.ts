@@ -26,11 +26,12 @@ import { PIPELINE_VERSION as V2_PIPELINE_VERSION } from './v2/provenance.js';
 const DEMO_EXAMPLES = [
   {
     id: "real-1",
-    title: "Likely Real (Peer-Reviewed Science)",
+    title: "Likely Real (Official NASA Science)",
     category: "Science / Astrophysics",
     expected_outcome: "LIKELY REAL",
-    source_url: "https://www.nasa.gov/press-release/james-webb-star-formation",
-    text: "Astronomers utilizing the James Webb Space Telescope have captured unprecedented infrared observations of star-forming regions in the nearby NGC 346 cluster. According to peer-reviewed findings published this week in the Astrophysical Journal, spectroscopic data confirms molecular hydrogen density variations consistent with theoretical models of stellar nurseries. Dr. Elena Vance, lead astrophysicist at the Goddard Space Flight Center, stated that the observations provide critical calibration measurements for understanding galactic evolution during the cosmic noon epoch. Further telemetry data have been archived at the Space Telescope Science Institute for open academic inquiry."
+    source_url: "https://www.nasa.gov/general/nasas-webb-captures-an-ethereal-view-of-ngc-346/",
+    // Paraphrased from NASA's 10 Oct 2023 article; avoids invented names or unsupported claims.
+    text: "NASA's James Webb Space Telescope captured an infrared view of the star-forming region NGC 346 in the Small Magellanic Cloud using its Mid-Infrared Instrument (MIRI). NASA describes NGC 346 as the brightest and largest star-forming region in the Small Magellanic Cloud, about 200,000 light-years away. The image traces emission from cool gas and dust, and bright patches and filaments mark areas with abundant protostars. NASA published this article on October 10, 2023."
   },
   {
     id: "fake-1",
