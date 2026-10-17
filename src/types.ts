@@ -102,6 +102,8 @@ export interface AnalysisResult {
   calibration_status?: 'EXACT_CALIBRATED_ENSEMBLE' | 'LEGACY_UNCALIBRATED_MARGIN' | string;
   /** Direction-only hint from an uncalibrated legacy model; not a final verdict. */
   model_directional_signal?: 'LIKELY REAL' | 'LIKELY FAKE' | 'UNAVAILABLE';
+  /** Raw-margin score in [0,1] for direction only; not a truth probability. */
+  model_directional_score?: number | null;
   vocabulary_coverage?: {
     ratio: number;
     matched_terms: number;

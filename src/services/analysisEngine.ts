@@ -309,6 +309,7 @@ export async function executeNewsAnalysis(
     verdict: backendData.verdict || backendData.prediction,
     prediction: backendData.prediction || backendData.verdict,
     model_directional_signal: ['LIKELY REAL', 'LIKELY FAKE', 'UNAVAILABLE'].includes(backendData.model_directional_signal) ? backendData.model_directional_signal : 'UNAVAILABLE',
+    model_directional_score: typeof backendData.model_directional_score === 'number' && Number.isFinite(backendData.model_directional_score) && backendData.model_directional_score >= 0 && backendData.model_directional_score <= 1 ? backendData.model_directional_score : null,
     reason: backendData.reason,
     risk_level: backendData.risk_level,
     fake_probability: typeof backendData.fake_probability === 'number' ? backendData.fake_probability : null,

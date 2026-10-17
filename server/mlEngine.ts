@@ -1480,6 +1480,7 @@ export class TruthLensMLEngine {
         verdict: VERDICT_NEEDS_MORE_CONTEXT,
         prediction: VERDICT_NEEDS_MORE_CONTEXT,
         model_directional_signal: 'UNAVAILABLE',
+        model_directional_score: null,
         reason: guardReason,
         message: 'More article context is required for reliable ML analysis.',
         fake_probability: null,
@@ -1546,6 +1547,12 @@ export class TruthLensMLEngine {
       legacySafetyMode && !limitedContentSource && !lowVocabularyCoverage
         ? (predictionDetails.decision_margin >= 0 ? VERDICT_LIKELY_FAKE : VERDICT_LIKELY_REAL)
         : 'UNAVAILABLE';
+    // An explanatory score derived from the legacy SVM margin. It is a
+    // directional model score only, never a calibrated probability of truth.
+    const modelDirectionalScore: number | null =
+      legacySafetyMode && !limitedContentSource && !lowVocabularyCoverage
+        ? Math.round(fakeProb * 10000) / 10000
+        : null;
 
     // 4. Verdict contract (backend = single source of truth).
     // Exact calibrated v3.1 artifacts use the configured probability zones.
@@ -1709,6 +1716,7 @@ export class TruthLensMLEngine {
       verdict: prediction,
       prediction,
       model_directional_signal: modelDirectionalSignal,
+      model_directional_score: modelDirectionalScore,
       reason: verdictReason,
       // Public probabilities are only exposed when the exact calibrated
       // ensemble is active. Legacy raw-margin scores are decision strength,
