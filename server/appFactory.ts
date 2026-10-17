@@ -333,7 +333,9 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
       const evidenceClaim = (claimBlock?.claim_text || text || '').toString();
       result.evidence_verification = await evidenceEngine.verifyClaim(evidenceClaim, {
         enabled: includeEvidence,
-        timeBudgetMs: Number(req.body.evidence_time_budget_ms) || 10000
+        timeBudgetMs: Number(req.body.evidence_time_budget_ms) || 10000,
+        articleTitle: typeof req.body.article_title === 'string' ? req.body.article_title : undefined,
+        sourceUrl
       });
 
       res.json(result);
