@@ -26,6 +26,8 @@
 import { ExtractedClaim, EvidenceItem } from '../../src/types.js';
 import { extractClaimsHeuristic, generateSearchQueries, classifyClaimType, normalizeClaimText } from './claimExtractor.js';
 import { evidenceProvider, RetrievalDiagnostic } from './evidenceProvider.js';
+import { excludeOriginalPublisherEvidence } from './evidenceProvider.js';
+import { withArticleContextSearchQuery } from './claimExtractor.js';
 import { aggregateClaimAssessment, evaluateSourceDiversity } from './evidenceAnalyzer.js';
 import { MAX_TELEMETRY_PROVIDER_DIAGNOSTICS, recordEvidenceTelemetry, summarizeProviderDiagnostics } from './observability.js';
 
@@ -245,6 +247,9 @@ export interface EvidenceEngineOptions {
   timeBudgetMs?: number;
   /** Explicitly disable retrieval (used by offline tests and by /api/analyze opt-out). */
   enabled?: boolean;
+  /** Optional context widens discovery without changing the claim being checked. */
+  articleTitle?: string;
+  sourceUrl?: string;
 }
 
 /**
@@ -343,7 +348,8 @@ export class EvidenceEngine {
         ['Claims shorter than four words cannot produce a meaningful evidence query.']);
     }
 
-    const claim = buildClaim(text);
+    const baseClaim = buildClaim(text);
+    const claim = withArticleContextSearchQuery(baseClaim, options?.articleTitle, options?.sourceUrl);
     const queries = claim.searchQueries.length ? claim.searchQueries : [claim.normalizedText];
 
     if (options?.enabled === false) {
@@ -361,6 +367,7 @@ export class EvidenceEngine {
         new Promise<EvidenceItem[]>((_, reject) =>
           setTimeout(() => reject(new Error(`evidence retrieval exceeded ${budget}ms budget`)), budget))
       ]);
+      items = excludeOriginalPublisherEvidence(items, options?.sourceUrl);
     } catch (err: any) {
       diagnostics.push({
         provider: 'evidence_engine', query: queries[0], attemptedAt: new Date().toISOString(),
