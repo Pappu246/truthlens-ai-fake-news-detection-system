@@ -115,6 +115,19 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
                 result.reason || result.message ||
                 'The backend could not reach a reliable verdict for this input. More context is required.'}
             </p>
+            {result.model_directional_signal && result.model_directional_signal !== 'UNAVAILABLE' && (
+              <div className="mb-6 rounded-xl border border-indigo-200 bg-indigo-50 p-4 text-left">
+                <div className="text-[10px] font-black uppercase tracking-wider text-indigo-700 mb-2">
+                  ML Directional Signal — Uncalibrated
+                </div>
+                <div className={`text-2xl font-black ${result.model_directional_signal === 'LIKELY FAKE' ? 'text-red-700' : 'text-emerald-700'}`}>
+                  {result.model_directional_signal}
+                </div>
+                <p className="mt-2 text-xs leading-relaxed text-slate-600">
+                  Direction of the legacy SVM margin only. It is not a calibrated probability and does not prove the article is true or false. The independent evidence verdict remains separate.
+                </p>
+              </div>
+            )}
             {currentEvidenceReport && (
               <p className="text-xs text-slate-500 mb-5">
                 The statistical article classifier remains withheld because its production artifact is uncalibrated.
