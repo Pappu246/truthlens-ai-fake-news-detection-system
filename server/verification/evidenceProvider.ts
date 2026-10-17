@@ -1485,7 +1485,9 @@ export class EvidenceProvider {
     // retrieval often spent the whole serverless request budget waiting on the
     // first news index, so the action/measurement fallback never ran. The
     // existing provider timeouts and route budget still bound the overall work.
-    const selectedQueries = queriesToRun.slice(0, 2);
+    // Keep the broader third query too: highly technical claims may need a topic-focused
+    // fallback when the first two precise variants return no admissible publisher evidence.
+    const selectedQueries = queriesToRun.slice(0, 3);
     const queryResults = await Promise.all(selectedQueries.map((q, queryIndex) =>
       this.search(q, claim, diagnostics, queryIndex === 0).catch((error: unknown) => {
         diagnostics?.push({
