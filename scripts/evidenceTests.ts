@@ -156,6 +156,34 @@ async function main(): Promise<void> {
   check('original publisher is not counted as independent evidence',
     independentOnly.length === 1 && independentOnly[0].sourceUrl.includes('apnews.com'));
 
+  const nasaLocationText = 'NCG 346 is located in the Small Magellanic Cloud (SMC), a dwarf galaxy close to our Milky Way.';
+  const nasaLocationClaim = extractClaimsHeuristic('', nasaLocationText)[0];
+  check('known NCG 346 source typo is canonicalized in search fields without rewriting the displayed source claim',
+    nasaLocationClaim.originalText.includes('NCG 346') &&
+      nasaLocationClaim.normalizedText.includes('NGC 346') &&
+      nasaLocationClaim.entities.includes('NGC') &&
+      nasaLocationClaim.searchQueries.join(' ').includes('NGC 346'),
+    JSON.stringify({ original: nasaLocationClaim.originalText, normalized: nasaLocationClaim.normalizedText, entities: nasaLocationClaim.entities, queries: nasaLocationClaim.searchQueries }));
+
+  const nasaLocationEvidence = 'As reported by the American space agency, the Small Magellanic Cloud (SMC) star-forming region NGC 346 is one of the most dynamic in nearby galaxies and is a dwarf galaxy.';
+  const nasaLocationRelation = classifyEvidenceRelation(
+    nasaLocationClaim,
+    nasaLocationEvidence,
+    0.93,
+    { isConsistent: true }
+  );
+  check('anchored scientific location facts accept equivalent source phrasing as supporting evidence',
+    nasaLocationRelation === 'SUPPORTS',
+    nasaLocationRelation);
+
+  const nasaDustText = "Webb's near-infrared observations marked the first detection of dust in an accretion disk around protostars in NGC 346.";
+  const nasaDustClaim = extractClaimsHeuristic('', nasaDustText)[0];
+  const nasaDustEvidence = "Astronomers have detected gas around protostars within NGC 346, but Webb's near-infrared observations mark the first time they have also detected dust in these disks.";
+  const nasaDustRelation = classifyEvidenceRelation(nasaDustClaim, nasaDustEvidence, 0.93, { isConsistent: true });
+  check('scientific detection claims are supported when an independent source uses equivalent verb forms',
+    nasaDustRelation === 'SUPPORTS',
+    nasaDustRelation);
+
   section('0. Claim extraction quality and secondary RSS search');
 
   const teaserRumorClaims = extractClaimsHeuristic(
