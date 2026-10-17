@@ -285,8 +285,8 @@ export function parseBingNewsRss(xml: string): BingNewsRssItem[] {
       // text or an untrusted host name.
       if (
         safeHttpUrl &&
-        parsedUrl.hostname.toLowerCase().replace(/^www\\./, '') === 'bing.com' &&
-        /\\/news\\/apiclick\\.aspx$/i.test(parsedUrl.pathname)
+        parsedUrl.hostname.toLowerCase().replace(/^www\./, '') === 'bing.com' &&
+        /\/news\/apiclick\.aspx$/i.test(parsedUrl.pathname)
       ) {
         const target = parsedUrl.searchParams.get('url') || parsedUrl.searchParams.get('u');
         if (target) {
