@@ -132,6 +132,9 @@ async function main(): Promise<void> {
   check('article-context query decodes HTML entities in publisher title',
     !/039|quot|amp/i.test(contextualQuery) && /nasa|webb/i.test(contextualQuery),
     contextualQuery);
+  check('article-context fallback prioritizes distinctive title words before technical claim wording',
+    /^webb ngc 346 nasa star formation cluster dusty ribbons$/i.test(contextualQuery),
+    contextualQuery);
   const contextualClaim = withArticleContextSearchQuery(
     { ...nasaClaim, searchQueries: ['query-one', 'query-two', 'query-three'] },
     'NASA Webb Uncovers Star Formation in Cluster Dusty Ribbons',
