@@ -68,7 +68,7 @@ export const MAX_PUBLISHER_FETCH_CANDIDATES_PER_PROVIDER = 5;
  */
 export function isSamePublisherOrigin(sourceUrl: string, evidenceUrl: string): boolean {
   try {
-    const host = (value: string) => new URL(value).hostname.toLowerCase().replace(/^www\\./, '');
+    const host = (value: string) => new URL(value).hostname.toLowerCase().replace(/^www[.]/, '');
     const sourceHost = host(sourceUrl);
     const evidenceHost = host(evidenceUrl);
     return sourceHost === evidenceHost ||
