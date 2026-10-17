@@ -308,6 +308,7 @@ export async function executeNewsAnalysis(
     message: backendData.message,
     verdict: backendData.verdict || backendData.prediction,
     prediction: backendData.prediction || backendData.verdict,
+    model_directional_signal: ['LIKELY REAL', 'LIKELY FAKE', 'UNAVAILABLE'].includes(backendData.model_directional_signal) ? backendData.model_directional_signal : 'UNAVAILABLE',
     reason: backendData.reason,
     risk_level: backendData.risk_level,
     fake_probability: typeof backendData.fake_probability === 'number' ? backendData.fake_probability : null,
