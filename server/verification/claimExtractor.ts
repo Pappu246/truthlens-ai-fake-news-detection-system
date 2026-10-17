@@ -296,6 +296,100 @@ export function generateSearchQueries(claim: {
 }
 
 /**
+ * Adds a broad, article-aware search query when title/source context is known.
+ * The first queries preserve the exact claim; this fallback keeps named entities,
+ * measurements, and topic nouns without requiring every word in a long claim.
+ */
+export function buildArticleContextSearchQuery(
+  claim: Pick<ExtractedClaim, 'normalizedText' | 'entities' | 'numbers' | 'keywords'>,
+  articleTitle?: string,
+  sourceUrl?: string
+): string {
+  const decodeEntities = (value: string): string => value
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#0*39;|&#x0*27;|&apos;/gi, "'")
+    .replace(/&#0*8217;|&#x0*2019;/gi, "'")
+    .replace(/&#0*38;/gi, '&');
+
+  const stopWords = new Set([
+    'the', 'and', 'for', 'with', 'from', 'that', 'this', 'these', 'those',
+    'into', 'onto', 'over', 'under', 'around', 'about', 'after', 'before',
+    'during', 'between', 'was', 'were', 'are', 'is', 'has', 'have', 'had',
+    'will', 'would', 'could', 'should', 'may', 'might', 'can', 'said', 'says',
+    'reported', 'reports', 'according', 'marked', 'marks', 'first', 'latest',
+    'new', 'news', 'article', 'study', 'studies', 'findings', 'found',
+    'observed', 'observations', 'showed', 'shows', 'revealed', 'reveals',
+    'confirmed', 'confirms', 'detection', 'discovery', 'using', 'used',
+    'being', 'been', 'their', 'there', 'they', 'them', 'its', 'who', 'what',
+    'when', 'where', 'which', 'while', 'than', 'then', 'also', 'more', 'most',
+    'very', 'near', 'such', 'each', 'both', 'only', 'other', 'some'
+  ]);
+
+  const tokens = (value: string): string[] => decodeEntities(value)
+    .replace(/&#\d+;|&#x[\da-f]+;/gi, ' ')
+    .toLowerCase()
+    .match(/[a-z][a-z0-9-]*|\b\d{1,3}(?:,\d{3})+\b|\b\d+\b/g) || [];
+
+  const topicTokens = (value: string): string[] => tokens(value)
+    .map(token => token.replace(/^-+|-+$/g, ''))
+    .filter(token => token.length > 2 && !stopWords.has(token));
+
+  const entityTokens = (claim.entities || []).flatMap(value => topicTokens(value));
+  const numberTokens = (claim.numbers || []).flatMap(value => tokens(value))
+    .filter(token => /\d/.test(token));
+  const claimTopicTokens = topicTokens(claim.normalizedText);
+  const keywordTokens = topicTokens((claim.keywords || []).join(' '));
+  const titleTokens = topicTokens(articleTitle || '');
+  let slugTokens: string[] = [];
+  try {
+    slugTokens = topicTokens(decodeURIComponent(new URL(sourceUrl || '').pathname.replace(/[-_/]+/g, ' ')));
+  } catch {
+    // Title and claim context remain usable when a source URL is absent or malformed.
+  }
+
+  const candidates = [
+    ...entityTokens,
+    ...numberTokens,
+    ...claimTopicTokens,
+    ...keywordTokens,
+    ...titleTokens,
+    ...slugTokens
+  ];
+  const selected: string[] = [];
+  const seen = new Set<string>();
+  for (const token of candidates) {
+    if (seen.has(token)) continue;
+    seen.add(token);
+    selected.push(token);
+    if (selected.length >= 9) break;
+  }
+  return selected.join(' ').trim();
+}
+
+/**
+ * Appends an article-aware query while preserving the two most claim-specific
+ * queries. Context broadens discovery; it never changes the claim or verdict.
+ */
+export function withArticleContextSearchQuery<T extends ExtractedClaim>(
+  claim: T,
+  articleTitle?: string,
+  sourceUrl?: string
+): T {
+  const contextQuery = buildArticleContextSearchQuery(claim, articleTitle, sourceUrl);
+  if (!contextQuery) return claim;
+  const existing = claim.searchQueries || [];
+  const normalizedContext = contextQuery.toLowerCase().replace(/\s+/g, ' ').trim();
+  if (existing.some(query => query.toLowerCase().replace(/\s+/g, ' ').trim() === normalizedContext)) {
+    return claim;
+  }
+  return {
+    ...claim,
+    searchQueries: [...existing.slice(0, 2), contextQuery].slice(0, 3)
+  };
+}
+
+/**
  * Deterministic rule-based claim extraction from title, body, and description.
  */
 export function extractClaimsHeuristic(
