@@ -123,8 +123,20 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
                 <div className={`text-2xl font-black ${result.model_directional_signal === 'LIKELY FAKE' ? 'text-red-700' : 'text-emerald-700'}`}>
                   {result.model_directional_signal}
                 </div>
+                {typeof result.model_directional_score === 'number' && (
+                  <div className="grid grid-cols-2 gap-3 mt-3">
+                    <div className="rounded-lg border border-red-200 bg-white p-3">
+                      <div className="text-[10px] font-black uppercase tracking-wide text-red-700">FAKE-side model score</div>
+                      <div className="text-2xl font-black text-red-700">{Math.round(result.model_directional_score * 100)}%</div>
+                    </div>
+                    <div className="rounded-lg border border-emerald-200 bg-white p-3">
+                      <div className="text-[10px] font-black uppercase tracking-wide text-emerald-700">REAL-side model score</div>
+                      <div className="text-2xl font-black text-emerald-700">{Math.round((1 - result.model_directional_score) * 100)}%</div>
+                    </div>
+                  </div>
+                )}
                 <p className="mt-2 text-xs leading-relaxed text-slate-600">
-                  Direction of the legacy SVM margin only. It is not a calibrated probability and does not prove the article is true or false. The independent evidence verdict remains separate.
+                  These percentages are an uncalibrated SVM direction score, NOT the probability the article is factually fake or real. Do not interpret them as factual confidence. Independent evidence verdict remains separate.
                 </p>
               </div>
             )}
