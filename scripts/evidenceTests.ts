@@ -18,8 +18,8 @@ import {
 import { EvidenceItem } from '../src/types';
 import { buildArticleVerification } from '../server/verification/assessmentEngine';
 import { ClaimVerificationResult } from '../src/types';
-import { extractClaimsHeuristic, generateSearchQueries } from '../server/verification/claimExtractor';
-import { extractReadableArticleText, shouldSearchWikipediaForEvidence, parsePublicationDate, parseBingNewsRss, parseGdeltArticleList, buildGdeltArticleSearchUrl, GDELT_SEARCH_TIMEOUT_MS, GDELT_RESULT_JOIN_GRACE_MS, GDELT_EMPTY_RESULT_JOIN_GRACE_MS, getGdeltJoinGraceMs, settleWithinGrace, GOOGLE_NEWS_WRAPPER_FETCH_TIMEOUT_MS, MAX_PUBLISHER_FETCH_CANDIDATES_PER_PROVIDER, selectPublisherFetchCandidates, MAX_GOOGLE_NEWS_WRAPPER_CANDIDATES_PER_PROVIDER, selectGoogleNewsHydrationCandidates, countAdmissiblePublisherEvidence, getGoogleNewsArticleId, buildGoogleNewsDecodeRequest, buildGoogleNewsDecodeBatchRequest, parseGoogleNewsDecodedUrlResponse, parseGoogleNewsDecodedUrlBatchResponse, isAdmissibleEvidence, preferPublisherEvidence, verifyEvidenceProvenance } from '../server/verification/evidenceProvider';
+import { extractClaimsHeuristic, generateSearchQueries, buildArticleContextSearchQuery, withArticleContextSearchQuery } from '../server/verification/claimExtractor';
+import { extractReadableArticleText, shouldSearchWikipediaForEvidence, parsePublicationDate, parseBingNewsRss, parseGdeltArticleList, buildGdeltArticleSearchUrl, GDELT_SEARCH_TIMEOUT_MS, GDELT_RESULT_JOIN_GRACE_MS, GDELT_EMPTY_RESULT_JOIN_GRACE_MS, getGdeltJoinGraceMs, settleWithinGrace, GOOGLE_NEWS_WRAPPER_FETCH_TIMEOUT_MS, MAX_PUBLISHER_FETCH_CANDIDATES_PER_PROVIDER, selectPublisherFetchCandidates, MAX_GOOGLE_NEWS_WRAPPER_CANDIDATES_PER_PROVIDER, selectGoogleNewsHydrationCandidates, countAdmissiblePublisherEvidence, getGoogleNewsArticleId, buildGoogleNewsDecodeRequest, buildGoogleNewsDecodeBatchRequest, parseGoogleNewsDecodedUrlResponse, parseGoogleNewsDecodedUrlBatchResponse, isAdmissibleEvidence, preferPublisherEvidence, verifyEvidenceProvenance, excludeOriginalPublisherEvidence, isSamePublisherOrigin } from '../server/verification/evidenceProvider';
 import { checkNumericalConsistency, classifyEvidenceRelation } from '../server/verification/evidenceAnalyzer';
 import { summarizeProviderDiagnostics } from '../server/verification/observability';
 
@@ -107,6 +107,51 @@ async function main(): Promise<void> {
   check('generated fallback queries retain an action or direction term',
     unemploymentQueries.some(query => /fell|below/i.test(query)),
     JSON.stringify(unemploymentQueries));
+
+  const nasaClaim = {
+    claimId: 'nasa-context-1',
+    originalText: "Webb's near-infrared observations marked the first detection of dust in an accretion disk around protostars in NGC 346.",
+    normalizedText: "Webb's near-infrared observations marked the first detection of dust in an accretion disk around protostars in NGC 346.",
+    claimType: 'Science' as const,
+    importance: 'HIGH' as const,
+    entities: ['Webb', 'NGC'],
+    numbers: ['346'],
+    dates: [],
+    locations: [],
+    keywords: ['near', 'infrared', 'observations', 'marked', 'first', 'detection', 'dust', 'accretion', 'disk', 'protostars'],
+    searchQueries: ['very long exact claim query one', 'very long exact claim query two', 'old broad query']
+  };
+  const contextualQuery = buildArticleContextSearchQuery(
+    nasaClaim,
+    'NASA&#039;s Webb Uncovers Star Formation in Cluster&#039;s Dusty Ribbons',
+    'https://www.nasa.gov/general/nasas-webb-captures-an-ethereal-view-of-ngc-346/'
+  );
+  check('article-context query preserves NGC 346 and useful science terms',
+    /webb.*ngc.*346/i.test(contextualQuery) && /dust|accretion|protostars/i.test(contextualQuery),
+    contextualQuery);
+  check('article-context query decodes HTML entities in publisher title',
+    !/039|quot|amp/i.test(contextualQuery) && /nasa|webb/i.test(contextualQuery),
+    contextualQuery);
+  const contextualClaim = withArticleContextSearchQuery(
+    { ...nasaClaim, searchQueries: ['query-one', 'query-two', 'query-three'] },
+    'NASA Webb Uncovers Star Formation in Cluster Dusty Ribbons',
+    'https://www.nasa.gov/general/nasas-webb-captures-an-ethereal-view-of-ngc-346/'
+  );
+  check('article-context fallback replaces the least-focused query while keeping three bounded queries',
+    contextualClaim.searchQueries.length === 3 &&
+      contextualClaim.searchQueries[0] === 'query-one' &&
+      contextualClaim.searchQueries[1] === 'query-two' &&
+      contextualClaim.searchQueries[2] === contextualQuery,
+    JSON.stringify(contextualClaim.searchQueries));
+  check('same publisher and subdomains are recognized for self-source exclusion',
+    isSamePublisherOrigin('https://www.nasa.gov/original', 'https://science.nasa.gov/news/') &&
+      !isSamePublisherOrigin('https://www.nasa.gov/original', 'https://apnews.com/article'));
+  const independentOnly = excludeOriginalPublisherEvidence([
+    item({ sourceUrl: 'https://www.nasa.gov/original' }),
+    item({ sourceUrl: 'https://apnews.com/article' })
+  ], 'https://science.nasa.gov/original');
+  check('original publisher is not counted as independent evidence',
+    independentOnly.length === 1 && independentOnly[0].sourceUrl.includes('apnews.com'));
 
   section('0. Claim extraction quality and secondary RSS search');
 
