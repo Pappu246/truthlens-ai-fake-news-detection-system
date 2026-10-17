@@ -15,6 +15,7 @@ import {
   aggregateClaimAssessment
 } from './evidenceAnalyzer.js';
 import { refineEvidenceRelationSemantically } from './semanticRelation.js';
+import { withArticleContextSearchQuery } from './claimExtractor.js';
 
 // GDELT's document index is slower than RSS feeds. Keep its timeout explicit,
 // bounded, and separate from the shorter publisher/RSS timeout so a 2s abort
@@ -59,6 +60,32 @@ export const GOOGLE_NEWS_WRAPPER_FETCH_TIMEOUT_MS = 4_500;
  * could discard the only fetchable publisher result.
  */
 export const MAX_PUBLISHER_FETCH_CANDIDATES_PER_PROVIDER = 5;
+
+/**
+ * The submitted article is the subject under review, not an independent
+ * corroborating source. Do not count evidence fetched from its own publisher
+ * domain as independent confirmation.
+ */
+export function isSamePublisherOrigin(sourceUrl: string, evidenceUrl: string): boolean {
+  try {
+    const host = (value: string) => new URL(value).hostname.toLowerCase().replace(/^www\\./, '');
+    const sourceHost = host(sourceUrl);
+    const evidenceHost = host(evidenceUrl);
+    return sourceHost === evidenceHost ||
+      sourceHost.endsWith('.' + evidenceHost) ||
+      evidenceHost.endsWith('.' + sourceHost);
+  } catch {
+    return false;
+  }
+}
+
+export function excludeOriginalPublisherEvidence<T extends Pick<EvidenceItem, 'sourceUrl' | 'sourceFinalUrl'>>(
+  items: readonly T[],
+  sourceUrl?: string
+): T[] {
+  if (!sourceUrl?.trim()) return [...items];
+  return items.filter(item => !isSamePublisherOrigin(sourceUrl, item.sourceFinalUrl || item.sourceUrl));
+}
 
 export function selectPublisherFetchCandidates<T>(items: readonly T[]): T[] {
   return items.slice(0, MAX_PUBLISHER_FETCH_CANDIDATES_PER_PROVIDER);
@@ -1572,15 +1599,20 @@ export class EvidenceProvider {
   /**
    * Verifies a batch of claims and aggregates verdicts.
    */
-  public async verifyClaims(claims: ExtractedClaim[]): Promise<ClaimVerificationResult[]> {
+  public async verifyClaims(
+    claims: ExtractedClaim[],
+    context?: { articleTitle?: string; sourceUrl?: string }
+  ): Promise<ClaimVerificationResult[]> {
     const importantClaims = claims.filter(c => c.importance === 'HIGH' || c.importance === 'MEDIUM');
 
     // Keep low-importance claims in the response, but prioritize important claims.
     // Two bounded workers avoid serial network waits without fanning every claim
     // out simultaneously and exhausting the serverless request's time budget.
     const importantResults = await mapWithConcurrency(importantClaims, 2, async claim => {
-      const evidenceItems = await this.searchEvidenceForClaim(claim);
-      return aggregateClaimAssessment(claim, evidenceItems);
+      const contextualClaim = withArticleContextSearchQuery(claim, context?.articleTitle, context?.sourceUrl);
+      const evidenceItems = await this.searchEvidenceForClaim(contextualClaim);
+      const independentItems = excludeOriginalPublisherEvidence(evidenceItems, context?.sourceUrl);
+      return aggregateClaimAssessment(contextualClaim, independentItems);
     });
     const resultById = new Map(importantResults.map(result => [result.claim.claimId, result]));
     const results: ClaimVerificationResult[] = claims.map(claim =>
@@ -1593,8 +1625,10 @@ export class EvidenceProvider {
       for (let i = 0; i < results.length; i++) {
         const claim = results[i].claim;
         if (claim.importance !== 'LOW' || results[i].assessment !== 'INSUFFICIENT') continue;
-        const evidenceItems = await this.searchEvidenceForClaim(claim);
-        results[i] = aggregateClaimAssessment(claim, evidenceItems);
+        const contextualClaim = withArticleContextSearchQuery(claim, context?.articleTitle, context?.sourceUrl);
+        const evidenceItems = await this.searchEvidenceForClaim(contextualClaim);
+        const independentItems = excludeOriginalPublisherEvidence(evidenceItems, context?.sourceUrl);
+        results[i] = aggregateClaimAssessment(contextualClaim, independentItems);
       }
     }
 
