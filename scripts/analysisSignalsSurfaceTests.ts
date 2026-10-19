@@ -75,7 +75,7 @@ function backendPayload() {
     detected_claim: claimModel.claim_text,
     indicators: [],
     feature_attributions: [],
-    claim_model,
+    claim_model: claimModel,
     evidence_verification: evidenceVerification
   };
 }
