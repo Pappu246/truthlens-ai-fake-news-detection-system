@@ -129,7 +129,7 @@ jobs:
           assert report["model_inference_mode"] == "calibrated_ensemble"
           assert report["evaluation_protocol"]["calibration_members_used"] == 3
           with Path("data/test.tsv").open(encoding="utf-8") as f:
-              rows = list(csv.reader(f, delimiter="\\t"))
+              rows = list(csv.reader(f, delimiter="\t"))
           binary_labels = {"pants-fire", "false", "mostly-true", "true"}
           expected_eligible = sum(1 for row in rows if len(row) > 1 and row[1].strip().lower() in binary_labels)
           assert report["total_test_samples"] == len(rows)
