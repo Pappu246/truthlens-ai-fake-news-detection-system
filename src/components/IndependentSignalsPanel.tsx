@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, CheckCircle, ExternalLink, FileSearch, Info, ShieldCheck, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle, ExternalLink, FileSearch, Info, Search, ShieldCheck, XCircle } from 'lucide-react';
 import type { ClaimModelInfo, EvidenceVerificationInfo } from '../types';
 
 interface IndependentSignalsPanelProps {
