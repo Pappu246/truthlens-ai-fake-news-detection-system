@@ -19,8 +19,16 @@ export const ExternalValidationSection: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isAuditExpanded, setIsAuditExpanded] = useState<boolean>(false);
   const [sampleFilter, setSampleFilter] = useState<'ALL' | 'CORRECT' | 'MISCLASSIFIED'>('ALL');
+  const [runtimeDiagnostics, setRuntimeDiagnostics] = useState<any>(null);
+  const [runtimeDiagnosticsLoaded, setRuntimeDiagnosticsLoaded] = useState(false);
 
   useEffect(() => {
+    fetch('/api/model/diagnostics')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => setRuntimeDiagnostics(data))
+      .catch(() => setRuntimeDiagnostics(null))
+      .finally(() => setRuntimeDiagnosticsLoaded(true));
+
     fetch('/api/external-validation')
       .then(res => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -66,6 +74,32 @@ export const ExternalValidationSection: React.FC = () => {
 
   const { metrics, confusion_matrix: cm, label_audit } = report;
 
+  const extractModelVersion = (value: string | null | undefined): string | null => {
+    const match = value?.match(/\\bv?(\\d+\\.\\d+\\.\\d+(?:-[a-z0-9.-]+)?)/i);
+    return match?.[1] ?? null;
+  };
+  const reportModelVersion = extractModelVersion(report.production_model);
+  const activeModelVersion = typeof runtimeDiagnostics?.model_version === 'string'
+    ? runtimeDiagnostics.model_version
+    : null;
+  const isEvaluationVersionMismatch = Boolean(
+    runtimeDiagnosticsLoaded &&
+    activeModelVersion &&
+    reportModelVersion &&
+    activeModelVersion !== reportModelVersion
+  );
+  const isEvaluationVersionConfirmed = Boolean(
+    runtimeDiagnosticsLoaded &&
+    activeModelVersion &&
+    reportModelVersion &&
+    activeModelVersion === reportModelVersion
+  );
+  const isEvaluationVersionUnverified = runtimeDiagnosticsLoaded && !isEvaluationVersionConfirmed;
+  const isEvaluationRunComplete = report.status === 'COMPLETED' && isEvaluationVersionConfirmed;
+  const evaluatedAtLabel = Number.isNaN(Date.parse(report.evaluated_at))
+    ? report.evaluated_at
+    : new Date(report.evaluated_at).toLocaleString();
+
   const filteredSamples = (report.sample_predictions || []).filter(sample => {
     if (sampleFilter === 'CORRECT') return sample.is_correct;
     if (sampleFilter === 'MISCLASSIFIED') return !sample.is_correct;
@@ -79,9 +113,21 @@ export const ExternalValidationSection: React.FC = () => {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-2">
-              <span className="px-2.5 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-black uppercase tracking-widest rounded flex items-center gap-1.5">
-                <CheckCircle className="w-3 h-3" />
-                External Validation: {report.status}
+              <span className={`px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest rounded flex items-center gap-1.5 ${
+                isEvaluationRunComplete
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                  : 'bg-amber-500/20 text-amber-200 border border-amber-400/40'
+              }`}>
+                {isEvaluationRunComplete
+                  ? <CheckCircle className="w-3 h-3" />
+                  : <AlertTriangle className="w-3 h-3" />}
+                {isEvaluationVersionMismatch
+                  ? 'Historical Snapshot — Version Mismatch'
+                  : isEvaluationVersionUnverified
+                    ? 'Model Version Unverified'
+                    : !runtimeDiagnosticsLoaded
+                      ? 'Checking Runtime Version…'
+                      : `Evaluation Run: ${report.status}`}
               </span>
               <span className="px-2.5 py-0.5 bg-slate-700/60 text-slate-300 text-[10px] font-mono rounded">
                 Split: {report.file_used}
@@ -94,15 +140,16 @@ export const ExternalValidationSection: React.FC = () => {
               External Validation: {report.dataset_name}
             </h2>
             <p className="text-xs text-slate-300 mt-1 max-w-3xl leading-relaxed">
-              Strict out-of-domain generalization evaluation of the active production runtime pipeline (
-              <strong className="text-white">{report.production_model}{report.runtime_feature_space ? `, ${report.runtime_feature_space}` : ''}</strong>) against the LIAR benchmark.
-              Zero retraining, zero parameter modifications, and zero training data contamination.
+              Saved out-of-domain evaluation report for
+              <strong className="text-white"> {report.production_model}{report.runtime_feature_space ? `, ${report.runtime_feature_space}` : ''}</strong>
+              against the LIAR benchmark. The version check below determines whether this report matches the active runtime.
+              Zero retraining and zero parameter modifications were reported for this evaluation run.
             </p>
           </div>
 
           <div className="bg-slate-800/80 border border-slate-700 p-3 rounded-xl flex flex-col justify-center min-w-[200px]">
             <div className="text-[10px] font-mono text-slate-400 uppercase tracking-wider mb-1">
-              Production Model
+              {isEvaluationVersionMismatch ? 'Historical Report Model' : 'Reported Evaluation Model'}
             </div>
             <div className="text-sm font-black text-white">{report.production_model}</div>
             <div className="text-[10px] font-mono text-slate-400 mt-0.5">
@@ -110,6 +157,29 @@ export const ExternalValidationSection: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {runtimeDiagnosticsLoaded && !isEvaluationVersionConfirmed && (
+          <div role="alert" className="mt-5 p-4 rounded-xl border border-amber-300 bg-amber-50 text-amber-950">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5 text-amber-700" />
+              <div className="text-xs leading-relaxed">
+                <strong className="block uppercase tracking-wide mb-1">Historical evaluation — not verified for the active model</strong>
+                {isEvaluationVersionMismatch ? (
+                  <>
+                    This cached LIAR report was evaluated on <strong>{reportModelVersion}</strong> ({evaluatedAtLabel}), but the active Node.js runtime reports
+                    <strong> {activeModelVersion}</strong>. The LIAR metrics below must not be attributed to the current production artifact.
+                  </>
+                ) : (
+                  <>
+                    TruthLens could not confirm that this cached LIAR report belongs to the active runtime version.
+                    Treat the metrics below as historical reference data, not current production validation.
+                  </>
+                )}
+                {' '}Regenerate the evaluation only after the evaluator is verified against the exact runtime artifact and its safety/abstention policy.
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Dataset Breakdown Pill Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-6 border-t border-slate-700/60">
