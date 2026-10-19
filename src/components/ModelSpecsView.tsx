@@ -21,6 +21,32 @@ interface DatasetAudit {
   short_articles: number;
 }
 
+interface ClaimVariantEvaluation {
+  uses_metadata: boolean;
+  test?: {
+    n: number;
+    accuracy: number;
+    macro_f1: number;
+    roc_auc?: number;
+    brier?: number;
+  };
+}
+
+interface ClaimModelEvaluation {
+  status?: string;
+  model_name?: string;
+  model_version?: string;
+  decision_threshold?: number;
+  dataset?: {
+    name?: string;
+    task?: string;
+    excluded_labels?: string[];
+    label_mapping?: Record<string, string>;
+    counts?: { train?: number; valid?: number; test?: number };
+  };
+  variants?: Record<string, ClaimVariantEvaluation>;
+}
+
 export const ModelSpecsView: React.FC<ModelSpecsViewProps> = ({ metrics, onRetrain }) => {
   const [retraining, setRetraining] = useState(false);
   const [datasetAudit, setDatasetAudit] = useState<DatasetAudit | null>(null);
@@ -29,6 +55,8 @@ export const ModelSpecsView: React.FC<ModelSpecsViewProps> = ({ metrics, onRetra
   const [minTextLength, setMinTextLength] = useState<number>(60);
   const [thresholdSavedMsg, setThresholdSavedMsg] = useState<string>('');
   const [runtimeDiagnostics, setRuntimeDiagnostics] = useState<any>(null);
+  const [claimModelEvaluation, setClaimModelEvaluation] = useState<ClaimModelEvaluation | null>(null);
+  const [claimModelEvaluationLoaded, setClaimModelEvaluationLoaded] = useState(false);
   const productionLocked = runtimeDiagnostics?.production_model_locked === true
     || runtimeDiagnostics?.decision_policy?.mode === 'LEGACY_MARGIN_GATED';
 
@@ -54,6 +82,21 @@ export const ModelSpecsView: React.FC<ModelSpecsViewProps> = ({ metrics, onRetra
       .then(res => res.ok ? res.json() : null)
       .then(data => setRuntimeDiagnostics(data))
       .catch(() => {});
+
+    // This is deliberately fetched as a distinct model: LIAR claim metrics
+    // must not be blended with the ISOT full-article model's benchmark.
+    fetch('/api/model/metrics')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        const claimModel = data?.claim_model;
+        setClaimModelEvaluation(
+          claimModel?.status === 'AVAILABLE' && claimModel?.model_role === 'claim_model'
+            ? claimModel
+            : null
+        );
+      })
+      .catch(() => setClaimModelEvaluation(null))
+      .finally(() => setClaimModelEvaluationLoaded(true));
   }, []);
 
   const handleRetrain = async () => {
@@ -101,6 +144,12 @@ export const ModelSpecsView: React.FC<ModelSpecsViewProps> = ({ metrics, onRetra
   const svm = metrics.linear_svm;
   const lr = metrics.logistic_regression;
   const cv = metrics.cross_validation;
+  const claimTextOnly = claimModelEvaluation?.variants?.text_only?.test;
+  const claimMetadata = claimModelEvaluation?.variants?.text_meta?.test;
+  const formatMetricPercent = (value: number | undefined) =>
+    typeof value === 'number' && Number.isFinite(value) ? `${(value * 100).toFixed(2)}%` : 'N/A';
+  const formatMetricDecimal = (value: number | undefined) =>
+    typeof value === 'number' && Number.isFinite(value) ? value.toFixed(4) : 'N/A';
 
   return (
     <section className="flex-1 p-6 lg:p-10 bg-slate-50 overflow-y-auto space-y-8">
@@ -585,6 +634,107 @@ export const ModelSpecsView: React.FC<ModelSpecsViewProps> = ({ metrics, onRetra
       {/* External Validation Section (LIAR Benchmark) */}
       <ExternalValidationSection />
 
+      {/* Dedicated LIAR claim model. Never compare/merge these numbers with the ISOT article model. */}
+      {claimModelEvaluationLoaded && (
+        <section className="bg-white p-6 lg:p-8 rounded-2xl shadow-sm border border-slate-200 space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+            <div>
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">
+                Separate model · Claim-level classification
+              </span>
+              <h3 className="text-xl lg:text-2xl font-black text-slate-900 uppercase tracking-tight">
+                Dedicated LIAR Claim Model
+              </h3>
+              <p className="text-xs text-slate-500 mt-2 leading-relaxed max-w-3xl">
+                These held-out LIAR TEST scores belong to a separate binary claim classifier, not the ISOT full-article model above.
+                They must not be combined into one accuracy figure or interpreted as proof that a claim is factually true.
+              </p>
+            </div>
+            {claimModelEvaluation?.model_version && (
+              <span className="px-2.5 py-1 bg-slate-100 text-slate-700 text-[10px] font-mono font-bold rounded whitespace-nowrap">
+                {claimModelEvaluation.model_name || 'Claim Model'} · v{claimModelEvaluation.model_version}
+              </span>
+            )}
+          </div>
+
+          {claimModelEvaluation ? (
+            <>
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                <div className="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <h4 className="text-sm font-black uppercase tracking-wide text-slate-900">Text-only variant</h4>
+                    <span className="text-[10px] font-mono text-slate-500">
+                      Held-out TEST · N={claimTextOnly?.n?.toLocaleString() || 'N/A'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div className="p-3 bg-white rounded-lg border border-slate-200">
+                      <span className="text-[9px] font-bold uppercase tracking-wide text-slate-500 block mb-1">Accuracy</span>
+                      <strong className="text-lg font-black font-mono text-slate-900">{formatMetricPercent(claimTextOnly?.accuracy)}</strong>
+                    </div>
+                    <div className="p-3 bg-white rounded-lg border border-slate-200">
+                      <span className="text-[9px] font-bold uppercase tracking-wide text-slate-500 block mb-1">Macro F1</span>
+                      <strong className="text-lg font-black font-mono text-slate-900">{formatMetricDecimal(claimTextOnly?.macro_f1)}</strong>
+                    </div>
+                    <div className="p-3 bg-white rounded-lg border border-slate-200">
+                      <span className="text-[9px] font-bold uppercase tracking-wide text-slate-500 block mb-1">ROC-AUC</span>
+                      <strong className="text-lg font-black font-mono text-slate-900">{formatMetricDecimal(claimTextOnly?.roc_auc)}</strong>
+                    </div>
+                    <div className="p-3 bg-white rounded-lg border border-slate-200">
+                      <span className="text-[9px] font-bold uppercase tracking-wide text-slate-500 block mb-1">Brier score</span>
+                      <strong className="text-lg font-black font-mono text-slate-900">{formatMetricDecimal(claimTextOnly?.brier)}</strong>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    Uses the claim text without speaker or credit-history metadata. This is the benchmark most relevant when only a standalone claim is supplied.
+                  </p>
+                </div>
+
+                <div className="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <h4 className="text-sm font-black uppercase tracking-wide text-slate-900">Metadata-assisted variant</h4>
+                    <span className="text-[10px] font-mono text-slate-500">
+                      Held-out TEST · N={claimMetadata?.n?.toLocaleString() || 'N/A'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div className="p-3 bg-white rounded-lg border border-slate-200">
+                      <span className="text-[9px] font-bold uppercase tracking-wide text-slate-500 block mb-1">Accuracy</span>
+                      <strong className="text-lg font-black font-mono text-slate-900">{formatMetricPercent(claimMetadata?.accuracy)}</strong>
+                    </div>
+                    <div className="p-3 bg-white rounded-lg border border-slate-200">
+                      <span className="text-[9px] font-bold uppercase tracking-wide text-slate-500 block mb-1">Macro F1</span>
+                      <strong className="text-lg font-black font-mono text-slate-900">{formatMetricDecimal(claimMetadata?.macro_f1)}</strong>
+                    </div>
+                    <div className="p-3 bg-white rounded-lg border border-slate-200">
+                      <span className="text-[9px] font-bold uppercase tracking-wide text-slate-500 block mb-1">ROC-AUC</span>
+                      <strong className="text-lg font-black font-mono text-slate-900">{formatMetricDecimal(claimMetadata?.roc_auc)}</strong>
+                    </div>
+                    <div className="p-3 bg-white rounded-lg border border-slate-200">
+                      <span className="text-[9px] font-bold uppercase tracking-wide text-slate-500 block mb-1">Brier score</span>
+                      <strong className="text-lg font-black font-mono text-slate-900">{formatMetricDecimal(claimMetadata?.brier)}</strong>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    Only applies when complete speaker, party and credit-history metadata are available. The current claim must be excluded from its own credit-history counts.
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl border border-amber-200 bg-amber-50 text-amber-950">
+                <p className="text-[11px] leading-relaxed">
+                  <strong>Benchmark scope:</strong> LIAR maps <em>true/mostly-true</em> to TRUE and <em>false/pants-fire</em> to FALSE; <em>half-true</em> and <em>barely-true</em> are excluded from the binary task.
+                  The held-out test set has {claimModelEvaluation.dataset?.counts?.test?.toLocaleString() || claimTextOnly?.n?.toLocaleString() || 'N/A'} samples.
+                  These metrics describe this benchmark split, not current-news generalization or article truth verification.
+                </p>
+              </div>
+            </>
+          ) : (
+            <p className="text-xs text-slate-500">The dedicated LIAR claim-model benchmark is unavailable in this runtime.</p>
+          )}
+        </section>
+      )}
+
       {/* Decision Threshold Configuration Panel */}
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
         <div className="flex items-center justify-between mb-4">
@@ -605,6 +755,13 @@ export const ModelSpecsView: React.FC<ModelSpecsViewProps> = ({ metrics, onRetra
           The underlying model is strictly binary (<code className="font-mono">REAL</code> vs <code className="font-mono">FAKE</code>). Predictions falling inside the uncertainty zone between the two thresholds are returned as <code className="font-mono">NEEDS MORE CONTEXT</code> instead of a forced verdict. Models trained on small demo datasets use a widened zone so borderline text is never classified with unsupported confidence.
         </p>
 
+        {productionLocked && (
+          <div className="p-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-950 text-xs leading-relaxed">
+            <strong>Production policy is read-only.</strong> These active values come from the deployed runtime artifact.
+            Changes require an audited candidate-promotion workflow; this panel cannot alter the production model.
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
           <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
             <label className="text-xs font-bold text-slate-700 block mb-1">
@@ -614,9 +771,10 @@ export const ModelSpecsView: React.FC<ModelSpecsViewProps> = ({ metrics, onRetra
               <input
                 type="range"
                 min="0.51"
-                max="0.95"
+                max={Math.max(0.95, fakeThreshold)}
                 step="0.05"
                 value={fakeThreshold}
+                disabled={productionLocked}
                 onChange={e => setFakeThreshold(parseFloat(e.target.value))}
                 className="flex-1 accent-red-600 cursor-pointer"
               />
@@ -638,6 +796,7 @@ export const ModelSpecsView: React.FC<ModelSpecsViewProps> = ({ metrics, onRetra
                 max="0.49"
                 step="0.05"
                 value={realThreshold}
+                disabled={productionLocked}
                 onChange={e => setRealThreshold(parseFloat(e.target.value))}
                 className="flex-1 accent-emerald-600 cursor-pointer"
               />
@@ -659,6 +818,7 @@ export const ModelSpecsView: React.FC<ModelSpecsViewProps> = ({ metrics, onRetra
                 max="300"
                 step="10"
                 value={minTextLength}
+                disabled={productionLocked}
                 onChange={e => setMinTextLength(parseInt(e.target.value, 10) || 60)}
                 className="w-24 bg-white border border-slate-300 rounded px-2 py-1 font-mono text-sm"
               />
@@ -674,7 +834,8 @@ export const ModelSpecsView: React.FC<ModelSpecsViewProps> = ({ metrics, onRetra
           </div>
           <button
             onClick={handleSaveThresholds}
-            className="px-6 py-2.5 bg-slate-900 text-white font-bold text-xs uppercase tracking-wider rounded-lg hover:bg-slate-800 transition-colors shadow-xs cursor-pointer"
+            disabled={productionLocked}
+            className="px-6 py-2.5 bg-slate-900 text-white font-bold text-xs uppercase tracking-wider rounded-lg hover:bg-slate-800 transition-colors shadow-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Save Threshold Configuration
           </button>
