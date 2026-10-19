@@ -150,7 +150,9 @@ export const ModelSpecsView: React.FC<ModelSpecsViewProps> = ({ metrics, onRetra
             </h3>
           </div>
           <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold font-mono rounded">
-            Production Node.js Active Runtime
+            {runtimeDiagnostics?.model_version
+              ? `Active Runtime · v${runtimeDiagnostics.model_version}`
+              : 'Production Node.js Active Runtime'}
           </span>
         </div>
 
@@ -184,16 +186,17 @@ export const ModelSpecsView: React.FC<ModelSpecsViewProps> = ({ metrics, onRetra
           </div>
 
           <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-            <span className="text-[10px] text-slate-400 uppercase font-sans block mb-1">Model Reliability</span>
+            <span className="text-[10px] text-slate-400 uppercase font-sans block mb-1">Validation Scope</span>
             <strong className="text-slate-900 block text-sm">
               {metrics.is_demo
                 ? 'DEMO — UNRELIABLE'
                 : runtimeDiagnostics?.inference_mode === 'legacy_single_svm'
                   ? 'LEGACY SAFETY MODE'
-                  : 'VALIDATED / BENCHMARK'}
+                  : 'IN-DOMAIN BENCHMARK ONLY'}
             </strong>
             <span className="text-[10px] text-slate-500 font-sans mt-0.5 block">
-              {runtimeDiagnostics?.legacy_artifact_warning || metrics.evaluation_status || 'Evaluated on genuine 20% held-out test split'}
+              {runtimeDiagnostics?.legacy_artifact_warning ||
+                `${metrics.evaluation_status || 'ISOT held-out test split'}; this metric does not establish out-of-domain accuracy.`}
             </span>
           </div>
         </div>
