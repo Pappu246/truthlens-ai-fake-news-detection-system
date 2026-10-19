@@ -755,6 +755,13 @@ export const ModelSpecsView: React.FC<ModelSpecsViewProps> = ({ metrics, onRetra
           The underlying model is strictly binary (<code className="font-mono">REAL</code> vs <code className="font-mono">FAKE</code>). Predictions falling inside the uncertainty zone between the two thresholds are returned as <code className="font-mono">NEEDS MORE CONTEXT</code> instead of a forced verdict. Models trained on small demo datasets use a widened zone so borderline text is never classified with unsupported confidence.
         </p>
 
+        {productionLocked && (
+          <div className="p-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-950 text-xs leading-relaxed">
+            <strong>Production policy is read-only.</strong> These active values come from the deployed runtime artifact.
+            Changes require an audited candidate-promotion workflow; this panel cannot alter the production model.
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
           <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
             <label className="text-xs font-bold text-slate-700 block mb-1">
@@ -764,9 +771,10 @@ export const ModelSpecsView: React.FC<ModelSpecsViewProps> = ({ metrics, onRetra
               <input
                 type="range"
                 min="0.51"
-                max="0.95"
+                max={Math.max(0.95, fakeThreshold)}
                 step="0.05"
                 value={fakeThreshold}
+                disabled={productionLocked}
                 onChange={e => setFakeThreshold(parseFloat(e.target.value))}
                 className="flex-1 accent-red-600 cursor-pointer"
               />
@@ -788,6 +796,7 @@ export const ModelSpecsView: React.FC<ModelSpecsViewProps> = ({ metrics, onRetra
                 max="0.49"
                 step="0.05"
                 value={realThreshold}
+                disabled={productionLocked}
                 onChange={e => setRealThreshold(parseFloat(e.target.value))}
                 className="flex-1 accent-emerald-600 cursor-pointer"
               />
@@ -809,6 +818,7 @@ export const ModelSpecsView: React.FC<ModelSpecsViewProps> = ({ metrics, onRetra
                 max="300"
                 step="10"
                 value={minTextLength}
+                disabled={productionLocked}
                 onChange={e => setMinTextLength(parseInt(e.target.value, 10) || 60)}
                 className="w-24 bg-white border border-slate-300 rounded px-2 py-1 font-mono text-sm"
               />
@@ -824,7 +834,8 @@ export const ModelSpecsView: React.FC<ModelSpecsViewProps> = ({ metrics, onRetra
           </div>
           <button
             onClick={handleSaveThresholds}
-            className="px-6 py-2.5 bg-slate-900 text-white font-bold text-xs uppercase tracking-wider rounded-lg hover:bg-slate-800 transition-colors shadow-xs cursor-pointer"
+            disabled={productionLocked}
+            className="px-6 py-2.5 bg-slate-900 text-white font-bold text-xs uppercase tracking-wider rounded-lg hover:bg-slate-800 transition-colors shadow-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Save Threshold Configuration
           </button>
