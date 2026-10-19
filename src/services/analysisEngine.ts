@@ -346,6 +346,7 @@ export async function executeNewsAnalysis(
     thresholds: backendData.thresholds,
     source_info: backendData.source_info,
     evidence_verification: backendData.evidence_verification,
+    claim_model: backendData.claim_model,
     linguistic_signals: linguisticSignals,
     feature_attributions: featureAttributions,
     timestamp: new Date().toISOString()
@@ -497,6 +498,7 @@ export async function analyzeUrlApi(url: string, fallbackTitle?: string): Promis
     thresholds: backendData.thresholds,
     source_info: backendData.source_info,
     evidence_verification: backendData.evidence_verification,
+    claim_model: backendData.claim_model,
     linguistic_signals: linguisticSignals,
     feature_attributions: featureAttributions,
     timestamp: new Date().toISOString()

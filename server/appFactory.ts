@@ -483,6 +483,30 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
         contentSource
       });
 
+      // Keep the dedicated LIAR claim signal separate from the ISOT article verdict.
+      // URL analyses must return the same two-model contract as direct text input.
+      let claimBlock: any;
+      try {
+        const primary = extractPrimaryClaim(extracted.content);
+        const primaryText = primary?.has_claim ? (primary.detected_claim || '').trim() : '';
+        claimBlock = primaryText
+          ? {
+              status: 'AVAILABLE',
+              source: 'primary claim extracted from the submitted article',
+              ...claimModel.predict(primaryText)
+            }
+          : {
+              status: 'NOT_APPLICABLE',
+              reason: 'No checkable standalone claim could be extracted from this article, so the claim model was not run. A claim-level score is withheld rather than guessed.'
+            };
+      } catch (err: any) {
+        claimBlock = {
+          status: err instanceof ClaimModelUnavailableError ? 'UNAVAILABLE' : 'NOT_APPLICABLE',
+          reason: err.message
+        };
+      }
+      analysis.claim_model = claimBlock;
+
       // URL analysis gets the same evidence-grounded verification layer as
       // direct text analysis. Evidence failure remains an abstention state;
       // it is never converted into FAKE.
