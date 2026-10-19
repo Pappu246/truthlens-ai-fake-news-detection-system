@@ -1,8 +1,10 @@
 import argparse
 import csv
+import hashlib
 import json
 import re
 import math
+import statistics
 from datetime import datetime, timezone
 from pathlib import Path
 from collections import Counter
@@ -55,7 +57,10 @@ def run_evaluation():
                         help="JSON report path (default: data/external_validation.json)")
     args = parser.parse_args()
 
-    with open("data/saved_model_artifacts.json", "r", encoding="utf-8") as f:
+    artifact_path = Path("data/saved_model_artifacts.json")
+    artifact_bytes = artifact_path.read_bytes()
+    artifact_sha256 = hashlib.sha256(artifact_bytes).hexdigest()
+    with artifact_path.open("r", encoding="utf-8") as f:
         artifact = json.load(f)
 
     vocab = artifact["vocabulary"]
@@ -227,6 +232,8 @@ def run_evaluation():
     eligible_samples = 0
     excluded_samples = 0
     valid_text_samples = 0
+    liar_all_word_counts = []
+    liar_eligible_word_counts = []
 
     # Raw model-transfer diagnostic uses the conventional 0.50 cutoff only
     # to compare score direction. It is not the user-facing product verdict.
@@ -244,6 +251,7 @@ def run_evaluation():
 
         if statement:
             valid_text_samples += 1
+            liar_all_word_counts.append(len(statement.split()))
 
         if raw_label in excluded_labels:
             excluded_samples += 1
@@ -255,6 +263,7 @@ def run_evaluation():
 
         eligible_samples += 1
         mapped_binary = mapping[raw_label]
+        liar_eligible_word_counts.append(len(statement.split()))
         cleaned = clean_text(statement)
         detail = predict_prob(cleaned)
         fake_prob = js_round(detail["probability"], 4)
@@ -343,6 +352,8 @@ def run_evaluation():
         "dataset_name": "LIAR Benchmark (PolitiFact)",
         "file_used": "test.tsv",
         "model_version": model_version,
+        "artifact_sha256": artifact_sha256,
+        "dataset_sha256": hashlib.sha256(tsv_path.read_bytes()).hexdigest(),
         "model_inference_mode": inference_mode,
         "production_model": f"{model_name} (v{model_version})",
         "source_training_dataset": f"{src_label} — {dataset_status}",
@@ -447,18 +458,18 @@ def run_evaluation():
                 "total_samples": 23481
             },
             "liar_all": {
-                "mean_words": 18.40,
-                "median_words": 16.0,
-                "min_words": 2,
-                "max_words": 431,
-                "total_samples": 1267
+                "mean_words": round(statistics.mean(liar_all_word_counts), 2) if liar_all_word_counts else 0,
+                "median_words": statistics.median(liar_all_word_counts) if liar_all_word_counts else 0,
+                "min_words": min(liar_all_word_counts) if liar_all_word_counts else 0,
+                "max_words": max(liar_all_word_counts) if liar_all_word_counts else 0,
+                "total_samples": len(liar_all_word_counts)
             },
             "liar_eligible": {
-                "mean_words": 18.03,
-                "median_words": 16.0,
-                "min_words": 2,
-                "max_words": 205,
-                "total_samples": 790
+                "mean_words": round(statistics.mean(liar_eligible_word_counts), 2) if liar_eligible_word_counts else 0,
+                "median_words": statistics.median(liar_eligible_word_counts) if liar_eligible_word_counts else 0,
+                "min_words": min(liar_eligible_word_counts) if liar_eligible_word_counts else 0,
+                "max_words": max(liar_eligible_word_counts) if liar_eligible_word_counts else 0,
+                "total_samples": len(liar_eligible_word_counts)
             }
         },
         "reuters_citation_stats": {
