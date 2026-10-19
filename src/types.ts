@@ -55,12 +55,80 @@ export interface SourceProvenanceInfo {
   notes: string;
 }
 
+export type EvidenceVerificationStatus =
+  | 'SUPPORTED'
+  | 'CONTRADICTED'
+  | 'MIXED'
+  | 'INSUFFICIENT_EVIDENCE'
+  | 'NEEDS_MORE_CONTEXT'
+  | 'SEARCH_UNAVAILABLE'
+  | 'UNAVAILABLE';
+
 export interface EvidenceVerificationInfo {
   available: boolean;
-  status: string;
-  message: string;
+  status: EvidenceVerificationStatus;
+  message?: string;
   reason?: string;
+  claim_text?: string;
+  claim_type?: string;
+  evidence_queries?: string[];
+  evidence?: Array<{
+    evidence_id?: string;
+    retrieved_source?: string;
+    source_title?: string;
+    source_url?: string;
+    source_final_url?: string | null;
+    source_domain?: string;
+    provenance_verified?: boolean;
+    source_fetch_status?: 'FETCHED' | 'FAILED' | 'NOT_ATTEMPTED' | 'UNKNOWN';
+    evidence_excerpt?: string;
+    stance?: 'SUPPORT' | 'CONTRADICT' | 'UNCLEAR';
+    relevance_signal?: { score: number; band: 'HIGH' | 'MEDIUM' | 'LOW'; explanation: string };
+  }>;
+  counts?: { total: number; support: number; contradict: number; unclear: number };
+  source_diversity?: { independentSourcesCount: number; domains: string[] } | null;
+  verification_signal?: { direction: 'TOWARD_TRUE' | 'TOWARD_FALSE' | 'CONFLICTING' | 'NONE'; strength: number; basis: string };
+  final_interpretation?: string;
+  evidence_outcome?: { status: 'NOT_ATTEMPTED' | 'SEARCH_FAILED' | 'NO_EVIDENCE' | 'PUBLISHER_FETCH_FAILED' | 'PROVENANCE_REJECTED' | 'AVAILABLE'; detail: string };
+  retrieval?: { attempted: boolean; all_providers_failed: boolean; duration_ms: number };
+  limitations?: string[];
   results?: any[];
+}
+
+export interface ClaimModelInfo {
+  status: 'AVAILABLE' | 'NOT_APPLICABLE' | 'UNAVAILABLE';
+  source?: string;
+  reason?: string;
+  claim_text?: string;
+  model_role?: 'claim_model';
+  model_name?: string;
+  model_version?: string;
+  model_type?: string;
+  variant_used?: 'text_only' | 'text_meta';
+  metadata_available?: boolean;
+  metadata_fields_used?: string[];
+  probability_true?: number | null;
+  probability_false?: number | null;
+  decision_threshold?: number;
+  label?: 'LIKELY TRUE' | 'LIKELY FALSE' | 'INSUFFICIENT CONTEXT';
+  confidence?: number | null;
+  limitations?: string[];
+  benchmark?: {
+    dataset: string;
+    split: string;
+    n: number;
+    accuracy: number;
+    macro_f1: number;
+    note: string;
+  } | null;
+  scored_at?: string;
+  top_features?: Array<{
+    term: string;
+    tfidf_value: number;
+    coefficient: number;
+    impact_score: number;
+    signal_direction: 'true' | 'false';
+  }>;
 }
 
 /**
@@ -143,6 +211,8 @@ export interface AnalysisResult {
   };
   source_info?: SourceProvenanceInfo;
   evidence_verification?: EvidenceVerificationInfo;
+  /** Separate LIAR short-claim model output; never merge with article probability. */
+  claim_model?: ClaimModelInfo;
   verification?: ArticleVerificationResponse;
   linguistic_signals: LinguisticSignals;
   feature_attributions: FeatureAttribution[];
