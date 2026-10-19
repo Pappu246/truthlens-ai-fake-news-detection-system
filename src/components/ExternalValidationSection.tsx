@@ -78,10 +78,35 @@ export const ExternalValidationSection: React.FC = () => {
     const match = value?.match(/\bv?(\d+\.\d+\.\d+(?:-[a-z0-9.-]+)?)/i);
     return match?.[1] ?? null;
   };
-  const reportModelVersion = extractModelVersion(report.production_model);
+  const reportModelVersion = report.model_version || extractModelVersion(report.production_model);
   const activeModelVersion = typeof runtimeDiagnostics?.model_version === 'string'
     ? runtimeDiagnostics.model_version
     : null;
+  const inDomainMetrics = runtimeDiagnostics?.evaluation_metrics?.best_model_metrics ?? null;
+  const inDomainConfusion = inDomainMetrics?.confusion_matrix ?? null;
+  const inDomainCorrect = inDomainConfusion
+    ? (Number(inDomainConfusion.true_negative) || 0) + (Number(inDomainConfusion.true_positive) || 0)
+    : null;
+  const inDomainTestSamples = runtimeDiagnostics?.dataset_size?.test_samples ?? null;
+  const inDomainAccuracy = typeof inDomainMetrics?.accuracy === 'number' ? inDomainMetrics.accuracy : null;
+  const inDomainPrecisionFake = typeof inDomainMetrics?.precision === 'number' ? inDomainMetrics.precision : null;
+  const inDomainRecallFake = typeof inDomainMetrics?.recall === 'number' ? inDomainMetrics.recall : null;
+  const inDomainF1Fake = typeof inDomainMetrics?.f1_score === 'number' ? inDomainMetrics.f1_score : null;
+  const inDomainRecallReal = inDomainConfusion
+    ? (Number(inDomainConfusion.true_negative) + Number(inDomainConfusion.false_positive)) > 0
+      ? Number(inDomainConfusion.true_negative) /
+        (Number(inDomainConfusion.true_negative) + Number(inDomainConfusion.false_positive))
+      : null
+    : null;
+  const inDomainBalancedAccuracy = inDomainRecallFake !== null && inDomainRecallReal !== null
+    ? (inDomainRecallFake + inDomainRecallReal) / 2
+    : null;
+  const formatPct = (value: number | null | undefined) =>
+    typeof value === 'number' && Number.isFinite(value) ? `${(value * 100).toFixed(2)}%` : 'N/A';
+  const formatDelta = (value: number | null | undefined, baseline: number | null | undefined) =>
+    typeof value === 'number' && typeof baseline === 'number' && Number.isFinite(value) && Number.isFinite(baseline)
+      ? `${((value - baseline) * 100).toFixed(2)} pp`
+      : 'N/A';
   const isEvaluationVersionMismatch = Boolean(
     runtimeDiagnosticsLoaded &&
     activeModelVersion &&
@@ -95,7 +120,8 @@ export const ExternalValidationSection: React.FC = () => {
     activeModelVersion === reportModelVersion
   );
   const isEvaluationVersionUnverified = runtimeDiagnosticsLoaded && !isEvaluationVersionConfirmed;
-  const isEvaluationRunComplete = report.status === 'COMPLETED' && isEvaluationVersionConfirmed;
+  const hasPolicyAwareReport = report.schema_version === 2 && Boolean(report.production_policy_metrics);
+  const isEvaluationRunComplete = report.status === 'COMPLETED' && isEvaluationVersionConfirmed && hasPolicyAwareReport;
   const evaluatedAtLabel = Number.isNaN(Date.parse(report.evaluated_at))
     ? report.evaluated_at
     : new Date(report.evaluated_at).toLocaleString();
@@ -127,7 +153,9 @@ export const ExternalValidationSection: React.FC = () => {
                     ? 'Model Version Unverified'
                     : !runtimeDiagnosticsLoaded
                       ? 'Checking Runtime Version…'
-                      : `Evaluation Run: ${report.status}`}
+                      : hasPolicyAwareReport
+                        ? `Model-Matched · Policy Evaluation ${report.status}`
+                        : 'Model Match · Legacy Evaluator'}
               </span>
               <span className="px-2.5 py-0.5 bg-slate-700/60 text-slate-300 text-[10px] font-mono rounded">
                 Split: {report.file_used}
@@ -158,12 +186,12 @@ export const ExternalValidationSection: React.FC = () => {
           </div>
         </div>
 
-        {runtimeDiagnosticsLoaded && !isEvaluationVersionConfirmed && (
+        {runtimeDiagnosticsLoaded && (!isEvaluationVersionConfirmed || !hasPolicyAwareReport) && (
           <div role="alert" className="mt-5 p-4 rounded-xl border border-amber-300 bg-amber-50 text-amber-950">
             <div className="flex items-start gap-2">
               <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5 text-amber-700" />
               <div className="text-xs leading-relaxed">
-                <strong className="block uppercase tracking-wide mb-1">Historical evaluation — not verified for the active model</strong>
+                <strong className="block uppercase tracking-wide mb-1">{!isEvaluationVersionConfirmed ? 'Historical evaluation — not verified for the active model' : 'Legacy evaluation method — production policy metrics missing'}</strong>
                 {isEvaluationVersionMismatch ? (
                   <>
                     This cached LIAR report was evaluated on <strong>{reportModelVersion}</strong> ({evaluatedAtLabel}), but the active Node.js runtime reports
@@ -220,15 +248,69 @@ export const ExternalValidationSection: React.FC = () => {
       </div>
 
       <div className="p-6 lg:p-8 space-y-8">
+        {report.production_policy_metrics && (
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 lg:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
+              <div>
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Production Decision-Policy Simulation</span>
+                <h3 className="text-base font-black text-slate-900 uppercase tracking-tight">
+                  Coverage & Abstention — v{report.model_version || reportModelVersion || 'unknown'}
+                </h3>
+                <p className="text-xs text-slate-500 mt-1 max-w-3xl leading-relaxed">
+                  Uses the active artifact's thresholds and article-runtime preflight, vocabulary coverage and short-input OOD guards.
+                  LIAR contains short claims, so this tests policy behavior on out-of-domain text; it does not prove real-world news accuracy.
+                </p>
+              </div>
+              <span className="text-[10px] font-mono bg-slate-100 text-slate-600 px-2.5 py-1 rounded whitespace-nowrap">
+                {report.production_policy_metrics.total_eligible_samples.toLocaleString()} eligible claims
+              </span>
+            </div>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="p-3 rounded-xl border border-slate-200 bg-slate-50">
+                <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Policy Coverage</span>
+                <strong className="text-2xl font-black font-mono text-slate-900">{(report.production_policy_metrics.coverage_ratio * 100).toFixed(2)}%</strong>
+                <span className="text-[10px] text-slate-500 block mt-1">{report.production_policy_metrics.decided_samples.toLocaleString()} decided</span>
+              </div>
+              <div className="p-3 rounded-xl border border-slate-200 bg-slate-50">
+                <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Abstention Rate</span>
+                <strong className="text-2xl font-black font-mono text-amber-700">{(report.production_policy_metrics.abstention_rate * 100).toFixed(2)}%</strong>
+                <span className="text-[10px] text-slate-500 block mt-1">{report.production_policy_metrics.abstained_samples.toLocaleString()} need more context</span>
+              </div>
+              <div className="p-3 rounded-xl border border-slate-200 bg-slate-50">
+                <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Selective Accuracy</span>
+                <strong className="text-2xl font-black font-mono text-slate-900">{formatPct(report.production_policy_metrics.selective_accuracy)}</strong>
+                <span className="text-[10px] text-slate-500 block mt-1">Among decided only; N={report.production_policy_metrics.decided_samples.toLocaleString()}</span>
+              </div>
+              <div className="p-3 rounded-xl border border-slate-200 bg-slate-50">
+                <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Correct / Decided</span>
+                <strong className="text-2xl font-black font-mono text-slate-900">
+                  {report.production_policy_metrics.confusion_matrix.true_positive + report.production_policy_metrics.confusion_matrix.true_negative}
+                </strong>
+                <span className="text-[10px] text-slate-500 block mt-1">Out of {report.production_policy_metrics.decided_samples.toLocaleString()} decisions</span>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2 mt-4">
+              {Object.entries(report.production_policy_metrics.abstention_reason_counts).map(([reason, count]) => (
+                <span key={reason} className="px-2.5 py-1 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-[10px] font-mono">
+                  {reason.replace(/_/g, ' ')}: {count.toLocaleString()}
+                </span>
+              ))}
+            </div>
+            <p className="text-[11px] text-slate-500 mt-4 leading-relaxed">
+              Abstentions are reported separately and are not counted as correct predictions. The diagnostic table below uses a fixed 0.50 score cutoff, not the production decision thresholds.
+            </p>
+          </section>
+        )}
+
         {/* Section 10: Cross-Dataset Comparison Table */}
         <div>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
             <div>
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
-                Cross-Dataset Generalization Analysis
+                Raw Model-Transfer Diagnostic · Fixed 0.50 Cutoff
               </span>
               <h3 className="text-base font-black text-slate-900 uppercase tracking-tight">
-                ISOT Held-Out Test vs. LIAR External Validation
+                ISOT In-Domain Benchmark vs. LIAR Transfer Diagnostic
               </h3>
             </div>
             <div className="text-[10px] font-mono bg-slate-100 text-slate-600 px-2.5 py-1 rounded">
@@ -242,38 +324,38 @@ export const ExternalValidationSection: React.FC = () => {
                 <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase font-black tracking-wider text-[10px]">
                   <th className="py-3 px-4">Evaluation Metric</th>
                   <th className="py-3 px-4">ISOT Held-out Test (In-Domain)</th>
-                  <th className="py-3 px-4">LIAR External Validation (Out-of-Domain)</th>
-                  <th className="py-3 px-4">Generalization Impact</th>
+                  <th className="py-3 px-4">LIAR Raw Diagnostic (0.50 Cutoff)</th>
+                  <th className="py-3 px-4">Δ vs. ISOT (pp)</th>
                   <th className="py-3 px-4">Analysis / Notes</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-mono">
                 <tr className="hover:bg-slate-50/50">
                   <td className="py-3 px-4 font-bold text-slate-800">Accuracy</td>
-                  <td className="py-3 px-4 text-emerald-700 font-black">99.57% (7,699 / 7,732)</td>
+                  <td className="py-3 px-4 text-emerald-700 font-black">{formatPct(inDomainAccuracy)} ({inDomainCorrect?.toLocaleString() ?? 'N/A'} / {inDomainTestSamples?.toLocaleString() ?? 'N/A'})</td>
                   <td className="py-3 px-4 text-slate-900 font-black">
                     {(metrics.accuracy * 100).toFixed(2)}% ({cm.true_positive + cm.true_negative} / {report.eligible_binary_samples})
                   </td>
                   <td className="py-3 px-4 text-rose-600 font-black">
-                    {((metrics.accuracy - 0.9957) * 100).toFixed(2)}%
+                    {formatDelta(metrics.accuracy, inDomainAccuracy)}
                   </td>
                   <td className="py-3 px-4 font-sans text-[11px] text-slate-500">Substantial domain shift between news articles and claims</td>
                 </tr>
                 <tr className="hover:bg-slate-50/50">
                   <td className="py-3 px-4 font-bold text-slate-800">Precision (Fake)</td>
-                  <td className="py-3 px-4 text-emerald-700 font-black">99.40%</td>
+                  <td className="py-3 px-4 text-emerald-700 font-black">{formatPct(inDomainPrecisionFake)}</td>
                   <td className="py-3 px-4 text-slate-900 font-black">{(metrics.precision * 100).toFixed(2)}%</td>
                   <td className="py-3 px-4 text-rose-600 font-black">
-                    {((metrics.precision - 0.9940) * 100).toFixed(2)}%
+                    {formatDelta(metrics.precision, inDomainPrecisionFake)}
                   </td>
                   <td className="py-3 px-4 font-sans text-[11px] text-slate-500">Short claims lack formal journalistic tags and attribution</td>
                 </tr>
                 <tr className="hover:bg-slate-50/50">
                   <td className="py-3 px-4 font-bold text-slate-800">Recall (Fake)</td>
-                  <td className="py-3 px-4 text-emerald-700 font-black">99.66%</td>
+                  <td className="py-3 px-4 text-emerald-700 font-black">{formatPct(inDomainRecallFake)}</td>
                   <td className="py-3 px-4 text-emerald-700 font-black">{(metrics.recall * 100).toFixed(2)}%</td>
                   <td className="py-3 px-4 text-slate-600 font-black">
-                    {((metrics.recall - 0.9966) * 100).toFixed(2)}%
+                    {formatDelta(metrics.recall, inDomainRecallFake)}
                   </td>
                   <td className="py-3 px-4 font-sans text-[11px] text-slate-500">
                     Nearly all fake claims successfully flagged ({cm.true_positive}/{report.binary_label_distribution.fake})
@@ -281,19 +363,19 @@ export const ExternalValidationSection: React.FC = () => {
                 </tr>
                 <tr className="hover:bg-slate-50/50">
                   <td className="py-3 px-4 font-bold text-slate-800">F1-Score (Fake)</td>
-                  <td className="py-3 px-4 text-emerald-700 font-black">99.53%</td>
+                  <td className="py-3 px-4 text-emerald-700 font-black">{formatPct(inDomainF1Fake)}</td>
                   <td className="py-3 px-4 text-slate-900 font-black">{(metrics.f1_score * 100).toFixed(2)}%</td>
                   <td className="py-3 px-4 text-rose-600 font-black">
-                    {((metrics.f1_score - 0.9953) * 100).toFixed(2)}%
+                    {formatDelta(metrics.f1_score, inDomainF1Fake)}
                   </td>
                   <td className="py-3 px-4 font-sans text-[11px] text-slate-500">Harmonic mean impacted by lower precision on short statements</td>
                 </tr>
                 <tr className="hover:bg-slate-50/50">
                   <td className="py-3 px-4 font-bold text-slate-800">Balanced Accuracy</td>
-                  <td className="py-3 px-4 text-emerald-700 font-black">99.58%</td>
+                  <td className="py-3 px-4 text-emerald-700 font-black">{formatPct(inDomainBalancedAccuracy)}</td>
                   <td className="py-3 px-4 text-slate-900 font-black">{(metrics.balanced_accuracy * 100).toFixed(2)}%</td>
                   <td className="py-3 px-4 text-rose-600 font-black">
-                    {((metrics.balanced_accuracy - 0.9958) * 100).toFixed(2)}%
+                    {formatDelta(metrics.balanced_accuracy, inDomainBalancedAccuracy)}
                   </td>
                   <td className="py-3 px-4 font-sans text-[11px] text-slate-500">
                     Mean of Fake Recall ({(metrics.recall * 100).toFixed(2)}%) and Real Recall ({(metrics.real_class.recall * 100).toFixed(2)}%)
@@ -306,9 +388,8 @@ export const ExternalValidationSection: React.FC = () => {
           <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl mt-3 flex items-start gap-2 text-blue-900">
             <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
             <p className="text-[11px] leading-relaxed">
-              <strong>Scientific Methodology Note:</strong> These datasets represent fundamentally distinct linguistic and structural distributions.
-              ISOT consists of long-form, multi-paragraph news articles with institutional attribution, whereas LIAR consists of short, single-sentence political statements without context.
-              This comparison evaluates out-of-domain transfer, <strong>NOT</strong> a claim that one dataset is "correct" or that the model is broken.
+              <strong>Diagnostic-only comparison:</strong> the LIAR scores use a fixed 0.50 cutoff and do not implement runtime context, OOD, abstention or 0.98/0.35 policy.
+              ISOT contains long-form news articles, while LIAR contains short claims with a finer-grained truth scale. Read the production-policy simulation above for coverage, abstention and selective accuracy; neither score establishes universal real-world fake-news accuracy.
             </p>
           </div>
         </div>
@@ -319,7 +400,7 @@ export const ExternalValidationSection: React.FC = () => {
           <div className="lg:col-span-2 space-y-4">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                LIAR Out-of-Domain Performance (Eligible N = {report.eligible_binary_samples})
+                LIAR Raw Transfer Diagnostic (Eligible N = {report.eligible_binary_samples})
               </span>
               <span className="text-[10px] font-mono text-slate-500">Binary Mapping Evaluated</span>
             </div>
@@ -415,7 +496,7 @@ export const ExternalValidationSection: React.FC = () => {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                LIAR Confusion Matrix (N = {report.eligible_binary_samples})
+                Raw Transfer Confusion Matrix (N = {report.eligible_binary_samples})
               </span>
               <span className="text-[10px] font-mono text-slate-500">Positive Class = FAKE (1)</span>
             </div>
@@ -637,8 +718,8 @@ export const ExternalValidationSection: React.FC = () => {
                   <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Threshold Policy</span>
                   <div className="space-y-0.5 font-mono text-[11px] text-slate-800">
                     <div><strong>Decision Boundary:</strong> 0.50 (Binary eval)</div>
-                    <div><strong>Production Real:</strong> ≤ 0.35 P(FAKE)</div>
-                    <div><strong>Production Fake:</strong> ≥ 0.65 P(FAKE)</div>
+                    <div><strong>Production Real:</strong> ≤ {(report.evaluation_protocol?.real_threshold ?? runtimeDiagnostics?.thresholds?.real_threshold ?? 0.35).toFixed(2)} P(FAKE)</div>
+                    <div><strong>Production Fake:</strong> ≥ {(report.evaluation_protocol?.fake_threshold ?? runtimeDiagnostics?.thresholds?.fake_threshold ?? 0.98).toFixed(2)} P(FAKE)</div>
                     <div><strong>Thresholds Modified:</strong> None (Preserved)</div>
                   </div>
                 </div>
@@ -706,7 +787,7 @@ export const ExternalValidationSection: React.FC = () => {
                       Sample Predictions Inspector ({report.sample_predictions?.length || 0} Inspected)
                     </h4>
                     <span className="text-[10px] text-slate-500">
-                      Actual statements from test.tsv processed through the production vectorizer and calibrated Linear SVM.
+                      Raw 0.50-cutoff transfer diagnostic plus a separate production-policy simulation; abstentions are preserved, not counted as correct.
                     </span>
                   </div>
 

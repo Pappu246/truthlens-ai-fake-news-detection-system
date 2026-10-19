@@ -401,7 +401,47 @@ export interface ReutersCitationStats {
   fake_csv_reuters_percentage: number;
 }
 
+export interface ProductionPolicyEvaluationMetrics {
+  evaluated_samples: number;
+  accuracy: number | null;
+  precision_fake: number | null;
+  recall_fake: number | null;
+  f1_fake: number | null;
+  precision_real: number | null;
+  recall_real: number | null;
+  f1_real: number | null;
+  macro_f1: number | null;
+  balanced_accuracy: number | null;
+  total_eligible_samples: number;
+  decided_samples: number;
+  abstained_samples: number;
+  coverage_ratio: number;
+  abstention_rate: number;
+  selective_accuracy: number | null;
+  probability_exposed_samples: number;
+  abstention_reason_counts: Record<string, number>;
+  confusion_matrix: ExternalValidationConfusionMatrix;
+  interpretation: string;
+}
+
 export interface ExternalValidationReport {
+  schema_version?: number;
+  model_version?: string;
+  model_inference_mode?: string;
+  evaluation_protocol?: {
+    raw_model_transfer: string;
+    production_policy: string;
+    fake_threshold: number;
+    real_threshold: number;
+    min_text_length: number;
+    min_word_count_without_source: number;
+    min_vocabulary_coverage: number;
+    ood_short_candidate_term_count: number;
+    ood_coverage_threshold: number;
+    calibration_members_used: number;
+    uses_runtime_calibrated_ensemble: boolean;
+  };
+  production_policy_metrics?: ProductionPolicyEvaluationMetrics;
   status: 'COMPLETED' | 'RUNNING' | 'NOT AVAILABLE';
   evaluated_at: string;
   dataset_name: string;

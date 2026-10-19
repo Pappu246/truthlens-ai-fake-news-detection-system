@@ -24,6 +24,11 @@ on:
       - 'scripts/evidenceTests.ts'
       - 'scripts/gate14RemainingTests.ts'
       - 'scripts/evidenceBenchmark.ts'
+      - 'scripts/evaluate_liar.py'
+      - 'data/test.tsv'
+      - 'data/saved_model_artifacts.json'
+      - 'data/external_validation.json'
+      - 'src/types.ts'
       - 'package.json'
       - 'package-lock.json'
       - 'vite.config.ts'
@@ -102,6 +107,49 @@ jobs:
       - name: External model-quality harness smoke
         run: npm run test:v2-model-quality-external-smoke
 
+      - name: Exact production-ensemble LIAR evaluation
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/external-validation
+          python3 scripts/evaluate_liar.py --output artifacts/external-validation/report.json
+          python3 - <<'PY'
+          import csv
+          import hashlib
+          import json
+          from pathlib import Path
+
+          with Path("data/saved_model_artifacts.json").open(encoding="utf-8") as f:
+              artifact = json.load(f)
+          with Path("artifacts/external-validation/report.json").open(encoding="utf-8") as f:
+              report = json.load(f)
+
+          assert report["status"] == "COMPLETED"
+          assert report["model_version"] == artifact["model_version"]
+          assert report["model_inference_mode"] == "calibrated_ensemble"
+          assert report["evaluation_protocol"]["calibration_members_used"] == 3
+          with Path("data/test.tsv").open(encoding="utf-8") as f:
+              rows = list(csv.reader(f, delimiter="\t"))
+          binary_labels = {"pants-fire", "false", "mostly-true", "true"}
+          expected_eligible = sum(1 for row in rows if len(row) > 1 and row[1].strip().lower() in binary_labels)
+          assert report["total_test_samples"] == len(rows)
+          assert report["eligible_binary_samples"] == expected_eligible
+          assert report["excluded_ambiguous_samples"] == len(rows) - expected_eligible
+          assert report["dataset_sha256"] == hashlib.sha256(Path("data/test.tsv").read_bytes()).hexdigest()
+          assert report["artifact_sha256"] == hashlib.sha256(Path("data/saved_model_artifacts.json").read_bytes()).hexdigest()
+          policy = report["production_policy_metrics"]
+          assert policy["decided_samples"] + policy["abstained_samples"] == report["eligible_binary_samples"]
+          assert policy["total_eligible_samples"] == report["eligible_binary_samples"]
+          raw_cm = report["confusion_matrix"]
+          assert sum(sum(row) for row in raw_cm["matrix"]) == report["eligible_binary_samples"]
+          policy_cm = policy["confusion_matrix"]
+          assert sum(sum(row) for row in policy_cm["matrix"]) == policy["decided_samples"]
+          assert abs(policy["coverage_ratio"] + policy["abstention_rate"] - 1.0) < 0.0002
+          print("LIAR ensemble report integrity: PASS")
+          print(f"version={report['model_version']} raw_N={report['eligible_binary_samples']} "
+                f"policy_decided={policy['decided_samples']} policy_abstained={policy['abstained_samples']}")
+          PY
+
       - name: Model artifact lifecycle tests
         run: npm run test:artifacts
 
@@ -145,4 +193,5 @@ jobs:
           path: |
             artifacts/evidence-benchmark/report.json
             artifacts/v2-model-quality/external-harness-smoke.json
+            artifacts/external-validation/report.json
           if-no-files-found: warn

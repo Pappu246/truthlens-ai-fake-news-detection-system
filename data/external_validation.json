@@ -1,17 +1,17 @@
 {
   "status": "COMPLETED",
-  "evaluated_at": "2026-09-26T06:05:00.733889Z",
+  "evaluated_at": "2026-10-19T09:41:50.203Z",
   "dataset_name": "LIAR Benchmark (PolitiFact)",
   "file_used": "test.tsv",
-  "production_model": "Linear SVM (Calibrated) (v3.0.0-isot)",
-  "source_training_dataset": "data/True.csv & data/Fake.csv \u2014 ISOT BENCHMARK DATASET",
+  "production_model": "Linear SVM (Calibrated) (v3.1.0-isot)",
+  "source_training_dataset": "data/True.csv & data/Fake.csv — ISOT BENCHMARK DATASET",
   "training_sample_count": 38656,
-  "runtime_feature_space": "8,000 TF-IDF features (is_demo=False)",
+  "runtime_feature_space": "8,000 TF-IDF features (is_demo=false)",
   "is_demo": false,
   "model_weights_modified": false,
   "tf_idf_source": "Fitted on training set (8,000 terms, saved_model_artifacts.json)",
   "offline_artifact_note": "backend/models/vectorizer.joblib (Python artifact) corresponds to the same vocabulary used by the Node.js runtime artifact saved_model_artifacts.json.",
-  "evaluation_type": "Out-of-domain external validation",
+  "evaluation_type": "Out-of-domain raw ensemble transfer diagnostic plus production-policy simulation",
   "total_test_samples": 1267,
   "valid_text_samples": 1267,
   "excluded_ambiguous_samples": 477,
@@ -59,38 +59,38 @@
     }
   ],
   "metrics": {
-    "accuracy": 0.4329,
-    "precision": 0.4299,
-    "recall": 0.9619,
-    "f1_score": 0.5942,
-    "macro_f1": 0.3265,
-    "balanced_accuracy": 0.4965,
+    "accuracy": 0.4354,
+    "precision": 0.4308,
+    "recall": 0.9589,
+    "f1_score": 0.5945,
+    "macro_f1": 0.3327,
+    "balanced_accuracy": 0.4984,
     "fake_class": {
       "label": "FAKE (1)",
-      "precision": 0.4299,
-      "recall": 0.9619,
-      "f1_score": 0.5942
+      "precision": 0.4308,
+      "recall": 0.9589,
+      "f1_score": 0.5945
     },
     "real_class": {
       "label": "REAL (0)",
-      "precision": 0.5185,
-      "recall": 0.0312,
-      "f1_score": 0.0588
+      "precision": 0.5484,
+      "recall": 0.0379,
+      "f1_score": 0.0708
     }
   },
   "confusion_matrix": {
-    "true_positive": 328,
-    "true_negative": 14,
-    "false_positive": 435,
-    "false_negative": 13,
+    "true_positive": 327,
+    "true_negative": 17,
+    "false_positive": 432,
+    "false_negative": 14,
     "matrix": [
       [
-        14,
-        435
+        17,
+        432
       ],
       [
-        13,
-        328
+        14,
+        327
       ]
     ],
     "labels": [
@@ -107,35 +107,35 @@
   "text_length_stats": {
     "isot_overall": {
       "mean_words": 417.74,
-      "median_words": 375.0,
+      "median_words": 375,
       "min_words": 2,
       "max_words": 8148,
       "total_samples": 44898
     },
     "isot_true": {
       "mean_words": 395.59,
-      "median_words": 369.0,
+      "median_words": 369,
       "min_words": 4,
       "max_words": 5181,
       "total_samples": 21417
     },
     "isot_fake": {
       "mean_words": 437.93,
-      "median_words": 378.0,
+      "median_words": 378,
       "min_words": 2,
       "max_words": 8148,
       "total_samples": 23481
     },
     "liar_all": {
       "mean_words": 18.4,
-      "median_words": 16.0,
+      "median_words": 16,
       "min_words": 2,
       "max_words": 431,
       "total_samples": 1267
     },
     "liar_eligible": {
       "mean_words": 18.03,
-      "median_words": 16.0,
+      "median_words": 16,
       "min_words": 2,
       "max_words": 205,
       "total_samples": 790
@@ -150,24 +150,24 @@
     "fake_csv_reuters_percentage": 1.37
   },
   "domain_shift_explanation": {
-    "summary": "External validation measures how the production runtime model generalizes to a completely different dataset, genre, and text structure.",
+    "summary": "This report separates raw calibrated model-score transfer from the production decision policy. LIAR contains short political claims, while the article classifier is trained on long-form ISOT news articles; raw transfer metrics are diagnostic and must not be presented as real-world fake-news accuracy.",
     "production_model_characteristics": [
-      "Production Runtime Model: Linear SVM (Calibrated) (v3.0.0-isot) with 8,000 TF-IDF features loaded from saved_model_artifacts.json",
-      "Training corpus: data/True.csv & data/Fake.csv \u2014 ISOT BENCHMARK DATASET (N\u224838,656)",
+      "Production Runtime Model: Linear SVM (Calibrated) (v3.1.0-isot) with 8,000 TF-IDF features loaded from saved_model_artifacts.json",
+      "Training corpus: data/True.csv & data/Fake.csv — ISOT BENCHMARK DATASET (N≈38,656)",
       "Full article contexts with structured journalistic or sensationalist reporting patterns"
     ],
     "isot_characteristics": [
-      "Production Runtime Model: Linear SVM (Calibrated) (v3.0.0-isot) with 8,000 TF-IDF features loaded from saved_model_artifacts.json",
-      "Training corpus: data/True.csv & data/Fake.csv \u2014 ISOT BENCHMARK DATASET (N\u224838,656)",
+      "Production Runtime Model: Linear SVM (Calibrated) (v3.1.0-isot) with 8,000 TF-IDF features loaded from saved_model_artifacts.json",
+      "Training corpus: data/True.csv & data/Fake.csv — ISOT BENCHMARK DATASET (N≈38,656)",
       "Full article contexts with structured journalistic or sensationalist reporting patterns"
     ],
     "liar_characteristics": [
-      "Short single-sentence political claims: mean 18.40 words, median 16.00 words (min: 2, max: 431; eligible N=790 mean: 18.03)",
+      "Short single-sentence political claims: mean 18.40 words, median 16.00 (min: 2, max: 431; eligible N=790 mean: 18.03)",
       "PolitiFact fact-checking claims lacking journalistic wire datelines or article structure",
       "Sparse n-gram overlap with full-length news article vocabulary",
       "Fine-grained veracity continuum rather than clean binary article labeling"
     ],
-    "conclusion": "Lower performance on LIAR reflects substantial domain shift and structural differences (isolated short claim without article context vs. full news article), rather than an algorithmic flaw in the production model. The ISOT-trained classifier detects linguistic patterns characteristic of full news articles and is not a substitute for fact-checking short isolated claims."
+    "conclusion": "LIAR is out-of-domain for a full-article model and contains short political claims. Raw model-transfer metrics are a diagnostic comparison, not proof of truth or general real-world accuracy. Production-policy coverage and selective metrics must be read alongside abstention counts; abstentions are not correct predictions."
   },
   "sample_predictions": [
     {
@@ -176,10 +176,21 @@
       "original_liar_label": "true",
       "mapped_binary_label": "REAL",
       "predicted_label": "FAKE",
-      "fake_probability": 0.9819,
-      "real_probability": 0.0181,
-      "confidence": 98.2,
-      "is_correct": false
+      "fake_probability": 0.9627,
+      "real_probability": 0.0373,
+      "confidence": 96.3,
+      "is_correct": false,
+      "production_verdict": "NEEDS MORE CONTEXT",
+      "production_abstention_reason": "insufficient_word_count",
+      "production_probability_withheld": true,
+      "production_fake_probability": null,
+      "production_real_probability": null,
+      "production_is_correct_when_decided": null,
+      "vocabulary_coverage": {
+        "candidate_terms": 15,
+        "matched_terms": 9,
+        "ratio": 0.6
+      }
     },
     {
       "id": "11685.json",
@@ -187,10 +198,21 @@
       "original_liar_label": "false",
       "mapped_binary_label": "FAKE",
       "predicted_label": "FAKE",
-      "fake_probability": 0.9546,
-      "real_probability": 0.0454,
-      "confidence": 95.5,
-      "is_correct": true
+      "fake_probability": 0.9322,
+      "real_probability": 0.0678,
+      "confidence": 93.2,
+      "is_correct": true,
+      "production_verdict": "NEEDS MORE CONTEXT",
+      "production_abstention_reason": "insufficient_word_count",
+      "production_probability_withheld": true,
+      "production_fake_probability": null,
+      "production_real_probability": null,
+      "production_is_correct_when_decided": null,
+      "vocabulary_coverage": {
+        "candidate_terms": 11,
+        "matched_terms": 5,
+        "ratio": 0.4545
+      }
     },
     {
       "id": "11096.json",
@@ -198,10 +220,21 @@
       "original_liar_label": "false",
       "mapped_binary_label": "FAKE",
       "predicted_label": "FAKE",
-      "fake_probability": 0.9993,
-      "real_probability": 0.0007,
-      "confidence": 99.9,
-      "is_correct": true
+      "fake_probability": 0.9982,
+      "real_probability": 0.0018,
+      "confidence": 99.8,
+      "is_correct": true,
+      "production_verdict": "NEEDS MORE CONTEXT",
+      "production_abstention_reason": "insufficient_text_length",
+      "production_probability_withheld": true,
+      "production_fake_probability": null,
+      "production_real_probability": null,
+      "production_is_correct_when_decided": null,
+      "vocabulary_coverage": {
+        "candidate_terms": 13,
+        "matched_terms": 5,
+        "ratio": 0.3846
+      }
     },
     {
       "id": "9524.json",
@@ -209,10 +242,21 @@
       "original_liar_label": "pants-fire",
       "mapped_binary_label": "FAKE",
       "predicted_label": "FAKE",
-      "fake_probability": 0.9999,
-      "real_probability": 0.0001,
-      "confidence": 100.0,
-      "is_correct": true
+      "fake_probability": 1,
+      "real_probability": 0,
+      "confidence": 100,
+      "is_correct": true,
+      "production_verdict": "LIKELY FAKE",
+      "production_abstention_reason": null,
+      "production_probability_withheld": false,
+      "production_fake_probability": 1,
+      "production_real_probability": 0,
+      "production_is_correct_when_decided": true,
+      "vocabulary_coverage": {
+        "candidate_terms": 29,
+        "matched_terms": 12,
+        "ratio": 0.4138
+      }
     },
     {
       "id": "5962.json",
@@ -220,21 +264,43 @@
       "original_liar_label": "true",
       "mapped_binary_label": "REAL",
       "predicted_label": "FAKE",
-      "fake_probability": 0.9974,
-      "real_probability": 0.0026,
-      "confidence": 99.7,
-      "is_correct": false
+      "fake_probability": 0.9934,
+      "real_probability": 0.0066,
+      "confidence": 99.3,
+      "is_correct": false,
+      "production_verdict": "LIKELY FAKE",
+      "production_abstention_reason": null,
+      "production_probability_withheld": false,
+      "production_fake_probability": 0.9934,
+      "production_real_probability": 0.0066,
+      "production_is_correct_when_decided": false,
+      "vocabulary_coverage": {
+        "candidate_terms": 28,
+        "matched_terms": 10,
+        "ratio": 0.3571
+      }
     },
     {
       "id": "7070.json",
       "statement": "Says that Tennessee law requires that schools receive half of proceeds -- $31 million per year -- from a half-cent increase in the Shelby County sales tax.",
       "original_liar_label": "true",
       "mapped_binary_label": "REAL",
-      "predicted_label": "FAKE",
-      "fake_probability": 0.5758,
-      "real_probability": 0.4242,
-      "confidence": 57.6,
-      "is_correct": false
+      "predicted_label": "REAL",
+      "fake_probability": 0.494,
+      "real_probability": 0.506,
+      "confidence": 50.6,
+      "is_correct": true,
+      "production_verdict": "NEEDS MORE CONTEXT",
+      "production_abstention_reason": "uncertainty_zone",
+      "production_probability_withheld": false,
+      "production_fake_probability": 0.494,
+      "production_real_probability": 0.506,
+      "production_is_correct_when_decided": null,
+      "vocabulary_coverage": {
+        "candidate_terms": 34,
+        "matched_terms": 13,
+        "ratio": 0.3824
+      }
     },
     {
       "id": "12849.json",
@@ -242,10 +308,21 @@
       "original_liar_label": "true",
       "mapped_binary_label": "REAL",
       "predicted_label": "FAKE",
-      "fake_probability": 0.9882,
-      "real_probability": 0.0118,
-      "confidence": 98.8,
-      "is_correct": false
+      "fake_probability": 0.9912,
+      "real_probability": 0.0088,
+      "confidence": 99.1,
+      "is_correct": false,
+      "production_verdict": "NEEDS MORE CONTEXT",
+      "production_abstention_reason": "insufficient_word_count",
+      "production_probability_withheld": true,
+      "production_fake_probability": null,
+      "production_real_probability": null,
+      "production_is_correct_when_decided": null,
+      "vocabulary_coverage": {
+        "candidate_terms": 11,
+        "matched_terms": 6,
+        "ratio": 0.5455
+      }
     },
     {
       "id": "11269.json",
@@ -253,10 +330,21 @@
       "original_liar_label": "pants-fire",
       "mapped_binary_label": "FAKE",
       "predicted_label": "FAKE",
-      "fake_probability": 0.9976,
-      "real_probability": 0.0024,
-      "confidence": 99.8,
-      "is_correct": true
+      "fake_probability": 0.993,
+      "real_probability": 0.007,
+      "confidence": 99.3,
+      "is_correct": true,
+      "production_verdict": "NEEDS MORE CONTEXT",
+      "production_abstention_reason": "insufficient_text_length",
+      "production_probability_withheld": true,
+      "production_fake_probability": null,
+      "production_real_probability": null,
+      "production_is_correct_when_decided": null,
+      "vocabulary_coverage": {
+        "candidate_terms": 9,
+        "matched_terms": 4,
+        "ratio": 0.4444
+      }
     },
     {
       "id": "11200.json",
@@ -264,10 +352,21 @@
       "original_liar_label": "false",
       "mapped_binary_label": "FAKE",
       "predicted_label": "FAKE",
-      "fake_probability": 0.9986,
-      "real_probability": 0.0014,
-      "confidence": 99.9,
-      "is_correct": true
+      "fake_probability": 0.9933,
+      "real_probability": 0.0067,
+      "confidence": 99.3,
+      "is_correct": true,
+      "production_verdict": "LIKELY FAKE",
+      "production_abstention_reason": null,
+      "production_probability_withheld": false,
+      "production_fake_probability": 0.9933,
+      "production_real_probability": 0.0067,
+      "production_is_correct_when_decided": true,
+      "vocabulary_coverage": {
+        "candidate_terms": 24,
+        "matched_terms": 11,
+        "ratio": 0.4583
+      }
     },
     {
       "id": "4888.json",
@@ -275,10 +374,21 @@
       "original_liar_label": "true",
       "mapped_binary_label": "REAL",
       "predicted_label": "FAKE",
-      "fake_probability": 0.8771,
-      "real_probability": 0.1229,
-      "confidence": 87.7,
-      "is_correct": false
+      "fake_probability": 0.7989,
+      "real_probability": 0.2011,
+      "confidence": 79.9,
+      "is_correct": false,
+      "production_verdict": "NEEDS MORE CONTEXT",
+      "production_abstention_reason": "insufficient_word_count",
+      "production_probability_withheld": true,
+      "production_fake_probability": null,
+      "production_real_probability": null,
+      "production_is_correct_when_decided": null,
+      "vocabulary_coverage": {
+        "candidate_terms": 16,
+        "matched_terms": 6,
+        "ratio": 0.375
+      }
     },
     {
       "id": "3331.json",
@@ -286,10 +396,21 @@
       "original_liar_label": "pants-fire",
       "mapped_binary_label": "FAKE",
       "predicted_label": "FAKE",
-      "fake_probability": 0.9991,
-      "real_probability": 0.0009,
-      "confidence": 99.9,
-      "is_correct": true
+      "fake_probability": 0.9971,
+      "real_probability": 0.0029,
+      "confidence": 99.7,
+      "is_correct": true,
+      "production_verdict": "NEEDS MORE CONTEXT",
+      "production_abstention_reason": "insufficient_word_count",
+      "production_probability_withheld": true,
+      "production_fake_probability": null,
+      "production_real_probability": null,
+      "production_is_correct_when_decided": null,
+      "vocabulary_coverage": {
+        "candidate_terms": 13,
+        "matched_terms": 5,
+        "ratio": 0.3846
+      }
     },
     {
       "id": "73.json",
@@ -297,10 +418,21 @@
       "original_liar_label": "true",
       "mapped_binary_label": "REAL",
       "predicted_label": "FAKE",
-      "fake_probability": 0.9999,
-      "real_probability": 0.0001,
-      "confidence": 100.0,
-      "is_correct": false
+      "fake_probability": 0.9995,
+      "real_probability": 0.0005,
+      "confidence": 100,
+      "is_correct": false,
+      "production_verdict": "NEEDS MORE CONTEXT",
+      "production_abstention_reason": "insufficient_word_count",
+      "production_probability_withheld": true,
+      "production_fake_probability": null,
+      "production_real_probability": null,
+      "production_is_correct_when_decided": null,
+      "vocabulary_coverage": {
+        "candidate_terms": 15,
+        "matched_terms": 10,
+        "ratio": 0.6667
+      }
     },
     {
       "id": "1328.json",
@@ -308,10 +440,21 @@
       "original_liar_label": "false",
       "mapped_binary_label": "FAKE",
       "predicted_label": "FAKE",
-      "fake_probability": 0.9941,
-      "real_probability": 0.0059,
-      "confidence": 99.4,
-      "is_correct": true
+      "fake_probability": 0.9865,
+      "real_probability": 0.0135,
+      "confidence": 98.7,
+      "is_correct": true,
+      "production_verdict": "NEEDS MORE CONTEXT",
+      "production_abstention_reason": "insufficient_word_count",
+      "production_probability_withheld": true,
+      "production_fake_probability": null,
+      "production_real_probability": null,
+      "production_is_correct_when_decided": null,
+      "vocabulary_coverage": {
+        "candidate_terms": 15,
+        "matched_terms": 7,
+        "ratio": 0.4667
+      }
     },
     {
       "id": "12169.json",
@@ -319,10 +462,21 @@
       "original_liar_label": "mostly-true",
       "mapped_binary_label": "REAL",
       "predicted_label": "FAKE",
-      "fake_probability": 0.9157,
-      "real_probability": 0.0843,
-      "confidence": 91.6,
-      "is_correct": false
+      "fake_probability": 0.8393,
+      "real_probability": 0.1607,
+      "confidence": 83.9,
+      "is_correct": false,
+      "production_verdict": "NEEDS MORE CONTEXT",
+      "production_abstention_reason": "uncertainty_zone",
+      "production_probability_withheld": false,
+      "production_fake_probability": 0.8393,
+      "production_real_probability": 0.1607,
+      "production_is_correct_when_decided": null,
+      "vocabulary_coverage": {
+        "candidate_terms": 21,
+        "matched_terms": 13,
+        "ratio": 0.619
+      }
     },
     {
       "id": "12996.json",
@@ -330,10 +484,21 @@
       "original_liar_label": "pants-fire",
       "mapped_binary_label": "FAKE",
       "predicted_label": "FAKE",
-      "fake_probability": 0.9773,
-      "real_probability": 0.0227,
-      "confidence": 97.7,
-      "is_correct": true
+      "fake_probability": 0.9306,
+      "real_probability": 0.0694,
+      "confidence": 93.1,
+      "is_correct": true,
+      "production_verdict": "NEEDS MORE CONTEXT",
+      "production_abstention_reason": "insufficient_word_count",
+      "production_probability_withheld": true,
+      "production_fake_probability": null,
+      "production_real_probability": null,
+      "production_is_correct_when_decided": null,
+      "vocabulary_coverage": {
+        "candidate_terms": 8,
+        "matched_terms": 5,
+        "ratio": 0.625
+      }
     },
     {
       "id": "8162.json",
@@ -341,10 +506,21 @@
       "original_liar_label": "mostly-true",
       "mapped_binary_label": "REAL",
       "predicted_label": "FAKE",
-      "fake_probability": 0.9923,
-      "real_probability": 0.0077,
-      "confidence": 99.2,
-      "is_correct": false
+      "fake_probability": 0.9839,
+      "real_probability": 0.0161,
+      "confidence": 98.4,
+      "is_correct": false,
+      "production_verdict": "NEEDS MORE CONTEXT",
+      "production_abstention_reason": "insufficient_text_length",
+      "production_probability_withheld": true,
+      "production_fake_probability": null,
+      "production_real_probability": null,
+      "production_is_correct_when_decided": null,
+      "vocabulary_coverage": {
+        "candidate_terms": 7,
+        "matched_terms": 3,
+        "ratio": 0.4286
+      }
     },
     {
       "id": "10064.json",
@@ -352,10 +528,21 @@
       "original_liar_label": "false",
       "mapped_binary_label": "FAKE",
       "predicted_label": "FAKE",
-      "fake_probability": 0.9999,
-      "real_probability": 0.0001,
-      "confidence": 100.0,
-      "is_correct": true
+      "fake_probability": 0.9998,
+      "real_probability": 0.0002,
+      "confidence": 100,
+      "is_correct": true,
+      "production_verdict": "NEEDS MORE CONTEXT",
+      "production_abstention_reason": "insufficient_word_count",
+      "production_probability_withheld": true,
+      "production_fake_probability": null,
+      "production_real_probability": null,
+      "production_is_correct_when_decided": null,
+      "vocabulary_coverage": {
+        "candidate_terms": 23,
+        "matched_terms": 8,
+        "ratio": 0.3478
+      }
     },
     {
       "id": "1084.json",
@@ -365,8 +552,19 @@
       "predicted_label": "FAKE",
       "fake_probability": 0.9999,
       "real_probability": 0.0001,
-      "confidence": 100.0,
-      "is_correct": false
+      "confidence": 100,
+      "is_correct": false,
+      "production_verdict": "NEEDS MORE CONTEXT",
+      "production_abstention_reason": "insufficient_word_count",
+      "production_probability_withheld": true,
+      "production_fake_probability": null,
+      "production_real_probability": null,
+      "production_is_correct_when_decided": null,
+      "vocabulary_coverage": {
+        "candidate_terms": 17,
+        "matched_terms": 7,
+        "ratio": 0.4118
+      }
     },
     {
       "id": "1051.json",
@@ -374,10 +572,21 @@
       "original_liar_label": "true",
       "mapped_binary_label": "REAL",
       "predicted_label": "FAKE",
-      "fake_probability": 0.9954,
-      "real_probability": 0.0046,
-      "confidence": 99.5,
-      "is_correct": false
+      "fake_probability": 0.9924,
+      "real_probability": 0.0076,
+      "confidence": 99.2,
+      "is_correct": false,
+      "production_verdict": "LIKELY FAKE",
+      "production_abstention_reason": null,
+      "production_probability_withheld": false,
+      "production_fake_probability": 0.9924,
+      "production_real_probability": 0.0076,
+      "production_is_correct_when_decided": false,
+      "vocabulary_coverage": {
+        "candidate_terms": 29,
+        "matched_terms": 13,
+        "ratio": 0.4483
+      }
     },
     {
       "id": "4161.json",
@@ -385,10 +594,21 @@
       "original_liar_label": "mostly-true",
       "mapped_binary_label": "REAL",
       "predicted_label": "FAKE",
-      "fake_probability": 0.9917,
-      "real_probability": 0.0083,
-      "confidence": 99.2,
-      "is_correct": false
+      "fake_probability": 0.9838,
+      "real_probability": 0.0162,
+      "confidence": 98.4,
+      "is_correct": false,
+      "production_verdict": "NEEDS MORE CONTEXT",
+      "production_abstention_reason": "insufficient_word_count",
+      "production_probability_withheld": true,
+      "production_fake_probability": null,
+      "production_real_probability": null,
+      "production_is_correct_when_decided": null,
+      "vocabulary_coverage": {
+        "candidate_terms": 21,
+        "matched_terms": 9,
+        "ratio": 0.4286
+      }
     },
     {
       "id": "11966.json",
@@ -396,10 +616,21 @@
       "original_liar_label": "false",
       "mapped_binary_label": "FAKE",
       "predicted_label": "FAKE",
-      "fake_probability": 0.8533,
-      "real_probability": 0.1467,
-      "confidence": 85.3,
-      "is_correct": true
+      "fake_probability": 0.7397,
+      "real_probability": 0.2603,
+      "confidence": 74,
+      "is_correct": true,
+      "production_verdict": "NEEDS MORE CONTEXT",
+      "production_abstention_reason": "uncertainty_zone",
+      "production_probability_withheld": false,
+      "production_fake_probability": 0.7397,
+      "production_real_probability": 0.2603,
+      "production_is_correct_when_decided": null,
+      "vocabulary_coverage": {
+        "candidate_terms": 23,
+        "matched_terms": 13,
+        "ratio": 0.5652
+      }
     },
     {
       "id": "9800.json",
@@ -407,10 +638,21 @@
       "original_liar_label": "false",
       "mapped_binary_label": "FAKE",
       "predicted_label": "FAKE",
-      "fake_probability": 0.9984,
-      "real_probability": 0.0016,
-      "confidence": 99.8,
-      "is_correct": true
+      "fake_probability": 0.9964,
+      "real_probability": 0.0036,
+      "confidence": 99.6,
+      "is_correct": true,
+      "production_verdict": "NEEDS MORE CONTEXT",
+      "production_abstention_reason": "insufficient_word_count",
+      "production_probability_withheld": true,
+      "production_fake_probability": null,
+      "production_real_probability": null,
+      "production_is_correct_when_decided": null,
+      "vocabulary_coverage": {
+        "candidate_terms": 21,
+        "matched_terms": 8,
+        "ratio": 0.381
+      }
     },
     {
       "id": "12381.json",
@@ -418,10 +660,21 @@
       "original_liar_label": "true",
       "mapped_binary_label": "REAL",
       "predicted_label": "FAKE",
-      "fake_probability": 0.9448,
-      "real_probability": 0.0552,
-      "confidence": 94.5,
-      "is_correct": false
+      "fake_probability": 0.9014,
+      "real_probability": 0.0986,
+      "confidence": 90.1,
+      "is_correct": false,
+      "production_verdict": "NEEDS MORE CONTEXT",
+      "production_abstention_reason": "insufficient_text_length",
+      "production_probability_withheld": true,
+      "production_fake_probability": null,
+      "production_real_probability": null,
+      "production_is_correct_when_decided": null,
+      "vocabulary_coverage": {
+        "candidate_terms": 11,
+        "matched_terms": 7,
+        "ratio": 0.6364
+      }
     },
     {
       "id": "10055.json",
@@ -429,10 +682,21 @@
       "original_liar_label": "mostly-true",
       "mapped_binary_label": "REAL",
       "predicted_label": "FAKE",
-      "fake_probability": 0.9971,
-      "real_probability": 0.0029,
-      "confidence": 99.7,
-      "is_correct": false
+      "fake_probability": 0.9962,
+      "real_probability": 0.0038,
+      "confidence": 99.6,
+      "is_correct": false,
+      "production_verdict": "LIKELY FAKE",
+      "production_abstention_reason": null,
+      "production_probability_withheld": false,
+      "production_fake_probability": 0.9962,
+      "production_real_probability": 0.0038,
+      "production_is_correct_when_decided": false,
+      "vocabulary_coverage": {
+        "candidate_terms": 28,
+        "matched_terms": 12,
+        "ratio": 0.4286
+      }
     },
     {
       "id": "4513.json",
@@ -440,21 +704,43 @@
       "original_liar_label": "true",
       "mapped_binary_label": "REAL",
       "predicted_label": "FAKE",
-      "fake_probability": 0.9961,
-      "real_probability": 0.0039,
-      "confidence": 99.6,
-      "is_correct": false
+      "fake_probability": 0.9877,
+      "real_probability": 0.0123,
+      "confidence": 98.8,
+      "is_correct": false,
+      "production_verdict": "LIKELY FAKE",
+      "production_abstention_reason": null,
+      "production_probability_withheld": false,
+      "production_fake_probability": 0.9877,
+      "production_real_probability": 0.0123,
+      "production_is_correct_when_decided": false,
+      "vocabulary_coverage": {
+        "candidate_terms": 18,
+        "matched_terms": 7,
+        "ratio": 0.3889
+      }
     },
     {
       "id": "10340.json",
       "statement": "Texas families have kept more than $10 billion in their family budgets since we successfully fought to restore Texas sales tax deduction a decade ago.",
       "original_liar_label": "true",
       "mapped_binary_label": "REAL",
-      "predicted_label": "REAL",
-      "fake_probability": 0.4879,
-      "real_probability": 0.5121,
-      "confidence": 51.2,
-      "is_correct": true
+      "predicted_label": "FAKE",
+      "fake_probability": 0.5657,
+      "real_probability": 0.4343,
+      "confidence": 56.6,
+      "is_correct": false,
+      "production_verdict": "NEEDS MORE CONTEXT",
+      "production_abstention_reason": "uncertainty_zone",
+      "production_probability_withheld": false,
+      "production_fake_probability": 0.5657,
+      "production_real_probability": 0.4343,
+      "production_is_correct_when_decided": null,
+      "vocabulary_coverage": {
+        "candidate_terms": 30,
+        "matched_terms": 14,
+        "ratio": 0.4667
+      }
     },
     {
       "id": "13251.json",
@@ -462,10 +748,21 @@
       "original_liar_label": "pants-fire",
       "mapped_binary_label": "FAKE",
       "predicted_label": "FAKE",
-      "fake_probability": 0.9997,
-      "real_probability": 0.0003,
-      "confidence": 100.0,
-      "is_correct": true
+      "fake_probability": 0.9996,
+      "real_probability": 0.0004,
+      "confidence": 100,
+      "is_correct": true,
+      "production_verdict": "NEEDS MORE CONTEXT",
+      "production_abstention_reason": "insufficient_word_count",
+      "production_probability_withheld": true,
+      "production_fake_probability": null,
+      "production_real_probability": null,
+      "production_is_correct_when_decided": null,
+      "vocabulary_coverage": {
+        "candidate_terms": 17,
+        "matched_terms": 9,
+        "ratio": 0.5294
+      }
     },
     {
       "id": "4929.json",
@@ -473,10 +770,21 @@
       "original_liar_label": "mostly-true",
       "mapped_binary_label": "REAL",
       "predicted_label": "FAKE",
-      "fake_probability": 0.9999,
-      "real_probability": 0.0001,
-      "confidence": 100.0,
-      "is_correct": false
+      "fake_probability": 0.9995,
+      "real_probability": 0.0005,
+      "confidence": 100,
+      "is_correct": false,
+      "production_verdict": "LIKELY FAKE",
+      "production_abstention_reason": null,
+      "production_probability_withheld": false,
+      "production_fake_probability": 0.9995,
+      "production_real_probability": 0.0005,
+      "production_is_correct_when_decided": false,
+      "vocabulary_coverage": {
+        "candidate_terms": 27,
+        "matched_terms": 12,
+        "ratio": 0.4444
+      }
     },
     {
       "id": "8841.json",
@@ -484,10 +792,21 @@
       "original_liar_label": "mostly-true",
       "mapped_binary_label": "REAL",
       "predicted_label": "FAKE",
-      "fake_probability": 0.992,
-      "real_probability": 0.008,
-      "confidence": 99.2,
-      "is_correct": false
+      "fake_probability": 0.9808,
+      "real_probability": 0.0192,
+      "confidence": 98.1,
+      "is_correct": false,
+      "production_verdict": "LIKELY FAKE",
+      "production_abstention_reason": null,
+      "production_probability_withheld": false,
+      "production_fake_probability": 0.9808,
+      "production_real_probability": 0.0192,
+      "production_is_correct_when_decided": false,
+      "vocabulary_coverage": {
+        "candidate_terms": 27,
+        "matched_terms": 14,
+        "ratio": 0.5185
+      }
     },
     {
       "id": "6313.json",
@@ -495,10 +814,91 @@
       "original_liar_label": "false",
       "mapped_binary_label": "FAKE",
       "predicted_label": "FAKE",
-      "fake_probability": 0.9996,
-      "real_probability": 0.0004,
-      "confidence": 100.0,
-      "is_correct": true
+      "fake_probability": 0.9973,
+      "real_probability": 0.0027,
+      "confidence": 99.7,
+      "is_correct": true,
+      "production_verdict": "LIKELY FAKE",
+      "production_abstention_reason": null,
+      "production_probability_withheld": false,
+      "production_fake_probability": 0.9973,
+      "production_real_probability": 0.0027,
+      "production_is_correct_when_decided": true,
+      "vocabulary_coverage": {
+        "candidate_terms": 27,
+        "matched_terms": 12,
+        "ratio": 0.4444
+      }
     }
-  ]
+  ],
+  "schema_version": 2,
+  "model_version": "3.1.0-isot",
+  "model_inference_mode": "calibrated_ensemble",
+  "artifact_sha256": "1ec1cae8ca08f01c8065983ee3a0376e0525e20d1effb53d2b36deebb1cca6bd",
+  "dataset_sha256": "ee41e2c741e0019216952625145af8c4aa8c8d3057ec68284b134267bb845e6f",
+  "evaluation_protocol": {
+    "raw_model_transfer": "Exact 3-member calibrated ensemble scores with conventional 0.50 cutoff; diagnostic comparison only, not the product decision policy.",
+    "production_policy": "Simulates the article runtime preflight (60 UTF-16 code units, 20 words without source), 0.10 minimum vocabulary coverage, short-input OOD guard, and artifact probability thresholds.",
+    "fake_threshold": 0.98,
+    "real_threshold": 0.35,
+    "min_text_length": 60,
+    "min_word_count_without_source": 20,
+    "min_vocabulary_coverage": 0.1,
+    "ood_short_candidate_term_count": 100,
+    "ood_coverage_threshold": 0.35,
+    "calibration_members_used": 3,
+    "uses_runtime_calibrated_ensemble": true
+  },
+  "production_policy_metrics": {
+    "evaluated_samples": 116,
+    "accuracy": 0.4138,
+    "precision_fake": 0.4128,
+    "recall_fake": 0.9184,
+    "f1_fake": 0.5696,
+    "precision_real": 0.4286,
+    "recall_real": 0.0448,
+    "f1_real": 0.0811,
+    "macro_f1": 0.3254,
+    "balanced_accuracy": 0.4816,
+    "total_eligible_samples": 790,
+    "decided_samples": 116,
+    "abstained_samples": 674,
+    "coverage_ratio": 0.1468,
+    "abstention_rate": 0.8532,
+    "selective_accuracy": 0.4138,
+    "probability_exposed_samples": 240,
+    "abstention_reason_counts": {
+      "insufficient_text_length": 96,
+      "insufficient_word_count": 415,
+      "short_input_ood": 39,
+      "uncertainty_zone": 124
+    },
+    "confusion_matrix": {
+      "true_positive": 45,
+      "true_negative": 3,
+      "false_positive": 64,
+      "false_negative": 4,
+      "matrix": [
+        [
+          3,
+          64
+        ],
+        [
+          4,
+          45
+        ]
+      ],
+      "labels": [
+        "REAL (0)",
+        "FAKE (1)"
+      ],
+      "explanations": {
+        "true_positive": "Fake statements correctly classified as Fake.",
+        "true_negative": "Real statements correctly classified as Real.",
+        "false_positive": "Real statements incorrectly classified as Fake.",
+        "false_negative": "Fake statements incorrectly classified as Real."
+      }
+    },
+    "interpretation": "Production policy abstentions are reported separately; abstentions are not counted as correct predictions."
+  }
 }
