@@ -75,7 +75,7 @@ export const ExternalValidationSection: React.FC = () => {
   const { metrics, confusion_matrix: cm, label_audit } = report;
 
   const extractModelVersion = (value: string | null | undefined): string | null => {
-    const match = value?.match(/\\bv?(\\d+\\.\\d+\\.\\d+(?:-[a-z0-9.-]+)?)/i);
+    const match = value?.match(/\bv?(\d+\.\d+\.\d+(?:-[a-z0-9.-]+)?)/i);
     return match?.[1] ?? null;
   };
   const reportModelVersion = extractModelVersion(report.production_model);
