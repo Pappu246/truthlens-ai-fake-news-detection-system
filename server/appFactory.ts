@@ -124,6 +124,17 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
   app.get('/api/health', (req, res) => {
     const modelTrained = mlEngine.isModelTrained();
     const calibrationExact = mlEngine.isCalibrationExact();
+    const articleMetrics = mlEngine.getMetrics();
+    const articleInferenceMode = mlEngine.getInferenceMode();
+    const articleModelVersion = articleMetrics?.model_version || null;
+    // The health label must describe the artifact and inference mode actually loaded.
+    // Legacy models keep the safety-gated label; calibrated models use the artifact's
+    // model name rather than a stale hard-coded legacy string.
+    const articleModelName = !modelTrained
+      ? 'Article Model Unavailable'
+      : articleInferenceMode === 'legacy_single_svm'
+        ? 'Linear SVM (Safety-Gated Legacy)'
+        : articleMetrics?.best_model?.name || 'Linear SVM (Calibrated)';
     const claimReady = claimModel.isReady();
     const degradedReasons: string[] = [];
     if (!modelTrained) degradedReasons.push('Article model artifact is unavailable.');
@@ -140,10 +151,10 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
         commit: process.env.RENDER_GIT_COMMIT || process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || null,
         branch: process.env.RENDER_GIT_BRANCH || process.env.VERCEL_GIT_COMMIT_REF || null
       },
-      model: 'Linear SVM (Safety-Gated Legacy)',
+      model: articleModelName,
       model_trained: modelTrained,
-      article_model_version: mlEngine.getMetrics()?.model_version || null,
-      article_inference_mode: mlEngine.getInferenceMode(),
+      article_model_version: articleModelVersion,
+      article_inference_mode: articleInferenceMode,
       article_calibration_exact: calibrationExact,
       // The article model and the claim model are separate systems and are
       // reported separately. They are never combined into one number.
@@ -151,10 +162,11 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
         article_model: {
           role: 'article_model',
           dataset: 'ISOT',
+          model_name: articleModelName,
           ready: modelTrained,
           status: modelTrained ? 'READY' : 'DEGRADED',
-          model_version: mlEngine.getMetrics()?.model_version || null,
-          inference_mode: mlEngine.getInferenceMode(),
+          model_version: articleModelVersion,
+          inference_mode: articleInferenceMode,
           calibration_exact: calibrationExact
         },
         claim_model: {
