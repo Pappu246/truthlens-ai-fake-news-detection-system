@@ -24,7 +24,7 @@
     "test:evidence": "tsx scripts/evidenceTests.ts",
     "test:artifacts": "tsx scripts/test_artifact_lifecycle.ts",
     "test:ssrf": "tsx scripts/ssrfTests.ts",
-    "test:all": "npm run lint && npm run test:contracts && npm run test:vercel-sim && npm run test:verdicts && npm run test:claim && npm run test:claim-parity && npm run test:evidence && npm run test:artifacts && npm run test:ssrf",
+    "test:all": "npm run lint && npm run test:contracts && npm run test:vercel-sim && npm run test:verdicts && npm run test:claim && npm run test:claim-parity && npm run test:evidence && npm run test:artifacts && npm run test:ssrf && npm run test:analysis-signals",
     "test:production": "tsx scripts/productionSmokeTest.ts",
     "test:v2": "tsx scripts/v2PipelineTests.ts",
     "test:v2-route": "tsx scripts/v2RouteTests.ts",
@@ -44,7 +44,8 @@
     "test:phase2-protocol": "tsx scripts/multiBenchmarkProtocolTests.ts",
     "test:phase2-adapters": "tsx scripts/phase2BenchmarkAdaptersTests.ts",
     "materialize:phase2": "tsx scripts/materializePhase2Benchmarks.ts",
-    "test:phase2-materialization": "tsx scripts/phase2MaterializationTests.ts"
+    "test:phase2-materialization": "tsx scripts/phase2MaterializationTests.ts",
+    "test:analysis-signals": "tsx scripts/analysisSignalsSurfaceTests.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
