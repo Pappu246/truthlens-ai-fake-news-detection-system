@@ -573,8 +573,13 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
       // The two models are reported under separate keys and are NEVER averaged
       // or blended. They solve different tasks on different corpora, so a
       // single combined accuracy number would be misleading.
+      const activeThresholds = mlEngine.getThresholds();
       res.json({
         ...articleMetrics,
+        // The cached training/evaluation metrics can contain the threshold
+        // used during model selection (e.g. 0.65). Runtime serving policy is
+        // sourced from the active artifact and can intentionally differ.
+        thresholds: activeThresholds,
         article_model: {
           role: 'article_model',
           task: 'full-article real/fake classification',
@@ -584,7 +589,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
             : (articleMetrics?.best_model?.name || 'Linear SVM (Calibrated)'),
           model_version: articleMetrics?.model_version,
           metrics: articleMetrics?.best_model?.metrics || null,
-          thresholds: articleMetrics?.thresholds || null,
+          thresholds: activeThresholds,
           dataset_info: articleMetrics?.dataset_info || null
         },
         claim_model: claimMetrics,
