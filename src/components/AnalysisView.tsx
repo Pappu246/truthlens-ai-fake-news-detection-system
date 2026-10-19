@@ -3,6 +3,7 @@ import { AnalysisResult, ArticleVerificationResponse, ModelComparisonData, isNee
 import { shouldAutoVerifyArticleContent } from '../utils/articleVerificationPolicy';
 import { CheckCircle, AlertTriangle, XCircle, Info, ExternalLink, ShieldAlert, FileText, Search, HelpCircle, Layers } from 'lucide-react';
 import { TruthLensVerificationSection } from './TruthLensVerificationSection';
+import { IndependentSignalsPanel } from './IndependentSignalsPanel';
 
 function safeHttpUrl(value: unknown): string | undefined {
   if (typeof value !== 'string' || !value.trim()) return undefined;
@@ -201,7 +202,11 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
         {/* IMPORTANT: this section must also mount in the abstention branch.
             The old early return hid the evidence engine, so automatic verification
             never ran even when autoVerify was enabled. */}
-        <div className="w-full max-w-4xl mx-auto pb-10">
+        <div className="w-full max-w-4xl mx-auto pb-10 space-y-6">
+          <IndependentSignalsPanel
+            claimModel={result.claim_model}
+            evidence={result.evidence_verification}
+          />
           <TruthLensVerificationSection
             initialVerification={result.verification}
             articleTitle={result.article_title}
@@ -329,6 +334,11 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
           </div>
         )}
       </div>
+
+      <IndependentSignalsPanel
+        claimModel={result.claim_model}
+        evidence={result.evidence_verification}
+      />
 
       {legacySafetyMode && (
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 shadow-sm">
