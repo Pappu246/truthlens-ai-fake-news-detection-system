@@ -82,6 +82,31 @@ export const ExternalValidationSection: React.FC = () => {
   const activeModelVersion = typeof runtimeDiagnostics?.model_version === 'string'
     ? runtimeDiagnostics.model_version
     : null;
+  const inDomainMetrics = runtimeDiagnostics?.evaluation_metrics?.best_model_metrics ?? null;
+  const inDomainConfusion = inDomainMetrics?.confusion_matrix ?? null;
+  const inDomainCorrect = inDomainConfusion
+    ? (Number(inDomainConfusion.true_negative) || 0) + (Number(inDomainConfusion.true_positive) || 0)
+    : null;
+  const inDomainTestSamples = runtimeDiagnostics?.dataset_size?.test_samples ?? null;
+  const inDomainAccuracy = typeof inDomainMetrics?.accuracy === 'number' ? inDomainMetrics.accuracy : null;
+  const inDomainPrecisionFake = typeof inDomainMetrics?.precision === 'number' ? inDomainMetrics.precision : null;
+  const inDomainRecallFake = typeof inDomainMetrics?.recall === 'number' ? inDomainMetrics.recall : null;
+  const inDomainF1Fake = typeof inDomainMetrics?.f1_score === 'number' ? inDomainMetrics.f1_score : null;
+  const inDomainRecallReal = inDomainConfusion
+    ? (Number(inDomainConfusion.true_negative) + Number(inDomainConfusion.false_positive)) > 0
+      ? Number(inDomainConfusion.true_negative) /
+        (Number(inDomainConfusion.true_negative) + Number(inDomainConfusion.false_positive))
+      : null
+    : null;
+  const inDomainBalancedAccuracy = inDomainRecallFake !== null && inDomainRecallReal !== null
+    ? (inDomainRecallFake + inDomainRecallReal) / 2
+    : null;
+  const formatPct = (value: number | null | undefined) =>
+    typeof value === 'number' && Number.isFinite(value) ? `${(value * 100).toFixed(2)}%` : 'N/A';
+  const formatDelta = (value: number | null | undefined, baseline: number | null | undefined) =>
+    typeof value === 'number' && typeof baseline === 'number' && Number.isFinite(value) && Number.isFinite(baseline)
+      ? `${((value - baseline) * 100).toFixed(2)} pp`
+      : 'N/A';
   const isEvaluationVersionMismatch = Boolean(
     runtimeDiagnosticsLoaded &&
     activeModelVersion &&
