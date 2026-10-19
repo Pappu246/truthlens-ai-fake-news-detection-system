@@ -223,6 +223,25 @@ async function httpContracts(): Promise<void> {
   try {
     const health = await call('GET', '/api/health');
     assert(health.status === 200, '/api/health returns 200');
+    assert(
+      health.json?.model === health.json?.components?.article_model?.model_name,
+      '/api/health keeps the top-level model label aligned with the article-model component',
+      JSON.stringify({ top_level: health.json?.model, component: health.json?.components?.article_model?.model_name })
+    );
+    if (health.json?.model_trained === true && health.json?.article_calibration_exact === true) {
+      assert(
+        typeof health.json?.model === 'string' && /calibrated/i.test(health.json.model) && !/legacy/i.test(health.json.model),
+        '/api/health labels an exactly calibrated artifact as calibrated, not legacy',
+        JSON.stringify({ model: health.json?.model, inference_mode: health.json?.article_inference_mode })
+      );
+    }
+    if (health.json?.model_trained === true && health.json?.article_calibration_exact === false) {
+      assert(
+        typeof health.json?.model === 'string' && /legacy/i.test(health.json.model),
+        '/api/health marks an uncalibrated loaded artifact as legacy',
+        JSON.stringify({ model: health.json?.model, inference_mode: health.json?.article_inference_mode })
+      );
+    }
     if (health.json?.article_calibration_exact === false) {
       assert(health.json?.status === 'degraded',
         '/api/health does not report an uncalibrated production artifact as fully healthy');
