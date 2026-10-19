@@ -25,6 +25,7 @@ on:
       - 'scripts/gate14RemainingTests.ts'
       - 'scripts/evidenceBenchmark.ts'
       - 'scripts/evaluate_liar.py'
+      - 'scripts/analysisSignalsSurfaceTests.ts'
       - 'data/test.tsv'
       - 'data/saved_model_artifacts.json'
       - 'data/external_validation.json'
@@ -80,6 +81,9 @@ jobs:
 
       - name: Contract tests
         run: npm run test:contracts
+
+      - name: Analysis claim/evidence signal mapping
+        run: npm run test:analysis-signals
 
       - name: Vercel runtime simulation (trace Node deprecations)
         env:
