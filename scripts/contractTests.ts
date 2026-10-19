@@ -281,6 +281,17 @@ async function httpContracts(): Promise<void> {
     assert(/Never merged/.test(mm.json?.separation_policy?.rule || ''),
       '/api/models/metrics states the models are never merged into one number');
 
+    const activeThresholds = await call('GET', '/api/model/thresholds');
+    assert(activeThresholds.status === 200, '/api/model/thresholds returns active policy');
+    assert(mm.json?.thresholds?.fake_threshold === activeThresholds.json?.fake_threshold &&
+      mm.json?.thresholds?.real_threshold === activeThresholds.json?.real_threshold,
+      '/api/model/metrics top-level thresholds match the active runtime policy',
+      JSON.stringify({ metrics: mm.json?.thresholds, runtime: activeThresholds.json }));
+    assert(mm.json?.article_model?.thresholds?.fake_threshold === activeThresholds.json?.fake_threshold &&
+      mm.json?.article_model?.thresholds?.real_threshold === activeThresholds.json?.real_threshold,
+      '/api/model/metrics article_model thresholds match the active runtime policy',
+      JSON.stringify({ article: mm.json?.article_model?.thresholds, runtime: activeThresholds.json }));
+
     const analyzed = await call('POST', '/api/analyze', {
       text: 'Federal regulators announced on Tuesday that quarterly inflation data showed consumer ' +
             'prices rose 0.3 percent in March, according to figures published by the Bureau of Labor ' +
