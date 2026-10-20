@@ -98,6 +98,8 @@ def test_dataset_manifest_requires_matching_export_hash_and_trusted_conversion(t
         "csv_sha256": hashlib.sha256(data).hexdigest(),
         "row_count": 1,
         "conversion_method": "trusted_offline_conversion_after_archive_hash_review",
+        "usage_permission_reviewed": True,
+        "permission_review_note": "Reviewed the dataset terms and confirmed this permitted research use.",
     }
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
     parsed = pd.read_csv(csv_path, dtype=str, keep_default_na=False)
@@ -150,3 +152,33 @@ def test_platform_reports_use_platform_scoped_runtime_metrics():
     assert cnn["runtime_policy"]["fake_recall_all_fake_samples"] == 0.0
     assert reddit["runtime_policy"]["coverage"] == 1.0
     assert reddit["runtime_policy"]["fake_recall_all_fake_samples"] == 0.0
+
+
+def test_normalisation_rejects_unneeded_personal_or_multimodal_fields():
+    frame = pd.DataFrame([{
+        **row(long_text("privacy"), 1, 0),
+        "author": "not needed",
+        "comment": "not needed",
+        "image_path": "not needed",
+    }])
+    with pytest.raises(ValueError, match="unnecessary/private or modality-specific fields"):
+        normalise_finefake_frame(frame)
+
+
+def test_dataset_manifest_requires_permission_review(tmp_path: Path):
+    csv_path = tmp_path / "finefake_text_only.csv"
+    pd.DataFrame([row(long_text("permission"), 1, 0)]).to_csv(csv_path, index=False)
+    manifest_path = tmp_path / "finefake_text_only.csv.manifest.json"
+    manifest = {
+        "dataset": "FineFake",
+        "official_repository": OFFICIAL_REPOSITORY,
+        "source_archive_sha256": "a" * 64,
+        "csv_sha256": hashlib.sha256(csv_path.read_bytes()).hexdigest(),
+        "row_count": 1,
+        "conversion_method": "trusted_offline_conversion_after_archive_hash_review",
+        "usage_permission_reviewed": False,
+        "permission_review_note": "",
+    }
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(ValueError, match="usage permission/terms must be reviewed"):
+        validate_dataset_manifest(csv_path, manifest_path, 1)
