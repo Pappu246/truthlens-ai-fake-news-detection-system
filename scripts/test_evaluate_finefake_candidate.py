@@ -122,23 +122,25 @@ def test_archive_audit_lists_pickle_member_but_does_not_extract_or_unpickle(tmp_
 
 
 def test_platform_reports_use_platform_scoped_runtime_metrics():
-    real_text = "truthlens " + long_text("actual reporting")
-    fake_text = "truthlens " + long_text("fabricated report")
+    # Keep every unique candidate feature in the dummy vocabulary so the
+    # runtime OOD/coverage guard does not mask the platform-metrics assertion.
+    real_text = " ".join(["truthlens"] * 60)
+    fake_text = " ".join(["truthlens"] * 61)
     artifact = {
-        "vocabulary": {"truthlens": 0},
-        "idf": [1.0],
+        "vocabulary": {"truthlens": 0, "truthlens truthlens": 1},
+        "idf": [1.0, 1.0],
         "selected_model": {
             "bias": 0.0,
-            "weights": [0.0],
+            "weights": [0.0, 0.0],
             "plattA": 0.0,
             "plattB": 2.0,
         },
     }
     records = [
         {"text": real_text, "y_fake": 0, "platform": "CNN"},
-        {"text": real_text + " additional phrase", "y_fake": 0, "platform": "CNN"},
+        {"text": real_text + " truthlens", "y_fake": 0, "platform": "CNN"},
         {"text": fake_text, "y_fake": 1, "platform": "Reddit"},
-        {"text": fake_text + " other phrase", "y_fake": 1, "platform": "Reddit"},
+        {"text": fake_text + " truthlens", "y_fake": 1, "platform": "Reddit"},
     ]
     report = evaluate_records(records, artifact)
     cnn = report["platform_metrics"]["CNN"]
