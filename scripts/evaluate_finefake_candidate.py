@@ -31,8 +31,8 @@ from sklearn.metrics import (
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from train_isot_runtime_candidate import (
-    RUNTIME_FAKE_THRESHOLD,
-    RUNTIME_REAL_THRESHOLD,
+    FAKE_THRESHOLD,
+    REAL_THRESHOLD,
     LOW_VOCABULARY_COVERAGE_THRESHOLD,
     OOD_SHORT_WORD_COUNT,
     OOD_COVERAGE_THRESHOLD,
@@ -317,8 +317,8 @@ def main() -> None:
     with candidate_manifest_path.open(encoding="utf-8") as handle:
         candidate_manifest = json.load(handle)
     expected_policy = {
-        "fake_threshold": RUNTIME_FAKE_THRESHOLD,
-        "real_threshold": RUNTIME_REAL_THRESHOLD,
+        "fake_threshold": FAKE_THRESHOLD,
+        "real_threshold": REAL_THRESHOLD,
         "low_vocabulary_coverage_threshold": LOW_VOCABULARY_COVERAGE_THRESHOLD,
         "ood_short_word_count": OOD_SHORT_WORD_COUNT,
         "ood_coverage_threshold": OOD_COVERAGE_THRESHOLD,
