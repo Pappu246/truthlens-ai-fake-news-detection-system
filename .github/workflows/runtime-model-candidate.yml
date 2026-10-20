@@ -110,6 +110,10 @@ jobs:
         run: npm run test:runtime-model-parity
 
       - name: Candidate-specific real/fake safety regression
+        # Preserve diagnostics and run the artifact-integrity + final gate steps
+        # even when candidate safety assertions fail. The final gate will still
+        # fail closed because runtime_safety_validation.json records passed=false.
+        continue-on-error: true
         run: |
           set -euo pipefail
           CANDIDATE_ARTIFACT="$(find artifacts/models -type f -name model_artifact.json -print -quit)"
