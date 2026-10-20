@@ -276,13 +276,25 @@ def evaluate_records(records: list[dict], artifact: dict) -> dict:
         by_platform[row["platform"]].append(index)
     for platform, indices in sorted(by_platform.items()):
         ys = y_fake[indices]
+        platform_runtime = compute_runtime_policy_metrics(
+            ys,
+            p_fake[indices],
+            texts=[records[index]["text"] for index in indices],
+            coverage_ratio=coverage_ratio[indices],
+            candidate_term_count=candidate_terms[indices],
+        )
         platform_metrics[platform] = {
             "samples": len(indices),
             "fake_samples": int(ys.sum()),
             "real_samples": int(len(ys) - ys.sum()),
             "diagnostic_accuracy_at_0_50": float(accuracy_score(ys, p_fake[indices] >= 0.5)),
-            "coverage_under_frozen_runtime_policy": float(runtime["coverage"]) if len(indices) == len(records) else None,
-            "note": "Per-platform probabilities require a platform-scoped runtime policy evaluation; aggregate coverage is not copied as a per-platform result.",
+            "runtime_policy": {
+                "coverage": platform_runtime["coverage"],
+                "abstention_rate": platform_runtime["abstention_rate"],
+                "operational_balanced_accuracy_abstentions_count_as_not_correct": platform_runtime["operational_balanced_accuracy_abstentions_count_as_not_correct"],
+                "fake_recall_all_fake_samples": platform_runtime["fake_recall_all_fake_samples"],
+                "real_recall_all_real_samples": platform_runtime["real_recall_all_real_samples"],
+            },
         }
     return {
         "raw_diagnostic_metrics": raw_metrics(y_fake, p_fake),
