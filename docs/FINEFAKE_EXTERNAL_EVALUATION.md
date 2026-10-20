@@ -17,7 +17,7 @@ Official dataset link: https://drive.google.com/file/d/16D9ix7ZOisa4VVBznBTBcv1N
    \`\`\`
 
 3. Review the source path, archive size, member listing and digest before using the file. A locally computed digest identifies exact bytes but does not by itself authenticate the publisher. Keep the audit report and pin the reviewed archive SHA-256 in the dataset intake manifest.
-4. Only after provenance review, convert the DataFrame in a trusted, isolated environment. Do not run pickle deserialization on an unreviewed archive, and do not perform this conversion in GitHub Actions. Export only text, binary label, fine-grained label, platform, topic, and date. Do not commit the raw archive or article texts to this repository.
+4. Review the dataset usage terms/permission before conversion and record the outcome in the sidecar manifest. Only after provenance and usage review, convert the DataFrame in a trusted, isolated environment. Do not run pickle deserialization on an unreviewed archive, and do not perform this conversion in GitHub Actions. Export only text, binary label, fine-grained label, platform, topic, and date; the evaluator rejects author, comment, image, knowledge, and other extra columns. Do not commit the raw archive or article texts to this repository.
 5. Beside the converted CSV, create a sidecar manifest named finefake_text_only.csv.manifest.json:
 
    \`\`\`json
@@ -27,7 +27,9 @@ Official dataset link: https://drive.google.com/file/d/16D9ix7ZOisa4VVBznBTBcv1N
      "source_archive_sha256": "<64-character reviewed archive SHA-256>",
      "csv_sha256": "<SHA-256 of the exact exported CSV bytes>",
      "row_count": 16909,
-     "conversion_method": "trusted_offline_conversion_after_archive_hash_review"
+     "conversion_method": "trusted_offline_conversion_after_archive_hash_review",
+     "usage_permission_reviewed": true,
+     "permission_review_note": "Document the source terms reviewed and why this use is permitted."
    }
    \`\`\`
 
