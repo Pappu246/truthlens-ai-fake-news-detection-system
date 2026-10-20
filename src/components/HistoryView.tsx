@@ -23,11 +23,14 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
           <div>
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
-              Audit Logs // SQLite Database
+              History Cache // This Device
             </span>
             <h2 className="text-4xl lg:text-5xl font-black uppercase tracking-tighter text-slate-900">
               Analysis History
             </h2>
+            <p className="mt-2 max-w-xl text-xs text-slate-500 leading-relaxed">
+              Production history is kept in this browser on this device. Shared server-side history is disabled until authenticated, per-user storage is available.
+            </p>
           </div>
           {history.length > 0 && (
             <button
@@ -171,7 +174,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
       <div className="mt-12 pt-6 border-t border-slate-200 flex justify-between items-center text-[10px] font-bold uppercase text-slate-400 tracking-wider">
         <span>Total Logged Records: {history.length}</span>
-        <span>Storage: Local Persistent Registry</span>
+        <span>Storage: Browser Local Cache</span>
       </div>
     </section>
   );
