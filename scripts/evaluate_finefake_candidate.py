@@ -81,6 +81,14 @@ def normalise_finefake_frame(frame: pd.DataFrame) -> pd.DataFrame:
             + ", ".join(missing)
             + f"; observed columns: {list(result.columns)}"
         )
+    allowed = {"text", "label", "fine_grained_label", "platform", "topic", "date"}
+    unexpected = sorted(set(result.columns) - allowed)
+    if unexpected:
+        raise ValueError(
+            "FineFake export contains unnecessary/private or modality-specific fields: "
+            + ", ".join(unexpected)
+            + ". Create a minimized CSV with only text, label, fine-grained label, platform, topic, and date."
+        )
     for optional in ("platform", "topic", "date"):
         if optional not in result.columns:
             result[optional] = ""
@@ -121,6 +129,10 @@ def validate_dataset_manifest(csv_path: Path, manifest_path: Path, frame_rows: i
             "FineFake export lacks the required trusted offline conversion attestation; "
             "do not load the source pickle in CI."
         )
+    if manifest.get("usage_permission_reviewed") is not True:
+        raise ValueError("FineFake usage permission/terms must be reviewed and attested in the intake manifest.")
+    if not str(manifest.get("permission_review_note", "")).strip():
+        raise ValueError("FineFake intake manifest must record a non-empty usage permission review note.")
     return manifest
 
 
