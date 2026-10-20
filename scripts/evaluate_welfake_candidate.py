@@ -246,8 +246,8 @@ def main() -> None:
         "ood_short_word_count": OOD_SHORT_WORD_COUNT,
         "ood_coverage_threshold": OOD_COVERAGE_THRESHOLD,
     }
-    if manifest_policy and manifest_policy != expected_policy:
-        raise SystemExit("Candidate training policy fingerprint does not match the current runtime policy.")
+    if manifest_policy != expected_policy:
+        raise SystemExit("Candidate training policy fingerprint is missing or does not match the current runtime policy.")
     artifact_digest = sha256(artifact_path)
     if artifact_digest != manifest.get("artifact_sha256"):
         raise SystemExit("Candidate artifact hash does not match its manifest.")
