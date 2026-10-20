@@ -299,6 +299,7 @@ def evaluate_records(records: list[dict], artifact: dict) -> dict:
     return {
         "raw_diagnostic_metrics": raw_metrics(y_fake, p_fake),
         "runtime_policy_metrics": runtime,
+        "platform_metrics": platform_metrics,
         "probability_summary": {
             "min_p_fake": float(p_fake.min()),
             "median_p_fake": float(np.median(p_fake)),
