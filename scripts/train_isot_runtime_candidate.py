@@ -561,6 +561,9 @@ def main():
         "git_commit": "runtime-candidate-pipeline",
         "dataset_name": "ISOT + WELFake" if welfake else "ISOT Fake News Dataset",
         "dataset_fingerprint": version_payload,
+        # Explicit field consumed by the promotion gate; it includes thresholds
+        # and OOD constants and is bound into the candidate version hash.
+        "training_contract": version_payload,
         "preparation_config": {
             "phase2_splits": "group-aware near-duplicate split + temporal split",
             "seed": SEED,
