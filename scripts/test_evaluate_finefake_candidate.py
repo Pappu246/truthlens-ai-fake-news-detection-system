@@ -13,6 +13,7 @@ from scripts.evaluate_finefake_candidate import (
     OFFICIAL_REPOSITORY,
     normalise_finefake_frame,
     normalized_text_hash,
+    evaluate_records,
     prepare_finefake_rows,
     validate_dataset_manifest,
 )
@@ -118,3 +119,32 @@ def test_archive_audit_lists_pickle_member_but_does_not_extract_or_unpickle(tmp_
     assert report["pickle_members_present"] is True
     assert report["verification_status"] == "LOCAL_SHA256_COMPUTED_PROVENANCE_REQUIRES_REVIEW"
     assert {item["name"] for item in report["members_listed_without_extraction"]} == {"FineFake.pkl", "README.txt"}
+
+
+def test_platform_reports_use_platform_scoped_runtime_metrics():
+    real_text = "truthlens " + long_text("actual reporting")
+    fake_text = "truthlens " + long_text("fabricated report")
+    artifact = {
+        "vocabulary": {"truthlens": 0},
+        "idf": [1.0],
+        "selected_model": {
+            "bias": 0.0,
+            "weights": [0.0],
+            "plattA": 0.0,
+            "plattB": 2.0,
+        },
+    }
+    records = [
+        {"text": real_text, "y_fake": 0, "platform": "CNN"},
+        {"text": real_text + " additional phrase", "y_fake": 0, "platform": "CNN"},
+        {"text": fake_text, "y_fake": 1, "platform": "Reddit"},
+        {"text": fake_text + " other phrase", "y_fake": 1, "platform": "Reddit"},
+    ]
+    report = evaluate_records(records, artifact)
+    cnn = report["platform_metrics"]["CNN"]
+    reddit = report["platform_metrics"]["Reddit"]
+    assert cnn["runtime_policy"]["coverage"] == 1.0
+    assert cnn["runtime_policy"]["real_recall_all_real_samples"] == 1.0
+    assert cnn["runtime_policy"]["fake_recall_all_fake_samples"] == 0.0
+    assert reddit["runtime_policy"]["coverage"] == 1.0
+    assert reddit["runtime_policy"]["fake_recall_all_fake_samples"] == 0.0
