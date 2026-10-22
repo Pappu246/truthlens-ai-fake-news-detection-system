@@ -89,9 +89,9 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
   // NEEDS MORE CONTEXT — dedicated visual state.
   // Short, headline-only, vague, incomplete or source-less content, as well
   // as uncertain model predictions inside the configured uncertainty zone,
-  // land here. This state NEVER renders a fake percentage: confidence and
-  // probabilities are shown as N/A (or the raw zone values, which by
-  // definition cannot exceed the threshold bounds).
+  // land here. The verdict always remains withheld. Only a successful exact-
+  // calibrated result with a complementary probability pair may show both
+  // model percentages; safety/OOD guards and uncalibrated margins fail closed.
   // ======================================================================
   if (result.status === 'INSUFFICIENT_INFORMATION' ||
       isNeedsMoreContextLabel(result.verdict) ||
