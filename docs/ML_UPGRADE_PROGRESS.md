@@ -1,5 +1,43 @@
 # TruthLens AI — World-Level ML Upgrade: Progress Log
 
+> **Current verified status (2026-10-22).** This block is the source of truth for the next work session. The numbered audit sections further below are historical implementation notes; where their old descriptions conflict with this current block, trust the current block and update the historical notes only when their original context matters.
+
+## Current production baseline — verified against the live Vercel alias
+
+- **Production commit:** `ad9dd3ffeaa273824a06bfc26ed8d300a41f849f` on `main`.
+- **Live checks:** `/api/health`, `/api/models/metrics`, `/api/model/diagnostics`, `/api/claim/metrics`, and the homepage returned HTTP 200 during the 2026-10-22 audit. The current main SHA's CI, Render production-smoke workflow, and Vercel production-smoke workflow all completed successfully on 2026-10-20.
+- **Article classifier:** ISOT-trained Linear SVM with an exact three-member calibrated ensemble, version `3.1.0-isot`; production model lock is on. Frozen decision thresholds are `P(FAKE) >= 0.98` and `P(FAKE) <= 0.35` for REAL. Inputs between thresholds or failing safety/OOD checks can abstain. The production benchmark reports 99.59% accuracy on its 7,732-example ISOT held-out split; this is a same-corpus benchmark result, **not** evidence of 99.59% real-world accuracy.
+- **Claim classifier:** LIAR-based claim-specific model `1.1.0-liar-claim`, available separately from the full-article classifier. Its reported text-only LIAR test accuracy is 62.72% (n=802); metadata-assisted is 65.84% (n=802). Claim scores must not be presented as full-article accuracy, or combined into a fake-news probability.
+- **Evidence retrieval:** API component reports READY, but retrieval depends on outbound providers and per-request results. An unsuccessful or blocked publisher fetch is not proof that a claim is false. `INSUFFICIENT_EVIDENCE`, `SEARCH_UNAVAILABLE`, claim-model probability, and article-model probability are different signals.
+- **V2 research stack:** marked EXPERIMENTAL and additive; it does not govern the production article/claim verdicts.
+- **History persistence:** the latest main UI explicitly says analysis history is stored in the browser on that device; shared server-side per-user history is disabled until authenticated per-user storage exists.
+- **Observed runtime events:** grouped Vercel logs show publisher extraction HTTP 403 and 404 events and a recurring Node `DEP0169 url.parse` deprecation warning. HTTP 403/404 can be expected publisher restrictions/missing URLs; verify that the API reports them safely rather than retrying aggressively or inferring a truth label. The warning's source has not yet been identified. Vercel Hobby log retention prevented a full 24-hour raw-log query in this audit.
+
+## Research candidate status — NOT PROMOTABLE
+
+Open draft PR [#131](https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/pull/131) is based on an older `main` SHA than the current production commit. Keep it research-only and **do not merge/promote its model**.
+
+Latest recorded candidate validation (workflow [39475286707](https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/actions/runs/39475286707)) completed training, Python/Node artifact parity, and existing model/verdict regressions, but its release gate failed. On the untouched WELFake same-corpus holdout (n=11,621), the frozen production decision policy plus abstention produced about 66.3% coverage, 64.1% operational balanced accuracy, and 57.3% fake recall, below required gates. More seriously, the candidate-specific regression classified a clearly fabricated synthetic fixture as `LIKELY REAL` with `P(FAKE)=0.0045`; its safety run recorded 12 assertions passed and 1 failed. The final gate also reported that the artifact-bound safety report did not pass its hash/zero-failure contract. These are legitimate blockers, not CI flakes. Do not weaken thresholds or remove the regression to obtain green CI.
+
+A separate, source-independent full-article validation report on at least 10,000 eligible articles is still missing. WELFake is a same-corpus holdout; LIAR evaluates a different claim-level task. FineFake intake/evaluator tooling exists in PR #131, but the archive has not been obtained and verified in the recorded run, and no FineFake score exists. Do not execute unverified pickle data or treat FineFake as source-independent validation without proving source separation.
+
+## Prioritized next actions
+
+1. **Keep production frozen.** No changes to `main`, `data/saved_model_artifacts.json`, production thresholds, deployment aliases/settings, or model promotion as part of research debugging. Do not merge PR #131.
+2. **Diagnose PR #131's safety failure.** Preserve the synthetic fabricated-article false-REAL regression. Identify why it produces `LIKELY REAL`/0.0045, report the artifact-bound safety JSON failure accurately, and fix the candidate/model or reject it. Re-run the same full workflow on one exact head SHA. Green unit tests alone are not the release gate.
+3. **Build independent full-article validation.** Select a legally usable, hash-pinned, source-independent dataset with article-level truth labels; exclude overlap with fitting/calibration/model-selection data; retain a reproducible manifest, source/date split, sample counts and metrics; require the exact runtime policy and adversarial safety suite to pass. Do not claim global real-world accuracy from ISOT/WELFake alone.
+4. **Complete the Phase 2 benchmark protocol tracked in [issue #132](https://github.com/Pappu246/truthlens-ai-fake-news-detection-system/issues/132).** Use official pinned scorers for FEVER, FEVEROUS, SciFact and AVeriTeC, complete the required sample counts, bind reports to model/config/data hashes, and create/seal the planned blind human-labelled Open-Web holdout (at least 100 claims). AI-generated annotations are not gold labels. Every gate must run against the same commit.
+5. **Re-test the live article/news pipeline and signal separation.** Verify the fetched body (not headline alone), freshness, SSRF/redirect/size/timeout handling, publisher-block handling, provenance, and prompt-injection resistance. Missing evidence must never automatically become FAKE. Keep claim model, article classifier, and evidence verdict visible as separate signals.
+6. **Investigate runtime warnings from evidence, not guesswork.** Identify the dependency/source of Node `DEP0169` before changing packages. Track publisher 403/404 as per-request extraction outcomes; use fallback evidence retrieval only within bounded budgets and never fabricate citations.
+7. **Only after the above:** update final release notes/UI claims from measured evidence, rerun CI + production smoke on the exact candidate SHA, and require human review of all reports before any separately approved promotion.
+
+## Session rule
+
+Read this current block first. The rest of this file preserves historical audits and implementation notes and may contain statements that were true when written but are no longer the current deployed state. Do not silently treat those snapshots as current production facts.
+
+---
+
+
 This file is the persistent state for the 19-phase upgrade. Read this file
 first in every new work session before touching any code. It records what
 is verified, what is missing, and the exact next task.
@@ -464,23 +502,6 @@ groups passing -- the sole failure, "REAL EVIDENCE TEST", requires
 environmental, unrelated to this change; that suite's own Test 24, "MODEL
 INTEGRITY", independently self-reports "Production model retrained = NO").
 
-## Next Task (read this first in the next session)
+## Next Task
 
-**Tasks 1, 2, 7, 9, and 10 are all complete and independently verified. Do
-not repeat any of them.**
-
-**Next priority: Task 11, end-to-end Live News / article pipeline audit.**
-Trace the full path: headline -> article URL -> SSRF-safe URL validation ->
-fetch -> article extraction -> actual article body -> content-quality gate
--> ML analysis -> claim extraction -> evidence verification. The critical
-requirement: a headline alone must never be presented as if it were a full
-article analysis -- if the real article body cannot be obtained, the result
-must be NEEDS MORE CONTEXT with a clear reason, not a verdict based on the
-headline text alone. Test specifically: successful extraction, extraction
-failure, headline-only, malformed URL, private/loopback IP, localhost,
-redirects, oversized response, timeout, unsupported content type, and that
-fetched HTML/article text is always treated as untrusted data, never as
-instructions (prompt-injection-via-webpage resistance). After Task 11:
-Task 12 (evidence/claim verification audit -- corroborated / contradicted /
-unsupported / insufficient-evidence must stay distinct, "no evidence found"
-must never become "fake"), then Task 13 (security audit).
+Follow **Prioritized next actions** at the top of this file. The old Task 11 handoff below was written before later production article-pipeline, model and deployment work; do not execute it as the current plan without re-checking the current baseline.
