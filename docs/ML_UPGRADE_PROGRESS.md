@@ -38,12 +38,15 @@ Read this current block first. The rest of this file preserves historical audits
 ---
 
 
-This file is the persistent state for the 19-phase upgrade. Read this file
-first in every new work session before touching any code. It records what
-is verified, what is missing, and the exact next task.
+The block at the top of this file is the current verified status and
+work plan. The phase-by-phase notes below are retained as the historical
+implementation record from when each entry was written. Do not treat old
+statements further below as the live deployed state without re-verifying
+them against the current branch and production deployment.
 
-**Do not start Phase 2+ work without reading this file's "Next Task"
-section at the bottom.**
+**Read the current production baseline and prioritized next actions above
+before touching code; the concise handoff is the "Next Task" section at the
+bottom.**
 
 ---
 
