@@ -103,6 +103,16 @@ check(
   fake.prediction !== 'LIKELY REAL',
   JSON.stringify({ prediction: fake.prediction, fake_probability: fake.fake_probability })
 );
+check(
+  'candidate-only style-conflict rule abstains instead of fabricating a FAKE verdict',
+  fake.prediction === 'NEEDS MORE CONTEXT',
+  JSON.stringify({ prediction: fake.prediction, reason: fake.reason })
+);
+check(
+  'candidate-only style-conflict rule withholds both probabilities',
+  fake.fake_probability === null && fake.real_probability === null,
+  JSON.stringify({ fake_probability: fake.fake_probability, real_probability: fake.real_probability })
+);
 // The deployed main-branch policy does not yet implement a separate
 // sensational-conflict abstention rule. Do not claim that unimplemented rule
 // is current policy; the direct false-REAL regression immediately above still
