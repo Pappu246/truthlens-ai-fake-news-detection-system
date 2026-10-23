@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-"""Evaluate a candidate against a fresh, source-independent full-article dataset.
+"""Evaluate a candidate on an external full-article corpus under the frozen runtime policy.
 
 PolyglotFakeFacts v2.0 is held outside candidate fitting/calibration/model selection.
-The evaluator pins the downloaded archive, enforces English full-text availability,
-removes exact and near-duplicate overlap against ISOT + the entire WELFake corpus,
-and applies the frozen runtime thresholds and abstention policy.
+The evaluator pins the downloaded archive and enforces English full-text availability.
+It checks exact-text overlap against complete ISOT and WELFake corpora, and near-
+duplicate overlap against the complete ISOT corpus only (bounded CI cost). It also
+deduplicates the external corpus internally. These checks do not prove publisher-
+level source independence: fitting corpora lack a complete source/domain registry,
+so this report must not be treated as release-grade independent validation.
 """
 import argparse
 import hashlib
@@ -309,7 +312,7 @@ def remove_training_overlap(records, exact_hashes, lsh_index):
         kept.append(record)
     return kept, {
         "exact_overlap_with_isot_or_welfake_removed": exact_removed,
-        "near_duplicate_overlap_with_isot_or_welfake_removed": near_removed,
+        "near_duplicate_overlap_with_isot_removed": near_removed,
     }
 
 
@@ -479,7 +482,7 @@ def main():
     report = {
         "schema_version": 1,
         "status": "COMPLETED",
-        "task": "Independent full-article fake-vs-real evaluation; not a claim-verification benchmark.",
+        "task": "External full-article fake-vs-real evaluation; not a claim-verification benchmark and not source-independent unless publisher separation is proven.",
         "dataset": {
             "name": DATASET_NAME,
             "doi": DATASET_DOI,
