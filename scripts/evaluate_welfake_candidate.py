@@ -289,6 +289,19 @@ def main() -> None:
     }
     if manifest_policy != expected_policy:
         raise SystemExit("Candidate training policy fingerprint is missing or does not match the current runtime policy.")
+    expected_candidate_safety_policy = {
+        "id": "sensational-conflict-abstention-v1",
+        "action": "abstain_and_withhold_probabilities",
+        "applies_only_when_model_probability_leans_real": True,
+        "minimum_sensational_terms": 3,
+        "minimum_sensational_terms_with_certainty": 2,
+        "minimum_certainty_terms": 1,
+        "production_status": "RESEARCH_ONLY_NOT_DEPLOYED",
+    }
+    candidate_safety_policy = manifest.get("training_contract", {}).get("candidate_safety_policy")
+    artifact_safety_policy = artifact.get("training_contract", {}).get("candidate_safety_policy")
+    if candidate_safety_policy != expected_candidate_safety_policy or artifact_safety_policy != candidate_safety_policy:
+        raise SystemExit("Candidate-only safety policy is missing or does not match the model artifact/manifest contract.")
     artifact_digest = sha256(artifact_path)
     if artifact_digest != manifest.get("artifact_sha256"):
         raise SystemExit("Candidate artifact hash does not match its manifest.")
@@ -491,6 +504,7 @@ def main() -> None:
             "source": "server/mlEngine.ts production OOD/decision guard",
             "matches_candidate_artifact": True,
         },
+        "candidate_safety_policy_contract": candidate_safety_policy,
         "isot_source_dataset_fingerprint": manifest.get("dataset_fingerprint"),
         "eligible_samples": len(samples),
         "fake_samples": int(y_fake.sum()),
