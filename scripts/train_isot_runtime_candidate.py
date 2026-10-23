@@ -488,28 +488,44 @@ def main():
         }
 
     candidate_sweeps = []
-    for svm_c in [0.25, 0.5, 1.0, 2.0, 4.0]:
-        candidate_svm = LinearSVC(C=svm_c, max_iter=3000, random_state=SEED)
-        candidate_svm.fit(Xtr, train_y)
-        calibration_margins = candidate_svm.decision_function(Xcal)
-        candidate_calibrator = LogisticRegression(
-            C=1e6, max_iter=2000, solver="lbfgs", random_state=SEED
-        )
-        candidate_calibrator.fit(calibration_margins.reshape(-1, 1), y_cal)
-        select_margins = candidate_svm.decision_function(Xpolicy)
-        candidate_policy_p = candidate_calibrator.predict_proba(
-            select_margins.reshape(-1, 1)
-        )[:, 1]
-        policy_quality = frozen_policy_metrics(
-            y_policy, candidate_policy_p, policy_coverage, policy_candidate_terms, policy_texts
-        )
-        candidate_sweeps.append({
-            "C": svm_c,
-            "model": candidate_svm,
-            "calibrator": candidate_calibrator,
-            "policy_probabilities": candidate_policy_p,
-            "policy_quality": policy_quality,
-        })
+    class_weight_options = [
+        (None, "unweighted"),
+        ("balanced", "balanced"),
+        ({0: 1.0, 1: 1.15}, "fake_weight_1.15"),
+        ({0: 1.0, 1: 1.30}, "fake_weight_1.30"),
+    ]
+    # Search is intentionally restricted to the fit/training split and the
+    # held-out validation policy split. It never observes WELFake holdout.
+    for class_weight, class_weight_label in class_weight_options:
+        for svm_c in [0.10, 0.25, 0.5, 1.0, 2.0]:
+            candidate_svm = LinearSVC(
+                C=svm_c,
+                class_weight=class_weight,
+                max_iter=5000,
+                random_state=SEED,
+            )
+            candidate_svm.fit(Xtr, train_y)
+            calibration_margins = candidate_svm.decision_function(Xcal)
+            candidate_calibrator = LogisticRegression(
+                C=1e6, max_iter=2000, solver="lbfgs", random_state=SEED
+            )
+            candidate_calibrator.fit(calibration_margins.reshape(-1, 1), y_cal)
+            select_margins = candidate_svm.decision_function(Xpolicy)
+            candidate_policy_p = candidate_calibrator.predict_proba(
+                select_margins.reshape(-1, 1)
+            )[:, 1]
+            policy_quality = frozen_policy_metrics(
+                y_policy, candidate_policy_p, policy_coverage, policy_candidate_terms, policy_texts
+            )
+            candidate_sweeps.append({
+                "C": svm_c,
+                "class_weight": class_weight,
+                "class_weight_label": class_weight_label,
+                "model": candidate_svm,
+                "calibrator": candidate_calibrator,
+                "policy_probabilities": candidate_policy_p,
+                "policy_quality": policy_quality,
+            })
 
     # Prefer a candidate meeting every frozen-policy gate; otherwise retain the
     # best measured operational balanced accuracy for diagnosis, never promotion.
@@ -526,6 +542,8 @@ def main():
     svm = chosen["model"]
     calibrator = chosen["calibrator"]
     selected_svm_c = float(chosen["C"])
+    selected_svm_class_weight = chosen["class_weight"]
+    selected_svm_class_weight_label = chosen["class_weight_label"]
     selection_policy_metrics = chosen["policy_quality"]
     selection_y = y_policy
     selection_p = chosen["policy_probabilities"]
@@ -551,7 +569,9 @@ def main():
         "seed": SEED,
         "max_features": args.max_features,
         "selected_svm_c": selected_svm_c,
-        "model_selection": "C sweep selected on a held-out validation policy split using frozen 0.98/0.35 thresholds and abstention; sigmoid calibration fitted on a separate validation half",
+        "selected_svm_class_weight": selected_svm_class_weight,
+        "selected_svm_class_weight_label": selected_svm_class_weight_label,
+        "model_selection": "SVM C/class-weight grid selected on a held-out validation policy split using frozen 0.98/0.35 thresholds and abstention; sigmoid calibration fitted on a separate validation half",
         "tokenizer": "TruthLens Node cleanText + unigram/bigram analyzer",
         "text_normalizer": "wire-byline-and-explicit-social-CTA-removal-v1",
         "candidate_safety_policy": {
@@ -653,7 +673,11 @@ def main():
                 "selected_C": selected_svm_c,
                 "selection_metrics": selection_policy_metrics,
                 "sweep": [
-                    {"C": item["C"], **item["policy_quality"]}
+                    {
+                        "C": item["C"],
+                        "class_weight": item["class_weight_label"],
+                        **item["policy_quality"],
+                    }
                     for item in candidate_sweeps
                 ],
                 "note": "Validation-only hyperparameter selection; WELFake holdout never consulted during model choice.",
