@@ -225,147 +225,109 @@ jobs:
       - name: Verify canonical production artifact was not modified
         run: cmp /tmp/truthlens-production-artifact.before.json data/saved_model_artifacts.json
 
-      - name: Enforce held-out full-article quality gate; report LIAR separately
+      - name: Enforce independent full-article quality gate; keep promotion separate
         run: |
           set -euo pipefail
           python - <<'PY'
           import glob, hashlib, json, os, sys
-          paths = sorted(glob.glob("artifacts/models/*/article_heldout_validation.json"))
+          paths = sorted(glob.glob("artifacts/models/*/article_independent_validation.json"))
           if not paths:
-              print("BLOCKED: task-matched full-article external validation is missing.")
+              print("BLOCKED: independent full-article report is missing.")
               sys.exit(1)
           report_path = paths[-1]
+          candidate_dir = os.path.dirname(report_path)
           with open(report_path, encoding="utf-8") as f:
               report = json.load(f)
-          candidate_dir = os.path.dirname(report_path)
           artifact_path = os.path.join(candidate_dir, "model_artifact.json")
           manifest_path = os.path.join(candidate_dir, "manifest.json")
-          with open(artifact_path, "rb") as f:
-              artifact_sha = hashlib.sha256(f.read()).hexdigest()
+          safety_path = os.path.join(candidate_dir, "runtime_safety_validation.json")
+          if not all(os.path.isfile(p) for p in (artifact_path, manifest_path, safety_path)):
+              print("BLOCKED: candidate artifact, manifest, or artifact-bound safety report is missing.")
+              sys.exit(1)
+          artifact_sha = hashlib.sha256(open(artifact_path, "rb").read()).hexdigest()
           with open(manifest_path, encoding="utf-8") as f:
               manifest = json.load(f)
-          with open(os.path.join(candidate_dir, "external_validation.json"), encoding="utf-8") as f:
-              liar = json.load(f)
-          safety_path = os.path.join(candidate_dir, "runtime_safety_validation.json")
-          if not os.path.isfile(safety_path):
-              print("BLOCKED: artifact-bound runtime safety report is missing.")
-              sys.exit(1)
           with open(safety_path, encoding="utf-8") as f:
               safety = json.load(f)
-          metrics = report.get("metrics", {})
-          runtime_policy = report.get("runtime_decision_policy", {})
-          runtime_metrics = runtime_policy.get("metrics", {})
-          ablation = report.get("source_attribution_ablation", {})
-          ablation_metrics = ablation.get("metrics", {})
-          ablation_runtime = ablation.get("runtime_decision_policy", {})
-          ablation_runtime_metrics = ablation_runtime.get("metrics", {})
+          dataset = report.get("dataset", {})
+          metrics = report.get("metrics_at_probability_threshold_0_50_diagnostic_only", {})
+          policy = report.get("frozen_runtime_decision_policy", {})
+          policy_checks = policy.get("metrics", {})
+          internal_gate = report.get("release_gate", {}).get("checks", {})
+          training_contract = manifest.get("training_contract", {})
+          expected_safety_policy = {
+              "id": "sensational-conflict-abstention-v1",
+              "action": "abstain_and_withhold_probabilities",
+              "applies_only_when_model_probability_leans_real": True,
+              "minimum_sensational_terms": 3,
+              "minimum_sensational_terms_with_certainty": 2,
+              "minimum_certainty_terms": 1,
+              "production_status": "RESEARCH_ONLY_NOT_DEPLOYED",
+          }
           checks = {
               "report_completed": report.get("status") == "COMPLETED",
-              "artifact_hash_matches": report.get("candidate_artifact_sha256") == artifact_sha == manifest.get("artifact_sha256"),
-              "dataset_checksum_matches": report.get("dataset_md5") == "73c9675a4b3d09f86a6933d0b8d7d908",
-              "sample_count": report.get("eligible_samples", 0) >= 10000,
-              "runtime_policy_thresholds_match_production": report.get("runtime_policy_contract") == {
-                  "fake_threshold": 0.98,
-                  "real_threshold": 0.35,
-                  "low_vocabulary_coverage_threshold": 0.10,
-                  "ood_short_word_count": 100,
-                  "ood_coverage_threshold": 0.35,
-                  "source": "server/mlEngine.ts production OOD/decision guard",
-                  "matches_candidate_artifact": True,
-              },
-              "candidate_only_safety_policy_is_explicit_and_artifact_bound": (
-                  report.get("candidate_safety_policy_contract") == manifest.get("training_contract", {}).get("candidate_safety_policy") == {
-                      "id": "sensational-conflict-abstention-v1",
-                      "action": "abstain_and_withhold_probabilities",
-                      "applies_only_when_model_probability_leans_real": True,
-                      "minimum_sensational_terms": 3,
-                      "minimum_sensational_terms_with_certainty": 2,
-                      "minimum_certainty_terms": 1,
-                      "production_status": "RESEARCH_ONLY_NOT_DEPLOYED",
-                  } and artifact.get("training_contract", {}).get("candidate_safety_policy") == manifest.get("training_contract", {}).get("candidate_safety_policy")
-              ),
-              "runtime_safety_report_matches_candidate_artifact": safety.get("status") == "COMPLETED" and safety.get("passed") is True and safety.get("candidate_artifact_sha256") == artifact_sha and safety.get("assertions_failed") == 0,
-              "candidate_remains_non_promotable_without_independent_article_validation": manifest.get("production_eligible") is False and manifest.get("promotion_status") == "CANDIDATE_ONLY",
-              "holdout_scope_is_not_mislabeled_external": report.get("partition_scope", {}).get("is_source_independent_external_test") is False,
-              "holdout_never_used_for_fit_calibration_or_selection": report.get("partition_scope", {}).get("holdout_is_never_fit_calibrated_or_selected") is True,
-              "holdout_hashes_disjoint_from_train": report.get("partition_scope", {}).get("holdout_overlaps_train") is False,
-              "holdout_hashes_disjoint_from_validation": report.get("partition_scope", {}).get("holdout_overlaps_validation") is False,
-              "balanced_accuracy": metrics.get("balanced_accuracy", 0) >= 0.70,
-              "fake_recall": metrics.get("fake_recall", 0) >= 0.70,
-              "real_recall": metrics.get("real_recall", 0) >= 0.70,
-              "runtime_policy_gate_passed": runtime_policy.get("passed") is True,
-              "runtime_policy_coverage": runtime_metrics.get("coverage", 0) >= 0.50,
-              "runtime_policy_operational_balanced_accuracy": runtime_metrics.get("operational_balanced_accuracy_abstentions_count_as_not_correct", 0) >= 0.70,
-              "runtime_policy_fake_recall": runtime_metrics.get("fake_recall_all_fake_samples", 0) >= 0.70,
-              "runtime_policy_real_recall": runtime_metrics.get("real_recall_all_real_samples", 0) >= 0.70,
-              "byline_ablation_passed": ablation.get("passed") is True,
-              "byline_ablation_balanced_accuracy": ablation_metrics.get("balanced_accuracy", 0) >= 0.65,
-              "byline_ablation_fake_recall": ablation_metrics.get("fake_recall", 0) >= 0.65,
-              "byline_ablation_real_recall": ablation_metrics.get("real_recall", 0) >= 0.65,
-              "byline_runtime_policy_gate_passed": ablation_runtime.get("passed") is True,
-              "byline_runtime_policy_coverage": ablation_runtime_metrics.get("coverage", 0) >= 0.50,
-              "byline_runtime_policy_operational_balanced_accuracy": ablation_runtime_metrics.get("operational_balanced_accuracy_abstentions_count_as_not_correct", 0) >= 0.65,
-              "byline_runtime_policy_fake_recall": ablation_runtime_metrics.get("fake_recall_all_fake_samples", 0) >= 0.65,
-              "byline_runtime_policy_real_recall": ablation_runtime_metrics.get("real_recall_all_real_samples", 0) >= 0.65,
-              "manifest_marks_candidate_only": manifest.get("production_eligible") is False and manifest.get("promotion_status") == "CANDIDATE_ONLY",
-              "report_release_gate": report.get("release_gate", {}).get("passed") is True,
+              "dataset_doi_and_license_are_expected": dataset.get("doi") == "10.17632/8yfrm6z9dx.1" and dataset.get("license") == "CC BY 4.0",
+              "independent_archive_sha256_is_pinned_and_matches": dataset.get("archive_hash_pinned_and_matches") is True and bool(dataset.get("expected_archive_sha256")),
+              "candidate_artifact_hash_matches_report_and_manifest": report.get("candidate", {}).get("artifact_sha256") == artifact_sha == manifest.get("artifact_sha256"),
+              "eligible_independent_full_articles_at_least_10000": report.get("sample_flow", {}).get("final_eligible_samples", 0) >= 10000,
+              "raw_balanced_accuracy": metrics.get("balanced_accuracy", 0) >= 0.70,
+              "raw_fake_recall": metrics.get("fake_recall", 0) >= 0.70,
+              "raw_real_recall": metrics.get("real_recall", 0) >= 0.70,
+              "runtime_policy_coverage": policy_checks.get("coverage", 0) >= 0.50,
+              "runtime_policy_operational_balanced_accuracy": policy_checks.get("operational_balanced_accuracy_abstentions_count_as_not_correct", 0) >= 0.70,
+              "runtime_policy_fake_recall": policy_checks.get("fake_recall_all_fake_samples", 0) >= 0.70,
+              "runtime_policy_real_recall": policy_checks.get("real_recall_all_real_samples", 0) >= 0.70,
+              "independent_evaluator_all_gates_pass": report.get("release_gate", {}).get("passed") is True and all(internal_gate.values()),
+              "runtime_safety_report_is_artifact_bound_and_passed": safety.get("status") == "COMPLETED" and safety.get("passed") is True and safety.get("candidate_artifact_sha256") == artifact_sha and safety.get("assertions_failed") == 0,
+              "frozen_production_thresholds_unchanged": artifact_path and json.load(open(artifact_path, encoding="utf-8")).get("thresholds", {}).get("fake_threshold") == 0.98 and json.load(open(artifact_path, encoding="utf-8")).get("thresholds", {}).get("real_threshold") == 0.35,
+              "candidate_safety_policy_is_explicit_and_research_only": training_contract.get("candidate_safety_policy") == expected_safety_policy and training_contract.get("candidate_safety_policy", {}).get("production_status") == "RESEARCH_ONLY_NOT_DEPLOYED",
+              "candidate_manifest_remains_non_promotable": manifest.get("production_eligible") is False and manifest.get("promotion_status") == "CANDIDATE_ONLY",
           }
           print(json.dumps({
-              "article_heldout_report": report_path,
-              "eligible_samples": report.get("eligible_samples"),
-              "metrics_at_0_50_diagnostic": metrics,
-              "runtime_decision_policy": runtime_policy,
-              "score_orientation_diagnostic_only": report.get("score_orientation_diagnostic_only"),
-              "source_attribution_ablation": {
-                  "metrics_at_0_50_diagnostic": ablation_metrics,
-                  "runtime_decision_policy": ablation_runtime,
-                  "passed": ablation.get("passed")
+              "independent_report": report_path,
+              "dataset": {
+                  "doi": dataset.get("doi"),
+                  "archive_sha256": dataset.get("archive_sha256"),
+                  "expected_archive_sha256": dataset.get("expected_archive_sha256"),
+                  "eligible_samples": report.get("sample_flow", {}).get("final_eligible_samples"),
+                  "fake_samples": report.get("sample_flow", {}).get("fake_samples"),
+                  "real_samples": report.get("sample_flow", {}).get("real_samples"),
+                  "overlap_removal": report.get("deduplication_and_overlap"),
               },
+              "raw_metrics_at_0_50": metrics,
+              "frozen_runtime_policy": policy,
+              "language_subgroups": report.get("language_subgroups_at_probability_threshold_0_50_diagnostic_only"),
+              "candidate_artifact_sha256": artifact_sha,
+              "safety_report": safety,
               "checks": checks,
-              "LIAR_DIAGNOSTIC_ONLY": {
-                  "eligible_binary_samples": liar.get("eligible_binary_samples"),
-                  "accuracy": liar.get("metrics", {}).get("accuracy"),
-                  "balanced_accuracy": liar.get("metrics", {}).get("balanced_accuracy"),
-                  "macro_f1": liar.get("metrics", {}).get("macro_f1")
-              }
+              "model_release_decision": "BLOCKED" if not all(checks.values()) else "QUALITY_GATES_PASSED_REVIEW_REQUIRED",
           }, indent=2))
           summary = [
-              "## Research candidate quality gate — not production promotion",
+              "## Independent full-article candidate validation — no automatic promotion",
               "",
-              "### Held-out full-article benchmark (same WELFake corpus; not source-independent)",
-              f"- Dataset: {report.get('dataset')}",
-              f"- Eligible untouched holdout articles: {report.get('eligible_samples')}",
-              "- Scope: WELFake train/validation partitions are used for fitting/calibration; the held-out partition is not source-independent external validation.",
-              f"- Balanced accuracy: {metrics.get('balanced_accuracy')}",
-              f"- Fake recall: {metrics.get('fake_recall')}",
-              f"- Real recall: {metrics.get('real_recall')}",
-              f"- Macro F1 at p_fake=0.50 diagnostic threshold: {metrics.get('macro_f1')}",
-              f"- Runtime-policy coverage: {runtime_metrics.get('coverage')}",
-              f"- Runtime-policy balanced accuracy (abstentions count as not correct): {runtime_metrics.get('operational_balanced_accuracy_abstentions_count_as_not_correct')}",
-              f"- Runtime-policy fake recall: {runtime_metrics.get('fake_recall_all_fake_samples')}",
-              f"- Runtime-policy real recall: {runtime_metrics.get('real_recall_all_real_samples')}",
+              f"- Dataset: {dataset.get('name')} ({dataset.get('doi')})",
+              f"- Immutable archive SHA-256: {dataset.get('archive_sha256')}",
+              f"- Eligible independent full articles: {report.get('sample_flow', {}).get('final_eligible_samples')}",
+              f"- Raw balanced accuracy: {metrics.get('balanced_accuracy')}",
+              f"- Raw fake recall: {metrics.get('fake_recall')}",
+              f"- Raw real recall: {metrics.get('real_recall')}",
+              f"- Frozen-policy coverage: {policy_checks.get('coverage')}",
+              f"- Frozen-policy operational balanced accuracy: {policy_checks.get('operational_balanced_accuracy_abstentions_count_as_not_correct')}",
+              f"- Frozen-policy fake recall: {policy_checks.get('fake_recall_all_fake_samples')}",
+              f"- Frozen-policy real recall: {policy_checks.get('real_recall_all_real_samples')}",
               "",
-              "### Publisher-byline ablation stress test",
-              f"- Balanced accuracy: {ablation_metrics.get('balanced_accuracy')}",
-              f"- Fake recall: {ablation_metrics.get('fake_recall')}",
-              f"- Real recall at p_fake=0.50: {ablation_metrics.get('real_recall')}",
-              f"- Byline runtime-policy coverage: {ablation_runtime_metrics.get('coverage')}",
-              f"- Byline runtime-policy balanced accuracy: {ablation_runtime_metrics.get('operational_balanced_accuracy_abstentions_count_as_not_correct')}",
-              f"- Byline runtime-policy fake recall: {ablation_runtime_metrics.get('fake_recall_all_fake_samples')}",
-              f"- Byline runtime-policy real recall: {ablation_runtime_metrics.get('real_recall_all_real_samples')}",
-              "",
-              "### LIAR claim benchmark (different task; diagnostic, not article-model gate)",
-              f"- Eligible binary claims: {liar.get('eligible_binary_samples')}",
-              f"- Accuracy: {liar.get('metrics', {}).get('accuracy')}",
-              f"- Balanced accuracy: {liar.get('metrics', {}).get('balanced_accuracy')}",
-              "",
-              "### Release gate checks"
+              "### Release gates"
           ]
           summary += [f"- {'PASS' if ok else 'BLOCKED'}: {name}" for name, ok in checks.items()]
+          summary += [
+              "",
+              "WELFake's previously examined holdout is not used in this gate and must not be reused to select candidate variants.",
+              "Even if every numeric gate passes, this candidate remains CANDIDATE_ONLY pending independent human review and the remaining benchmark protocol."
+          ]
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as f:
               f.write("\n".join(summary) + "\n")
           if not all(checks.values()):
-              print("BLOCKED: do not promote this candidate. Held-out full-article quality gate did not pass.")
+              print("BLOCKED: do not promote this candidate.")
               sys.exit(1)
           PY
 
