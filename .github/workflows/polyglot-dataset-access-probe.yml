@@ -1,0 +1,45 @@
+name: Probe independent full-article dataset access
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Query official public metadata and page
+        run: |
+          python - <<'PY'
+          import json, re, urllib.request, urllib.error
+          urls = [
+              ("page", "https://data.mendeley.com/datasets/8yfrm6z9dx/1"),
+              ("files_api", "https://api.data.mendeley.com/datasets/publics/8yfrm6z9dx/files?version=1"),
+              ("zip_metadata_api", "https://api.data.mendeley.com/datasets/8yfrm6z9dx/zip?version=1"),
+          ]
+          def fetch(label, url):
+              req = urllib.request.Request(url, headers={"User-Agent":"TruthLens-Research-Validation/1.0"})
+              try:
+                  with urllib.request.urlopen(req, timeout=20) as resp:
+                      data = resp.read()
+                      print(json.dumps({"label":label,"status":resp.status,"final_url":resp.geturl(),
+                        "content_type":resp.headers.get("content-type"),"bytes":len(data)}))
+                      return data
+              except urllib.error.HTTPError as e:
+                  data=e.read(4096)
+                  print(json.dumps({"label":label,"status":e.code,"url":url,
+                    "content_type":e.headers.get("content-type"),"sample":data[:300].decode("utf-8","replace")}))
+              except Exception as e:
+                  print(json.dumps({"label":label,"error":type(e).__name__+":"+str(e)[:200]}))
+              return b""
+          html=fetch("page", urls[0][1]).decode("utf-8","replace")
+          for filename in ("Fake.xlsx","Real.xlsx","20.xlsx","80.xlsx"):
+              i=html.find(filename)
+              print(json.dumps({"file_marker":filename,"present":i>=0,
+                "context":html[max(0,i-500):i+700] if i>=0 else None}))
+          uuids=sorted(set(re.findall(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",html)))
+          print(json.dumps({"uuid_count":len(uuids),"uuid_samples":uuids[:20]}))
+          for label,url in urls[1:]:
+              fetch(label,url)
+          PY
