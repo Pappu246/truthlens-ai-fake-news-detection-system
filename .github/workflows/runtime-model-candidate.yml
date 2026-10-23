@@ -252,7 +252,9 @@ jobs:
           dataset = report.get("dataset", {})
           metrics = report.get("metrics_at_probability_threshold_0_50_diagnostic_only", {})
           policy = report.get("frozen_runtime_decision_policy", {})
-          policy_checks = policy.get("metrics", {})
+          # The evaluator writes the frozen runtime-policy metrics at the top level.
+          policy_checks = policy
+          source_independence = report.get("source_independence", {})
           internal_gate = report.get("release_gate", {}).get("checks", {})
           training_contract = manifest.get("training_contract", {})
           expected_safety_policy = {
@@ -268,6 +270,7 @@ jobs:
               "report_completed": report.get("status") == "COMPLETED",
               "dataset_doi_and_license_are_expected": dataset.get("doi") == "10.17632/8yfrm6z9dx.1" and dataset.get("license") == "CC BY 4.0",
               "independent_archive_sha256_is_pinned_and_matches": dataset.get("archive_hash_pinned_and_matches") is True and bool(dataset.get("expected_archive_sha256")),
+              "publisher_level_source_independence_is_proven": source_independence.get("proven_disjoint") is True and source_independence.get("status") == "PROVEN",
               "candidate_artifact_hash_matches_report_and_manifest": report.get("candidate", {}).get("artifact_sha256") == artifact_sha == manifest.get("artifact_sha256"),
               "eligible_independent_full_articles_at_least_10000": report.get("sample_flow", {}).get("final_eligible_samples", 0) >= 10000,
               "raw_balanced_accuracy": metrics.get("balanced_accuracy", 0) >= 0.70,
@@ -285,6 +288,7 @@ jobs:
           }
           print(json.dumps({
               "independent_report": report_path,
+              "source_independence": source_independence,
               "dataset": {
                   "doi": dataset.get("doi"),
                   "archive_sha256": dataset.get("archive_sha256"),
