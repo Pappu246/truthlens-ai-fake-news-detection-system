@@ -367,8 +367,9 @@ export class TruthLensMLEngine {
     plattB: number;
   }> = [];
   private inferenceMode: 'calibrated_ensemble' | 'single_calibrated_svm' | 'legacy_single_svm' = 'legacy_single_svm';
-  // Non-null only for research artifacts that version the matching Python/Node text normalizer.
+  // Research-only contracts are enabled only when explicitly versioned in the loaded artifact.
   private textNormalizerVersion: string | null = null;
+  private candidateSafetyPolicyVersion: string | null = null;
   private isTrained = false;
   private trainedAt: string = new Date().toISOString();
   private metrics: any = null;
@@ -438,9 +439,14 @@ export class TruthLensMLEngine {
     try {
       const raw = fs.readFileSync(filePath, 'utf-8');
       const artifact: ModelArtifacts = JSON.parse(raw);
-      const declaredTextNormalizer = (artifact as any).training_contract?.text_normalizer;
+      const trainingContract = (artifact as any).training_contract;
+      const declaredTextNormalizer = trainingContract?.text_normalizer;
       this.textNormalizerVersion = declaredTextNormalizer === 'wire-byline-and-explicit-social-CTA-removal-v1'
         ? declaredTextNormalizer
+        : null;
+      const declaredCandidateSafetyPolicy = trainingContract?.candidate_safety_policy?.id;
+      this.candidateSafetyPolicyVersion = declaredCandidateSafetyPolicy === 'sensational-conflict-abstention-v1'
+        ? declaredCandidateSafetyPolicy
         : null;
 
       // ARTIFACT INTEGRITY GUARD: a saved model is only usable when the
@@ -1596,6 +1602,15 @@ export class TruthLensMLEngine {
     const lowVocabularyCoverage = predictionDetails.coverage_ratio < LEGACY_MIN_VOCAB_COVERAGE;
     const limitedContentSource = LIMITED_CONTENT_SOURCES.has(options?.contentSource || '');
     const legacySafetyMode = !predictionDetails.calibrated;
+    const lowerPolicyText = textTrimmed.toLowerCase();
+    const sensationalMatchCount = SENSATIONAL_TERMS.filter(term => lowerPolicyText.includes(term)).length;
+    const certaintyMatchCount = CERTAINTY_TERMS.filter(term => lowerPolicyText.includes(term)).length;
+    const sensationalConflictCandidate =
+      this.candidateSafetyPolicyVersion === 'sensational-conflict-abstention-v1' &&
+      predictionDetails.calibrated &&
+      fakeProb <= tReal &&
+      (sensationalMatchCount >= 3 || (sensationalMatchCount >= 2 && certaintyMatchCount >= 1));
+    let sensationalConflictAbstentionFired = false;
     // Presentation-only direction signal for the legacy, uncalibrated SVM.
     // This is NOT a truth verdict and must never be converted into a probability.
     const modelDirectionalSignal: 'LIKELY REAL' | 'LIKELY FAKE' | 'UNAVAILABLE' =
@@ -1683,6 +1698,16 @@ export class TruthLensMLEngine {
       prediction = VERDICT_LIKELY_FAKE;
       riskLevel = 'HIGH';
       confidence = fakeProb;
+    } else if (fakeProb <= tReal && sensationalConflictCandidate) {
+      // Candidate-only fail-closed guard: conflicting sensational cues never
+      // prove falsity; when the calibrated model leans REAL, abstain rather
+      // than emit a confident false-REAL verdict.
+      prediction = VERDICT_NEEDS_MORE_CONTEXT;
+      riskLevel = 'UNDETERMINED';
+      confidence = null;
+      sensationalConflictAbstentionFired = true;
+      verdictReason =
+        'The model leaned REAL, but multiple sensational or absolute-certainty cues conflict with that direction. TruthLens withholds the verdict and percentages rather than treating style cues as proof. Verify the claims against independent sources.';
     } else if (fakeProb <= tReal) {
       prediction = VERDICT_LIKELY_REAL;
       riskLevel = 'LOW';
@@ -1695,7 +1720,9 @@ export class TruthLensMLEngine {
         `The calibrated model probability (P(FAKE)=${fakeProb}) falls inside the configured uncertainty zone (${tReal} - ${tFake}); the model does not have sufficient certainty to classify this text as real or fake. Verifying individual claims against independent evidence sources is recommended for a trustworthy assessment.`;
     }
 
-    const probabilityCaveat = limitedContentSource
+    const probabilityCaveat = sensationalConflictAbstentionFired
+      ? 'Candidate safety guard: the classifier direction conflicts with multiple sensational/certainty cues, so the verdict and percentages are withheld. Style is not proof of truth or falsity.'
+      : limitedContentSource
       ? 'Only partial article content is available (headline/RSS summary or extraction-blocked fallback). TruthLens withholds probability/confidence from the classification panel until full article text or independent evidence is available.'
       : demoModel
         ? (fakeProb >= 0.9 || realProb >= 0.9
@@ -1708,7 +1735,7 @@ export class TruthLensMLEngine {
     const confidenceScore = confidence !== null && predictionDetails.calibrated && !limitedContentSource
       ? Math.round(confidence * 100)
       : null;
-    const uncertaintyScore = limitedContentSource || lowVocabularyCoverage || legacySafetyMode
+    const uncertaintyScore = limitedContentSource || lowVocabularyCoverage || legacySafetyMode || sensationalConflictAbstentionFired
       ? null
       : Math.round((1.0 - Math.abs(fakeProb - realProb)) * 10000) / 10000;
 
@@ -1773,8 +1800,8 @@ export class TruthLensMLEngine {
       // probability that can later be rendered as 96–100% confidence.
       // The OOD guard fires independently of the low-vocabulary-coverage
       // threshold and must also withhold probabilities.
-      fake_probability: predictionDetails.calibrated && !lowVocabularyCoverage && !limitedContentSource && !oodGuardFired ? fakeProb : null,
-      real_probability: predictionDetails.calibrated && !lowVocabularyCoverage && !limitedContentSource && !oodGuardFired ? realProb : null,
+      fake_probability: predictionDetails.calibrated && !lowVocabularyCoverage && !limitedContentSource && !oodGuardFired && !sensationalConflictAbstentionFired ? fakeProb : null,
+      real_probability: predictionDetails.calibrated && !lowVocabularyCoverage && !limitedContentSource && !oodGuardFired && !sensationalConflictAbstentionFired ? realProb : null,
       risk_level: riskLevel,
       model_name: legacySafetyMode ? 'Linear SVM (Safety-Gated Legacy)' : 'Linear SVM (Calibrated)',
       source_url: sourceUrl || options?.originalUrl || '',
@@ -1804,8 +1831,8 @@ export class TruthLensMLEngine {
       // not probabilities, and must never be rendered as 96–100% confidence.
       // The OOD guard fires independently of the low-vocabulary-coverage
       // threshold and must also withhold probabilities.
-      fake_probability: predictionDetails.calibrated && !lowVocabularyCoverage && !limitedContentSource && !oodGuardFired ? fakeProb : null,
-      real_probability: predictionDetails.calibrated && !lowVocabularyCoverage && !limitedContentSource && !oodGuardFired ? realProb : null,
+      fake_probability: predictionDetails.calibrated && !lowVocabularyCoverage && !limitedContentSource && !oodGuardFired && !sensationalConflictAbstentionFired ? fakeProb : null,
+      real_probability: predictionDetails.calibrated && !lowVocabularyCoverage && !limitedContentSource && !oodGuardFired && !sensationalConflictAbstentionFired ? realProb : null,
       confidence,
       confidence_score: confidenceScore,
       model_score: confidenceScore,
