@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { analyzeUrlApi, executeNewsAnalysis } from '../src/services/analysisEngine';
+import { getCalibratedProbabilityPresentation } from '../src/utils/calibratedProbabilityPresentation';
 
 const claimModel = {
   status: 'AVAILABLE',
@@ -81,6 +82,65 @@ function backendPayload() {
 }
 
 async function main() {
+  // A calibrated article can abstain inside the uncertainty zone without
+  // withholding its probabilities. Show both percentages only for successful,
+  // exact-calibrated, complementary outputs; never infer or invent values.
+  assert.deepEqual(
+    getCalibratedProbabilityPresentation({
+      status: 'SUCCESS',
+      model_inference_mode: 'calibrated_ensemble',
+      calibration_status: 'EXACT_CALIBRATED_ENSEMBLE',
+      fake_probability: 0.6272,
+      real_probability: 0.3728
+    }),
+    { fakeProbability: 0.6272, realProbability: 0.3728, fakePercent: 63, realPercent: 37 }
+  );
+  assert.equal(
+    getCalibratedProbabilityPresentation({
+      status: 'INSUFFICIENT_INFORMATION',
+      model_inference_mode: 'calibrated_ensemble',
+      calibration_status: 'EXACT_CALIBRATED_ENSEMBLE',
+      fake_probability: 0.62,
+      real_probability: 0.38
+    }),
+    null,
+    'Unsafe/insufficient input must not expose model probabilities.'
+  );
+  assert.equal(
+    getCalibratedProbabilityPresentation({
+      status: 'SUCCESS',
+      model_inference_mode: 'legacy_single_svm',
+      calibration_status: 'LEGACY_UNCALIBRATED_MARGIN',
+      fake_probability: 0.9,
+      real_probability: 0.1
+    }),
+    null,
+    'An uncalibrated margin must not be presented as probability.'
+  );
+  assert.equal(
+    getCalibratedProbabilityPresentation({
+      status: 'SUCCESS',
+      model_inference_mode: 'calibrated_ensemble',
+      calibration_status: 'EXACT_CALIBRATED_ENSEMBLE',
+      fake_probability: 0.62,
+      real_probability: 0.2
+    }),
+    null,
+    'Inconsistent/non-complementary scores must be withheld.'
+  );
+  assert.equal(
+    getCalibratedProbabilityPresentation({
+      status: 'SUCCESS',
+      model_inference_mode: 'calibrated_ensemble',
+      calibration_status: 'EXACT_CALIBRATED_ENSEMBLE',
+      fake_probability: Number.NaN,
+      real_probability: 0
+    }),
+    null,
+    'Non-finite probabilities must be withheld.'
+  );
+  console.log('Calibrated abstention probability display: PASS');
+
   const originalFetch = globalThis.fetch;
   try {
     let observedPath = '';
