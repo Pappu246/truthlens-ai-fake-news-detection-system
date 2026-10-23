@@ -120,3 +120,38 @@ def test_runtime_policy_does_not_abstain_on_short_but_well_covered_input():
     assert report["coverage"] == 1.0
     assert report["short_low_coverage_abstentions"] == 0
     assert report["real_recall_all_real_samples"] == 1.0
+
+
+def test_research_style_conflict_rule_abstains_on_real_leaning_sensational_text():
+    report = compute_runtime_policy_metrics(
+        np.asarray([1]),
+        np.asarray([0.10]),
+        texts=[
+            "SHOCKING SECRET EXPOSED by alien whistleblower! The conspiracy is hidden. "
+            "This is an undeniable guaranteed miracle."
+        ],
+        coverage_ratio=np.asarray([0.90]),
+        candidate_term_count=np.asarray([180]),
+        sensational_conflict_guard_enabled=True,
+    )
+    assert report["sensational_conflict_guard"]["enabled"] is True
+    assert report["sensational_conflict_abstentions"] == 1
+    assert report["coverage"] == 0.0
+    assert report["fake_recall_all_fake_samples"] == 0.0
+
+
+def test_research_style_conflict_rule_never_overrides_high_fake_probability():
+    report = compute_runtime_policy_metrics(
+        np.asarray([1]),
+        np.asarray([0.99]),
+        texts=[
+            "SHOCKING SECRET EXPOSED by alien whistleblower! The conspiracy is hidden. "
+            "This is an undeniable guaranteed miracle."
+        ],
+        coverage_ratio=np.asarray([0.90]),
+        candidate_term_count=np.asarray([180]),
+        sensational_conflict_guard_enabled=True,
+    )
+    assert report["sensational_conflict_abstentions"] == 0
+    assert report["coverage"] == 1.0
+    assert report["fake_recall_all_fake_samples"] == 1.0
