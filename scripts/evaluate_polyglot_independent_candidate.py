@@ -109,7 +109,9 @@ def select_article_columns(frame: pd.DataFrame, filename: str):
         (
             "englishtranslatedtext", "textenglishtranslation", "englishtranslation",
             "englishtranslatedarticle", "translatedtextenglish", "englisharticletext",
-            "englishbody", "englishtranslatedbody", "translatedtext",
+            "englishbody", "englishtranslatedbody", "englishtranslatedversion",
+            "englishtranslatedversiontext", "englishtranslationversion",
+            "translatedenglishversion", "translatedtext",
         ),
     )
     if not english_body:
@@ -118,7 +120,10 @@ def select_article_columns(frame: pd.DataFrame, filename: str):
         english_body = find_column(columns, (), contains_all=("translated", "text"))
     original_body = find_column(
         columns,
-        ("originaltext", "articletext", "fulltext", "bodytext", "articlebody", "content", "text", "body"),
+        (
+            "originaltext", "newsoriginaltext", "originalarticletext", "newsarticletext",
+            "articletext", "fulltext", "bodytext", "articlebody", "content", "text", "body",
+        ),
     )
     body_col = english_body or original_body
     if body_col is None:
