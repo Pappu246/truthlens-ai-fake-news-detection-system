@@ -9,7 +9,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { TruthLensMLEngine } from '../server/mlEngine.js';
+import { cleanText, TruthLensMLEngine } from '../server/mlEngine.js';
 
 const artifactPath = process.argv[2];
 if (!artifactPath || !fs.existsSync(artifactPath)) {
@@ -56,6 +56,23 @@ check('candidate thresholds match the frozen production policy (fake 0.98 / real
   fakeThreshold === 0.98 && realThreshold === 0.35,
   JSON.stringify({ fake_threshold: fakeThreshold, real_threshold: realThreshold }));
 check('candidate uses an exact calibrated inference contract', engine.isCalibrationExact());
+
+const bylineNormalized = cleanText(
+  'WASHINGTON (Reuters) - Officials said the new report was published after an independent review.'
+);
+check(
+  'wire-service dateline is normalized before model inference',
+  !bylineNormalized.includes('reuters') && !bylineNormalized.includes('washington'),
+  bylineNormalized
+);
+const ctaNormalized = cleanText(
+  'The article reports the full results. Share this before the outlet deletes it forever!'
+);
+check(
+  'explicit social-share call to action is normalized before model inference',
+  !ctaNormalized.includes('share') && !ctaNormalized.includes('deletes'),
+  ctaNormalized
+);
 check(
   'candidate inference mode is explicitly calibrated',
   ['single_calibrated_svm', 'calibrated_ensemble'].includes(engine.getInferenceMode()),
