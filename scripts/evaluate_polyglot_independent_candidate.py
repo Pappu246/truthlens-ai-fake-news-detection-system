@@ -456,7 +456,9 @@ def main():
     gate = {
         "archive_sha256_is_hard_pinned_and_matches": archive_hash_pinned_and_matches,
         "candidate_artifact_hash_matches_manifest": artifact_digest == manifest.get("artifact_sha256"),
-        "source_is_distinct_from_candidate_fitting_sources": True,
+        # Exact/near-duplicate removal establishes corpus-level separation, not publisher-level independence.
+        # Training corpora lack a complete source/domain registry, so this gate must stay fail-closed.
+        "source_is_distinct_from_candidate_fitting_sources": False,
         "eligible_full_articles_at_least_10000": len(records) >= MIN_GATE_SAMPLES,
         "both_classes_present": len(set(y_fake.tolist())) == 2,
         "raw_balanced_accuracy_at_least_0_70": raw_metrics.get("balanced_accuracy", 0) >= 0.70,
@@ -492,6 +494,14 @@ def main():
             "class_label_rule": "Fake.xlsx => FAKE (1); Real.xlsx => REAL (0); explicit textual labels, when present, must agree.",
             "body_rule": "English-translated full article text is preferred; unqualified original text is accepted only when every non-empty language value is English.",
         },
+        "source_independence": {
+            "status": "NOT_PROVEN",
+            "proven_disjoint": False,
+            "reason": (
+                "The candidate fitting corpora do not preserve a complete publisher/domain registry. "
+                "Exact and near-duplicate text overlap checks do not prove publisher-level disjointness."
+            ),
+        },
         "candidate": {
             "model_version": artifact.get("model_version"),
             "artifact_sha256": artifact_digest,
@@ -523,6 +533,7 @@ def main():
         "release_gate": {"passed": all(gate.values()), "checks": gate},
         "limits": [
             "This is a separate dataset/corpus, not proof of performance on every current news domain.",
+            "Publisher-level source independence is NOT_PROVEN because candidate-fitting corpora lack a complete source/domain registry.",
             "The dataset label methodology is source- and publisher-informed; treat results as external dataset performance, not universal truth accuracy.",
             "WELFake has been examined across prior research iterations; no score from its exposed holdout is used in this release gate.",
             "The archive must be pinned to a reviewed, immutable SHA-256 before this report can pass.",
