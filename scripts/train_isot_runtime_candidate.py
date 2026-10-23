@@ -68,7 +68,10 @@ PUNCT_RE = re.compile(r'[.,/#!$%\^&\*;:{}=\-_\`~()?"\'\[\]]')
 URL_RE = re.compile(r'https?://\S+|www\.\S+')
 HTML_RE = re.compile(r'<.*?>')
 WIRE_DATELINE_RE = re.compile(
-    r"(?:[A-Z][A-Z0-9 .,'’/-]{2,60}\s+)?\(\s*(?:Reuters|Associated Press|AP News|AP|AFP|Agence France-Presse|Bloomberg News)\s*\)\s*[-—:]\s*",
+    r"(?:\b[A-Z][A-Z0-9 .,'’/-]{2,60}\s+)?\(\s*(?:Reuters|Associated Press|AP News|AP|AFP|Agence France-Presse|Bloomberg News)\s*\)\s*[-—:]\s*",
+)
+WIRE_PREFIX_RE = re.compile(
+    r"\b(?:Reuters|Associated Press|AP News|AP|AFP|Bloomberg News)\s*[-—:]\s*",
     re.IGNORECASE,
 )
 WIRE_BYLINE_SUFFIX_RE = re.compile(
@@ -86,6 +89,7 @@ def normalize_editorial_boilerplate(text: str) -> str:
     """Remove narrow wire-service byline and explicit social CTA boilerplate."""
     normalized = text or ""
     normalized = WIRE_DATELINE_RE.sub(" ", normalized)
+    normalized = WIRE_PREFIX_RE.sub(" ", normalized)
     normalized = WIRE_BYLINE_SUFFIX_RE.sub(" ", normalized)
     normalized = SOCIAL_CTA_RE.sub(" ", normalized)
     return re.sub(r'\s+', ' ', normalized).strip()
