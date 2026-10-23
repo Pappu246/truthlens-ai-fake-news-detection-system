@@ -4,6 +4,7 @@ import { shouldAutoVerifyArticleContent } from '../utils/articleVerificationPoli
 import { CheckCircle, AlertTriangle, XCircle, Info, ExternalLink, ShieldAlert, FileText, Search, HelpCircle, Layers } from 'lucide-react';
 import { TruthLensVerificationSection } from './TruthLensVerificationSection';
 import { IndependentSignalsPanel } from './IndependentSignalsPanel';
+import { getCalibratedProbabilityPresentation } from '../utils/calibratedProbabilityPresentation';
 
 function safeHttpUrl(value: unknown): string | undefined {
   if (typeof value !== 'string' || !value.trim()) return undefined;
@@ -82,18 +83,19 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
     );
   }
 
+  const abstentionProbabilities = getCalibratedProbabilityPresentation(result);
+
   // ======================================================================
   // NEEDS MORE CONTEXT — dedicated visual state.
   // Short, headline-only, vague, incomplete or source-less content, as well
   // as uncertain model predictions inside the configured uncertainty zone,
-  // land here. This state NEVER renders a fake percentage: confidence and
-  // probabilities are shown as N/A (or the raw zone values, which by
-  // definition cannot exceed the threshold bounds).
+  // land here. The verdict always remains withheld. Only a successful exact-
+  // calibrated result with a complementary probability pair may show both
+  // model percentages; safety/OOD guards and uncalibrated margins fail closed.
   // ======================================================================
   if (result.status === 'INSUFFICIENT_INFORMATION' ||
       isNeedsMoreContextLabel(result.verdict) ||
       isNeedsMoreContextLabel(result.prediction)) {
-    const withheld = result.fake_probability === null || result.fake_probability === undefined;
     return (
       <section className="flex-1 p-6 lg:p-10 bg-slate-50 overflow-y-auto flex flex-col justify-between">
         <div className="max-w-2xl mx-auto my-auto py-10">
@@ -179,15 +181,36 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
                 <span>Model Decision:</span>
                 <span className="font-bold text-amber-700">Classification Withheld (Safeguard)</span>
               </div>
-              <div className="flex justify-between">
-                <span>Fake Probability:</span>
-                <span className="font-bold text-slate-900">
-                  {withheld ? 'N/A (not available)' : (result.fake_probability as number).toFixed(2)}
-                </span>
-              </div>
+              {abstentionProbabilities ? (
+                <>
+                  <div className="flex justify-between">
+                    <span>Calibrated Model P(FAKE):</span>
+                    <span className="font-bold text-red-700">{abstentionProbabilities.fakePercent}%</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Calibrated Model P(REAL):</span>
+                    <span className="font-bold text-emerald-700">{abstentionProbabilities.realPercent}%</span>
+                  </div>
+                  <p className="text-[11px] leading-relaxed text-slate-500 font-sans">
+                    These percentages are the article classifier's calibrated statistical outputs, not proof of factual truth.
+                    The model still abstains; the independent evidence result is shown separately.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="flex justify-between">
+                    <span>Model P(FAKE):</span>
+                    <span className="font-bold text-slate-900">N/A (withheld)</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Model P(REAL):</span>
+                    <span className="font-bold text-slate-900">N/A (withheld)</span>
+                  </div>
+                </>
+              )}
               <div className="flex justify-between">
                 <span>Confidence:</span>
-                <span className="font-bold text-slate-900">N/A</span>
+                <span className="font-bold text-slate-900">N/A (verdict withheld)</span>
               </div>
             </div>
 
