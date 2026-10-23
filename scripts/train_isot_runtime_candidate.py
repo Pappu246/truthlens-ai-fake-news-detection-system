@@ -578,6 +578,9 @@ def main():
         "welfake_split_method": welfake["manifest"]["split_method"] if welfake else None,
         "seed": SEED,
         "max_features": args.max_features,
+        "tfidf_min_df": 2,
+        "tfidf_analyzer": "TruthLens runtime unigram/bigram analyzer",
+        "tfidf_sublinear_tf": True,
         "selected_svm_c": selected_svm_c,
         "selected_svm_class_weight": selected_svm_class_weight,
         "selected_svm_class_weight_label": selected_svm_class_weight_label,
@@ -788,7 +791,7 @@ def main():
             "calibration": "Platt sigmoid on disjoint validation split",
             "tfidf": {
                 "max_features": args.max_features,
-                "min_df": 3,
+                "min_df": 2,
                 "sublinear_tf": True,
                 "norm": "l2",
                 "analyzer": "TruthLens runtime analyzer",
