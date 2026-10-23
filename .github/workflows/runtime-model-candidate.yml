@@ -177,7 +177,7 @@ jobs:
       - name: Evaluate candidate on fresh independent full-article dataset
         continue-on-error: true
         env:
-          POLYGLOT_EXPECTED_ARCHIVE_SHA256: ""
+          POLYGLOT_EXPECTED_ARCHIVE_SHA256: "06762bfccc55c3236e51bab2d8907218c4c2705e84e3932a5587d29f9879016e"
         run: |
           set -euo pipefail
           CANDIDATE_ARTIFACT="$(find artifacts/models -type f -name model_artifact.json -print -quit)"
