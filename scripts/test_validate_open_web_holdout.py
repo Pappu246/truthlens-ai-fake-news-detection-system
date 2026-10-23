@@ -140,7 +140,8 @@ class OpenWebHoldoutValidationTests(unittest.TestCase):
             validate_holdout(self.records_path, self.manifest_path)
 
     def test_mutated_holdout_bytes_fail_hash_check(self):
-        self.records_path.write_bytes(self.records_path.read_bytes() + b"\n")
+        raw = self.records_path.read_bytes()
+        self.records_path.write_bytes(raw.replace(b"Distinct test claim number 0", b"Changed test claim number 0", 1))
         with self.assertRaisesRegex(HoldoutValidationError, "SHA-256"):
             validate_holdout(self.records_path, self.manifest_path)
 
