@@ -73,7 +73,7 @@ def label_from_filename(filename: str) -> int:
 
 
 def parse_textual_label(value: object):
-    if value is None or (isinstance(value, float) and np.isnan(value)):
+    if value is None or bool(pd.isna(value)):
         return None
     if isinstance(value, (int, float, np.integer, np.floating)):
         # Numeric mappings are ambiguous across dataset exports; use the
@@ -160,7 +160,12 @@ def records_from_frame(frame: pd.DataFrame, filename: str, sheet_name: str):
                 rejected_unusable += 1
                 continue
         else:
-            language = str(row.get(lang_col) or "unknown").strip().lower() if lang_col else "unknown"
+            raw_language = row.get(lang_col) if lang_col else None
+            language = (
+                str(raw_language).strip().lower()
+                if raw_language is not None and not bool(pd.isna(raw_language)) and str(raw_language).strip()
+                else "unknown"
+            )
 
         label = file_label
         if label_col is not None:
