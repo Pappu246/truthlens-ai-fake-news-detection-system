@@ -58,7 +58,9 @@ check('candidate thresholds match the frozen production policy (fake 0.98 / real
 check('candidate uses an exact calibrated inference contract', engine.isCalibrationExact());
 
 const bylineNormalized = cleanText(
-  'WASHINGTON (Reuters) - Officials said the new report was published after an independent review.'
+  'WASHINGTON (Reuters) - Officials said the new report was published after an independent review.',
+  true,
+  true
 );
 check(
   'wire-service dateline is normalized before model inference',
@@ -66,7 +68,9 @@ check(
   bylineNormalized
 );
 const ctaNormalized = cleanText(
-  'The article reports the full results. Share this before the outlet deletes it forever!'
+  'The article reports the full results. Share this before the outlet deletes it forever!',
+  true,
+  true
 );
 check(
   'explicit social-share call to action is normalized before model inference',
