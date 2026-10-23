@@ -36,6 +36,27 @@ jobs:
                   print(json.dumps({"label":label,"error":type(e).__name__+":"+str(e)[:200]}))
               return b""
           html=fetch("page", urls[0][1]).decode("utf-8","replace")
+          from urllib.parse import urljoin, urlparse
+          scripts=[urljoin(urls[0][1],src) for src in re.findall(r'<script[^>]+src=["\\']([^"\\']+)["\\']',html,re.IGNORECASE)]
+          print(json.dumps({"script_count":len(scripts),"scripts":scripts[:20]}))
+          patterns=[
+              "api.data.mendeley.com", "datasets/publics", "public-files/datasets",
+              "file_downloaded", "download-all", "filesLoading", "zip/file_downloaded",
+              "content_details", "download_url", "getFiles", "listFiles", "files/list"
+          ]
+          for script_url in scripts[:15]:
+              host=urlparse(script_url).netloc.lower()
+              if not any(name in host for name in ("mendeley.com","elsevier.com")):
+                  continue
+              script=fetch("script_asset",script_url).decode("utf-8","replace")
+              findings=[]
+              for pattern in patterns:
+                  positions=[m.start() for m in re.finditer(re.escape(pattern),script,re.IGNORECASE)]
+                  if positions:
+                      findings.append({"pattern":pattern,"count":len(positions),
+                        "contexts":[script[max(0,i-180):min(len(script),i+350)] for i in positions[:2]]})
+              if findings:
+                  print(json.dumps({"script_url":script_url,"bytes":len(script),"findings":findings}))
           for filename in ("Fake.xlsx","Real.xlsx","20.xlsx","80.xlsx"):
               i=html.find(filename)
               print(json.dumps({"file_marker":filename,"present":i>=0,
