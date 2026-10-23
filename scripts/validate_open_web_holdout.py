@@ -104,7 +104,7 @@ def _load_jsonl(path: Path) -> tuple[list[dict], str]:
     return records, digest
 
 
-def _validate_record(record: dict, line_number: int) -> tuple[str, str, set[str], set[str]]:
+def _validate_record(record: dict, line_number: int) -> tuple[str, str, set[str], set[str], str]:
     prefix = f"record line {line_number}"
     _require(set(record) == RECORD_KEYS, f"{prefix} has missing or unexpected fields.")
     for key in ("claim_id", "claim_text", "syndication_cluster_id", "split"):
@@ -177,7 +177,7 @@ def _validate_record(record: dict, line_number: int) -> tuple[str, str, set[str]
     elif adjudication["final_label"] != annotation_labels[0]:
         _require(adjudication["disagreement_resolved"] is True, f"{prefix}: an adjudicated label differing from unanimous annotation requires an explanation.")
     fingerprint = _claim_fingerprint(record["claim_text"])
-    return record["claim_id"], record["syndication_cluster_id"], annotator_ids, attestation_refs | {fingerprint}
+    return record["claim_id"], record["syndication_cluster_id"], annotator_ids, attestation_refs, fingerprint
 
 
 def validate_holdout(records_path: Path, manifest_path: Path, minimum_claims: int = 100) -> dict:
@@ -209,16 +209,15 @@ def validate_holdout(records_path: Path, manifest_path: Path, minimum_claims: in
 
     seen_ids, seen_clusters, seen_claims, all_annotators, all_attestations = set(), set(), set(), set(), set()
     for line_number, record in enumerate(records, start=1):
-        claim_id, cluster_id, annotators, attestation_and_fingerprint = _validate_record(record, line_number)
+        claim_id, cluster_id, annotators, attestation_refs, fingerprint = _validate_record(record, line_number)
         _require(claim_id not in seen_ids, f"Duplicate claim_id: {claim_id}.")
         _require(cluster_id not in seen_clusters, f"Duplicate syndication cluster in holdout: {cluster_id}.")
-        fingerprint = next((value for value in attestation_and_fingerprint if value not in {a["attestation_ref"] for a in record["annotations"]}), None)
-        _require(fingerprint is not None and fingerprint not in seen_claims, f"Duplicate/near-identical claim text at line {line_number}.")
+        _require(fingerprint not in seen_claims, f"Duplicate/near-identical claim text at line {line_number}.")
         seen_ids.add(claim_id)
         seen_clusters.add(cluster_id)
         seen_claims.add(fingerprint)
         all_annotators.update(annotators)
-        all_attestations.update(a["attestation_ref"] for a in record["annotations"])
+        all_attestations.update(attestation_refs)
 
     human_review = manifest.get("human_review")
     _require(isinstance(human_review, dict), "Manifest human_review object is required.")
