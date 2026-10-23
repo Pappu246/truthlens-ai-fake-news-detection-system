@@ -25,6 +25,47 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  polyglot_dataset_probe:
+    name: Probe official independent dataset access
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Query official public metadata and page
+        run: |
+          python - <<'PY'
+          import json, re, urllib.request, urllib.error
+          targets = [
+              ("dataset_page", "https://data.mendeley.com/datasets/8yfrm6z9dx/1"),
+              ("public_files_api", "https://api.data.mendeley.com/datasets/publics/8yfrm6z9dx/files?version=1"),
+              ("zip_metadata_api", "https://api.data.mendeley.com/datasets/8yfrm6z9dx/zip?version=1"),
+          ]
+          def fetch(label, url):
+              request = urllib.request.Request(url, headers={"User-Agent":"TruthLens-Research-Validation/1.0"})
+              try:
+                  with urllib.request.urlopen(request, timeout=20) as response:
+                      data = response.read()
+                      print(json.dumps({"label":label,"status":response.status,"final_url":response.geturl(),
+                        "content_type":response.headers.get("content-type"),"bytes":len(data)}))
+                      return data
+              except urllib.error.HTTPError as error:
+                  data = error.read(2048)
+                  print(json.dumps({"label":label,"status":error.code,"url":url,
+                    "content_type":error.headers.get("content-type"),
+                    "body_start":data[:240].decode("utf-8","replace")}))
+              except Exception as error:
+                  print(json.dumps({"label":label,"error":type(error).__name__+":"+str(error)[:180]}))
+              return b""
+          html=fetch("dataset_page", targets[0][1]).decode("utf-8","replace")
+          for filename in ("Fake.xlsx","Real.xlsx","20.xlsx","80.xlsx"):
+              index=html.find(filename)
+              print(json.dumps({"file_marker":filename,"present":index>=0,
+                "context":html[max(0,index-400):index+600] if index>=0 else None}))
+          uuids=sorted(set(re.findall(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",html)))
+          print(json.dumps({"uuid_count":len(uuids),"uuid_samples":uuids[:15]}))
+          for label,url in targets[1:]:
+              fetch(label,url)
+          PY
+
   candidate:
     name: Build and validate exact runtime candidate
     runs-on: ubuntu-latest
