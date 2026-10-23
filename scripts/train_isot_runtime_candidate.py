@@ -393,28 +393,128 @@ def main():
     Xt = vec.transform(test_x)
     Xtemp = vec.transform(temp_x)
 
+    # Select model strength for the frozen deployed decision policy, not just
+    # an unrelated 0.50 F1 cut-off. The validation data is split into separate
+    # calibration and policy-selection partitions so the same rows are not used
+    # both to fit the sigmoid and to pick C. The WELFake holdout remains untouched.
+    calibration_indices, policy_indices = train_test_split(
+        np.arange(len(val_y)),
+        test_size=0.5,
+        random_state=SEED,
+        stratify=val_y,
+    )
+    Xcal = Xv[calibration_indices]
+    y_cal = val_y[calibration_indices]
+    Xpolicy = Xv[policy_indices]
+    y_policy = val_y[policy_indices]
+    policy_texts = [val_x[int(i)] for i in policy_indices]
+
+    def runtime_term_stats(text: str) -> tuple[int, int]:
+        words = text.split()
+        terms = set(words)
+        terms.update(
+            f"{words[i]} {words[i + 1]}"
+            for i in range(len(words) - 1)
+            if len(words[i]) >= 3 and len(words[i + 1]) >= 3
+        )
+        return len(terms), sum(term in vec.vocabulary_ for term in terms)
+
+    all_policy_term_stats = [runtime_term_stats(text) for text in policy_texts]
+    policy_candidate_terms = np.asarray([item[0] for item in all_policy_term_stats], dtype=int)
+    policy_matched_terms = np.asarray([item[1] for item in all_policy_term_stats], dtype=int)
+    policy_coverage = np.divide(
+        policy_matched_terms,
+        policy_candidate_terms,
+        out=np.zeros(len(policy_candidate_terms), dtype=float),
+        where=policy_candidate_terms > 0,
+    )
+
+    def frozen_policy_metrics(y_true, p_fake, coverage_ratio, candidate_term_count):
+        low_vocabulary = coverage_ratio < LOW_VOCABULARY_COVERAGE_THRESHOLD
+        short_low_coverage = (
+            (candidate_term_count < OOD_SHORT_WORD_COUNT) &
+            (coverage_ratio < OOD_COVERAGE_THRESHOLD)
+        )
+        abstain = low_vocabulary | short_low_coverage
+        decision = np.full(len(y_true), -1, dtype=int)
+        can_decide = ~abstain
+        decision[can_decide & (p_fake <= REAL_THRESHOLD)] = 0
+        decision[can_decide & (p_fake >= FAKE_THRESHOLD)] = 1
+        real_mask = y_true == 0
+        fake_mask = y_true == 1
+        real_total = max(1, int(real_mask.sum()))
+        fake_total = max(1, int(fake_mask.sum()))
+        fake_recall = float(np.sum(fake_mask & (decision == 1)) / fake_total)
+        real_recall = float(np.sum(real_mask & (decision == 0)) / real_total)
+        coverage = float(np.mean(decision >= 0)) if len(decision) else 0.0
+        operational_balanced_accuracy = (fake_recall + real_recall) / 2.0
+        return {
+            "sample_count": int(len(y_true)),
+            "coverage": coverage,
+            "abstention_rate": float(1.0 - coverage),
+            "operational_balanced_accuracy_abstentions_count_as_not_correct": operational_balanced_accuracy,
+            "fake_recall_all_fake_samples": fake_recall,
+            "real_recall_all_real_samples": real_recall,
+            "passed": (
+                coverage >= 0.50 and operational_balanced_accuracy >= 0.70 and
+                fake_recall >= 0.70 and real_recall >= 0.70
+            ),
+        }
+
+    candidate_sweeps = []
+    for svm_c in [0.25, 0.5, 1.0, 2.0, 4.0]:
+        candidate_svm = LinearSVC(C=svm_c, max_iter=3000, random_state=SEED)
+        candidate_svm.fit(Xtr, train_y)
+        calibration_margins = candidate_svm.decision_function(Xcal)
+        candidate_calibrator = LogisticRegression(
+            C=1e6, max_iter=2000, solver="lbfgs", random_state=SEED
+        )
+        candidate_calibrator.fit(calibration_margins.reshape(-1, 1), y_cal)
+        select_margins = candidate_svm.decision_function(Xpolicy)
+        candidate_policy_p = candidate_calibrator.predict_proba(
+            select_margins.reshape(-1, 1)
+        )[:, 1]
+        policy_quality = frozen_policy_metrics(
+            y_policy, candidate_policy_p, policy_coverage, policy_candidate_terms
+        )
+        candidate_sweeps.append({
+            "C": svm_c,
+            "model": candidate_svm,
+            "calibrator": candidate_calibrator,
+            "policy_probabilities": candidate_policy_p,
+            "policy_quality": policy_quality,
+        })
+
+    # Prefer a candidate meeting every frozen-policy gate; otherwise retain the
+    # best measured operational balanced accuracy for diagnosis, never promotion.
+    chosen = max(
+        candidate_sweeps,
+        key=lambda item: (
+            bool(item["policy_quality"]["passed"]),
+            float(item["policy_quality"]["operational_balanced_accuracy_abstentions_count_as_not_correct"]),
+            min(float(item["policy_quality"]["fake_recall_all_fake_samples"]),
+                float(item["policy_quality"]["real_recall_all_real_samples"])),
+            float(item["policy_quality"]["coverage"]),
+        ),
+    )
+    svm = chosen["model"]
+    calibrator = chosen["calibrator"]
+    selected_svm_c = float(chosen["C"])
+    selection_policy_metrics = chosen["policy_quality"]
+    selection_y = y_policy
+    selection_p = chosen["policy_probabilities"]
     lr = LogisticRegression(C=1.0, max_iter=1500, solver="liblinear", random_state=SEED)
-    svm = LinearSVC(C=1.0, max_iter=3000, random_state=SEED)
     lr.fit(Xtr, train_y)
-    svm.fit(Xtr, train_y)
+    lr_policy = lr.predict_proba(Xpolicy)[:, 1]
+    lr_val_f1 = f1_score(y_policy, lr_policy >= 0.5, zero_division=0)
 
-    lr_val = lr.predict_proba(Xv)[:, 1]
-    svm_val_margin = svm.decision_function(Xv)
-
-    calibrator = LogisticRegression(C=1e6, max_iter=2000, solver="lbfgs", random_state=SEED)
-    calibrator.fit(svm_val_margin.reshape(-1, 1), val_y)
-    cal_p_val = calibrator.predict_proba(svm_val_margin.reshape(-1, 1))[:, 1]
+    cal_p_val = calibrator.predict_proba(
+        svm.decision_function(Xv).reshape(-1, 1)
+    )[:, 1]
     svm_test_p = calibrator.predict_proba(svm.decision_function(Xt).reshape(-1, 1))[:, 1]
     svm_temp_p = calibrator.predict_proba(svm.decision_function(Xtemp).reshape(-1, 1))[:, 1]
     lr_test_p = lr.predict_proba(Xt)[:, 1]
-
-    svm_val_f1 = f1_score(val_y, cal_p_val >= 0.5, zero_division=0)
-    lr_val_f1 = f1_score(val_y, lr_val >= 0.5, zero_division=0)
-    if svm_val_f1 < lr_val_f1:
-        raise SystemExit(
-            f"Linear SVM calibration lost validation F1 ({svm_val_f1:.6f} < {lr_val_f1:.6f}); "
-            "refusing to produce a calibrated-SVM runtime candidate."
-        )
+    svm_val_f1 = f1_score(y_policy, selection_p >= 0.5, zero_division=0)
 
     version_payload = {
         "source_fake_sha256": sha256(fake),
@@ -424,6 +524,8 @@ def main():
         "welfake_split_method": welfake["manifest"]["split_method"] if welfake else None,
         "seed": SEED,
         "max_features": args.max_features,
+        "selected_svm_c": selected_svm_c,
+        "model_selection": "C sweep selected on a held-out validation policy split using frozen 0.98/0.35 thresholds and abstention; sigmoid calibration fitted on a separate validation half",
         "tokenizer": "TruthLens Node cleanText + unigram/bigram analyzer",
         "text_normalizer": "wire-byline-and-explicit-social-CTA-removal-v1",
         "runtime_policy": {
@@ -447,7 +549,7 @@ def main():
 
     selected_test = metrics(test_y, svm_test_p)
     selected_temp = metrics(temp_y, svm_temp_p)
-    selected_val = metrics(val_y, cal_p_val)
+    selected_val = metrics(selection_y, selection_p)
 
     vocab = {term: int(idx) for term, idx in vec.vocabulary_.items()}
     model = {
@@ -509,8 +611,17 @@ def main():
                 "ece_10_temporal": ece(temp_y, svm_temp_p),
             },
             "candidates": {
-                "logistic_regression_validation": metrics(val_y, lr_val),
-                "linear_svm_calibrated_validation": selected_val,
+                "logistic_regression_policy_selection": metrics(selection_y, lr_policy),
+                "linear_svm_calibrated_policy_selection": selected_val,
+            },
+            "frozen_runtime_policy_model_selection": {
+                "selected_C": selected_svm_c,
+                "selection_metrics": selection_policy_metrics,
+                "sweep": [
+                    {"C": item["C"], **item["policy_quality"]}
+                    for item in candidate_sweeps
+                ],
+                "note": "Validation-only hyperparameter selection; WELFake holdout never consulted during model choice.",
             },
         },
         "thresholds": {
