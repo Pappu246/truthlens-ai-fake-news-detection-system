@@ -45,6 +45,16 @@ RUNTIME_REAL_THRESHOLD = 0.35
 LOW_VOCABULARY_COVERAGE_THRESHOLD = 0.10
 OOD_SHORT_WORD_COUNT = 100
 OOD_COVERAGE_THRESHOLD = 0.35
+SENSATIONAL_CONFLICT_TERMS = [
+    "shocking", "unbelievable", "secret", "exposed", "censored", "miracle", "bombshell",
+    "banned", "terrifying", "mind control", "clones", "whistleblower", "alien", "suppressed",
+    "hidden truth", "deep state", "globalist", "poisons", "furious", "wake up", "conspiracy",
+    "mutant", "occult", "chemtrails", "nano-circuits", "brainwash",
+]
+CERTAINTY_CONFLICT_TERMS = [
+    "guaranteed", "100%", "never before", "undeniable", "proven fact", "absolute proof",
+    "every single", "cure all", "miracle cure", "completely destroys", "cures all",
+]
 
 
 def md5(path: Path) -> str:
@@ -71,6 +81,7 @@ def compute_runtime_policy_metrics(
     candidate_term_count: np.ndarray | None = None,
     fake_threshold: float = RUNTIME_FAKE_THRESHOLD,
     real_threshold: float = RUNTIME_REAL_THRESHOLD,
+    sensational_conflict_guard_enabled: bool = False,
 ) -> dict:
     """Mirror the production model's full-article decision/abstention policy.
 
@@ -107,7 +118,25 @@ def compute_runtime_policy_metrics(
         (candidate_term_count < OOD_SHORT_WORD_COUNT) &
         (coverage_ratio < OOD_COVERAGE_THRESHOLD)
     )
-    policy_abstain = low_vocabulary | short_low_coverage
+    if sensational_conflict_guard_enabled and texts is not None:
+        raw_style_conflict = []
+        for text in texts:
+            lowered = text.lower() if text else ""
+            sensational_count = sum(term in lowered for term in SENSATIONAL_CONFLICT_TERMS)
+            certainty_count = sum(term in lowered for term in CERTAINTY_CONFLICT_TERMS)
+            raw_style_conflict.append(
+                sensational_count >= 3 or
+                (sensational_count >= 2 and certainty_count >= 1)
+            )
+        sensational_conflict_abstain = (
+            (np.asarray(p_fake, dtype=float) <= real_threshold) &
+            np.asarray(raw_style_conflict, dtype=bool) &
+            ~low_vocabulary &
+            ~short_low_coverage
+        )
+    else:
+        sensational_conflict_abstain = np.zeros(count, dtype=bool)
+    policy_abstain = low_vocabulary | short_low_coverage | sensational_conflict_abstain
 
     prediction = np.full(count, -1, dtype=int)
     can_decide = ~policy_abstain
@@ -138,12 +167,20 @@ def compute_runtime_policy_metrics(
             "P(FAKE) >= 0.98 => LIKELY FAKE; P(FAKE) <= 0.35 => LIKELY REAL; "
             "otherwise NEEDS MORE CONTEXT; also abstain if vocabulary coverage < 0.10 "
             "or if candidate term count < 100 AND coverage < 0.35"
+            + ("; research-only abstention when a REAL-leaning score conflicts with multiple sensational/certainty cues"
+               if sensational_conflict_guard_enabled else "")
         ),
         "fake_threshold": fake_threshold,
         "real_threshold": real_threshold,
         "low_vocabulary_coverage_threshold": LOW_VOCABULARY_COVERAGE_THRESHOLD,
         "ood_short_word_count": OOD_SHORT_WORD_COUNT,
         "ood_coverage_threshold": OOD_COVERAGE_THRESHOLD,
+        "sensational_conflict_guard": {
+            "enabled": bool(sensational_conflict_guard_enabled),
+            "action": "abstain_and_withhold_probabilities",
+            "production_status": "RESEARCH_ONLY_NOT_DEPLOYED" if sensational_conflict_guard_enabled else "NOT_ENABLED",
+        },
+        "sensational_conflict_abstentions": int(sensational_conflict_abstain.sum()),
         "sample_count": int(count),
         "decided_count": decided_count,
         "coverage": float(decided_count / total),
@@ -230,6 +267,10 @@ def main() -> None:
     artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     split_manifest = json.loads(split_manifest_path.read_text(encoding="utf-8"))
+    candidate_safety_policy = manifest.get("training_contract", {}).get("candidate_safety_policy", {})
+    sensational_conflict_guard_enabled = (
+        candidate_safety_policy.get("id") == "sensational-conflict-abstention-v1"
+    )
     artifact_thresholds = artifact.get("thresholds", {})
     if (
         artifact_thresholds.get("fake_threshold") != RUNTIME_FAKE_THRESHOLD
@@ -358,6 +399,7 @@ def main() -> None:
         y_fake, p_fake, texts=sample_texts, coverage_ratio=coverage_ratio,
         candidate_term_count=np.asarray([item[1] for item in scored], dtype=int),
         fake_threshold=RUNTIME_FAKE_THRESHOLD, real_threshold=RUNTIME_REAL_THRESHOLD,
+        sensational_conflict_guard_enabled=sensational_conflict_guard_enabled,
     )
     # This inverse-score statistic is diagnostic only. It helps distinguish a
     # likely domain/style inversion from a mediocre ranking, but it must never
@@ -378,6 +420,7 @@ def main() -> None:
         coverage_ratio=neutralized_coverage_ratio,
         candidate_term_count=np.asarray([item[1] for item in neutralized_scored], dtype=int),
         fake_threshold=RUNTIME_FAKE_THRESHOLD, real_threshold=RUNTIME_REAL_THRESHOLD,
+        sensational_conflict_guard_enabled=sensational_conflict_guard_enabled,
     )
     release_thresholds = {
         "minimum_eligible_samples": MIN_GATE_SAMPLES,
