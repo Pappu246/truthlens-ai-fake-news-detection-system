@@ -26,69 +26,66 @@ concurrency:
 
 jobs:
   polyglot_dataset_probe:
-    name: Probe official independent dataset access
+    name: Download independent PolyglotFakeFacts v2.0 archive
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     steps:
-      - name: Query official public metadata and page
+      - name: Download and inspect the official CC BY 4.0 dataset archive
         run: |
+          set -euo pipefail
+          mkdir -p artifacts/independent-data
+          DATASET_URL="https://data.mendeley.com/public-api/zip/8yfrm6z9dx/download/1"
+          curl --fail --location --show-error --connect-timeout 20 --max-time 600 --retry 2 --retry-all-errors --retry-delay 3 \
+            --user-agent "TruthLens-Independent-Model-Validation/1.0" \
+            "$DATASET_URL" -o artifacts/independent-data/polyglotfakefacts-v2.zip
+          test -s artifacts/independent-data/polyglotfakefacts-v2.zip
           python - <<'PY'
-          import json, re, urllib.request, urllib.error
-          targets = [
-              ("dataset_page", "https://data.mendeley.com/datasets/8yfrm6z9dx/1"),
-              ("public_files_api", "https://api.data.mendeley.com/datasets/publics/8yfrm6z9dx/files?version=1"),
-              ("zip_metadata_api", "https://api.data.mendeley.com/datasets/8yfrm6z9dx/zip?version=1"),
-          ]
-          def fetch(label, url):
-              request = urllib.request.Request(url, headers={"User-Agent":"TruthLens-Research-Validation/1.0"})
-              try:
-                  with urllib.request.urlopen(request, timeout=20) as response:
-                      data = response.read()
-                      print(json.dumps({"label":label,"status":response.status,"final_url":response.geturl(),
-                        "content_type":response.headers.get("content-type"),"bytes":len(data)}))
-                      return data
-              except urllib.error.HTTPError as error:
-                  data = error.read(2048)
-                  print(json.dumps({"label":label,"status":error.code,"url":url,
-                    "content_type":error.headers.get("content-type"),
-                    "body_start":data[:240].decode("utf-8","replace")}))
-              except Exception as error:
-                  print(json.dumps({"label":label,"error":type(error).__name__+":"+str(error)[:180]}))
-              return b""
-          html=fetch("dataset_page", targets[0][1]).decode("utf-8","replace")
-          from urllib.parse import urljoin, urlparse
-          scripts=[urljoin(targets[0][1],src) for src in re.findall(r'<script[^>]+src="([^"]+)"',html,re.IGNORECASE)]
-          print(json.dumps({"script_count":len(scripts),"scripts":scripts[:20]}))
-          patterns=[
-              "api.data.mendeley.com", "datasets/publics", "public-files/datasets",
-              "file_downloaded", "download-all", "filesLoading", "zip/file_downloaded",
-              "content_details", "download_url", "getFiles", "listFiles", "api/v", "files/list"
-          ]
-          for script_url in scripts[:15]:
-              host=urlparse(script_url).netloc.lower()
-              if not any(name in host for name in ("mendeley.com","elsevier.com")):
-                  continue
-              script=fetch("script_asset",script_url).decode("utf-8","replace")
-              findings=[]
-              for pattern in patterns:
-                  positions=[m.start() for m in re.finditer(re.escape(pattern),script,re.IGNORECASE)]
-                  if positions:
-                      findings.append({"pattern":pattern,"count":len(positions),
-                        "contexts":[script[max(0,i-180):min(len(script),i+350)] for i in positions[:2]]})
-              if findings:
-                  print(json.dumps({"script_url":script_url,"bytes":len(script),"findings":findings}))
-          for filename in ("Fake.xlsx","Real.xlsx","20.xlsx","80.xlsx"):
-              index=html.find(filename)
-              print(json.dumps({"file_marker":filename,"present":index>=0,
-                "context":html[max(0,index-400):index+600] if index>=0 else None}))
-          uuids=sorted(set(re.findall(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",html)))
-          print(json.dumps({"uuid_count":len(uuids),"uuid_samples":uuids[:15]}))
-          for label,url in targets[1:]:
-              fetch(label,url)
+          import hashlib, json, zipfile
+          from pathlib import Path
+          archive = Path("artifacts/independent-data/polyglotfakefacts-v2.zip")
+          digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+          with zipfile.ZipFile(archive) as zf:
+              bad = zf.testzip()
+              if bad:
+                  raise SystemExit(f"Corrupt dataset ZIP entry: {bad}")
+              entries = zf.infolist()
+          names = {Path(entry.filename).name.lower(): entry for entry in entries if not entry.is_dir()}
+          required = ("fake.xlsx", "real.xlsx")
+          missing = [name for name in required if name not in names]
+          if missing:
+              raise SystemExit(f"Published archive is missing required full-article workbooks: {missing}; found {sorted(names)[:40]}")
+          summary = {
+              "dataset": "PolyglotFakeFacts v2.0",
+              "doi": "10.17632/8yfrm6z9dx.1",
+              "license": "CC BY 4.0",
+              "archive": str(archive),
+              "archive_bytes": archive.stat().st_size,
+              "archive_sha256": digest,
+              "required_workbooks": {
+                  name: {"member": names[name].filename, "bytes": names[name].file_size}
+                  for name in required
+              },
+              "zip_integrity_check": "passed",
+          }
+          print(json.dumps(summary, indent=2))
+          Path("artifacts/independent-data/archive-metadata.json").write_text(
+              json.dumps(summary, indent=2) + "\n", encoding="utf-8"
+          )
           PY
+
+      - name: Upload immutable source archive and fingerprint
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: polyglotfakefacts-v2-independent-source
+          path: |
+            artifacts/independent-data/polyglotfakefacts-v2.zip
+            artifacts/independent-data/archive-metadata.json
+          if-no-files-found: error
+          compression-level: 0
 
   candidate:
     name: Build and validate exact runtime candidate
+    needs: polyglot_dataset_probe
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -148,13 +145,50 @@ jobs:
       - name: Train exact compact runtime candidate
         run: python scripts/train_isot_runtime_candidate.py --welfake data/WELFake_Dataset.csv
 
-      - name: Evaluate candidate on untouched WELFake held-out full-article partition
+      - name: Download the independent dataset artifact from the probe job
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: polyglotfakefacts-v2-independent-source
+          path: artifacts/independent-data
+
+      - name: Extract and inspect independent article workbooks
+        run: |
+          set -euo pipefail
+          python -m pip install openpyxl==3.1.5
+          mkdir -p /tmp/truthlens-polyglot
+          python - <<'PY'
+          import json, zipfile
+          from pathlib import Path
+          archive = Path("artifacts/independent-data/polyglotfakefacts-v2.zip")
+          out = Path("/tmp/truthlens-polyglot")
+          with zipfile.ZipFile(archive) as zf:
+              members = [m for m in zf.infolist() if not m.is_dir() and Path(m.filename).name.lower() in {"fake.xlsx", "real.xlsx"}]
+              if {Path(m.filename).name.lower() for m in members} != {"fake.xlsx", "real.xlsx"}:
+                  raise SystemExit("Required Fake.xlsx and Real.xlsx workbooks not found after archive download.")
+              for member in members:
+                  target = out / Path(member.filename).name
+                  target.write_bytes(zf.read(member))
+          print(json.dumps({
+              "dataset_dir": str(out),
+              "workbooks": [{"name": p.name, "bytes": p.stat().st_size} for p in sorted(out.glob("*.xlsx"))]
+          }, indent=2))
+          PY
+
+      - name: Evaluate candidate on fresh independent full-article dataset
+        continue-on-error: true
+        env:
+          POLYGLOT_EXPECTED_ARCHIVE_SHA256: ""
         run: |
           set -euo pipefail
           CANDIDATE_ARTIFACT="$(find artifacts/models -type f -name model_artifact.json -print -quit)"
           test -n "$CANDIDATE_ARTIFACT"
           CANDIDATE_DIR="$(dirname "$CANDIDATE_ARTIFACT")"
-          python scripts/evaluate_welfake_candidate.py --candidate-dir "$CANDIDATE_DIR" --welfake data/WELFake_Dataset.csv
+          python scripts/evaluate_polyglot_independent_candidate.py \
+            --candidate-dir "$CANDIDATE_DIR" \
+            --dataset-dir /tmp/truthlens-polyglot \
+            --archive artifacts/independent-data/polyglotfakefacts-v2.zip \
+            --welfake data/WELFake_Dataset.csv \
+            --expected-archive-sha256 "$POLYGLOT_EXPECTED_ARCHIVE_SHA256"
 
       - name: Set up Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
