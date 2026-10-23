@@ -1,8 +1,8 @@
 {
   "project": "TruthLens AI world-level ML upgrade",
   "spec_source": "19-phase upgrade requested by project owner",
-  "last_updated_phase": 10,
-  "current_status": "Tasks 1, 2, 7, 9, 10 complete and independently verified, including a same-session follow-up fix for an accidental production-write side effect discovered while verifying Task 10. Task 11 (Live News / article pipeline audit) is next.",
+  "last_updated_phase": 11,
+  "current_status": "Production-side security and calibrated-probability UI fixes are merged on main and Vercel reports the exact main deployment READY. The deployed model artifact and 0.98/0.35 thresholds remain unchanged. Phase 11 live pipeline verification is only partially rechecked after this deploy: current Vercel logs show model/health/metrics execution and distinct publisher 403/404 outcomes, but the complete productionSmokeTest.ts suite was not run from this environment. The separate Phase 10 research candidate remains NOT RELEASE-READY: its prior exact-artifact run failed the fabricated-article safety assertion (P(FAKE)=0.0045), runtime-policy operational balanced accuracy (64.09%), and fake recall (57.31%); current candidate-only wire-byline/social-CTA normalization experiment is running and must not be promoted before exact-head gates and independent article validation pass.",
   "phases": [
     {
       "id": 1,
@@ -68,8 +68,8 @@
     {
       "id": 11,
       "name": "Live news -> full article extraction",
-      "status": "already_implemented",
-      "notes": "server/extraction/articleExtractor.ts + server/news/* already implemented and confirmed working live."
+      "status": "partial",
+      "notes": "Article extraction/evidence implementation exists and recent production logs show health/metrics startup, article-extraction requests, and evidence verification. Publisher HTTP 403/404 are surfaced as per-source outcomes, not truth labels. One recent evidence route returned MIXED with three records (two supporting, one contradicting) in ~5 seconds; separate short input abstained without retrieval. Full scripts/productionSmokeTest.ts was not rerun against the latest production commit from this environment because direct outbound DNS/network access was unavailable. Repeat from a network-enabled runner and inspect GDELT pending/timeout diagnostics."
     },
     {
       "id": 12,
@@ -96,7 +96,8 @@
     {
       "id": 16,
       "name": "UI improvement",
-      "status": "not_started"
+      "status": "partial",
+      "notes": "Merged PR #137 on 2026-10-23: show complementary calibrated fake/real percentages on eligible abstention results; keep values withheld for incomplete/OOD/invalid/uncalibrated results. This completes that specific UI fix, not the entire UI-improvement phase."
     },
     {
       "id": 17,
@@ -114,7 +115,7 @@
       "id": 19,
       "name": "Build / lint / deployment verification",
       "status": "ongoing",
-      "notes": "Verified working as of the most recent deploy prior to this upgrade starting."
+      "notes": "Vercel production deployment for main commit af972bf97b96d1055e14c368843d69f82a541605 is READY. PR #136 security patch and PR #137 UI fix passed exact-head CI and preview checks before merge. Runtime logs verify health/metrics/model loading, but full post-deploy scripts/productionSmokeTest.ts has not been executed from this network-restricted environment; rerun it from a network-enabled runner."
     }
   ],
   "datasets": {
@@ -258,7 +259,7 @@
     }
   },
   "next_task": {
-    "phase": 9,
-    "description": "Finish Phase 9 verification: run canonical candidate training and LIAR external validation in CI, review actual metrics, then decide separately whether any candidate should be explicitly promoted."
+    "phase": 11,
+    "description": "Re-run scripts/productionSmokeTest.ts against the exact deployed main commit from a network-enabled runner; capture /api/health commit identity, model metrics/diagnostics, claim/model separation, /api/evidence/verify provider statuses and timing, extraction 403/404/504 semantics, analyze-url body freshness, news-source labeling, and SSRF/redirect guards. Trace Node DEP0169 to its exact dependency/call site without suppressing warnings. In parallel, inspect exact-head candidate-only byline/social-CTA normalization CI/runtime quality gates; keep PR #131 research-only unless safety, frozen-policy operational metrics, and independent source-independent full-article evidence all pass. Do not change production model artifacts or the 0.98/0.35 thresholds to force a green gate."
   }
 }
