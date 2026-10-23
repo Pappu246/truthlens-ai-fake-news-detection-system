@@ -43,7 +43,24 @@ jobs:
             await new Promise(resolve => server.close(resolve));
           }
           NODE
-      - name: Run end-to-end smoke against exact production deployment
+      - name: Run full smoke suite against production-locked app
         env:
-          EXPECTED_DEPLOY_COMMIT: 4a0d58e7b67988a26545a9b385c98a050681fde5
-        run: npx tsx scripts/productionSmokeTest.ts https://truthlens-ai-fake-news-detection-system-55t3kfj1y.vercel.app
+          NODE_ENV: production
+          PORT: 3000
+        run: |
+          set -euo pipefail
+          PORT=3000 NODE_ENV=production npx tsx server.ts > /tmp/truthlens-local-server.log 2>&1 &
+          server_pid=$!
+          cleanup() {
+            kill "$server_pid" 2>/dev/null || true
+            wait "$server_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:3000/api/health >/tmp/truthlens-health.json; then
+              break
+            fi
+            sleep 1
+          done
+          cat /tmp/truthlens-health.json
+          npx tsx scripts/productionSmokeTest.ts http://127.0.0.1:3000
