@@ -67,11 +67,34 @@ STOPWORDS = {
 PUNCT_RE = re.compile(r'[.,/#!$%\^&\*;:{}=\-_\`~()?"\'\[\]]')
 URL_RE = re.compile(r'https?://\S+|www\.\S+')
 HTML_RE = re.compile(r'<.*?>')
+WIRE_DATELINE_RE = re.compile(
+    r"(?:[A-Z][A-Z0-9 .,'’/-]{2,60}\s+)?\(\s*(?:Reuters|Associated Press|AP News|AP|AFP|Agence France-Presse|Bloomberg News)\s*\)\s*[-—:]\s*",
+    re.IGNORECASE,
+)
+WIRE_BYLINE_SUFFIX_RE = re.compile(
+    r"\s*[-|–—]\s*(?:Reuters|Associated Press|AP News|AFP|Agence France-Presse|Bloomberg News)(?=\s|$)",
+    re.IGNORECASE,
+)
+SOCIAL_CTA_RE = re.compile(
+    r"\b(?:please\s+)?share\s+(?:this|the\s+(?:story|article|post|news))\s+before\b[^.!?\n]*(?:[.!?]|$)"
+    r"|\b(?:like\s+and\s+share|subscribe\s+to\s+(?:our|the)\s+newsletter|click\s+here\s+to\s+read\s+more)\b[^.!?\n]*(?:[.!?]|$)",
+    re.IGNORECASE,
+)
+
+
+def normalize_editorial_boilerplate(text: str) -> str:
+    """Remove narrow wire-service byline and explicit social CTA boilerplate."""
+    normalized = text or ""
+    normalized = WIRE_DATELINE_RE.sub(" ", normalized)
+    normalized = WIRE_BYLINE_SUFFIX_RE.sub(" ", normalized)
+    normalized = SOCIAL_CTA_RE.sub(" ", normalized)
+    return re.sub(r'\s+', ' ', normalized).strip()
+
 
 def clean_text(text: str) -> str:
     if not text:
         return ""
-    cleaned = text.lower()
+    cleaned = normalize_editorial_boilerplate(text).lower()
     cleaned = URL_RE.sub(" ", cleaned)
     cleaned = HTML_RE.sub(" ", cleaned)
     cleaned = PUNCT_RE.sub(" ", cleaned)
@@ -398,6 +421,7 @@ def main():
         "seed": SEED,
         "max_features": args.max_features,
         "tokenizer": "TruthLens Node cleanText + unigram/bigram analyzer",
+        "text_normalizer": "wire-byline-and-explicit-social-CTA-removal-v1",
         "runtime_policy": {
             "fake_threshold": FAKE_THRESHOLD,
             "real_threshold": REAL_THRESHOLD,
