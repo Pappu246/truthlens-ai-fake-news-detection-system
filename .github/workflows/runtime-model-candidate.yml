@@ -177,6 +177,17 @@ jobs:
                   "source": "server/mlEngine.ts production OOD/decision guard",
                   "matches_candidate_artifact": True,
               },
+              "candidate_only_safety_policy_is_explicit_and_artifact_bound": (
+                  report.get("candidate_safety_policy_contract") == manifest.get("training_contract", {}).get("candidate_safety_policy") == {
+                      "id": "sensational-conflict-abstention-v1",
+                      "action": "abstain_and_withhold_probabilities",
+                      "applies_only_when_model_probability_leans_real": True,
+                      "minimum_sensational_terms": 3,
+                      "minimum_sensational_terms_with_certainty": 2,
+                      "minimum_certainty_terms": 1,
+                      "production_status": "RESEARCH_ONLY_NOT_DEPLOYED",
+                  } and artifact.get("training_contract", {}).get("candidate_safety_policy") == manifest.get("training_contract", {}).get("candidate_safety_policy")
+              ),
               "runtime_safety_report_matches_candidate_artifact": safety.get("status") == "COMPLETED" and safety.get("passed") is True and safety.get("candidate_artifact_sha256") == artifact_sha and safety.get("assertions_failed") == 0,
               "candidate_remains_non_promotable_without_independent_article_validation": manifest.get("production_eligible") is False and manifest.get("promotion_status") == "CANDIDATE_ONLY",
               "holdout_scope_is_not_mislabeled_external": report.get("partition_scope", {}).get("is_source_independent_external_test") is False,
