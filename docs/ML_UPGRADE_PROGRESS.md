@@ -1,3 +1,46 @@
+# TruthLens AI — Current Execution Handoff (verified 2026-10-23)
+
+This is the current, verified execution state. The historical phase notes below were written at earlier points in the project; where they disagree with this block, use this block. Production model weights, thresholds, and deployment settings remain frozen during research.
+
+## Production state
+
+- Current main commit: af972bf97b96d1055e14c368843d69f82a541605.
+- Current Vercel production deployment: READY, deployment dpl_DsBdceTvDPsF1moGfMpyUrg9d13x, serving the commit above.
+- Security: PR #136 merged the Vite 6.4.5 lockfile patch. The main dependency lock no longer pins Vite 6.4.3. The security PR's audit, type-check, build, regression CI and preview checks passed before merge.
+- UI: PR #137 merged calibrated P(FAKE)/P(REAL) presentation for eligible uncertain results. The exact PR head passed CI and its Vercel preview check before merge. The UI continues to withhold percentages when inputs are incomplete, out-of-distribution, invalid, or uncalibrated. Old duplicate draft PR #135 was closed.
+- Production model: the existing calibrated ensemble loaded successfully in current Vercel runtime logs. Production model artifact, model alias and thresholds were not changed by PRs #136/#137. The frozen decisions remain P(FAKE) >= 0.98 for LIKELY FAKE and P(FAKE) <= 0.35 for LIKELY REAL; uncertain and safety-guarded cases abstain.
+- Production smoke limitation: current logs confirm successful health/metrics/history route execution and model loading, but the full scripts/productionSmokeTest.ts suite was not run against this new deployment from the current environment because direct outbound network access was unavailable. Do not describe log samples as a complete smoke suite.
+- Live extraction/evidence telemetry: the API logged publisher extraction HTTP 403 and 404 as distinct upstream outcomes; neither means the underlying claim is false. One recent evidence request returned MIXED with three evidence records (two supporting, one contradicting) in about five seconds. A separate short/under-specified request returned NEEDS_MORE_CONTEXT without retrieval. GDELT has previously remained pending/timed out in some requests, so bounded fallback/retrieval diagnostics remain worth rechecking.
+- Remaining runtime warning: Node DEP0169 from url.parse was seen in recent Vercel logs. Its exact dependency/source is still unidentified. Do not suppress it or blindly upgrade packages without tracing it.
+
+## Research model: NOT RELEASE-READY
+
+Draft PR #131 remains isolated research work and must not be promoted. Workflow run 39475286707 failed a real model-quality/safety gate; this was not a transient Cloudflare error.
+
+On the prior candidate artifact and the WELFake same-corpus holdout (11,621 articles):
+- Raw diagnostic balanced accuracy was 87.54%, fake recall 93.92%, and real recall 81.15%. These are diagnostics on a same-corpus split, not independent real-world accuracy.
+- Under the frozen runtime decision policy plus abstention, coverage was about 66.3%, operational balanced accuracy 64.09%, fake recall 57.31%, and real recall about 70.86%. The required 70% operational balanced-accuracy and fake-recall gates failed.
+- The candidate-specific runtime safety test classified a clearly fabricated synthetic article as LIKELY REAL with P(FAKE)=0.0045. The artifact-bound report recorded 12 assertions passed and one failed.
+- The same run's final gate correctly rejected promotion. The candidate manifest remained production_eligible=false and promotion_status=CANDIDATE_ONLY. The independent source-independent full-article report (at least 10,000 eligible examples) is also missing. WELFake does not satisfy that independence requirement, and LIAR is a different claim-level task.
+
+## Research diagnosis and active experiment
+
+The failed candidate artifact shows signs of shortcut learning: its most negative feature weights included “reuters” (-23.216) and “share” (-3.566). On the fabricated safety fixture, “share” alone contributed roughly -0.43 to the normalized margin, in the REAL direction. “mainstream”, “exposed”, “secret”, “alien”, and “media” also contributed materially toward REAL. This is direct artifact evidence of a dataset/boilerplate association, not proof that any word is inherently fake or real.
+
+A candidate-only normalization experiment is now running on the research branch. Python training/evaluation and the branch's Node runtime cleaner have been aligned to remove narrow wire-service bylines and explicit social-share call-to-action boilerplate; regression checks were added for parity. This experiment is not on main and has not been promoted. Do not claim it fixed the candidate until the exact-head workflow reports the measured outcome.
+
+## Next actions, in order
+
+1. Review the exact-head CI, model-candidate workflow, runtime parity and candidate-specific safety results for the normalization experiment. If the fabricated fixture still receives a confident REAL verdict or any frozen-policy quality gate fails, keep the candidate blocked.
+2. Diagnose remaining source/boilerplate shortcut features from artifact weights and evaluation diagnostics. Change training/data normalization only when the transform is mirrored in runtime and held-out evaluation; never tune against the exposed holdout or weaken the 0.98/0.35 thresholds to make CI green.
+3. Obtain a legally usable, checksum-pinned, full-article source-independent evaluation set with task-matched article-level truth labels, remove exact and near duplicates against training/model-selection data, and produce the required artifact-bound report on at least 10,000 eligible examples. FineFake tooling exists in the research branch, but its archive has not been verified/materialized in the recorded run and no FineFake score exists. Never unpickle unverified external data.
+4. Complete issue #132's benchmark protocol separately: pinned official scorers/artifacts for FEVER, FEVEROUS, SciFact and AVeriTeC at the full configured sample counts, plus a sealed blind human-labelled Open-Web holdout of at least 100 claims. AI-generated labels are not ground truth.
+5. Re-run the full production smoke suite from a network-enabled runner against the exact deployed commit, recording API health, metrics, claim/article/evidence signal separation, article-body freshness, SSRF/redirect/timeout behaviour, and provenance. Treat blocked publisher fetches as source-specific failures, not truth labels.
+6. Trace the DEP0169 warning to the exact dependency/call site using deprecation stack traces in a safe test environment; apply a narrow fix and rerun audit/build/tests.
+7. Only consider separate promotion after safety, frozen-policy full-article quality, independent evaluation and human review all pass. Never overwrite the production artifact or update thresholds as a research shortcut.
+
+---
+
 # TruthLens AI — World-Level ML Upgrade: Progress Log
 
 This file is the persistent state for the 19-phase upgrade. Read this file
