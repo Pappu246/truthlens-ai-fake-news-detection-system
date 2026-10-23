@@ -439,16 +439,6 @@ export class TruthLensMLEngine {
     try {
       const raw = fs.readFileSync(filePath, 'utf-8');
       const artifact: ModelArtifacts = JSON.parse(raw);
-      const trainingContract = (artifact as any).training_contract;
-      const declaredTextNormalizer = trainingContract?.text_normalizer;
-      this.textNormalizerVersion = declaredTextNormalizer === 'wire-byline-and-explicit-social-CTA-removal-v1'
-        ? declaredTextNormalizer
-        : null;
-      const declaredCandidateSafetyPolicy = trainingContract?.candidate_safety_policy?.id;
-      this.candidateSafetyPolicyVersion = declaredCandidateSafetyPolicy === 'sensational-conflict-abstention-v1'
-        ? declaredCandidateSafetyPolicy
-        : null;
-
       // ARTIFACT INTEGRITY GUARD: a saved model is only usable when the
       // vocabulary, IDF table, weight vector and Platt parameters are mutually
       // consistent. A stale or truncated artifact (e.g. retrained model paired
@@ -467,6 +457,16 @@ export class TruthLensMLEngine {
         );
         return false;
       }
+
+      const trainingContract = (artifact as any).training_contract;
+      const declaredTextNormalizer = trainingContract?.text_normalizer;
+      this.textNormalizerVersion = declaredTextNormalizer === 'wire-byline-and-explicit-social-CTA-removal-v1'
+        ? declaredTextNormalizer
+        : null;
+      const declaredCandidateSafetyPolicy = trainingContract?.candidate_safety_policy?.id;
+      this.candidateSafetyPolicyVersion = declaredCandidateSafetyPolicy === 'sensational-conflict-abstention-v1'
+        ? declaredCandidateSafetyPolicy
+        : null;
 
       this.vocabulary = new Map(Object.entries(artifact.vocabulary));
       this.idf = artifact.idf;
