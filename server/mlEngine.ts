@@ -207,9 +207,9 @@ function normalizeEditorialBoilerplate(text: string): string {
     .trim();
 }
 
-export function cleanText(text: string, removeStopwords = true): string {
+export function cleanText(text: string, removeStopwords = true, normalizeBoilerplate = false): string {
   if (!text) return '';
-  let cleaned = normalizeEditorialBoilerplate(text).toLowerCase();
+  let cleaned = (normalizeBoilerplate ? normalizeEditorialBoilerplate(text) : text).toLowerCase();
   cleaned = cleaned.replace(/https?:\/\/\S+|www\.\S+/g, ' ');
   cleaned = cleaned.replace(/<.*?>/g, ' ');
   cleaned = cleaned.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"'\[\]]/g, ' ');
@@ -367,6 +367,8 @@ export class TruthLensMLEngine {
     plattB: number;
   }> = [];
   private inferenceMode: 'calibrated_ensemble' | 'single_calibrated_svm' | 'legacy_single_svm' = 'legacy_single_svm';
+  // Non-null only for research artifacts that version the matching Python/Node text normalizer.
+  private textNormalizerVersion: string | null = null;
   private isTrained = false;
   private trainedAt: string = new Date().toISOString();
   private metrics: any = null;
@@ -436,6 +438,10 @@ export class TruthLensMLEngine {
     try {
       const raw = fs.readFileSync(filePath, 'utf-8');
       const artifact: ModelArtifacts = JSON.parse(raw);
+      const declaredTextNormalizer = (artifact as any).training_contract?.text_normalizer;
+      this.textNormalizerVersion = declaredTextNormalizer === 'wire-byline-and-explicit-social-CTA-removal-v1'
+        ? declaredTextNormalizer
+        : null;
 
       // ARTIFACT INTEGRITY GUARD: a saved model is only usable when the
       // vocabulary, IDF table, weight vector and Platt parameters are mutually
@@ -1569,7 +1575,11 @@ export class TruthLensMLEngine {
       };
     }
 
-    const cleaned = cleanText(textTrimmed);
+    const cleaned = cleanText(
+      textTrimmed,
+      true,
+      this.textNormalizerVersion === 'wire-byline-and-explicit-social-CTA-removal-v1'
+    );
     if (!cleaned) {
       throw new Error('Article text contains only punctuation, stop words, or symbols.');
     }
