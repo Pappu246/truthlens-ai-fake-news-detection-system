@@ -1,0 +1,46 @@
+name: One-off current production smoke
+on:
+  push:
+    branches:
+      - ops/production-smoke-2026-10-23
+permissions:
+  contents: read
+jobs:
+  production-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout audited source
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install pinned dependencies
+        run: npm ci
+      - name: Trace legacy URL deprecation in local API runtime
+        env:
+          NODE_OPTIONS: --trace-deprecation
+        run: |
+          node --import tsx --input-type=module <<'NODE'
+          import { createExpressApp } from './server/appFactory.ts';
+          const app = await createExpressApp({ isProduction: true, includeVite: false });
+          const server = await new Promise((resolve, reject) => {
+            const instance = app.listen(0, '127.0.0.1', () => resolve(instance));
+            instance.on('error', reject);
+          });
+          try {
+            const address = server.address();
+            const response = await fetch('http://127.0.0.1:' + address.port + '/api/health');
+            const payload = await response.json();
+            console.log('Local API health:', response.status, payload.status, payload.article_model_version);
+            if (response.status !== 200 || payload.status !== 'ok') process.exitCode = 1;
+          } finally {
+            await new Promise(resolve => server.close(resolve));
+          }
+          NODE
+      - name: Run end-to-end smoke against exact production deployment
+        env:
+          EXPECTED_DEPLOY_COMMIT: 4a0d58e7b67988a26545a9b385c98a050681fde5
+        run: npx tsx scripts/productionSmokeTest.ts https://truthlens-ai-fake-news-detection-system-55t3kfj1y.vercel.app
