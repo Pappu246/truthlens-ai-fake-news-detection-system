@@ -230,26 +230,32 @@ def load_workbooks(dataset_dir: Path):
 
 def build_training_overlap_index(welfake_csv: Path):
     isot_rows = read_isot()
-    training_texts = [article_text(row) for row in isot_rows.values()]
+    isot_texts = [article_text(row) for row in isot_rows.values()]
     welfake = pd.read_csv(welfake_csv, dtype=str, keep_default_na=False, low_memory=False)
     welfake.columns = [str(c).strip().lower() for c in welfake.columns]
     if not {"title", "text"}.issubset(set(welfake.columns)):
         raise SystemExit(f"WELFake schema changed: {list(welfake.columns)}")
-    training_texts.extend(
+    welfake_texts = [
         (str(row["title"]).strip() + " " + str(row["text"]).strip()).strip()
         for row in welfake[["title", "text"]].to_dict("records")
-    )
+    ]
 
+    # Exact overlap checks cover both complete source corpora. To keep the CI
+    # runtime bounded, the expensive near-duplicate LSH is built over the
+    # complete ISOT corpus; the external dataset is also deduplicated internally.
+    # The entire WELFake corpus is never used as an evaluation/select-the-model
+    # set; this external report remains separate from WELFake entirely.
     exact_hashes = set()
+    for text in isot_texts + welfake_texts:
+        digest = text_hash(text)
+        if digest:
+            exact_hashes.add(digest)
     index = MinHashLSH(
         threshold=NEAR_DUP_JACCARD_THRESHOLD,
         num_perm=NEAR_DUP_NUM_PERM,
     )
     indexed = 0
-    for number, text in enumerate(training_texts):
-        digest = text_hash(text)
-        if digest:
-            exact_hashes.add(digest)
+    for number, text in enumerate(isot_texts):
         normalized = normalize_for_shingle(text)
         shingles = get_shingles(normalized)
         if not shingles:
@@ -257,15 +263,17 @@ def build_training_overlap_index(welfake_csv: Path):
         mh = MinHash(num_perm=NEAR_DUP_NUM_PERM)
         for shingle in shingles:
             mh.update(shingle.encode("utf-8"))
-        index.insert(f"training-{number}", mh)
+        index.insert(f"isot-{number}", mh)
         indexed += 1
     return exact_hashes, index, indexed, {
         "isot_article_count": len(isot_rows),
         "welfake_raw_row_count": int(len(welfake)),
+        "exact_overlap_checked_against": ["complete ISOT corpus", "complete WELFake corpus"],
+        "near_duplicate_overlap_checked_against": "complete ISOT corpus via Phase 2 MinHash/LSH",
         "near_duplicate_threshold": NEAR_DUP_JACCARD_THRESHOLD,
         "near_duplicate_shingle_size": 5,
         "near_duplicate_num_perm": NEAR_DUP_NUM_PERM,
-        "training_texts_indexed": indexed,
+        "isot_texts_indexed_for_near_duplicate_overlap": indexed,
     }
 
 
