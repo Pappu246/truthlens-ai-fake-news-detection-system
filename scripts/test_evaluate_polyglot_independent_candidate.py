@@ -50,6 +50,45 @@ def test_english_translation_is_preferred_over_original_language_text():
     assert stats["uses_english_translation"] is True
 
 
+def test_published_polyglot_workbook_column_names_are_supported():
+    # Exact headers observed in the official PolyglotFakeFacts v2.0 archive.
+    frame = pd.DataFrame({
+        "Gathering date": ["2024-01-01"],
+        "News date": ["2024-01-02"],
+        "Language": ["Spanish"],
+        "URL": ["https://example.test/article"],
+        "Domain": ["example.test"],
+        "Keywords": ["research, public"],
+        "News headline": ["Example headline"],
+        "News original text": ["Texto en español " * 100],
+        "English translated version": [LONG_BODY],
+        "Label": ["fake"],
+    })
+    title, body, lang, label, translated = select_article_columns(frame, "Fake.xlsx")
+    assert title == "News headline"
+    assert body == "English translated version"
+    assert lang == "Language"
+    assert label == "Label"
+    assert translated is True
+
+    records, stats = records_from_frame(frame, "Fake.xlsx", "Sheet1")
+    assert len(records) == 1
+    assert records[0]["body"] == LONG_BODY
+    assert records[0]["y_fake"] == 1
+    assert stats["uses_english_translation"] is True
+
+
+def test_unrecognized_body_columns_fail_closed_instead_of_selecting_first_column():
+    frame = pd.DataFrame({
+        "Headline": ["Example headline"],
+        "Language": ["English"],
+        "Label": ["fake"],
+        "Comments": ["This is not the article body."],
+    })
+    with pytest.raises(ValueError, match="no recognized article-text column"):
+        select_article_columns(frame, "Fake.xlsx")
+
+
 def test_original_non_english_text_without_translation_is_rejected():
     frame = pd.DataFrame({
         "Original Headline": ["Ejemplo"],
