@@ -44,6 +44,16 @@ REAL_THRESHOLD = 0.35
 LOW_VOCABULARY_COVERAGE_THRESHOLD = 0.10
 OOD_SHORT_WORD_COUNT = 100
 OOD_COVERAGE_THRESHOLD = 0.35
+SENSATIONAL_CONFLICT_TERMS = [
+    "shocking", "unbelievable", "secret", "exposed", "censored", "miracle", "bombshell",
+    "banned", "terrifying", "mind control", "clones", "whistleblower", "alien", "suppressed",
+    "hidden truth", "deep state", "globalist", "poisons", "furious", "wake up", "conspiracy",
+    "mutant", "occult", "chemtrails", "nano-circuits", "brainwash",
+]
+CERTAINTY_CONFLICT_TERMS = [
+    "guaranteed", "100%", "never before", "undeniable", "proven fact", "absolute proof",
+    "every single", "cure all", "miracle cure", "completely destroys", "cures all",
+]
 
 STOPWORDS = {
     'a', 'about', 'above', 'after', 'again', 'against', 'all', 'am', 'an', 'and', 'any', 'are',
@@ -429,13 +439,28 @@ def main():
         where=policy_candidate_terms > 0,
     )
 
-    def frozen_policy_metrics(y_true, p_fake, coverage_ratio, candidate_term_count):
+    def frozen_policy_metrics(y_true, p_fake, coverage_ratio, candidate_term_count, texts):
         low_vocabulary = coverage_ratio < LOW_VOCABULARY_COVERAGE_THRESHOLD
         short_low_coverage = (
             (candidate_term_count < OOD_SHORT_WORD_COUNT) &
             (coverage_ratio < OOD_COVERAGE_THRESHOLD)
         )
-        abstain = low_vocabulary | short_low_coverage
+        raw_style_conflict = []
+        for text in texts:
+            lowered = text.lower() if text else ""
+            sensational_count = sum(term in lowered for term in SENSATIONAL_CONFLICT_TERMS)
+            certainty_count = sum(term in lowered for term in CERTAINTY_CONFLICT_TERMS)
+            raw_style_conflict.append(
+                sensational_count >= 3 or
+                (sensational_count >= 2 and certainty_count >= 1)
+            )
+        style_conflict = (
+            (p_fake <= REAL_THRESHOLD) &
+            np.asarray(raw_style_conflict, dtype=bool) &
+            ~low_vocabulary &
+            ~short_low_coverage
+        )
+        abstain = low_vocabulary | short_low_coverage | style_conflict
         decision = np.full(len(y_true), -1, dtype=int)
         can_decide = ~abstain
         decision[can_decide & (p_fake <= REAL_THRESHOLD)] = 0
@@ -452,6 +477,7 @@ def main():
             "sample_count": int(len(y_true)),
             "coverage": coverage,
             "abstention_rate": float(1.0 - coverage),
+            "sensational_conflict_abstentions": int(style_conflict.sum()),
             "operational_balanced_accuracy_abstentions_count_as_not_correct": operational_balanced_accuracy,
             "fake_recall_all_fake_samples": fake_recall,
             "real_recall_all_real_samples": real_recall,
@@ -475,7 +501,7 @@ def main():
             select_margins.reshape(-1, 1)
         )[:, 1]
         policy_quality = frozen_policy_metrics(
-            y_policy, candidate_policy_p, policy_coverage, policy_candidate_terms
+            y_policy, candidate_policy_p, policy_coverage, policy_candidate_terms, policy_texts
         )
         candidate_sweeps.append({
             "C": svm_c,
@@ -528,6 +554,15 @@ def main():
         "model_selection": "C sweep selected on a held-out validation policy split using frozen 0.98/0.35 thresholds and abstention; sigmoid calibration fitted on a separate validation half",
         "tokenizer": "TruthLens Node cleanText + unigram/bigram analyzer",
         "text_normalizer": "wire-byline-and-explicit-social-CTA-removal-v1",
+        "candidate_safety_policy": {
+            "id": "sensational-conflict-abstention-v1",
+            "action": "abstain_and_withhold_probabilities",
+            "applies_only_when_model_probability_leans_real": True,
+            "minimum_sensational_terms": 3,
+            "minimum_sensational_terms_with_certainty": 2,
+            "minimum_certainty_terms": 1,
+            "production_status": "RESEARCH_ONLY_NOT_DEPLOYED",
+        },
         "runtime_policy": {
             "fake_threshold": FAKE_THRESHOLD,
             "real_threshold": REAL_THRESHOLD,
