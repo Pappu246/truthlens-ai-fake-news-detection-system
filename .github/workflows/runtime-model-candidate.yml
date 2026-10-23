@@ -145,13 +145,77 @@ jobs:
       - name: Train exact compact runtime candidate
         run: python scripts/train_isot_runtime_candidate.py --welfake data/WELFake_Dataset.csv
 
+      - name: Enforce internal frozen-policy gate before external scoring
+        id: internal_policy_gate
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import glob, hashlib, json, os
+          from pathlib import Path
+
+          paths = sorted(glob.glob("artifacts/models/*/model_artifact.json"))
+          failures = []
+          selection = {}
+          artifact_sha = None
+          if len(paths) != 1:
+              failures.append(f"Expected exactly one freshly trained candidate artifact, found {len(paths)}.")
+          else:
+              artifact_path = Path(paths[0])
+              manifest_path = artifact_path.parent / "manifest.json"
+              if not manifest_path.is_file():
+                  failures.append("Fresh candidate manifest is missing.")
+              else:
+                  artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
+                  manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                  artifact_sha = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
+                  if artifact_sha != manifest.get("artifact_sha256"):
+                      failures.append("Candidate artifact SHA-256 does not match its manifest.")
+                  if manifest.get("production_eligible") is not False or manifest.get("promotion_status") != "CANDIDATE_ONLY":
+                      failures.append("Candidate manifest must remain non-promotable.")
+                  thresholds = artifact.get("thresholds", {})
+                  if thresholds.get("fake_threshold") != 0.98 or thresholds.get("real_threshold") != 0.35:
+                      failures.append("Candidate changed the frozen 0.98/0.35 production thresholds.")
+                  selection = artifact.get("metrics", {}).get("frozen_runtime_policy_model_selection", {}).get("selection_metrics", {})
+                  if selection.get("passed") is not True:
+                      failures.append("Internal validation did not pass the frozen runtime-policy gate.")
+                  if selection.get("coverage", 0) < 0.50:
+                      failures.append("Internal validation coverage is below 0.50.")
+                  if selection.get("operational_balanced_accuracy_abstentions_count_as_not_correct", 0) < 0.70:
+                      failures.append("Internal operational balanced accuracy is below 0.70.")
+                  if selection.get("fake_recall_all_fake_samples", 0) < 0.70:
+                      failures.append("Internal FAKE recall is below 0.70.")
+                  if selection.get("real_recall_all_real_samples", 0) < 0.70:
+                      failures.append("Internal REAL recall is below 0.70.")
+
+          passed = len(failures) == 0
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
+              out.write(f"passed={'true' if passed else 'false'}\n")
+          result = {
+              "internal_frozen_policy_gate_passed": passed,
+              "candidate_artifact": paths[0] if len(paths) == 1 else None,
+              "candidate_artifact_sha256": artifact_sha,
+              "selection_metrics": selection,
+              "failures": failures,
+              "external_holdout_action": "ELIGIBLE_TO_SCORE" if passed else "SKIP_EXTERNAL_SCORING",
+          }
+          print(json.dumps(result, indent=2))
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+              summary.write("## Internal candidate quality gate before external scoring\n\n")
+              summary.write(f"- Gate passed: **{passed}**\n")
+              summary.write(f"- External holdout: **{'may be scored' if passed else 'will not be scored'}**\n")
+              for failure in failures:
+                  summary.write(f"- BLOCKED: {failure}\n")
+          PY
+
       - name: Download the independent dataset artifact from the probe job
+        if: steps.internal_policy_gate.outputs.passed == 'true'
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: polyglotfakefacts-v2-independent-source
           path: artifacts/independent-data
 
       - name: Extract and inspect independent article workbooks
+        if: steps.internal_policy_gate.outputs.passed == 'true'
         run: |
           set -euo pipefail
           python -m pip install openpyxl==3.1.5
@@ -175,6 +239,7 @@ jobs:
           PY
 
       - name: Evaluate candidate on fresh independent full-article dataset
+        if: steps.internal_policy_gate.outputs.passed == 'true'
         continue-on-error: true
         env:
           POLYGLOT_EXPECTED_ARCHIVE_SHA256: "06762bfccc55c3236e51bab2d8907218c4c2705e84e3932a5587d29f9879016e"
@@ -226,13 +291,24 @@ jobs:
         run: cmp /tmp/truthlens-production-artifact.before.json data/saved_model_artifacts.json
 
       - name: Enforce independent full-article quality gate; keep promotion separate
+        env:
+          INTERNAL_POLICY_GATE_PASSED: ${{ steps.internal_policy_gate.outputs.passed }}
         run: |
           set -euo pipefail
           python - <<'PY'
           import glob, hashlib, json, os, sys
           paths = sorted(glob.glob("artifacts/models/*/article_independent_validation.json"))
           if not paths:
-              print("BLOCKED: independent full-article report is missing.")
+              internal_passed = os.environ.get("INTERNAL_POLICY_GATE_PASSED") == "true"
+              if internal_passed:
+                  reason = "The internal policy gate passed, but the external evaluator did not produce a report. Inspect the evaluator step logs."
+              else:
+                  reason = "The internal frozen-policy quality gate failed, so external scoring was intentionally skipped."
+              message = "BLOCKED: independent full-article report is missing. " + reason
+              print(message)
+              with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+                  summary.write("## Independent full-article release decision\n\n")
+                  summary.write("- **BLOCKED:** " + reason + "\n")
               sys.exit(1)
           report_path = paths[-1]
           candidate_dir = os.path.dirname(report_path)
@@ -267,6 +343,7 @@ jobs:
               "production_status": "RESEARCH_ONLY_NOT_DEPLOYED",
           }
           checks = {
+              "internal_frozen_runtime_policy_gate_passed": os.environ.get("INTERNAL_POLICY_GATE_PASSED") == "true",
               "report_completed": report.get("status") == "COMPLETED",
               "dataset_doi_and_license_are_expected": dataset.get("doi") == "10.17632/8yfrm6z9dx.1" and dataset.get("license") == "CC BY 4.0",
               "independent_archive_sha256_is_pinned_and_matches": dataset.get("archive_hash_pinned_and_matches") is True and bool(dataset.get("expected_archive_sha256")),
@@ -310,6 +387,7 @@ jobs:
               "## Independent full-article candidate validation — no automatic promotion",
               "",
               f"- Dataset: {dataset.get('name')} ({dataset.get('doi')})",
+              f"- Internal frozen-policy quality gate passed: {os.environ.get('INTERNAL_POLICY_GATE_PASSED') == 'true'}",
               f"- Immutable archive SHA-256: {dataset.get('archive_sha256')}",
               f"- Eligible independent full articles: {report.get('sample_flow', {}).get('final_eligible_samples')}",
               f"- Raw balanced accuracy: {metrics.get('balanced_accuracy')}",
