@@ -2,7 +2,7 @@
   "project": "TruthLens AI world-level ML upgrade",
   "spec_source": "19-phase upgrade requested by project owner",
   "last_updated_phase": 11,
-  "current_status": "Main commit 4a0d58e7b67988a26545a9b385c98a050681fde5 is deployed READY on Vercel. Live authorized GET probes for health, model metrics/diagnostics, claim metrics and news all returned 200. The production-mode local end-to-end smoke suite passed 62/62 checks; direct GitHub-runner POST access to Vercel was blocked by configured Vercel Authentication (401), which is an access boundary rather than an app failure. Research candidate PR #131 remains draft and non-promotable; latest candidate-validation iteration is still running while prior exact-head runtime quality and safety gates failed.",
+  "current_status": "Current main commit 979a3f24f705968e92f03ad5a633bc1a905b6f61 is deployed READY on Vercel. Production-mode local smoke passed 62/62; authorized live GET routes returned 200; Vite 6.4.5 and the calibrated probability UI are deployed. Research PR #131's exact-head validation completed: CI/governance, parity, existing safety/verdict regressions, candidate safety (17/17) and production-artifact unchanged checks passed, but its model-quality gate failed under frozen policy (coverage 59.07%, operational balanced accuracy 56.03%, fake recall 46.93%, real recall 65.13%). The WELFake holdout has been examined across multiple iterations and must no longer be used to choose/promote future variants. Candidate remains draft/non-promotable. A fresh independent article validation source is not yet fetched or audited.",
   "phases": [
     {
       "id": 1,
@@ -69,7 +69,7 @@
       "id": 11,
       "name": "Live news -> full article extraction",
       "status": "partial",
-      "notes": "Verified 2026-10-23: production-mode local scripts/productionSmokeTest.ts passed 62/62, including article/claim/evidence contracts, production mutation lock, SSRF, extraction 403/404 handling, and news content-source labels. Authorized live GET routes on exact Vercel main deploy returned 200 for /api/health, /api/models/metrics, /api/model/diagnostics, /api/claim/metrics, and /api/news/latest. GitHub-runner POST access to Vercel itself returns 401 Protected deployment; do not treat it as application failure or weaken Vercel Auth. Publisher 403/404 are per-source outcomes, not truth labels. DEP0169 url.parse was not reproduced inside app boot with trace-deprecation, so source remains unconfirmed."
+      "notes": "Production-mode local end-to-end smoke passed 62/62, including article/claim/evidence contracts, production mutation lock, SSRF, extraction error semantics, and news content-source labels. Authorized live GET routes on production deploy returned 200. DEP0169 did not reproduce inside app boot with trace-deprecation; source remains unconfirmed."
     },
     {
       "id": 12,
@@ -115,7 +115,7 @@
       "id": 19,
       "name": "Build / lint / deployment verification",
       "status": "ongoing",
-      "notes": "Production deployment for main commit 4a0d58e7b67988a26545a9b385c98a050681fde5 is READY. Security/UI CI and preview checks passed before merge. Production-mode local end-to-end smoke passed 62/62 checks; live authorized GET endpoints returned 200. Direct unauthenticated GitHub-runner POST to protected Vercel deployment is intentionally denied (401). Research-model release gate is still independent and blocked pending exact-head validation."
+      "notes": "Main commit 979a3f24f705968e92f03ad5a633bc1a905b6f61 (docs update only) is deployed READY. Production-mode smoke 62/62 and authorized GET checks passed. Research candidate exact-head safety/parity/regression checks passed but frozen runtime-policy quality gate failed; candidate is not promotable. Independent full-article validation archive has not yet been obtained and audited."
     }
   ],
   "datasets": {
@@ -260,6 +260,6 @@
   },
   "next_task": {
     "phase": 10,
-    "description": "Finish the exact-head Runtime Model Candidate Validation job for draft PR #131. Review the artifact-bound candidate safety test, Python-to-Node inference parity, frozen 0.98/0.35 decision-policy metrics with abstentions counted as incorrect, and final gate output. Keep PR #131 research-only if any safety or operational policy gate fails. After candidate evaluation, obtain and verify at least 10,000 source-independent task-matched full-article examples; WELFake same-corpus results do not satisfy this. Separately trace DEP0169 from the actual deployed runtime without suppressing warnings."
+    "description": "Keep research PR #131 draft; its current exact-head model fails the frozen runtime policy quality gate despite candidate safety passing. Do not reuse the now-exposed WELFake holdout for future model selection or promotion. Expand model selection only against reserved validation partitions with the exact frozen policy, requiring operational balanced accuracy >=0.70 and per-class recall >=0.70. Before one final release decision, fetch and verify a fresh, independent, hash-pinned, full-article dataset (PolyglotFakeFacts v2.0 is a potential source, but download and eligibility/overlap checks are still pending) and bind the external report to the exact artifact/config/source hashes. If the candidate fails the internal validation gate, do not spend the external holdout. Production artifact/thresholds stay unchanged."
   }
 }
