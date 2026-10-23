@@ -356,7 +356,12 @@ def score_runtime(text, artifact):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-dir", default=str(DEFAULT_OUT))
-    parser.add_argument("--max-features", type=int, default=8000)
+    parser.add_argument(
+        "--max-features",
+        type=int,
+        default=16000,
+        help="candidate-only vocabulary cap; production artifact is unchanged",
+    )
     parser.add_argument("--welfake", default=None, help="optional verified WELFake CSV for multi-source candidate training")
     args = parser.parse_args()
 
@@ -389,12 +394,17 @@ def main():
         train_y = np.concatenate([train_y, np.asarray([item["label"] for item in wf_train], dtype=int)])
         val_y = np.concatenate([val_y, np.asarray([item["label"] for item in wf_val], dtype=int)])
 
+    # Expand lexical coverage for the research candidate without changing the
+    # deployed runtime policy. Rare-but-repeated fake-news cues were being
+    # pruned at min_df=3 / 8k features; the prior candidate's best fake recall
+    # was 66.90%, below the frozen 70% gate. The exact runtime parity suite
+    # verifies that the expanded vocabulary is still scored identically.
     vec = TfidfVectorizer(
         analyzer=runtime_analyzer,
         lowercase=False,
         token_pattern=None,
         max_features=args.max_features,
-        min_df=3,
+        min_df=2,
         sublinear_tf=True,
         norm="l2",
     )
