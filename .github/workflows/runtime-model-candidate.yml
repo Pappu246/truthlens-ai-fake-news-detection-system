@@ -57,7 +57,7 @@ jobs:
               return b""
           html=fetch("dataset_page", targets[0][1]).decode("utf-8","replace")
           from urllib.parse import urljoin, urlparse
-          scripts=[urljoin(targets[0][1],src) for src in re.findall(r'<script[^>]+src=["\\']([^"\\']+)["\\']',html,re.IGNORECASE)]
+          scripts=[urljoin(targets[0][1],src) for src in re.findall(r'<script[^>]+src="([^"]+)"',html,re.IGNORECASE)]
           print(json.dumps({"script_count":len(scripts),"scripts":scripts[:20]}))
           patterns=[
               "api.data.mendeley.com", "datasets/publics", "public-files/datasets",
