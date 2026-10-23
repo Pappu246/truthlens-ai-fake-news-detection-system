@@ -56,10 +56,14 @@ def find_column(columns, exact_names, *, contains_all=()):
     for alias in exact_names:
         if alias in normalized:
             return normalized[alias]
-    for col in columns:
-        name = normalized_column_name(col)
-        if all(term in name for term in contains_all):
-            return col
+    # An empty fallback pattern means there is no fallback search. Without
+    # this guard, all([]) is True in Python and the first column (often the
+    # headline) would be incorrectly selected as article text.
+    if contains_all:
+        for col in columns:
+            name = normalized_column_name(col)
+            if all(term in name for term in contains_all):
+                return col
     return None
 
 
@@ -83,7 +87,7 @@ def parse_textual_label(value: object):
     value = re.sub(r"[^a-z0-9]+", " ", value).strip()
     if not value:
         return None
-    if value in {"fake", "false", "misinformation", "disinformation", "non credible", "noncredible"}:
+    if value in {"fake", "fake news", "false", "misinformation", "disinformation", "non credible", "noncredible"}:
         return 1
     if value in {"real", "true", "non fake", "nonfake", "genuine", "credible", "factual"}:
         return 0
