@@ -5,13 +5,14 @@ on:
   pull_request:
     branches:
       - main
+    # Run the expensive full SciFact pass only when evaluation inputs/runtime
+    # change. Do not launch it for unrelated model-quality workflow edits or
+    # package.json script registrations; CI still type-checks those changes.
     paths:
       - 'server/v2/**'
       - 'scripts/v2ScifactEndToEnd.ts'
       - 'data/v2/**'
-      - 'package.json'
       - 'package-lock.json'
-      - '.github/workflows/v2-*.yml'
   workflow_dispatch:
 
 concurrency:
