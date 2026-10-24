@@ -15,9 +15,9 @@ EXPECTED_EXTERNAL_MD5 = "64b4e8888f95ec104611de9d01ffe903"
 TEXT_ALIASES = {"articletext", "fulltext", "fullarticle", "articlebody", "body", "content", "text", "newscontent", "articlecontent"}
 TITLE_ALIASES = {"title", "headline", "newstitle", "articletitle", "newsheadline"}
 SOURCE_ALIASES = {"url", "articleurl", "sourceurl", "domain", "sourcedomain", "publisher", "source", "outlet", "website", "site", "host", "media"}
-LABEL_ALIASES = {"label", "veracity", "truthlabel", "truthfulness", "fakenewslabel", "factuality", "isfake", "fake", "class", "reliability", "credibility"}
-FAKE_LABELS = {"fake", "fake news", "false", "misinformation", "disinformation", "false news", "not true", "untrue", "noncredible", "non credible"}
-REAL_LABELS = {"real", "real news", "true", "factual", "credible", "reliable", "not fake", "non fake", "non-fake"}
+LABEL_ALIASES = {"label", "veracity", "truthlabel", "truelabel", "truthfulness", "fakenewslabel", "factuality", "isfake", "isreal", "istrue", "fake", "fakeflag", "realflag", "class", "reliability", "credibility"}
+FAKE_LABELS = {"fake", "fake news", "false", "misinformation", "disinformation", "false news", "not true", "untrue", "noncredible", "non credible", "hoax"}
+REAL_LABELS = {"real", "real news", "true", "true news", "truthful", "factual", "credible", "reliable", "legitimate", "authentic", "not fake", "non fake", "non-fake"}
 
 def sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
@@ -25,14 +25,28 @@ def sha(data: bytes) -> str:
 def norm_header(value) -> str:
     return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
 
-def map_binary_label(value):
-    # Normalize punctuation and separators before exact matching. This handles
-    # spellings such as "fake-news", "real_news", and "non-fake" without
-    # guessing numeric or ambiguous labels.
-    value = re.sub(r"[^a-z0-9]+", " ", str(value or "").strip().lower()).strip()
-    if value in FAKE_LABELS:
+def map_binary_label(value, column=None):
+    """Map documented label strings, respecting explicit boolean-field semantics."""
+    raw = str(value or "").strip().lower()
+    normalized = re.sub(r"[^a-z0-9]+", " ", raw).strip()
+    field = norm_header(column or "")
+
+    # Boolean-like values are only interpreted when the field name makes the
+    # polarity explicit. Generic 0/1 values remain ambiguous and are rejected.
+    if field in {"isfake", "fake", "fakeflag", "isfakenews"}:
+        if normalized in {"true", "yes", "1"}:
+            return "FAKE"
+        if normalized in {"false", "no", "0"}:
+            return "REAL"
+    if field in {"isreal", "istrue", "realflag", "istruenews", "istruthful"}:
+        if normalized in {"true", "yes", "1"}:
+            return "REAL"
+        if normalized in {"false", "no", "0"}:
+            return "FAKE"
+
+    if normalized in FAKE_LABELS:
         return "FAKE"
-    if value in REAL_LABELS:
+    if normalized in REAL_LABELS:
         return "REAL"
     return None
 
@@ -138,81 +152,7 @@ def filter_near_duplicates_direct(candidate_records, external_records):
         "conflicting_near_duplicate_articles_removed": conflicting_near_duplicates_removed,
     }
 
-def choose_label_column(rows, label_columns):
-    """Choose one explicit binary label field; never combine separate taxonomies."""
-    label_priority = (
-        "class", "truthlabel", "veracity", "truthfulness", "fakenewslabel",
-        "factuality", "isfake", "label", "reliability", "credibility"
-    )
-    candidate_stats = {}
-    mapped_by_column = {}
-    for column in label_columns:
-        values = [map_binary_label(row.get(column)) for row in rows]
-        mapped_by_column[column] = values
-        candidate_stats[column] = {
-            "fake": sum(value == "FAKE" for value in values),
-            "real": sum(value == "REAL" for value in values),
-            "unmapped": sum(value is None for value in values),
-        }
-
-    # A single field must demonstrate both classes on eligible full-text rows.
-    # If a preferred field only emits one class, fall back to the next explicit
-    # field that independently contains FAKE and REAL. Never union fields.
-    viable = [
-        column for column in label_columns
-        if candidate_stats[column]["fake"] > 0 and candidate_stats[column]["real"] > 0
-    ]
-
-    def priority(column):
-        name = norm_header(column)
-        try:
-            return label_priority.index(name)
-        except ValueError:
-            return len(label_priority)
-
-    selected = sorted(
-        viable,
-        key=lambda column: (
-            priority(column),
-            -candidate_stats[column]["fake"] - candidate_stats[column]["real"],
-            column.lower(),
-        ),
-    )[0] if viable else None
-
-    comparisons = {}
-    if selected is not None:
-        selected_values = mapped_by_column[selected]
-        for column in viable:
-            if column == selected:
-                continue
-            other_values = mapped_by_column[column]
-            paired = [
-                (left, right) for left, right in zip(selected_values, other_values)
-                if left is not None and right is not None
-            ]
-            comparisons[column] = {
-                "overlapping_mapped_rows": len(paired),
-                "disagreement_rows": sum(left != right for left, right in paired),
-            }
-
-    return selected, {
-        "candidate_label_columns": candidate_stats,
-        "selected_label_column": selected,
-        "selection_reason": (
-            "selected one preferred field containing both explicit binary classes"
-            if selected is not None
-            else "no single candidate field contained both explicit binary classes; file rows excluded rather than mixing fields"
-        ),
-        "competing_column_comparisons": comparisons,
-    }
-
-
-def scan_delimited(stream, delimiter, unique, counters, diagnostics, source_name):
-    reader = csv.DictReader(
-        io.TextIOWrapper(stream, encoding="utf-8-sig", errors="replace", newline=""),
-        delimiter=delimiter,
-    )
-    headers = reader.fieldnames or []
+def classify_columns(headers):
     body_columns = [h for h in headers if norm_header(h) in TEXT_ALIASES]
     if not body_columns:
         body_columns = [
@@ -228,98 +168,49 @@ def scan_delimited(stream, delimiter, unique, counters, diagnostics, source_name
     label_columns = [
         h for h in headers
         if norm_header(h) in LABEL_ALIASES
-        or any(term in norm_header(h) for term in ("truthlabel", "veracitylabel", "fakelabel"))
+        or any(term in norm_header(h) for term in ("truthlabel", "truelabel", "veracitylabel", "fakelabel"))
     ]
+    return body_columns, title_columns, source_columns, label_columns
 
-    if not body_columns or not source_columns or not label_columns:
-        rows_scanned_in_file = sum(1 for _ in reader)
-        counters["rows_scanned"] += rows_scanned_in_file
-        diagnostics.append({
-            "file": source_name,
-            "rows_scanned": rows_scanned_in_file,
-            "full_text_rows": 0,
-            "full_text_with_source_rows": 0,
-            "candidate_label_columns": {},
-            "selected_label_column": None,
-            "selection_reason": "required article-text, source, or explicit label headers are missing",
-        })
-        counters["files_missing_required_headers"] += 1
-        return
 
-    full_text_rows_before = counters["full_text_rows"]
-    rows_scanned_in_file = 0
-    eligible_rows = []
-    for row in reader:
-        rows_scanned_in_file += 1
-        counters["rows_scanned"] += 1
-        body = next(
-            (str(row.get(column) or "").strip() for column in body_columns if str(row.get(column) or "").strip()),
-            "",
-        )
-        title = next(
-            (str(row.get(column) or "").strip() for column in title_columns if str(row.get(column) or "").strip()),
-            "",
-        )
-        text = re.sub(r"\s+", " ", (title + " " + body).strip())
-        if len(text) < 300 or len(text.split()) < 50:
-            continue
-        counters["full_text_rows"] += 1
-        sources = {fp for column in source_columns if (fp := domain_fingerprint(row.get(column)))}
-        if not sources:
-            continue
-        eligible_rows.append((row, text, sources))
+def schema_signature(headers, body_columns, title_columns, source_columns, label_columns):
+    # Group only structurally compatible files. One authoritative field is
+    # selected across a group; distinct columns are never combined.
+    return json.dumps({
+        "headers": sorted(norm_header(h) for h in headers),
+        "body_columns": sorted(norm_header(h) for h in body_columns),
+        "title_columns": sorted(norm_header(h) for h in title_columns),
+        "source_columns": sorted(norm_header(h) for h in source_columns),
+        "label_columns": sorted(norm_header(h) for h in label_columns),
+    }, sort_keys=True, separators=(",", ":"))
 
-    counters["full_text_with_source_rows"] += len(eligible_rows)
-    selected_label_column, label_diagnostic = choose_label_column(
-        [item[0] for item in eligible_rows], label_columns
+
+def get_eligible_article_fields(row, body_columns, title_columns, source_columns):
+    body = next(
+        (str(row.get(column) or "").strip() for column in body_columns if str(row.get(column) or "").strip()),
+        "",
     )
-    diagnostics.append({
-        "file": source_name,
-        "rows_scanned": rows_scanned_in_file,
-        "full_text_rows": counters["full_text_rows"] - full_text_rows_before,
-        "full_text_with_source_rows": len(eligible_rows),
-        **label_diagnostic,
-    })
-
-    if selected_label_column is None:
-        counters["files_without_mixed_label_column"] += 1
-        counters["rows_excluded_without_single_mixed_label_field"] += len(eligible_rows)
-        return
-
-    for row, text, sources in eligible_rows:
-        label = map_binary_label(row.get(selected_label_column))
-        if label is None:
-            counters["rows_unmapped_on_selected_label_field"] += 1
-            continue
-        counters["full_text_with_explicit_label_and_source"] += 1
-        fingerprint = article_text_fingerprint(text)
-        article = unique.setdefault(
-            fingerprint,
-            {"text": text, "labels": set(), "source_fingerprints": set()},
-        )
-        article["labels"].add(label)
-        article["source_fingerprints"].update(sources)
-        article["text"] = min(article["text"], text)
+    title = next(
+        (str(row.get(column) or "").strip() for column in title_columns if str(row.get(column) or "").strip()),
+        "",
+    )
+    text = re.sub(r"\s+", " ", (title + " " + body).strip())
+    if len(text) < 300 or len(text.split()) < 50:
+        return text, set(), False
+    sources = {fp for column in source_columns if (fp := domain_fingerprint(row.get(column)))}
+    return text, sources, True
 
 
-def scan_external_archive(archive_path: Path):
-    csv.field_size_limit(50 * 1024 * 1024)
-    unique = {}
-    counters = defaultdict(int)
-    diagnostics = []
-    files_scanned = 0
+def iter_archive_delimited_files(archive_path: Path):
+    """Yield CSV/TSV streams, including members inside nested ZIP files."""
     with zipfile.ZipFile(archive_path) as outer:
         for info in outer.infolist():
             if info.is_dir():
                 continue
             suffix = Path(info.filename).suffix.lower()
             if suffix in {".csv", ".tsv"}:
-                files_scanned += 1
                 with outer.open(info, "r") as stream:
-                    scan_delimited(
-                        stream, "," if suffix == ".csv" else "\t",
-                        unique, counters, diagnostics, info.filename,
-                    )
+                    yield info.filename, "," if suffix == ".csv" else "\t", stream
             elif suffix == ".zip":
                 with outer.open(info, "r") as source:
                     nested_bytes = source.read()
@@ -328,16 +219,174 @@ def scan_external_archive(archive_path: Path):
                         nested_suffix = Path(nested.filename).suffix.lower()
                         if nested.is_dir() or nested_suffix not in {".csv", ".tsv"}:
                             continue
-                        files_scanned += 1
                         with inner.open(nested, "r") as stream:
-                            scan_delimited(
-                                stream, "," if nested_suffix == ".csv" else "\t",
-                                unique, counters, diagnostics,
-                                info.filename + "!" + nested.filename,
-                            )
-    counter_payload = dict(counters)
-    counter_payload["source_file_label_diagnostics"] = diagnostics
-    return unique, counter_payload, files_scanned
+                            yield info.filename + "!" + nested.filename, "," if nested_suffix == ".csv" else "\t", stream
+
+
+def scan_external_archive(archive_path: Path):
+    """
+    Two-pass scan: infer one label field per compatible header schema, then ingest
+    rows using only that field. Class-partitioned files can be combined only when
+    their schemas match and a single field carries both explicit binary labels.
+    """
+    csv.field_size_limit(50 * 1024 * 1024)
+    unique = {}
+    counters = defaultdict(int)
+    group_stats = {}
+    file_stats = {}
+    files_scanned = 0
+
+    # Pass 1: establish label distributions across compatible schemas.
+    for source_name, delimiter, stream in iter_archive_delimited_files(archive_path):
+        files_scanned += 1
+        reader = csv.DictReader(
+            io.TextIOWrapper(stream, encoding="utf-8-sig", errors="replace", newline=""),
+            delimiter=delimiter,
+        )
+        headers = reader.fieldnames or []
+        body_columns, title_columns, source_columns, label_columns = classify_columns(headers)
+        stats = {
+            "file": source_name,
+            "rows_scanned": 0,
+            "full_text_rows": 0,
+            "full_text_with_source_rows": 0,
+            "source_schema_sha256": None,
+            "candidate_label_columns": {},
+            "selected_label_column": None,
+            "selected_label_counts": {"FAKE": 0, "REAL": 0},
+            "selection_reason": None,
+        }
+
+        if not body_columns or not source_columns or not label_columns:
+            for _ in reader:
+                stats["rows_scanned"] += 1
+            counters["rows_scanned"] += stats["rows_scanned"]
+            counters["files_missing_required_headers"] += 1
+            stats["selection_reason"] = "required article-text, source, or explicit label headers are missing"
+            file_stats[source_name] = stats
+            continue
+
+        signature = schema_signature(headers, body_columns, title_columns, source_columns, label_columns)
+        stats["source_schema_sha256"] = sha(signature.encode("utf-8"))
+        group_label_stats = group_stats.setdefault(signature, {})
+        for column in label_columns:
+            group_label_stats.setdefault(column, {"fake": 0, "real": 0, "unmapped": 0})
+
+        for row in reader:
+            stats["rows_scanned"] += 1
+            text, sources, full_text = get_eligible_article_fields(row, body_columns, title_columns, source_columns)
+            if not full_text:
+                continue
+            stats["full_text_rows"] += 1
+            counters["full_text_rows"] += 1
+            if not sources:
+                continue
+            stats["full_text_with_source_rows"] += 1
+            counters["full_text_with_source_rows"] += 1
+            for column in label_columns:
+                label = map_binary_label(row.get(column), column)
+                counts = group_label_stats[column]
+                if label == "FAKE":
+                    counts["fake"] += 1
+                elif label == "REAL":
+                    counts["real"] += 1
+                else:
+                    counts["unmapped"] += 1
+        counters["rows_scanned"] += stats["rows_scanned"]
+        file_stats[source_name] = stats
+
+    label_priority = (
+        "class", "truthlabel", "truelabel", "veracity", "truthfulness", "fakenewslabel",
+        "factuality", "isfake", "label", "reliability", "credibility"
+    )
+    selected_by_schema = {}
+    group_diagnostics = {}
+    for signature, candidate_stats in group_stats.items():
+        viable = [
+            column for column, counts in candidate_stats.items()
+            if counts["fake"] > 0 and counts["real"] > 0
+        ]
+
+        def priority(column):
+            try:
+                return label_priority.index(norm_header(column))
+            except ValueError:
+                return len(label_priority)
+
+        selected = sorted(
+            viable,
+            key=lambda column: (
+                priority(column),
+                -candidate_stats[column]["fake"] - candidate_stats[column]["real"],
+                column.lower(),
+            ),
+        )[0] if viable else None
+        selected_by_schema[signature] = selected
+        group_diagnostics[signature] = {
+            "schema_sha256": sha(signature.encode("utf-8")),
+            "candidate_label_columns": candidate_stats,
+            "selected_label_column": selected,
+            "selection_reason": (
+                "selected one explicit label field with both binary classes across this compatible schema group"
+                if selected is not None
+                else "no single label field in this compatible schema group contains both binary classes; rows excluded rather than mixing fields"
+            ),
+        }
+
+    # Pass 2: ingest using the one selected field for each schema group.
+    for source_name, delimiter, stream in iter_archive_delimited_files(archive_path):
+        stats = file_stats.get(source_name)
+        if not stats or not stats.get("source_schema_sha256"):
+            continue
+        reader = csv.DictReader(
+            io.TextIOWrapper(stream, encoding="utf-8-sig", errors="replace", newline=""),
+            delimiter=delimiter,
+        )
+        headers = reader.fieldnames or []
+        body_columns, title_columns, source_columns, label_columns = classify_columns(headers)
+        signature = schema_signature(headers, body_columns, title_columns, source_columns, label_columns)
+        selected_label_column = selected_by_schema.get(signature)
+        group_diag = group_diagnostics.get(signature, {})
+        stats["selected_label_column"] = selected_label_column
+        stats["candidate_label_columns"] = group_diag.get("candidate_label_columns", {})
+        stats["selection_reason"] = group_diag.get("selection_reason")
+
+        if selected_label_column is None:
+            if stats["full_text_with_source_rows"]:
+                counters["files_without_mixed_label_column"] += 1
+                counters["rows_excluded_without_single_mixed_label_field"] += stats["full_text_with_source_rows"]
+            continue
+
+        for row in reader:
+            text, sources, full_text = get_eligible_article_fields(row, body_columns, title_columns, source_columns)
+            if not full_text or not sources:
+                continue
+            label = map_binary_label(row.get(selected_label_column), selected_label_column)
+            if label is None:
+                counters["rows_unmapped_on_selected_label_field"] += 1
+                continue
+            stats["selected_label_counts"][label] += 1
+            counters["full_text_with_explicit_label_and_source"] += 1
+            fingerprint = article_text_fingerprint(text)
+            article = unique.setdefault(
+                fingerprint,
+                {"text": text, "labels": set(), "source_fingerprints": set()},
+            )
+            article["labels"].add(label)
+            article["source_fingerprints"].update(sources)
+            article["text"] = min(article["text"], text)
+
+    diagnostics = [
+        {**stats, "source_schema_sha256": stats.get("source_schema_sha256")}
+        for _, stats in sorted(file_stats.items())
+    ]
+    counters["compatible_schema_group_count"] = len(group_stats)
+    counters["schema_groups_without_single_mixed_label_field"] = sum(
+        selected is None for selected in selected_by_schema.values()
+    )
+    counters["source_file_label_diagnostics"] = diagnostics
+    counters["label_schema_group_diagnostics"] = list(group_diagnostics.values())
+    return unique, dict(counters), files_scanned
 
 
 def write_jsonl(path: Path, records):
@@ -381,8 +430,6 @@ def main():
             "label": label,
             "source_fingerprints": sorted(article["source_fingerprints"]),
         })
-    if not eligible:
-        raise SystemExit("No unique external articles meet the full-text, explicit-label and source filters.")
     eligible_label_counts = {
         "FAKE": sum(record["y"] == 1 for record in eligible),
         "REAL": sum(record["y"] == 0 for record in eligible),
@@ -409,9 +456,17 @@ def main():
         if hashlib.sha256(record["domain"].encode("utf-8")).hexdigest() not in external_publisher_set
     ]
 
-    selected_external, near_duplicate_counts = filter_near_duplicates_direct(
-        filtered_candidate_rows, eligible
-    )
+    if eligible:
+        selected_external, near_duplicate_counts = filter_near_duplicates_direct(
+            filtered_candidate_rows, eligible
+        )
+    else:
+        selected_external = []
+        near_duplicate_counts = {
+            "cross_corpus_near_duplicate_articles_removed": 0,
+            "external_near_duplicate_articles_removed": 0,
+            "conflicting_near_duplicate_articles_removed": 0,
+        }
     cross_corpus_removed = near_duplicate_counts["cross_corpus_near_duplicate_articles_removed"]
     external_near_duplicates_removed = near_duplicate_counts["external_near_duplicate_articles_removed"]
     conflicting_near_duplicates_removed = near_duplicate_counts["conflicting_near_duplicate_articles_removed"]
@@ -459,6 +514,8 @@ def main():
     summary_path = output_dir / "external-preparation-summary.json"
     summary_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({k: v for k, v in summary.items() if k != "method_notes"}, indent=2))
+    if not eligible:
+        raise SystemExit("No unique external articles meet the full-text, explicit-label and source filters; diagnostic summary was written.")
 
 if __name__ == "__main__":
     main()

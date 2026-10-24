@@ -8,6 +8,11 @@ from prepare_external_source_disjoint_data import article_text_fingerprint, map_
 def test_binary_label_mapper_normalizes_explicit_labels_but_does_not_guess():
     assert map_binary_label("disinformation") == "FAKE"
     assert map_binary_label("TRUE") == "REAL"
+    assert map_binary_label("FALSE") == "FAKE"
+    assert map_binary_label("True", "is_fake") == "FAKE"
+    assert map_binary_label("False", "is_fake") == "REAL"
+    assert map_binary_label("True", "is_real") == "REAL"
+    assert map_binary_label("False", "is_real") == "FAKE"
     assert map_binary_label("fake-news") == "FAKE"
     assert map_binary_label("real_news") == "REAL"
     assert map_binary_label("non-fake") == "REAL"
@@ -101,3 +106,36 @@ def test_exact_jaccard_is_direct_and_symmetric():
     right = {2, 3, 4, 5}
     assert exact_jaccard(left, right) == 0.6
     assert exact_jaccard(left, right) == exact_jaccard(right, left)
+
+
+def test_balanced_label_field_can_span_compatible_single_class_files(tmp_path):
+    archive = tmp_path / "split-by-class.zip"
+    body = " ".join(["independent"] * 70) + " This is a long article in a source split by its class."
+    fields = ["article_title", "article_text", "article_url", "class", "label"]
+    fake = [
+        {"article_title": "Fake item " + str(i), "article_text": body + " fake " + str(i),
+         "article_url": f"https://fake{i}.example.org/story", "class": "disinformation", "label": "false"}
+        for i in range(2)
+    ]
+    real = [
+        {"article_title": "Real item " + str(i), "article_text": body + " real " + str(i),
+         "article_url": f"https://real{i}.example.net/story", "class": "disinformation", "label": "true"}
+        for i in range(2)
+    ]
+    raw_fake, raw_real = io.StringIO(), io.StringIO()
+    for raw, rows in ((raw_fake, fake), (raw_real, real)):
+        writer = csv.DictWriter(raw, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(rows)
+    with zipfile.ZipFile(archive, "w") as z:
+        z.writestr("partition-a.csv", raw_fake.getvalue())
+        z.writestr("partition-b.csv", raw_real.getvalue())
+
+    unique, counts, files_scanned = scan_external_archive(archive)
+    labels = {next(iter(item["labels"])) for item in unique.values() if len(item["labels"]) == 1}
+    assert files_scanned == 2
+    assert len(unique) == 4
+    assert labels == {"FAKE", "REAL"}
+    assert counts["compatible_schema_group_count"] == 1
+    assert counts["schema_groups_without_single_mixed_label_field"] == 0
+    assert all(item["selected_label_column"] == "label" for item in counts["source_file_label_diagnostics"])
