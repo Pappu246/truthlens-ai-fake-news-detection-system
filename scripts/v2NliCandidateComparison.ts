@@ -158,76 +158,117 @@ async function main(): Promise<void> {
   if (claims.length !== 300 || corpus.length !== 5183) throw new Error(`Unexpected frozen SciFact counts: claims=${claims.length}, docs=${corpus.length}`);
   const docsById = new Map(corpus.map(document => [String(document.doc_id), document]));
 
-  const embeddingModel = new TransformerEmbeddingModel();
-  const baseline = new PretrainedNliAdapter({ embeddingModel, relatednessFloor: RELATEDNESS_FLOOR });
-  const candidateClient = new MlWorkerClient({ nliModelId: DISTILBERT_MNLI_CANDIDATE.id });
-  const candidate = new PretrainedNliAdapter({
-    client: candidateClient,
-    embeddingModel,
-    relatednessFloor: RELATEDNESS_FLOOR,
-    modelName: DISTILBERT_MNLI_CANDIDATE.id,
-    modelVersion: DISTILBERT_MNLI_CANDIDATE.versionSeal ?? 'unsealed'
-  });
-
-  const goldLabels: GoldLabel[] = [];
-  const baselinePredictions: NliLabel[] = [];
-  const candidatePredictions: NliLabel[] = [];
-  const rows: Array<Record<string, unknown>> = [];
+  type PassageEntry = { docId: string; rationaleIndex: number; text: string; gold: GoldLabel };
+  type ClaimGroup = { claimId: number; builtClaim: ReturnType<typeof buildClaim>; passages: PassageEntry[] };
+  const groups: ClaimGroup[] = [];
   const maxClaims = Math.max(1, Math.min(Number(arg('max-claims') || claims.length), claims.length));
 
-  try {
-    for (const [claimIndex, claim] of claims.slice(0, maxClaims).entries()) {
-      const builtClaim = buildClaim(claim.claim);
-      const passages: Array<{ docId: string; rationaleIndex: number; text: string; gold: GoldLabel }> = [];
-      for (const [docId, rationales] of Object.entries(claim.evidence || {})) {
-        const doc = docsById.get(docId);
-        if (!doc) throw new Error(`Missing evidence doc ${docId} for claim ${claim.id}`);
-        for (const [rationaleIndex, rationale] of rationales.entries()) {
-          const text = rationale.sentences.map(index => doc.abstract[index]).filter(Boolean).join(' ').trim();
-          if (!text) throw new Error(`Empty evidence passage for claim ${claim.id}, doc ${docId}`);
-          passages.push({ docId, rationaleIndex, text, gold: rationale.label === 'SUPPORT' ? 'SUPPORTS' : 'REFUTES' });
-        }
-      }
-      const goldDocIds = new Set(Object.keys(claim.evidence || {}));
-      for (const citedId of claim.cited_doc_ids || []) {
-        if (goldDocIds.has(String(citedId))) continue;
-        const doc = docsById.get(String(citedId));
-        if (!doc) throw new Error(`Missing cited document ${citedId} for claim ${claim.id}`);
-        passages.push({ docId: String(citedId), rationaleIndex: -1, text: doc.abstract.join(' ').trim(), gold: 'NEUTRAL' });
-      }
-      if (!passages.length) continue;
-
-      const texts = passages.map(item => item.text);
-      const baseResults = baseline.classifyBatch(builtClaim, texts);
-      const candidateResults = candidate.classifyBatch(builtClaim, texts);
-      if (baseResults.length !== passages.length || candidateResults.length !== passages.length) {
-        throw new Error(`Classification count mismatch for SciFact claim ${claim.id}`);
-      }
-
-      for (let i = 0; i < passages.length; i++) {
-        const item = passages[i];
-        const baseResult = baseResults[i];
-        const candidateResult = candidateResults[i];
-        goldLabels.push(item.gold);
-        baselinePredictions.push(baseResult.label);
-        candidatePredictions.push(candidateResult.label);
-        rows.push({
-          claim_id: claim.id,
-          document_id: item.docId,
-          rationale_index: item.rationaleIndex,
-          gold: item.gold,
-          baseline_prediction: baseResult.label,
-          baseline_confidence: baseResult.confidence,
-          candidate_prediction: candidateResult.label,
-          candidate_confidence: candidateResult.confidence,
-          baseline_correct: baseResult.label === item.gold,
-          candidate_correct: candidateResult.label === item.gold
-        });
-      }
-      if ((claimIndex + 1) % 10 === 0 || claimIndex + 1 === Math.min(maxClaims, claims.length)) {
-        console.log(`processed claims ${claimIndex + 1}/${Math.min(maxClaims, claims.length)}`);
+  // Materialize one deterministic ordered list of the exact same claim/evidence
+  // pairs before loading either cross-encoder. This also keeps row alignment
+  // explicit when the two model passes run serially.
+  for (const [claimIndex, claim] of claims.slice(0, maxClaims).entries()) {
+    const builtClaim = buildClaim(claim.claim);
+    const passages: PassageEntry[] = [];
+    for (const [docId, rationales] of Object.entries(claim.evidence || {})) {
+      const doc = docsById.get(docId);
+      if (!doc) throw new Error(`Missing evidence doc ${docId} for claim ${claim.id}`);
+      for (const [rationaleIndex, rationale] of rationales.entries()) {
+        const text = rationale.sentences.map(index => doc.abstract[index]).filter(Boolean).join(' ').trim();
+        if (!text) throw new Error(`Empty evidence passage for claim ${claim.id}, doc ${docId}`);
+        passages.push({ docId, rationaleIndex, text, gold: rationale.label === 'SUPPORT' ? 'SUPPORTS' : 'REFUTES' });
       }
     }
+    const goldDocIds = new Set(Object.keys(claim.evidence || {}));
+    for (const citedId of claim.cited_doc_ids || []) {
+      if (goldDocIds.has(String(citedId))) continue;
+      const doc = docsById.get(String(citedId));
+      if (!doc) throw new Error(`Missing cited document ${citedId} for claim ${claim.id}`);
+      passages.push({ docId: String(citedId), rationaleIndex: -1, text: doc.abstract.join(' ').trim(), gold: 'NEUTRAL' });
+    }
+    if (passages.length) groups.push({ claimId: claim.id, builtClaim, passages });
+    if ((claimIndex + 1) % 25 === 0 || claimIndex + 1 === Math.min(maxClaims, claims.length)) {
+      console.log(`prepared ${claimIndex + 1}/${Math.min(maxClaims, claims.length)} claims`);
+    }
+  }
+
+  const goldLabels: GoldLabel[] = groups.flatMap(group => group.passages.map(item => item.gold));
+  const baselinePredictions: NliLabel[] = [];
+  const candidatePredictions: NliLabel[] = [];
+  const rows: Array<Record<string, unknown>> = groups.flatMap(group => group.passages.map(item => ({
+    claim_id: group.claimId,
+    document_id: item.docId,
+    rationale_index: item.rationaleIndex,
+    gold: item.gold
+  })));
+  const baseline = new PretrainedNliAdapter({
+    embeddingModel: new TransformerEmbeddingModel(),
+    relatednessFloor: RELATEDNESS_FLOOR
+  });
+  let candidateClient: MlWorkerClient | null = null;
+  let candidate: PretrainedNliAdapter | null = null;
+
+  try {
+    // ONNX Runtime's native binding is not reliable when two independently
+    // initialized worker-thread environments execute concurrently under Node
+    // 22 (V8 HandleScope fatal crash). Run each model in its own worker lifetime
+    // instead; predictions remain paired by the frozen rows above.
+    let cursor = 0;
+    for (const [groupIndex, group] of groups.entries()) {
+      const baseResults = baseline.classifyBatch(group.builtClaim, group.passages.map(item => item.text));
+      if (baseResults.length !== group.passages.length) {
+        throw new Error(`Baseline classification count mismatch for SciFact claim ${group.claimId}`);
+      }
+      for (let i = 0; i < baseResults.length; i++) {
+        const result = baseResults[i];
+        baselinePredictions.push(result.label);
+        Object.assign(rows[cursor + i], {
+          baseline_prediction: result.label,
+          baseline_confidence: result.confidence,
+          baseline_correct: result.label === group.passages[i].gold
+        });
+      }
+      cursor += group.passages.length;
+      if ((groupIndex + 1) % 25 === 0 || groupIndex + 1 === groups.length) {
+        console.log(`baseline NLI processed ${groupIndex + 1}/${groups.length} claims`);
+      }
+    }
+
+    // Fully dispose the default embedding+NLI worker before creating the
+    // candidate worker. Never host two ONNX Runtime worker environments at once.
+    await disposeMlWorker();
+    candidateClient = new MlWorkerClient({ nliModelId: DISTILBERT_MNLI_CANDIDATE.id });
+    const candidateEmbeddingModel = new TransformerEmbeddingModel(candidateClient);
+    candidate = new PretrainedNliAdapter({
+      client: candidateClient,
+      embeddingModel: candidateEmbeddingModel,
+      relatednessFloor: RELATEDNESS_FLOOR,
+      modelName: DISTILBERT_MNLI_CANDIDATE.id,
+      modelVersion: DISTILBERT_MNLI_CANDIDATE.versionSeal ?? 'unsealed'
+    });
+
+    cursor = 0;
+    for (const [groupIndex, group] of groups.entries()) {
+      const candidateResults = candidate.classifyBatch(group.builtClaim, group.passages.map(item => item.text));
+      if (candidateResults.length !== group.passages.length) {
+        throw new Error(`Candidate classification count mismatch for SciFact claim ${group.claimId}`);
+      }
+      for (let i = 0; i < candidateResults.length; i++) {
+        const result = candidateResults[i];
+        candidatePredictions.push(result.label);
+        Object.assign(rows[cursor + i], {
+          candidate_prediction: result.label,
+          candidate_confidence: result.confidence,
+          candidate_correct: result.label === group.passages[i].gold
+        });
+      }
+      cursor += group.passages.length;
+      if ((groupIndex + 1) % 25 === 0 || groupIndex + 1 === groups.length) {
+        console.log(`candidate NLI processed ${groupIndex + 1}/${groups.length} claims`);
+      }
+    }
+
+    if (!candidate) throw new Error('Candidate NLI adapter was not initialized.');
+    const activeCandidate = candidate;
 
     const models = {
       baseline: {
@@ -236,8 +277,8 @@ async function main(): Promise<void> {
         nli_weight_sha256: nliSeal().find(manifest => manifest.kind === 'nli')?.files.find(file => file.path === 'onnx/model_quantized.onnx')?.sha256 ?? null
       },
       candidate: {
-        name: candidate.modelName,
-        version: candidate.modelVersion,
+        name: activeCandidate.modelName,
+        version: activeCandidate.modelVersion,
         nli_weight_sha256: candidateSeal().files.find(file => file.path === 'onnx/model_quantized.onnx')?.sha256 ?? null
       }
     };
@@ -246,7 +287,7 @@ async function main(): Promise<void> {
       split: 'dev',
       relatedness_floor: RELATEDNESS_FLOOR,
       max_pair_tokens: 384,
-      candidate_model_id: candidate.modelName,
+      candidate_model_id: activeCandidate.modelName,
       scoring_labels: TARGET_LABELS
     };
     const sealedModels = { baseline: nliSeal(), candidate: candidateSeal() };
@@ -308,7 +349,7 @@ async function main(): Promise<void> {
       artifact: output
     }, null, 2));
   } finally {
-    await candidateClient.dispose();
+    if (candidateClient) await candidateClient.dispose();
     await disposeMlWorker();
   }
 }
