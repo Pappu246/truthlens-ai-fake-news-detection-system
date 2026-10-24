@@ -77,6 +77,7 @@ async function makeFixtures(root) {
       independent_annotator_count: 2
     })
   ]);
+  return holdoutSha;
 }
 
 async function runGate(root, expectedSha = COMMIT) {
@@ -91,7 +92,7 @@ async function runGate(root, expectedSha = COMMIT) {
 async function main() {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'truthlens-phase2-gate-test-'));
   try {
-    await makeFixtures(root);
+    const holdoutSha = await makeFixtures(root);
     const valid = await runGate(root);
     assert.equal(valid.result.status, 0, valid.result.stderr || valid.result.stdout);
     assert.equal(valid.report.status, 'READY_FOR_HUMAN_REVIEW');
