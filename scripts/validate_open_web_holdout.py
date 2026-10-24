@@ -12,6 +12,7 @@ import hashlib
 import json
 import re
 import sys
+import unicodedata
 from datetime import date, datetime
 from pathlib import Path
 from urllib.parse import urlparse
@@ -45,6 +46,16 @@ class HoldoutValidationError(ValueError):
 def _require(condition: bool, message: str) -> None:
     if not condition:
         raise HoldoutValidationError(message)
+
+
+def _reject_duplicate_json_keys(pairs: list[tuple[str, object]]) -> dict:
+    """Reject duplicate keys at every JSON object depth before values are lost."""
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise HoldoutValidationError(f"duplicate JSON object key: {key!r}.")
+        result[key] = value
+    return result
 
 
 def _parse_aware_datetime(value: object, field: str) -> datetime:
@@ -84,7 +95,13 @@ def _https_url(value: object, field: str) -> tuple[str, str]:
 
 
 def _claim_fingerprint(text: str) -> str:
-    normalized = re.sub(r"[^a-z0-9]+", " ", text.casefold()).strip()
+    # NFKC + Unicode categories retain claims in scripts beyond ASCII/Latin.
+    normalized = unicodedata.normalize("NFKC", text).casefold()
+    normalized = "".join(
+        character if unicodedata.category(character)[0] in {"L", "M", "N"} else " "
+        for character in normalized
+    )
+    normalized = " ".join(normalized.split())
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
@@ -96,7 +113,9 @@ def _load_jsonl(path: Path) -> tuple[list[dict], str]:
         if not raw_line.strip():
             raise HoldoutValidationError(f"Blank JSONL line at line {line_number}; blank lines are not allowed.")
         try:
-            item = json.loads(raw_line)
+            item = json.loads(raw_line, object_pairs_hook=_reject_duplicate_json_keys)
+        except HoldoutValidationError as exc:
+            raise HoldoutValidationError(f"Invalid JSON on line {line_number}: {exc}") from exc
         except json.JSONDecodeError as exc:
             raise HoldoutValidationError(f"Invalid JSON on line {line_number}: {exc.msg}.") from exc
         _require(isinstance(item, dict), f"Line {line_number} must contain one JSON object.")
@@ -104,7 +123,9 @@ def _load_jsonl(path: Path) -> tuple[list[dict], str]:
     return records, digest
 
 
-def _validate_record(record: dict, line_number: int) -> tuple[str, str, set[str], set[str], str]:
+def _validate_record(
+    record: dict, line_number: int, sealed_at: datetime | None = None
+) -> tuple[str, str, set[str], set[str], str, str]:
     prefix = f"record line {line_number}"
     _require(set(record) == RECORD_KEYS, f"{prefix} has missing or unexpected fields.")
     for key in ("claim_id", "claim_text", "syndication_cluster_id", "split"):
@@ -162,6 +183,11 @@ def _validate_record(record: dict, line_number: int) -> tuple[str, str, set[str]
         attestation_refs.add(attestation.strip())
         annotation_labels.append(annotation["label"])
     _require(len(attestation_refs) == 2, f"{prefix}: each annotator needs a distinct attestation reference.")
+    if sealed_at is not None:
+        _require(
+            all(when <= sealed_at for when in annotation_times),
+            f"{prefix}: annotations must be completed before the holdout is sealed.",
+        )
 
     adjudication = record["adjudication"]
     _require(isinstance(adjudication, dict) and set(adjudication) == ADJUDICATION_KEYS, f"{prefix}.adjudication has missing or unexpected fields.")
@@ -171,22 +197,50 @@ def _validate_record(record: dict, line_number: int) -> tuple[str, str, set[str]
     _require(isinstance(adjudication["rationale"], str) and len(adjudication["rationale"].strip()) >= 20, f"{prefix}.adjudication.rationale is too short.")
     adjudicated_at = _parse_aware_datetime(adjudication["adjudicated_at"], f"{prefix}.adjudication.adjudicated_at")
     _require(all(adjudicated_at >= when for when in annotation_times), f"{prefix}: adjudication cannot precede the two independent annotations.")
+    if sealed_at is not None:
+        _require(
+            adjudicated_at <= sealed_at,
+            f"{prefix}: adjudication must be completed before the holdout is sealed.",
+        )
     _require(isinstance(adjudication["disagreement_resolved"], bool), f"{prefix}.adjudication.disagreement_resolved must be boolean.")
     if annotation_labels[0] != annotation_labels[1]:
         _require(adjudication["disagreement_resolved"] is True, f"{prefix}: conflicting annotators require explicit adjudication.")
     elif adjudication["final_label"] != annotation_labels[0]:
         _require(adjudication["disagreement_resolved"] is True, f"{prefix}: an adjudicated label differing from unanimous annotation requires an explanation.")
     fingerprint = _claim_fingerprint(record["claim_text"])
-    return record["claim_id"], record["syndication_cluster_id"], annotator_ids, attestation_refs, fingerprint
+    return (
+        record["claim_id"], record["syndication_cluster_id"], annotator_ids,
+        attestation_refs, fingerprint, adjudicator,
+    )
 
 
-def validate_holdout(records_path: Path, manifest_path: Path, minimum_claims: int = 100) -> dict:
-    """Validate a sealed holdout and return aggregate-only validation evidence."""
+def validate_holdout(
+    records_path: Path,
+    manifest_path: Path,
+    minimum_claims: int = 100,
+    *,
+    expected_commit_sha: str,
+    expected_artifact_sha256: str,
+) -> dict:
+    """Validate a sealed holdout against the exact authorized candidate pin."""
+    _require(
+        isinstance(minimum_claims, int) and not isinstance(minimum_claims, bool) and minimum_claims >= 100,
+        "--minimum-claims must be at least 100.",
+    )
+    expected_commit_sha = str(expected_commit_sha).lower()
+    expected_artifact_sha256 = str(expected_artifact_sha256).lower()
+    _require(bool(HEX_160.fullmatch(expected_commit_sha)), "Expected candidate commit SHA must be 40 hexadecimal characters.")
+    _require(bool(HEX_256.fullmatch(expected_artifact_sha256)), "Expected candidate artifact SHA-256 must be 64 hexadecimal characters.")
     _require(records_path.is_file(), f"Holdout records file not found: {records_path}")
     _require(manifest_path.is_file(), f"Holdout manifest not found: {manifest_path}")
     records, records_sha256 = _load_jsonl(records_path)
     try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest = json.loads(
+            manifest_path.read_text(encoding="utf-8"),
+            object_pairs_hook=_reject_duplicate_json_keys,
+        )
+    except HoldoutValidationError as exc:
+        raise HoldoutValidationError(f"Invalid manifest JSON: {exc}") from exc
     except json.JSONDecodeError as exc:
         raise HoldoutValidationError(f"Invalid manifest JSON: {exc.msg}.") from exc
     _require(isinstance(manifest, dict), "Manifest must be a JSON object.")
@@ -207,9 +261,13 @@ def validate_holdout(records_path: Path, manifest_path: Path, minimum_claims: in
     _require(isinstance(seal.get("sealed_by"), str) and seal["sealed_by"].strip(), "seal.sealed_by is required.")
     sealed_at = _parse_aware_datetime(seal.get("sealed_at"), "seal.sealed_at")
 
-    seen_ids, seen_clusters, seen_claims, all_annotators, all_attestations = set(), set(), set(), set(), set()
+    seen_ids, seen_clusters, seen_claims, all_annotators, all_attestations, all_adjudicators = (
+        set(), set(), set(), set(), set(), set()
+    )
     for line_number, record in enumerate(records, start=1):
-        claim_id, cluster_id, annotators, attestation_refs, fingerprint = _validate_record(record, line_number)
+        claim_id, cluster_id, annotators, attestation_refs, fingerprint, adjudicator = _validate_record(
+            record, line_number, sealed_at
+        )
         _require(claim_id not in seen_ids, f"Duplicate claim_id: {claim_id}.")
         _require(cluster_id not in seen_clusters, f"Duplicate syndication cluster in holdout: {cluster_id}.")
         _require(fingerprint not in seen_claims, f"Duplicate/near-identical claim text at line {line_number}.")
@@ -218,12 +276,20 @@ def validate_holdout(records_path: Path, manifest_path: Path, minimum_claims: in
         seen_claims.add(fingerprint)
         all_annotators.update(annotators)
         all_attestations.update(attestation_refs)
+        all_adjudicators.add(adjudicator)
 
     human_review = manifest.get("human_review")
     _require(isinstance(human_review, dict), "Manifest human_review object is required.")
     _require(human_review.get("status") == "VERIFIED", "An independent human data-steward review is required.")
     reviewer = human_review.get("reviewer_id")
-    _require(isinstance(reviewer, str) and reviewer.strip() and reviewer not in all_annotators, "Human review must be signed off by a separate reviewer.")
+    _require(
+        isinstance(reviewer, str)
+        and reviewer.strip()
+        and reviewer not in all_annotators
+        and reviewer not in all_adjudicators
+        and reviewer != seal["sealed_by"],
+        "Human review must be signed off by a separate reviewer who is not an annotator, adjudicator, or sealer.",
+    )
     reviewed_at = _parse_aware_datetime(human_review.get("reviewed_at"), "human_review.reviewed_at")
     _require(reviewed_at >= sealed_at, "Human review must occur after the holdout is sealed.")
     _require(isinstance(human_review.get("provenance_review_ref"), str) and human_review["provenance_review_ref"].strip(), "Human review must reference its provenance audit.")
@@ -239,6 +305,14 @@ def validate_holdout(records_path: Path, manifest_path: Path, minimum_claims: in
     _require(authorized_at >= reviewed_at and authorized_at > sealed_at, "Evaluation access must be authorized after sealing and human review.")
     _require(bool(HEX_160.fullmatch(str(access.get("evaluation_commit_sha", "")).lower())), "evaluation_access.evaluation_commit_sha must be a pinned 40-character commit SHA.")
     _require(bool(HEX_256.fullmatch(str(access.get("candidate_artifact_sha256", "")).lower())), "evaluation_access.candidate_artifact_sha256 must be a pinned SHA-256.")
+    _require(
+        access["evaluation_commit_sha"].lower() == expected_commit_sha,
+        "Manifest evaluation commit SHA does not match the expected candidate commit SHA.",
+    )
+    _require(
+        access["candidate_artifact_sha256"].lower() == expected_artifact_sha256,
+        "Manifest candidate artifact SHA-256 does not match the expected candidate artifact SHA-256.",
+    )
 
     return {
         "schema_version": 1,
@@ -264,15 +338,41 @@ def validate_holdout(records_path: Path, manifest_path: Path, minimum_claims: in
     }
 
 
+def _ensure_output_path_separate(output_path: Path, input_paths: tuple[Path, ...]) -> None:
+    """Prevent a report from destroying an input, including symlink/hard-link aliases."""
+    resolved_output = output_path.expanduser().resolve()
+    for input_path in input_paths:
+        resolved_input = input_path.expanduser().resolve()
+        _require(
+            resolved_output != resolved_input,
+            "Report --output must not overwrite holdout records or manifest inputs.",
+        )
+        if output_path.exists() and input_path.exists():
+            _require(
+                not output_path.samefile(input_path),
+                "Report --output must not overwrite holdout records or manifest inputs.",
+            )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--records", required=True, type=Path, help="Restricted JSONL holdout; do not commit private claims/evidence to public Git.")
     parser.add_argument("--manifest", required=True, type=Path, help="Signed-off holdout manifest.")
     parser.add_argument("--minimum-claims", type=int, default=100)
+    parser.add_argument("--expected-commit-sha", required=True, help="Exact 40-character commit SHA under evaluation.")
+    parser.add_argument("--expected-artifact-sha256", required=True, help="Exact SHA-256 of the candidate artifact under evaluation.")
     parser.add_argument("--output", type=Path, help="Optional aggregate-only JSON report path.")
     args = parser.parse_args()
     try:
-        report = validate_holdout(args.records, args.manifest, minimum_claims=args.minimum_claims)
+        if args.output is not None:
+            _ensure_output_path_separate(args.output, (args.records, args.manifest))
+        report = validate_holdout(
+            args.records,
+            args.manifest,
+            minimum_claims=args.minimum_claims,
+            expected_commit_sha=args.expected_commit_sha,
+            expected_artifact_sha256=args.expected_artifact_sha256,
+        )
     except (HoldoutValidationError, OSError) as exc:
         print(json.dumps({"structural_validation_passed": False, "error": str(exc)}, indent=2), file=sys.stderr)
         return 1
