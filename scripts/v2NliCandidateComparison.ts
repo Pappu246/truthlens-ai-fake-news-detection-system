@@ -19,7 +19,7 @@ import {
   verifyCandidateHashes,
   verifyModelHashes
 } from '../server/v2/ml/modelManifest.js';
-import { NliClassification, NliLabel } from '../server/v2/types.js';
+import type { NliLabel } from '../server/v2/types.js';
 
 type GoldLabel = 'SUPPORTS' | 'REFUTES' | 'NEUTRAL';
 interface Rationale {
