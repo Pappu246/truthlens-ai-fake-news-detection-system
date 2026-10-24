@@ -137,7 +137,7 @@ jobs:
           def norm(value):
               return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
 
-          SHORTENERS = {"bit.ly", "t.co", "tinyurl.com", "goo.gl", "ow.ly", "is.gd", "buff.ly", "trib.al", "sptnk.ws"}
+          SHORTENERS = {"bit.ly", "t.co", "tinyurl.com", "goo.gl", "ow.ly", "is.gd", "buff.ly", "trib.al", "sptnkne.ws"}
 
           def domain_from(value):
               raw = str(value or "").strip()
@@ -211,7 +211,7 @@ jobs:
                   if len(full_text) < 300 or len(full_text.split()) < 50:
                       continue
                   result["full_text_rows_300_chars_50_words"] += 1
-                  normalized_text = re.sub(r"\\s+", " ", full_text).strip().casefold()
+                  normalized_text = re.sub(r"\s+", " ", full_text).strip().casefold()
                   text_fingerprint = hashlib.sha256(normalized_text.encode("utf-8")).hexdigest()
                   article = result["_article_fingerprints"].setdefault(
                       text_fingerprint, {"labels": set(), "sources": set()}
