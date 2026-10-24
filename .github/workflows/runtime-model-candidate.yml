@@ -143,7 +143,7 @@ jobs:
         run: cp data/saved_model_artifacts.json /tmp/truthlens-production-artifact.before.json
 
       - name: Train exact compact runtime candidate
-        run: python scripts/train_isot_runtime_candidate.py --welfake data/WELFake_Dataset.csv
+        run: python scripts/train_isot_runtime_candidate.py --max-features 32000 --min-df 1 --welfake data/WELFake_Dataset.csv
 
       - name: Enforce internal frozen-policy gate before external scoring
         id: internal_policy_gate
