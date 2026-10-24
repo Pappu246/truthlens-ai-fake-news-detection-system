@@ -25,11 +25,12 @@ on:
       - 'scripts/v2DownloadModels.ts'
       - 'data/v2/**'
       - 'package-lock.json'
+      - '.github/workflows/v2-scifact-end-to-end.yml'
   workflow_dispatch:
 
 concurrency:
-  group: truthlens-v2-scifact-${{ github.event.pull_request.number || github.ref_name }}-${{ github.sha }}
-  cancel-in-progress: false
+  group: truthlens-v2-scifact-${{ github.event.pull_request.number || github.ref_name }}
+  cancel-in-progress: true
 
 permissions:
   contents: read

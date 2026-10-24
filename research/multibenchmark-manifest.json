@@ -41,7 +41,8 @@
         "directional_macro_f1",
         "production_policy_abstention"
       ],
-      "source": "https://github.com/allenai/scifact"
+      "source": "https://github.com/allenai/scifact",
+      "expected_evaluation_claims": 300
     },
     {
       "id": "fever_v1",
@@ -76,7 +77,8 @@
         "workflow": "Phase 2 External Dataset Materialization",
         "workflow_run": 10,
         "artifact_digest": "sha256:0a98f1cf50a3ed54c17817d3a542139ea009c3cb04c752c606ec864658a0ae60"
-      }
+      },
+      "expected_evaluation_claims": 19998
     },
     {
       "id": "feverous",
@@ -110,7 +112,8 @@
         "workflow": "Phase 2 External Dataset Materialization",
         "workflow_run": 10,
         "artifact_digest": "sha256:0a98f1cf50a3ed54c17817d3a542139ea009c3cb04c752c606ec864658a0ae60"
-      }
+      },
+      "expected_evaluation_claims": 7890
     },
     {
       "id": "averitec",
@@ -159,7 +162,8 @@
       "dataset_hashes": {
         "train_sha256": "ae5eda7c42ddf1695ef185a7ba1bc716928f5adf57103e4f78aae5f9afe00f9c",
         "dev_sha256": "499793726b4a5406780928a3d9dedc48d6dd53de778f22437d129cacdb08e300"
-      }
+      },
+      "expected_evaluation_claims": 500
     },
     {
       "id": "truthlens_open_web_v1",
