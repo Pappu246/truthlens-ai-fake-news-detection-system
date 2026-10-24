@@ -38,6 +38,9 @@ on:
       - 'render.yaml'
       - 'index.html'
       - 'metadata.json'
+      - 'scripts/validate_open_web_holdout.py'
+      - 'scripts/test_validate_open_web_holdout.py'
+      - 'docs/research/OPEN_WEB_HOLDOUT_PROTOCOL.md'
       - '.github/workflows/ci.yml'
 
 permissions:
@@ -63,6 +66,9 @@ jobs:
 
       - name: Dependency audit
         run: npm audit --audit-level=moderate
+
+      - name: Sealed Open-Web holdout integrity contract
+        run: python3 scripts/test_validate_open_web_holdout.py
 
       - name: Type-check
         run: npm run lint
