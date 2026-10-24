@@ -54,7 +54,10 @@ jobs:
           license_id = ((metadata.get("license") or {}).get("id") or "").lower()
           if "cc-by-4.0" not in license_id and "cc by 4.0" not in license_id:
               raise SystemExit(f"Unexpected/missing dataset license metadata: {license_id!r}")
-          Path("/tmp/zenodo-dataset-url.txt").write_text(item["links"]["self"], encoding="utf-8")
+          download_url = item.get("links", {}).get("content") or item.get("links", {}).get("download")
+          if not download_url:
+              raise SystemExit(f"No binary content link in Zenodo metadata for {item.get('key')!r}")
+          Path("/tmp/zenodo-dataset-url.txt").write_text(download_url, encoding="utf-8")
           print(json.dumps({
               "record_id": record["id"],
               "doi": metadata.get("doi"),
@@ -226,7 +229,7 @@ jobs:
                               nested_reports.append(item)
                   nested_path.unlink(missing_ok=True)
 
-          selected = report if report else nested_reports
+          selected = nested_reports if nested_reports else report
           aggregate = {
               "delimited_files_scanned": len(selected),
               "total_rows": sum(x["row_count"] for x in selected),
@@ -235,12 +238,14 @@ jobs:
               "full_text_with_explicit_string_binary_label_and_source": sum(x["full_text_with_explicit_string_binary_label_and_source"] for x in selected),
               "rows_with_unmapped_labels_not_guessed": "counted by per-column distribution only; numeric/ambiguous labels not mapped"
           }
+          with archive.open("rb") as archive_stream:
+              archive_sha256 = hashlib.file_digest(archive_stream, "sha256").hexdigest()
           output = {
               "dataset": "Disinformation Detection: Code and Datasets v1.1",
               "doi": "10.5281/zenodo.18135595",
               "license": "CC BY 4.0",
               "archive_md5_expected": "64b4e8888f95ec104611de9d01ffe903",
-              "archive_sha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
+              "archive_sha256": archive_sha256,
               "archive_bytes": archive.stat().st_size,
               "archive_member_count": archive_member_count,
               "top_level_delimited_files": report,
