@@ -503,6 +503,14 @@ def main():
         ("balanced", "balanced"),
         ({0: 1.0, 1: 1.15}, "fake_weight_1.15"),
         ({0: 1.0, 1: 1.30}, "fake_weight_1.30"),
+        # Extend the candidate-only search in the direction indicated by the
+        # prior frozen-policy validation sweep. Selection still requires all
+        # four gates and is performed only on the dedicated policy split;
+        # neither thresholds nor the untouched holdout are changed.
+        ({0: 1.0, 1: 1.50}, "fake_weight_1.50"),
+        ({0: 1.0, 1: 1.75}, "fake_weight_1.75"),
+        ({0: 1.0, 1: 2.00}, "fake_weight_2.00"),
+        ({0: 1.0, 1: 2.50}, "fake_weight_2.50"),
     ]
     # Search is intentionally restricted to the fit/training split and the
     # held-out validation policy split. It never observes WELFake holdout.
