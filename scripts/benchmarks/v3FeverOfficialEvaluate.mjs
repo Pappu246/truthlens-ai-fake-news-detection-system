@@ -22,6 +22,9 @@ async function fetchText(url) { const res = await fetch(url, { headers: { "user-
 async function main() {
   const predictions = path.resolve(arg("predictions") || "artifacts/v3/fever/predictions.json");
   const evaluatedCommitSha = arg("commit-sha") || process.env.TRUTHLENS_EVALUATED_COMMIT_SHA || process.env.GITHUB_SHA || null;
+  const predictionsData = JSON.parse(await fs.readFile(predictions, "utf8"));
+  if (!Array.isArray(predictionsData)) throw new Error("FEVER predictions artifact must be a JSON array");
+  if (predictionsData.length === 0) throw new Error("FEVER predictions artifact is empty");
   const actual = path.resolve(arg("actual") || "data/external/fever/shared_task_dev.jsonl");
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "truthlens-fever-"));
   try {
@@ -40,7 +43,7 @@ async function main() {
       scorer_revision: "4801615100fbf6327f8e99b5dbaefe5dd890e869",
       predictions,
       actual,
-      evaluation_count: Array.isArray(predictions) ? predictions.length : 0,
+      evaluation_count: predictionsData.length,
       truthlens_git_sha: evaluatedCommitSha,
       metrics,
       scorer_stdout: scorerRun.stdout,

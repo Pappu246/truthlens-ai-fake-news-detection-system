@@ -140,18 +140,61 @@ await checkCommitProvenance("AVeriTeC reproducibility manifest evaluated commit"
 
 const openWebHoldout = "research/open-web-v1-holdout.jsonl";
 const openWebManifest = "artifacts/v3/open-web-v1/holdout-release-manifest.json";
+const openWebGate = "artifacts/v3/open-web-v1/holdout-gate.json";
 const holdoutExists = await exists(openWebHoldout);
 const openManifestExists = await exists(openWebManifest);
-checks.push({ label: "Open-Web sealed holdout", holdoutExists, manifestExists: openManifestExists });
-if (!holdoutExists || !openManifestExists) {
-  failures.push("Open-Web human-labelled blind holdout is not sealed");
+const openGateExists = await exists(openWebGate);
+checks.push({
+  label: "Open-Web sealed human-labelled holdout",
+  holdoutExists,
+  manifestExists: openManifestExists,
+  validatorGateExists: openGateExists
+});
+if (!holdoutExists || !openManifestExists || !openGateExists) {
+  failures.push("Open-Web human-labelled blind holdout and successful validator evidence are not sealed");
 } else {
-  const release = await readJson(openWebManifest);
-  if (release.benchmark_id !== "truthlens_open_web_v1" || release.release_state !== "SEALED") {
-    failures.push("Open-Web release manifest is not SEALED");
+  try {
+    const release = await readJson(openWebManifest);
+    const validation = await readJson(openWebGate);
+    const holdoutBytes = await fs.readFile(openWebHoldout);
+    const actual = crypto.createHash("sha256").update(holdoutBytes).digest("hex");
+    const physicalLines = holdoutBytes.toString("utf8").split(/\r?\n/);
+    const holdoutRows = physicalLines.filter((line) => line.trim().length > 0).length;
+
+    if (release.benchmark_id !== "truthlens_open_web_v1" || release.release_state !== "SEALED") {
+      failures.push("Open-Web release manifest is not SEALED");
+    }
+    if (release.target_claims !== 100 || release.evaluation_count !== 100 || holdoutRows !== 100) {
+      failures.push("Open-Web holdout must contain exactly 100 claims in both file and release manifest");
+    }
+    if (!/^[a-f0-9]{64}$/i.test(release.sha256 || "") || actual !== release.sha256) {
+      failures.push("Open-Web holdout hash does not match release manifest");
+    }
+    if (validation.benchmark_id !== "truthlens_open_web_v1" ||
+        validation.status !== "SEALED" ||
+        validation.release_state !== "SEALED" ||
+        validation.record_count !== 100) {
+      failures.push("Open-Web validator gate artifact does not prove a sealed 100-claim holdout");
+    }
+    if (!Number.isInteger(release.independent_annotator_count) || release.independent_annotator_count < 2 ||
+        !Number.isInteger(validation.independent_annotator_count) || validation.independent_annotator_count < 2) {
+      failures.push("Open-Web holdout must attest at least two independent human annotators");
+    }
+    if (!/^[a-f0-9]{64}$/i.test(release.attestation_sha256 || "") ||
+        release.attestation_sha256 !== validation.attestation_sha256) {
+      failures.push("Open-Web human annotation attestation provenance is missing or inconsistent");
+    }
+    if (validation.sha256 !== release.sha256) {
+      failures.push("Open-Web validator evidence and release manifest holdout hashes differ");
+    }
+
+    checks.push({
+      label: "Open-Web holdout count, sealed validator, and human attestation",
+      pass: !failures.some((failure) => failure.includes("Open-Web"))
+    });
+  } catch (error) {
+    failures.push("Open-Web holdout gate artifacts are invalid JSON or unreadable (" + String(error) + ")");
   }
-  const actual = await sha256(openWebHoldout);
-  if (actual !== release.sha256) failures.push("Open-Web holdout hash does not match release manifest");
 }
 
 const gate = {

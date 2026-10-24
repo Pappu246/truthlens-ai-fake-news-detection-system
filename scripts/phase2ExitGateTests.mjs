@@ -21,8 +21,12 @@ async function write(root, relative, data) {
 
 async function makeFixtures(root) {
   const holdoutPath = 'research/open-web-v1-holdout.jsonl';
-  const holdout = '{"claim_id":"blind-001","label":"SUPPORTED","annotator_count":2}\n';
+  const holdout = Array.from({ length: 100 }, (_, index) => JSON.stringify({
+    claim_id: 'blind-' + String(index + 1).padStart(3, '0'),
+    human_label: ['SUPPORTED', 'REFUTED', 'INSUFFICIENT_EVIDENCE', 'CONFLICTED'][index % 4]
+  })).join('\n') + '\n';
   const holdoutSha = crypto.createHash('sha256').update(holdout).digest('hex');
+  const attestationSha = 'a'.repeat(64);
   await Promise.all([
     write(root, 'research/multibenchmark-manifest.json', {
       phase: 2,
@@ -55,7 +59,22 @@ async function makeFixtures(root) {
     write(root, 'artifacts/v2-averitec-e2e/reproducibility-manifest.json', { truthlens_git_sha: COMMIT }),
     write(root, holdoutPath, holdout),
     write(root, 'artifacts/v3/open-web-v1/holdout-release-manifest.json', {
-      benchmark_id: 'truthlens_open_web_v1', release_state: 'SEALED', sha256: holdoutSha
+      benchmark_id: 'truthlens_open_web_v1',
+      release_state: 'SEALED',
+      target_claims: 100,
+      evaluation_count: 100,
+      sha256: holdoutSha,
+      attestation_sha256: attestationSha,
+      independent_annotator_count: 2
+    }),
+    write(root, 'artifacts/v3/open-web-v1/holdout-gate.json', {
+      benchmark_id: 'truthlens_open_web_v1',
+      status: 'SEALED',
+      release_state: 'SEALED',
+      record_count: 100,
+      sha256: holdoutSha,
+      attestation_sha256: attestationSha,
+      independent_annotator_count: 2
     })
   ]);
 }
@@ -88,12 +107,19 @@ async function main() {
     assert.notEqual(missingExpectedSha.result.status, 0);
     assert.ok(missingExpectedSha.report.failures.some((item) => item.includes('expected evaluated commit SHA missing or invalid')));
 
+    await write(root, 'artifacts/v3/open-web-v1/holdout-release-manifest.json', {
+      benchmark_id: 'truthlens_open_web_v1', release_state: 'SEALED', target_claims: 100,
+      evaluation_count: 100, sha256: holdoutSha, attestation_sha256: 'b'.repeat(64), independent_annotator_count: 1
+    });
+    const invalidAttestation = await runGate(root);
+    assert.notEqual(invalidAttestation.result.status, 0);
+    assert.ok(invalidAttestation.report.failures.some((item) => item.includes('annotation attestation provenance')));
     await fs.rm(path.join(root, 'research/open-web-v1-holdout.jsonl'), { force: true });
     const noHumanHoldout = await runGate(root);
     assert.notEqual(noHumanHoldout.result.status, 0);
     assert.ok(noHumanHoldout.report.failures.some((item) => item.includes('Open-Web human-labelled blind holdout is not sealed')));
 
-    console.log('Phase 2 exit gate tests: PASS (exact-head provenance, stale/missing SHA blocked, absent human holdout remains blocked)');
+    console.log('Phase 2 exit gate tests: PASS (exact-head provenance, stale/missing SHA blocked, 100-claim holdout + annotation attestation required)');
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }
