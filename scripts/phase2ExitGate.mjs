@@ -60,6 +60,98 @@ async function checkCommitProvenance(label, file, selectCommitSha) {
   }
 }
 
+async function checkSciFactArtifact() {
+  const label = "SciFact full-split benchmark";
+  const file = "artifacts/v2-scifact-e2e/scifact-end-to-end.json";
+  const expected = manifest.benchmarks?.find((item) => item.id === "scifact");
+  const expectedClaims = expected?.expected_evaluation_claims ?? 300;
+  const expectedCorpusDocuments = expected?.corpus_documents ?? 5183;
+  const startFailureCount = failures.length;
+  if (!expected) failures.push("SciFact manifest entry missing");
+  if (expectedClaims !== 300) failures.push("SciFact manifest expected_evaluation_claims must be 300");
+  if (expectedCorpusDocuments !== 5183) failures.push("SciFact manifest corpus_documents must be 5183");
+
+  if (!(await exists(file))) {
+    failures.push(label + ": benchmark artifact missing");
+    checks.push({ label, file, pass: false, reason: "benchmark artifact missing" });
+    return;
+  }
+
+  try {
+    const report = await readJson(file);
+    if (report.benchmark !== true) failures.push(label + ": benchmark flag is not true");
+    if (report.dataset?.claims_evaluated !== expectedClaims) {
+      failures.push(label + ": claims_evaluated expected " + expectedClaims + ", got " + report.dataset?.claims_evaluated);
+    }
+    if (report.dataset?.corpus_documents !== expectedCorpusDocuments) {
+      failures.push(label + ": corpus_documents expected " + expectedCorpusDocuments + ", got " + report.dataset?.corpus_documents);
+    }
+    const rows = Array.isArray(report.rows) ? report.rows : [];
+    if (rows.length !== expectedClaims) failures.push(label + ": rows expected " + expectedClaims + ", got " + rows.length);
+
+    const provenance = report.run_provenance || {};
+    if (!/^[a-f0-9]{40}$/i.test(provenance.source_commit_sha || "")) {
+      failures.push(label + ": source commit SHA missing or invalid");
+    }
+    if (!/^[a-f0-9]{64}$/i.test(provenance.config_sha256 || "")) {
+      failures.push(label + ": configuration SHA-256 missing or invalid");
+    }
+    if (!/^[a-f0-9]{64}$/i.test(provenance.model_manifest_sha256 || "")) {
+      failures.push(label + ": model manifest SHA-256 missing or invalid");
+    }
+    if (report.models?.manifest_sha256 !== provenance.model_manifest_sha256) {
+      failures.push(label + ": model manifest SHA-256 does not match run provenance");
+    }
+
+    const endToEnd = report.end_to_end || {};
+    const evidenceRows = rows.filter((row) => Array.isArray(row.gold_evidence_ids) && row.gold_evidence_ids.length > 0);
+    const evidenceDenominator = evidenceRows.length;
+    if (endToEnd.open_candidate_recall_denominator !== evidenceDenominator) {
+      failures.push(label + ": open_candidate_recall denominator mismatch");
+    }
+    if (endToEnd.gold_evidence_recall_at_5_denominator !== evidenceDenominator) {
+      failures.push(label + ": gold_evidence_recall_at_5 denominator mismatch");
+    }
+    const expectedCandidateHits = evidenceRows.filter((row) => row.candidate_pool_recall_hit).length;
+    if (endToEnd.open_candidate_recall_hits !== expectedCandidateHits) {
+      failures.push(label + ": open_candidate_recall hits mismatch");
+    }
+    if (!Number.isInteger(endToEnd.gold_evidence_recall_at_5_hits) ||
+        endToEnd.gold_evidence_recall_at_5_hits < 0 ||
+        endToEnd.gold_evidence_recall_at_5_hits > evidenceDenominator) {
+      failures.push(label + ": gold_evidence_recall_at_5 hits outside denominator");
+    }
+    for (const key of ["benchmark_directional_accuracy", "benchmark_directional_macro_f1"]) {
+      const value = endToEnd[key];
+      if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 1) {
+        failures.push(label + ": " + key + " missing or outside [0,1]");
+      }
+    }
+    const confusion = endToEnd.benchmark_directional_confusion_matrix;
+    if (!Array.isArray(confusion)) {
+      failures.push(label + ": directional confusion matrix missing");
+    } else {
+      const classified = confusion.reduce((total, item) => total +
+        Object.values(item?.predicted || {}).reduce((subtotal, count) =>
+          subtotal + (typeof count === "number" && Number.isFinite(count) ? count : 0), 0), 0);
+      if (classified !== rows.length) failures.push(label + ": confusion matrix denominator mismatch");
+    }
+
+    checks.push({
+      label,
+      file,
+      pass: failures.length === startFailureCount,
+      evaluation_count: report.dataset?.claims_evaluated ?? null,
+      corpus_documents: report.dataset?.corpus_documents ?? null,
+      source_commit_sha: provenance.source_commit_sha ?? null,
+      sha256: await sha256(file)
+    });
+  } catch (error) {
+    failures.push(label + ": invalid benchmark artifact (" + String(error) + ")");
+    checks.push({ label, file, pass: false, reason: "invalid benchmark artifact" });
+  }
+}
+
 async function checkArtifact(label, file, expectedBenchmarkId, expectedEvaluationCount = null) {
   const ok = await exists(file);
   checks.push({ label, file, exists: ok });
@@ -110,6 +202,8 @@ const scifactBaseline = "docs/V3_PHASE2_BENCHMARK_PROTOCOL.md";
 checks.push({ label: "SciFact baseline protocol record", file: scifactBaseline, exists: await exists(scifactBaseline) });
 if (!(await exists(scifactBaseline))) failures.push("SciFact protocol record missing");
 
+await checkSciFactArtifact();
+
 await checkArtifact(
   "FEVER official score",
   "artifacts/v3/fever/official-scorer-run.json",
@@ -131,6 +225,7 @@ await checkArtifact(
   manifest.benchmarks.find((item) => item.id === "averitec")?.expected_evaluation_claims ?? null
 );
 
+await checkCommitProvenance("SciFact evaluated commit", "artifacts/v2-scifact-e2e/scifact-end-to-end.json", (artifact) => artifact.run_provenance?.source_commit_sha);
 await checkCommitProvenance("FEVER score evaluated commit", "artifacts/v3/fever/official-scorer-run.json", (artifact) => artifact.truthlens_git_sha);
 await checkCommitProvenance("FEVER adapter evaluated commit", "artifacts/v3/fever/truthlens-adapter-report.json", (artifact) => artifact.provenance?.commit_sha);
 await checkCommitProvenance("FEVEROUS score evaluated commit", "artifacts/v3/feverous/official-scorer-run.json", (artifact) => artifact.truthlens_git_sha);

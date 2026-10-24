@@ -27,6 +27,12 @@ async function makeFixtures(root) {
   })).join('\n') + '\n';
   const holdoutSha = crypto.createHash('sha256').update(holdout).digest('hex');
   const attestationSha = 'a'.repeat(64);
+  const scifactRows = Array.from({ length: 300 }, (_, index) => ({
+    gold_evidence_ids: index % 2 === 0 ? ["doc-" + index] : [],
+    candidate_pool_recall_hit: index % 2 === 0 && index < 200
+  }));
+  const scifactEvidenceDenominator = scifactRows.filter((row) => row.gold_evidence_ids.length > 0).length;
+  const scifactCandidateHits = scifactRows.filter((row) => row.gold_evidence_ids.length > 0 && row.candidate_pool_recall_hit).length;
   await Promise.all([
     write(root, 'research/multibenchmark-manifest.json', {
       phase: 2,
@@ -36,12 +42,29 @@ async function makeFixtures(root) {
         production_artifact_must_remain_unchanged: true
       },
       benchmarks: [
+        { id: 'scifact', expected_evaluation_claims: 300, corpus_documents: 5183 },
         { id: 'fever_v1', expected_evaluation_claims: COUNT },
         { id: 'feverous', expected_evaluation_claims: COUNT },
         { id: 'averitec', expected_evaluation_claims: COUNT }
       ]
     }),
     write(root, 'docs/V3_PHASE2_BENCHMARK_PROTOCOL.md', 'Frozen protocol fixture\n'),
+    write(root, 'artifacts/v2-scifact-e2e/scifact-end-to-end.json', {
+      benchmark: true,
+      dataset: { claims_evaluated: 300, corpus_documents: 5183 },
+      run_provenance: { source_commit_sha: COMMIT, config_sha256: 'd'.repeat(64), model_manifest_sha256: 'b'.repeat(64) },
+      models: { manifest_sha256: 'b'.repeat(64) },
+      rows: scifactRows,
+      end_to_end: {
+        open_candidate_recall_denominator: scifactEvidenceDenominator,
+        open_candidate_recall_hits: scifactCandidateHits,
+        gold_evidence_recall_at_5_denominator: scifactEvidenceDenominator,
+        gold_evidence_recall_at_5_hits: 75,
+        benchmark_directional_accuracy: 0.7,
+        benchmark_directional_macro_f1: 0.68,
+        benchmark_directional_confusion_matrix: [{ predicted: { SUPPORT: 100, CONTRADICT: 100, NOT_ENOUGH_INFO: 100 } }]
+      }
+    }),
     write(root, 'artifacts/v3/fever/official-scorer-run.json', {
       benchmark_id: 'fever', evaluation_count: COUNT, truthlens_git_sha: COMMIT,
       metrics: { strict_score: 0.3, label_accuracy: 0.4, evidence_precision: 0.5, evidence_recall: 0.6, evidence_f1: 0.55 }
@@ -100,6 +123,42 @@ async function main() {
     assert.equal(valid.report.production_promotion_allowed, false);
 
     await write(root, 'artifacts/v3/feverous/truthlens-adapter-report.json', { provenance: { commit_sha: STALE_COMMIT } });
+    await write(root, 'artifacts/v2-scifact-e2e/scifact-end-to-end.json', {
+      benchmark: true,
+      dataset: { claims_evaluated: 300, corpus_documents: 5183 },
+      run_provenance: { source_commit_sha: STALE_COMMIT, config_sha256: 'd'.repeat(64), model_manifest_sha256: 'b'.repeat(64) },
+      models: { manifest_sha256: 'b'.repeat(64) },
+      rows: scifactRows,
+      end_to_end: {
+        open_candidate_recall_denominator: scifactEvidenceDenominator,
+        open_candidate_recall_hits: scifactCandidateHits,
+        gold_evidence_recall_at_5_denominator: scifactEvidenceDenominator,
+        gold_evidence_recall_at_5_hits: 75,
+        benchmark_directional_accuracy: 0.7,
+        benchmark_directional_macro_f1: 0.68,
+        benchmark_directional_confusion_matrix: [{ predicted: { SUPPORT: 100, CONTRADICT: 100, NOT_ENOUGH_INFO: 100 } }]
+      }
+    });
+    const staleSciFact = await runGate(root);
+    assert.notEqual(staleSciFact.result.status, 0);
+    assert.ok(staleSciFact.report.failures.some((item) => item.includes('SciFact evaluated commit') && item.includes('commit SHA mismatch')));
+    await write(root, 'artifacts/v2-scifact-e2e/scifact-end-to-end.json', {
+      benchmark: true,
+      dataset: { claims_evaluated: 300, corpus_documents: 5183 },
+      run_provenance: { source_commit_sha: COMMIT, config_sha256: 'd'.repeat(64), model_manifest_sha256: 'b'.repeat(64) },
+      models: { manifest_sha256: 'b'.repeat(64) },
+      rows: scifactRows,
+      end_to_end: {
+        open_candidate_recall_denominator: scifactEvidenceDenominator,
+        open_candidate_recall_hits: scifactCandidateHits,
+        gold_evidence_recall_at_5_denominator: scifactEvidenceDenominator,
+        gold_evidence_recall_at_5_hits: 75,
+        benchmark_directional_accuracy: 0.7,
+        benchmark_directional_macro_f1: 0.68,
+        benchmark_directional_confusion_matrix: [{ predicted: { SUPPORT: 100, CONTRADICT: 100, NOT_ENOUGH_INFO: 100 } }]
+      }
+    });
+
     const stale = await runGate(root);
     assert.notEqual(stale.result.status, 0);
     assert.ok(stale.report.failures.some((item) => item.includes('FEVEROUS adapter evaluated commit') && item.includes('commit SHA mismatch')));
@@ -120,7 +179,7 @@ async function main() {
     assert.notEqual(noHumanHoldout.result.status, 0);
     assert.ok(noHumanHoldout.report.failures.some((item) => item.includes('Open-Web human-labelled blind holdout and successful validator evidence are not sealed')));
 
-    console.log('Phase 2 exit gate tests: PASS (exact-head provenance, stale/missing SHA blocked, 100-claim holdout + annotation attestation required)');
+    console.log('Phase 2 exit gate tests: PASS (SciFact full-split exact-SHA provenance, stale/missing SHA blocked, 100-claim holdout + annotation attestation required)');
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }
