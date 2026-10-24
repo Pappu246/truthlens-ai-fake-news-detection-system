@@ -108,22 +108,28 @@ jobs:
           def norm(value):
               return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
 
+          SHORTENERS = {"bit.ly", "t.co", "tinyurl.com", "goo.gl", "ow.ly", "is.gd", "buff.ly", "trib.al", "sptnk.ne.ws"}
+
           def domain_from(value):
-              value = str(value or "").strip()
-              if not value:
+              raw = str(value or "").strip()
+              if not raw:
                   return None
-              if "://" not in value:
-                  value = "https://" + value
+              if "://" not in raw:
+                  raw = "https://" + raw
               try:
-                  host = (urlsplit(value).hostname or "").lower().rstrip(".")
-                  if host.startswith("www."):
-                      host = host[4:]
-                  if not host:
-                      return None
-                  sld = get_sld(host, strict=True)
-                  return str(sld).lower() if sld else None
-              except Exception:
+                  host = (urlsplit(raw).hostname or "").lower().rstrip(".").encode("idna").decode("ascii")
+              except (ValueError, UnicodeError):
                   return None
+              if host.startswith("www."):
+                  host = host[4:]
+              if host in SHORTENERS or "." not in host:
+                  return None
+              try:
+                  sld = get_sld(host, strict=True)
+              except Exception:
+                  sld = None
+              sld = str(sld or "").lower().rstrip(".")
+              return sld if sld and sld not in SHORTENERS else None
 
           def map_label(value):
               value = re.sub(r"\s+", " ", str(value or "").strip().lower())
@@ -154,6 +160,7 @@ jobs:
                   "full_text_rows_300_chars_50_words": 0,
                   "full_text_with_explicit_string_binary_label": 0,
                   "full_text_with_explicit_string_binary_label_and_source": 0,
+                  "source_domain_fingerprints": set(),
                   "label_value_counts": {col: Counter() for col in label_columns},
                   "mapped_label_counts": {col: Counter() for col in label_columns},
               }
@@ -183,11 +190,17 @@ jobs:
                   if not mapped_label:
                       continue
                   result["full_text_with_explicit_string_binary_label"] += 1
-                  source = next((domain_from(row.get(col)) for col in source_columns if domain_from(row.get(col))), None)
+                  source = None
+                  for col in source_columns:
+                      source = domain_from(row.get(col))
+                      if source:
+                          break
                   if source:
                       result["full_text_with_explicit_string_binary_label_and_source"] += 1
+                      result["source_domain_fingerprints"].add(hashlib.sha256(source.encode("utf-8")).hexdigest())
               result["label_value_counts"] = {col: dict(counts.most_common(40)) for col, counts in result["label_value_counts"].items()}
               result["mapped_label_counts"] = {col: dict(counts) for col, counts in result["mapped_label_counts"].items()}
+              result["source_domain_fingerprints"] = sorted(result["source_domain_fingerprints"])
               return result
 
           report = []
@@ -242,6 +255,8 @@ jobs:
               "full_text_rows_300_chars_50_words": sum(x["full_text_rows_300_chars_50_words"] for x in selected),
               "full_text_with_explicit_string_binary_label": sum(x["full_text_with_explicit_string_binary_label"] for x in selected),
               "full_text_with_explicit_string_binary_label_and_source": sum(x["full_text_with_explicit_string_binary_label_and_source"] for x in selected),
+              "unique_source_domain_fingerprints": sorted({fp for x in selected for fp in x["source_domain_fingerprints"]}),
+              "source_domain_fingerprint_algorithm": "SHA-256 of canonical registrable domain UTF-8; unsalted equality fingerprint, not anonymization",
               "rows_with_unmapped_labels_not_guessed": "counted by per-column distribution only; numeric/ambiguous labels not mapped"
           }
           with archive.open("rb") as archive_stream:
@@ -261,7 +276,8 @@ jobs:
                   "Structural/schema audit only; no article body, title, URL, domain or individual row is emitted.",
                   "Only explicit string values for binary FAKE/REAL are mapped. Numeric and ambiguous labels are not guessed.",
                   "A large row count does not prove independent publishers or valid item-level ground truth.",
-                  "External performance evaluation must remain blocked until text/source overlap against candidate-fitting corpora is checked."
+                  "External performance evaluation must remain blocked until text/source overlap against candidate-fitting corpora is checked.",
+                  "Source-domain fingerprints are unsalted SHA-256 equality fingerprints, not anonymization; no raw source domain is emitted."
               ],
               "release_gate_passed": False
           }
