@@ -8,7 +8,7 @@ from publicsuffix2 import get_sld
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
-from isot_data_pipeline import near_duplicate_groups
+from datasketch import MinHash, MinHashLSH
 from train_polyglot_source_heldout_candidate import load_records, normalize_domain
 
 EXPECTED_EXTERNAL_MD5 = "64b4e8888f95ec104611de9d01ffe903"
@@ -40,6 +40,100 @@ def article_text_fingerprint(text: str) -> str:
 def domain_fingerprint(value):
     canonical = normalize_domain(value)
     return sha(canonical.encode("utf-8")) if canonical else None
+
+def word_shingles(text: str):
+    normalized = re.sub(r"[^a-z0-9\s]", " ", str(text or "").casefold())
+    words = re.sub(r"\s+", " ", normalized).strip().split()
+    if len(words) < 5:
+        material = " ".join(words)
+        return {int.from_bytes(hashlib.blake2b(material.encode("utf-8"), digest_size=8).digest(), "big")} if material else set()
+    return {
+        int.from_bytes(hashlib.blake2b(" ".join(words[i:i + 5]).encode("utf-8"), digest_size=8).digest(), "big")
+        for i in range(len(words) - 4)
+    }
+
+def make_minhash(shingles):
+    signature = MinHash(num_perm=128)
+    for item in shingles:
+        signature.update(item.to_bytes(8, "big"))
+    return signature
+
+def exact_jaccard(left, right):
+    if not left and not right:
+        return 1.0
+    union = len(left | right)
+    return len(left & right) / union if union else 0.0
+
+def filter_near_duplicates_direct(candidate_records, external_records):
+    """Filter by direct, exact Jaccard matches, avoiding transitive LSH components."""
+    lsh = MinHashLSH(threshold=0.70, num_perm=128)
+    shingle_cache = {}
+    candidate_ids = set()
+    accepted = {}
+    conflicted = set()
+    external_near_duplicates_removed = 0
+    cross_corpus_removed = 0
+    conflicting_near_duplicates_removed = 0
+
+    for record in candidate_records:
+        record_id = "polyglot-" + str(record["id"])
+        shingles = word_shingles(record["text"])
+        if not shingles:
+            continue
+        lsh.insert(record_id, make_minhash(shingles))
+        shingle_cache[record_id] = shingles
+        candidate_ids.add(record_id)
+
+    for record in sorted(external_records, key=lambda item: item["text_hash"]):
+        record_id = record["_id"]
+        shingles = word_shingles(record["text"])
+        if not shingles:
+            continue
+        signature = make_minhash(shingles)
+        neighbors = lsh.query(signature)
+        exact_matches = [
+            neighbor for neighbor in neighbors
+            if neighbor in shingle_cache and exact_jaccard(shingles, shingle_cache[neighbor]) >= 0.70
+        ]
+
+        if any(neighbor in candidate_ids for neighbor in exact_matches):
+            cross_corpus_removed += 1
+            continue
+
+        conflict_matches = [neighbor for neighbor in exact_matches if neighbor in conflicted]
+        if conflict_matches:
+            conflicted.add(record_id)
+            shingle_cache[record_id] = shingles
+            lsh.insert(record_id, signature)
+            conflicting_near_duplicates_removed += 1
+            continue
+
+        external_matches = [neighbor for neighbor in exact_matches if neighbor in accepted]
+        if any(accepted[neighbor]["y"] != record["y"] for neighbor in external_matches):
+            for neighbor in external_matches:
+                accepted.pop(neighbor, None)
+                conflicted.add(neighbor)
+            conflicted.add(record_id)
+            shingle_cache[record_id] = shingles
+            lsh.insert(record_id, signature)
+            conflicting_near_duplicates_removed += len(external_matches) + 1
+            continue
+
+        if external_matches:
+            # A direct same-label duplicate of an already-retained representative
+            # is removed; similarity chains alone do not collapse unrelated endpoints.
+            external_near_duplicates_removed += 1
+            continue
+
+        accepted[record_id] = record
+        shingle_cache[record_id] = shingles
+        lsh.insert(record_id, signature)
+
+    return sorted(accepted.values(), key=lambda item: item["text_hash"]), {
+        "cross_corpus_near_duplicate_articles_removed": cross_corpus_removed,
+        "external_near_duplicate_articles_removed": external_near_duplicates_removed,
+        "conflicting_near_duplicate_articles_removed": conflicting_near_duplicates_removed,
+    }
 
 def scan_delimited(stream, delimiter, unique, counters):
     reader = csv.DictReader(io.TextIOWrapper(stream, encoding="utf-8-sig", errors="replace", newline=""), delimiter=delimiter)
@@ -172,37 +266,12 @@ def main():
         if hashlib.sha256(record["domain"].encode("utf-8")).hexdigest() not in external_publisher_set
     ]
 
-    combined, by_id, external_by_id = [], {}, {}
-    for record in filtered_candidate_rows:
-        item_id = "polyglot-" + str(record["id"])
-        item = {"_id": item_id, "text": record["text"], "kind": "polyglot"}
-        combined.append(item)
-        by_id[item_id] = item
-    for record in eligible:
-        item_id = record["_id"]
-        item = {"_id": item_id, "text": record["text"], "kind": "external", "record": record}
-        combined.append(item)
-        by_id[item_id] = item
-        external_by_id[item_id] = record
-
-    _, groups = near_duplicate_groups(combined)
-    selected_external = []
-    cross_corpus_removed = external_near_duplicates_removed = conflicting_near_duplicates_removed = 0
-    for members in groups.values():
-        polyglot_members = [member for member in members if by_id[member]["kind"] == "polyglot"]
-        external_members = [external_by_id[member] for member in members if member in external_by_id]
-        if not external_members:
-            continue
-        if polyglot_members:
-            cross_corpus_removed += len(external_members)
-            continue
-        if len({record["y"] for record in external_members}) != 1:
-            conflicting_near_duplicates_removed += len(external_members)
-            continue
-        external_members.sort(key=lambda item: item["text_hash"])
-        selected_external.append(external_members[0])
-        external_near_duplicates_removed += max(0, len(external_members) - 1)
-
+    selected_external, near_duplicate_counts = filter_near_duplicates_direct(
+        filtered_candidate_rows, eligible
+    )
+    cross_corpus_removed = near_duplicate_counts["cross_corpus_near_duplicate_articles_removed"]
+    external_near_duplicates_removed = near_duplicate_counts["external_near_duplicate_articles_removed"]
+    conflicting_near_duplicates_removed = near_duplicate_counts["conflicting_near_duplicate_articles_removed"]
     selected_external.sort(key=lambda item: item["text_hash"])
     evaluation_path = output_dir / "external-disjoint-evaluation.jsonl"
     write_jsonl(evaluation_path, selected_external)

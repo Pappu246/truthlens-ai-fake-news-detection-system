@@ -57,3 +57,11 @@ def test_nonempty_text_column_wins_over_blank_primary_body_and_class_has_priorit
     assert counts["rows_scanned"] == 2
     assert len(unique) == 2
     assert labels == {"FAKE", "REAL"}
+
+
+def test_exact_jaccard_is_direct_and_symmetric():
+    from prepare_external_source_disjoint_data import exact_jaccard
+    left = {1, 2, 3, 4}
+    right = {2, 3, 4, 5}
+    assert exact_jaccard(left, right) == 0.6
+    assert exact_jaccard(left, right) == exact_jaccard(right, left)
