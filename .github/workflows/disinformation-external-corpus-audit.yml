@@ -56,7 +56,10 @@ jobs:
               raise SystemExit(f"Unexpected/missing dataset license metadata: {license_id!r}")
           download_url = item.get("links", {}).get("content") or item.get("links", {}).get("download")
           if not download_url:
-              raise SystemExit(f"No binary content link in Zenodo metadata for {item.get('key')!r}")
+              from urllib.parse import quote
+              # Zenodo v12 sometimes exposes only the file-metadata link; resolve the
+              # binary download URL using the key returned by that official record.
+              download_url = f"https://zenodo.org/records/18135595/files/{quote(item['key'], safe='')}?download=1"
           Path("/tmp/zenodo-dataset-url.txt").write_text(download_url, encoding="utf-8")
           print(json.dumps({
               "record_id": record["id"],
