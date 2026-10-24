@@ -12,7 +12,6 @@ from publicsuffix2 import get_sld
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, average_precision_score, balanced_accuracy_score, brier_score_loss, confusion_matrix, f1_score, precision_score, recall_score, roc_auc_score
-from sklearn.model_selection import train_test_split
 from sklearn.svm import LinearSVC
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/"scripts"))
@@ -165,7 +164,20 @@ def main():
     vec=TfidfVectorizer(analyzer=runtime_analyzer,lowercase=False,token_pattern=None,max_features=args.max_features,min_df=args.min_df,sublinear_tf=True,norm="l2")
     Xtr=vec.fit_transform([r["clean"] for r in train]); Xv=vec.transform([r["clean"] for r in val]); Xte=vec.transform([r["clean"] for r in test])
     ytr=np.asarray([r["y"] for r in train]); yv=np.asarray([r["y"] for r in val]); yte=np.asarray([r["y"] for r in test])
-    cal_ix,pol_ix=train_test_split(np.arange(len(val)),test_size=.5,random_state=SEED,stratify=yv); Xcal,ycal=Xv[cal_ix],yv[cal_ix]; Xpol=Xv[pol_ix]
+    # Calibration and policy selection use different publisher groups within the validation split.
+    # The final test split remains untouched for the once-only held-out evaluation.
+    cal_domains=set(); pol_domains=set()
+    for label in (0,1):
+        val_domains=sorted({r["domain"] for r in val if r["y"]==label},key=lambda d:sha(f"truthlens-val-half:{SEED}:{label}:{d}".encode()))
+        ncal=max(1,len(val_domains)//2)
+        if len(val_domains)-ncal<1: raise SystemExit(f"Too few validation publishers for label {label}.")
+        cal_domains.update(val_domains[:ncal]); pol_domains.update(val_domains[ncal:])
+    cal_ix=np.asarray([i for i,r in enumerate(val) if r["domain"] in cal_domains],dtype=int)
+    pol_ix=np.asarray([i for i,r in enumerate(val) if r["domain"] in pol_domains],dtype=int)
+    if {val[int(i)]["y"] for i in cal_ix}!={0,1} or {val[int(i)]["y"] for i in pol_ix}!={0,1}:
+        raise SystemExit("Calibration and policy-selection publisher groups must each contain both classes.")
+    if cal_domains & pol_domains: raise SystemExit("Publisher overlap between calibration and policy selection.")
+    Xcal,ycal=Xv[cal_ix],yv[cal_ix]; Xpol=Xv[pol_ix]
     polrows=with_coverage([val[int(i)] for i in pol_ix],vec.vocabulary_); ypol=yv[pol_ix]; sweeps=[]
     for cw in (None,"balanced"):
       for C in (.1,.25,.5,1.,2.):
