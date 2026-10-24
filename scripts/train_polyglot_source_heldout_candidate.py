@@ -56,6 +56,43 @@ def publisher_domain_fingerprints(domains):
         if (canonical := normalize_domain(raw)) is not None
     }
     return sorted(fingerprints)
+
+def load_external_publisher_exclusions(path):
+    raw = Path(path).read_bytes()
+    payload = json.loads(raw.decode("utf-8"))
+    if payload.get("schema_version") != 1:
+        raise SystemExit("Unsupported external publisher exclusion schema")
+    fingerprints = payload.get("publisher_domain_fingerprints")
+    if not isinstance(fingerprints, list) or not fingerprints:
+        raise SystemExit("External publisher exclusion list is empty or malformed")
+    if any(not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value) for value in fingerprints):
+        raise SystemExit("External publisher exclusions must be lowercase SHA-256 fingerprints")
+    normalized = sorted(set(fingerprints))
+    if len(normalized) != len(fingerprints):
+        raise SystemExit("External publisher exclusion set contains duplicates")
+    set_sha = sha(json.dumps(normalized, separators=(",", ":")).encode("utf-8"))
+    if payload.get("publisher_fingerprint_set_sha256") != set_sha:
+        raise SystemExit("External publisher fingerprint-set SHA-256 mismatch")
+    source_archive_sha = payload.get("source_archive_sha256")
+    if not isinstance(source_archive_sha, str) or not re.fullmatch(r"[0-9a-f]{64}", source_archive_sha):
+        raise SystemExit("Missing or malformed external source archive SHA-256")
+    return set(normalized), {
+        "applied": True,
+        "source_archive_sha256": source_archive_sha,
+        "publisher_fingerprint_set_sha256": set_sha,
+        "publisher_fingerprint_count": len(normalized),
+        "exclusion_input_sha256": sha(raw),
+    }
+
+def exclude_external_publishers(records, external_fingerprints):
+    excluded = [record for record in records if sha(record["domain"].encode("utf-8")) in external_fingerprints]
+    kept = [record for record in records if sha(record["domain"].encode("utf-8")) not in external_fingerprints]
+    return kept, {
+        "candidate_rows_before_source_exclusion": len(records),
+        "candidate_rows_excluded_for_external_publisher_overlap": len(excluded),
+        "candidate_rows_after_source_exclusion": len(kept),
+    }
+
 def label_ok(v,expected):
     if v is None or (isinstance(v,float) and math.isnan(v)): return True
     raw=re.sub(r"[^a-z0-9]+"," ",str(v).strip().lower()).strip()
@@ -156,7 +193,7 @@ def with_coverage(rows,vocab):
         out.append({**r,"candidate_term_count":len(terms),"coverage_ratio":sum(t in vocab for t in terms)/max(1,len(terms))})
     return out
 def main():
-    ap=argparse.ArgumentParser(); ap.add_argument("--dataset-dir",required=True); ap.add_argument("--archive",required=True); ap.add_argument("--output-dir",default=str(ROOT/"artifacts"/"models")); ap.add_argument("--max-features",type=int,default=16000); ap.add_argument("--min-df",type=int,default=2)
+    ap=argparse.ArgumentParser(); ap.add_argument("--dataset-dir",required=True); ap.add_argument("--archive",required=True); ap.add_argument("--output-dir",default=str(ROOT/"artifacts"/"models")); ap.add_argument("--max-features",type=int,default=16000); ap.add_argument("--min-df",type=int,default=2); ap.add_argument("--exclude-publisher-fingerprints")
     args=ap.parse_args(); archive=Path(args.archive)
     if not archive.is_file(): raise SystemExit(f"Inner dataset archive missing: {archive}")
     archive_sha=sha(archive.read_bytes())
@@ -167,6 +204,13 @@ def main():
     if not {"fake.xlsx","real.xlsx"}.issubset(names): raise SystemExit("Pinned ZIP missing Fake.xlsx/Real.xlsx")
     if args.max_features<1000 or args.min_df<1: raise SystemExit("Require --max-features >=1000 and --min-df >=1")
     records,workbook_stats=load_records(Path(args.dataset_dir)); eligible_before=len(records)
+    source_exclusion={"applied":False,"records_excluded_from_development":0}
+    if args.exclude_publisher_fingerprints:
+        excluded_fingerprints, exclusion_contract = load_external_publisher_exclusions(args.exclude_publisher_fingerprints)
+        records, exclusion_counts = exclude_external_publishers(records, excluded_fingerprints)
+        source_exclusion={**exclusion_contract,**exclusion_counts,"records_excluded_from_development":exclusion_counts["candidate_rows_excluded_for_external_publisher_overlap"]}
+        if not records:
+            raise SystemExit("External publisher exclusion removed every candidate training record.")
     records,exact_stats=dedup_exact(records); records,near_stats=dedup_near(records); records,mixed_stats=exclude_mixed_publishers(records)
     sets,domain_sets=publisher_split(records); train,val,test=sets["train"],sets["validation"],sets["test"]
     vec=TfidfVectorizer(analyzer=runtime_analyzer,lowercase=False,token_pattern=None,max_features=args.max_features,min_df=args.min_df,sublinear_tf=True,norm="l2")
@@ -202,7 +246,7 @@ def main():
     def predict(X):
         p=np.clip(cal.predict_proba(svm.decision_function(X).reshape(-1,1))[:,1],1e-8,1-1e-8); logit=np.log(p/(1-p)); return 1/(1+np.exp(-np.clip(scale*logit+offset,-50,50)))
     pval,ptest=predict(Xv),predict(Xte); valscored=with_coverage(val,vec.vocabulary_); testscored=with_coverage(test,vec.vocabulary_); vocab={t:int(i) for t,i in vec.vocabulary_.items()}
-    vpayload={"dataset":DATASET,"archive_sha256":archive_sha,"seed":SEED,"split":"publisher-disjoint within same dataset; deterministic 65/15/20 domain split by class","train_domain_sha256":sha("\n".join(sorted(domain_sets["train"])).encode()),"validation_domain_sha256":sha("\n".join(sorted(domain_sets["validation"])).encode()),"calibration_domain_sha256":sha("\n".join(sorted(cal_domains)).encode()),"policy_selection_domain_sha256":sha("\n".join(sorted(pol_domains)).encode()),"test_domain_sha256":sha("\n".join(sorted(domain_sets["test"])).encode()),"max_features":args.max_features,"min_df":args.min_df,"selected_C":chosen["C"],"selected_class_weight":chosen["class_weight"],"calibration_scale":scale,"calibration_offset":offset,"fake_threshold":FAKE_THRESHOLD,"real_threshold":REAL_THRESHOLD,"independent_external_validation":False}
+    vpayload={"dataset":DATASET,"archive_sha256":archive_sha,"seed":SEED,"split":"publisher-disjoint within same dataset; deterministic 65/15/20 domain split by class","train_domain_sha256":sha("\n".join(sorted(domain_sets["train"])).encode()),"validation_domain_sha256":sha("\n".join(sorted(domain_sets["validation"])).encode()),"calibration_domain_sha256":sha("\n".join(sorted(cal_domains)).encode()),"policy_selection_domain_sha256":sha("\n".join(sorted(pol_domains)).encode()),"test_domain_sha256":sha("\n".join(sorted(domain_sets["test"])).encode()),"max_features":args.max_features,"min_df":args.min_df,"external_publisher_exclusion":source_exclusion,"selected_C":chosen["C"],"selected_class_weight":chosen["class_weight"],"calibration_scale":scale,"calibration_offset":offset,"fake_threshold":FAKE_THRESHOLD,"real_threshold":REAL_THRESHOLD,"independent_external_validation":False}
     version="polyglot-source-svm-"+sha(json.dumps(vpayload,sort_keys=True,separators=(",",":")).encode())[:12]; out=Path(args.output_dir).resolve()/version; out.mkdir(parents=True,exist_ok=False)
     artifact={"model_name":"Linear SVM (Calibrated; Publisher-Held-Out Research Candidate)","model_type":"linear_svm_calibrated","model_version":version,"trained_at":datetime.now(timezone.utc).isoformat(),"is_demo":False,"dataset_status":"SOURCE-HELD-OUT RESEARCH CANDIDATE","dataset_info":{"name":DATASET+" publisher-held-out split","source_path":"official Fake.xlsx + Real.xlsx English-translated body/title","total_samples":len(records),"train_samples":len(train),"validation_samples":len(val),"test_samples":len(test),"holdout_samples":len(test),"real_samples":int(np.sum(ytr==0)),"fake_samples":int(np.sum(ytr==1)),"vocabulary_size":len(vocab),"is_demo":False,"dataset_status":"SOURCE-HELD-OUT RESEARCH CANDIDATE","evaluation_status":"Publisher domains disjoint inside same corpus; external release gate remains blocked."},"preprocessing":{"lowercase":True,"strip_urls":True,"strip_html":True,"strip_punctuation":True,"remove_stopwords":True,"min_token_length":3,"ngram_range":[1,2],"sublinear_tf":True},"vocabulary":vocab,"idf":vec.idf_.astype(float).tolist(),"selected_model":{"name":"Linear SVM (Calibrated)","inference_mode":"single_calibrated_svm","weights":svm.coef_[0].astype(float).tolist(),"bias":float(svm.intercept_[0]),"plattA":-float(cal.coef_[0,0])*scale,"plattB":-float(cal.intercept_[0])*scale-offset},"logistic_regression":{"weights":svm.coef_[0].astype(float).tolist(),"bias":float(svm.intercept_[0])},"metrics":{"validation_raw":raw_metrics(yv,pval),"publisher_heldout_test_raw":raw_metrics(yte,ptest),"validation_frozen_policy":policy_metrics(valscored,pval),"publisher_heldout_test_frozen_policy":policy_metrics(testscored,ptest),"policy_selection":{"selected_C":chosen["C"],"class_weight":chosen["class_weight"],"calibration_scale":scale,"calibration_offset":offset,"selection_metrics":chosen["pm"],"passed_internal_frozen_policy_gate":chosen["passed"],"sweep":[{"C":s["C"],"class_weight":s["class_weight"],"scale":s["scale"],"offset":s["offset"],"passed":s["passed"],**s["pm"]} for s in sweeps]}},"thresholds":{"fake_threshold":FAKE_THRESHOLD,"real_threshold":REAL_THRESHOLD,"min_text_length":60,"min_word_count":20},"training_contract":vpayload}
     apath=out/"model_artifact.json"; apath.write_text(json.dumps(artifact,separators=(",",":")),encoding="utf8"); fixtures=[]
@@ -212,7 +256,7 @@ def main():
         fixtures.append({"id":item["id"],"text":item["text"],"expected_fake_probability":oracle,"candidate_terms":terms,"matched_terms":matched})
     (out/"runtime_parity_fixtures.json").write_text(json.dumps(fixtures,indent=2),encoding="utf8")
     overlaps={f"{a}_{b}":sorted(domain_sets[a]&domain_sets[b]) for a,b in (("train","validation"),("train","test"),("validation","test"))}
-    report={"schema_version":1,"status":"COMPLETED","task":"Same-dataset publisher-held-out diagnostic; not independent external release validation.","dataset":{"name":DATASET,"doi":"10.17632/8yfrm6z9dx.1","version":"1","license":"CC BY 4.0","archive_sha256":archive_sha,"workbooks":workbook_stats},"data_flow":{"eligible_before_dedup":eligible_before,"after_exact_near_and_mixed_publisher_filters":len(records),"split_counts":{k:len(v) for k,v in sets.items()},"domain_counts":{k:len(domain_sets[k]) for k in domain_sets},"class_counts":{k:{"real":sum(r["y"]==0 for r in v),"fake":sum(r["y"]==1 for r in v)} for k,v in sets.items()},**exact_stats,**near_stats,**mixed_stats},"publisher_separation":{"status":"PASS_WITHIN_DATASET","method":"publicsuffix2 pinned public suffix list","overlap":overlaps,"split_domain_sha256":{k:vpayload[f"{k}_domain_sha256"] for k in ("train","validation","test")},"domain_fingerprint_algorithm":"SHA-256 of canonical registrable-domain UTF-8; unsalted equality fingerprints, not anonymization","domain_fingerprints":{"candidate_development_corpus":publisher_domain_fingerprints([r["domain"] for r in records]),"train":publisher_domain_fingerprints([r["domain"] for r in train]),"validation":publisher_domain_fingerprints([r["domain"] for r in val]),"test":publisher_domain_fingerprints([r["domain"] for r in test])},"validation_subgroups":{"calibration_publisher_sha256":vpayload["calibration_domain_sha256"],"policy_selection_publisher_sha256":vpayload["policy_selection_domain_sha256"],"calibration_policy_publisher_overlap":sorted(cal_domains & pol_domains)}},"candidate":{"model_version":version,"artifact_sha256":sha(apath.read_bytes()),"production_eligible":False,"promotion_status":"CANDIDATE_ONLY"},"metrics":artifact["metrics"],"release_gate":{"passed":False,"required_independent_full_articles":MIN_EXTERNAL_SAMPLES,"publisher_heldout_articles":len(test),"independent_external_dataset":False,"publisher_disjoint_within_dataset":True,"reason":"Same-dataset publisher holdout does not satisfy the independent external full-article release gate."},"limits":["All partitions come from one dataset release; publisher holdout is not a separate independent corpus.","Mixed-label publishers are excluded, reducing sample count and potentially biasing the subset.","Near duplicates are removed before partitioning; this does not establish source independence from ISOT/WELFake.","Candidate remains non-promotable; canonical production model and thresholds are unchanged."]}
+    report={"schema_version":1,"status":"COMPLETED","task":"Same-dataset publisher-held-out diagnostic; not independent external release validation.","dataset":{"name":DATASET,"doi":"10.17632/8yfrm6z9dx.1","version":"1","license":"CC BY 4.0","archive_sha256":archive_sha,"workbooks":workbook_stats},"data_flow":{"eligible_before_dedup":eligible_before,"external_publisher_exclusion":source_exclusion,"after_exact_near_and_mixed_publisher_filters":len(records),"split_counts":{k:len(v) for k,v in sets.items()},"domain_counts":{k:len(domain_sets[k]) for k in domain_sets},"class_counts":{k:{"real":sum(r["y"]==0 for r in v),"fake":sum(r["y"]==1 for r in v)} for k,v in sets.items()},**exact_stats,**near_stats,**mixed_stats},"publisher_separation":{"status":"PASS_WITHIN_DATASET","method":"publicsuffix2 pinned public suffix list","overlap":overlaps,"split_domain_sha256":{k:vpayload[f"{k}_domain_sha256"] for k in ("train","validation","test")},"domain_fingerprint_algorithm":"SHA-256 of canonical registrable-domain UTF-8; unsalted equality fingerprints, not anonymization","domain_fingerprints":{"candidate_development_corpus":publisher_domain_fingerprints([r["domain"] for r in records]),"train":publisher_domain_fingerprints([r["domain"] for r in train]),"validation":publisher_domain_fingerprints([r["domain"] for r in val]),"test":publisher_domain_fingerprints([r["domain"] for r in test])},"validation_subgroups":{"calibration_publisher_sha256":vpayload["calibration_domain_sha256"],"policy_selection_publisher_sha256":vpayload["policy_selection_domain_sha256"],"calibration_policy_publisher_overlap":sorted(cal_domains & pol_domains)}},"candidate":{"model_version":version,"artifact_sha256":sha(apath.read_bytes()),"production_eligible":False,"promotion_status":"CANDIDATE_ONLY"},"metrics":artifact["metrics"],"release_gate":{"passed":False,"required_independent_full_articles":MIN_EXTERNAL_SAMPLES,"publisher_heldout_articles":len(test),"independent_external_dataset":False,"publisher_disjoint_within_dataset":True,"reason":"Same-dataset publisher holdout does not satisfy the independent external full-article release gate."},"limits":["All partitions come from one dataset release; publisher holdout is not a separate independent corpus.","Mixed-label publishers are excluded, reducing sample count and potentially biasing the subset.","Near duplicates are removed before partitioning; this does not establish source independence from ISOT/WELFake.","Candidate remains non-promotable; canonical production model and thresholds are unchanged."]}
     (out/"source_holdout_validation.json").write_text(json.dumps(report,indent=2),encoding="utf8")
     manifest={"schema_version":1,"model_version":version,"created_at":artifact["trained_at"],"dataset_name":DATASET,"dataset_fingerprint":vpayload,"training_contract":vpayload,"software":{"python":platform.python_version(),"numpy":np.__version__,"pandas":pd.__version__},"metrics":artifact["metrics"],"report":"source_holdout_validation.json","artifact_sha256":sha(apath.read_bytes()),"parity_fixture_count":len(fixtures),"production_artifact":"data/saved_model_artifacts.json","production_eligible":False,"promotion_status":"CANDIDATE_ONLY"}
     (out/"manifest.json").write_text(json.dumps(manifest,indent=2),encoding="utf8")
