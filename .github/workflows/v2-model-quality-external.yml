@@ -199,10 +199,10 @@ jobs:
           TRUTHLENS_V2_ML_CALL_TIMEOUT_MS: 180000
         run: |
           set -euo pipefail
-          npm run eval:v2-nli-candidate-comparison -- \\
-            --data-dir=/tmp/truthlens-model-quality/scifact \\
-            --max-claims=300 \\
-            --output=artifacts/v2-model-quality/nli-candidate-comparison.json \\
+          npm run eval:v2-nli-candidate-comparison -- \
+            --data-dir=/tmp/truthlens-model-quality/scifact \
+            --max-claims=300 \
+            --output=artifacts/v2-model-quality/nli-candidate-comparison.json \
             2>&1 | tee artifacts/v2-model-quality/nli-candidate-comparison.log
 
       - name: Upload local pretrained evaluation results
