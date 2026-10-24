@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: truthlens-disinformation-corpus-audit
@@ -30,6 +31,14 @@ jobs:
 
       - name: Install pinned publisher-domain parser
         run: python -m pip install publicsuffix2==2.20191221
+
+      - name: Download pinned candidate publisher-fingerprint artifact
+        uses: actions/download-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: truthlens-polyglot-source-heldout-candidate
+          run-id: 40112758824
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: /tmp/polyglot-candidate
 
       - name: Fetch and verify official Zenodo record metadata
         shell: bash
@@ -100,6 +109,24 @@ jobs:
           from publicsuffix2 import get_sld
 
           archive = Path("/tmp/zenodo-datasets.zip")
+          candidate_reports = list(Path("/tmp/polyglot-candidate").rglob("source_holdout_validation.json"))
+          if len(candidate_reports) != 1:
+              raise SystemExit(f"Expected exactly one pinned candidate report, found {len(candidate_reports)}")
+          candidate_report = json.loads(candidate_reports[0].read_text(encoding="utf-8"))
+          expected_model_version = "polyglot-source-svm-51ebe2298575"
+          expected_artifact_sha256 = "7a3e4edc45396fc164f10768bf5f7cb00d817223a688b35c6f90b9d58dd3a986"
+          if candidate_report.get("candidate", {}).get("model_version") != expected_model_version:
+              raise SystemExit("Pinned candidate model version does not match audit protocol")
+          if candidate_report.get("candidate", {}).get("artifact_sha256") != expected_artifact_sha256:
+              raise SystemExit("Pinned candidate artifact hash does not match audit protocol")
+          candidate_domain_fingerprints = set(
+              candidate_report.get("publisher_separation", {}).get("domain_fingerprints", {}).get("candidate_development_corpus", [])
+          )
+          if len(candidate_domain_fingerprints) != 398 or any(not re.fullmatch(r"[0-9a-f]{64}", fp) for fp in candidate_domain_fingerprints):
+              raise SystemExit("Pinned candidate development publisher fingerprints are missing or malformed")
+          candidate_dataset_sha256 = candidate_report.get("dataset", {}).get("archive_sha256")
+          if candidate_dataset_sha256 != "06762bfccc55c3236e51bab2d8907218c4c2705e84e3932a5587d29f9879016e":
+              raise SystemExit("Pinned candidate dataset hash does not match audit protocol")
           text_aliases = {"articletext", "fulltext", "fullarticle", "articlebody", "body", "content", "text", "newscontent", "articlecontent"}
           title_aliases = {"title", "headline", "newstitle", "articletitle", "newsheadline"}
           source_aliases = {"url", "articleurl", "sourceurl", "domain", "sourcedomain", "publisher", "source", "outlet", "website", "site", "host", "media"}
@@ -163,6 +190,7 @@ jobs:
                   "full_text_with_explicit_string_binary_label": 0,
                   "full_text_with_explicit_string_binary_label_and_source": 0,
                   "source_domain_fingerprints": set(),
+                  "_article_fingerprints": {},
                   "label_value_counts": {col: Counter() for col in label_columns},
                   "mapped_label_counts": {col: Counter() for col in label_columns},
               }
@@ -183,23 +211,30 @@ jobs:
                   if len(full_text) < 300 or len(full_text.split()) < 50:
                       continue
                   result["full_text_rows_300_chars_50_words"] += 1
-                  mapped_label = None
-                  if label_columns:
-                      for col in label_columns:
-                          mapped_label = map_label(row.get(col))
-                          if mapped_label:
-                              break
-                  if not mapped_label:
-                      continue
-                  result["full_text_with_explicit_string_binary_label"] += 1
+                  normalized_text = re.sub(r"\\s+", " ", full_text).strip().casefold()
+                  text_fingerprint = hashlib.sha256(normalized_text.encode("utf-8")).hexdigest()
+                  article = result["_article_fingerprints"].setdefault(
+                      text_fingerprint, {"labels": set(), "sources": set()}
+                  )
+                  mapped_labels = set()
+                  for col in label_columns:
+                      mapped = map_label(row.get(col))
+                      if mapped:
+                          mapped_labels.add(mapped)
+                  article["labels"].update(mapped_labels)
+                  if mapped_labels:
+                      result["full_text_with_explicit_string_binary_label"] += 1
                   source = None
                   for col in source_columns:
                       source = domain_from(row.get(col))
                       if source:
                           break
                   if source:
-                      result["full_text_with_explicit_string_binary_label_and_source"] += 1
-                      result["source_domain_fingerprints"].add(hashlib.sha256(source.encode("utf-8")).hexdigest())
+                      source_fingerprint = hashlib.sha256(source.encode("utf-8")).hexdigest()
+                      article["sources"].add(source_fingerprint)
+                      result["source_domain_fingerprints"].add(source_fingerprint)
+                      if mapped_labels:
+                          result["full_text_with_explicit_string_binary_label_and_source"] += 1
               result["label_value_counts"] = {col: dict(counts.most_common(40)) for col, counts in result["label_value_counts"].items()}
               result["mapped_label_counts"] = {col: dict(counts) for col, counts in result["mapped_label_counts"].items()}
               result["source_domain_fingerprints"] = sorted(result["source_domain_fingerprints"])
@@ -251,15 +286,54 @@ jobs:
                   nested_path.unlink(missing_ok=True)
 
           selected = nested_reports if nested_reports else report
+          unique_articles = {}
+          for item in selected:
+              for article_fp, article in item["_article_fingerprints"].items():
+                  combined = unique_articles.setdefault(article_fp, {"labels": set(), "sources": set()})
+                  combined["labels"].update(article["labels"])
+                  combined["sources"].update(article["sources"])
+          unique_with_binary_label = [x for x in unique_articles.values() if x["labels"]]
+          unique_with_source = [x for x in unique_with_binary_label if x["sources"]]
+          unique_unambiguous_binary_with_source = [x for x in unique_with_source if len(x["labels"]) == 1]
+          unique_publisher_disjoint = [
+              x for x in unique_unambiguous_binary_with_source
+              if not (x["sources"] & candidate_domain_fingerprints)
+          ]
+          unique_publisher_overlap = [
+              x for x in unique_unambiguous_binary_with_source
+              if x["sources"] & candidate_domain_fingerprints
+          ]
+          all_external_domain_fingerprints = sorted({
+              fp for x in selected for fp in x["source_domain_fingerprints"]
+          })
+          overlap_fingerprints = sorted(set(all_external_domain_fingerprints) & candidate_domain_fingerprints)
+          # Do not serialize per-article text fingerprints or any article content.
+          for item in selected:
+              item.pop("_article_fingerprints", None)
           aggregate = {
               "delimited_files_scanned": len(selected),
-              "total_rows": sum(x["row_count"] for x in selected),
-              "full_text_rows_300_chars_50_words": sum(x["full_text_rows_300_chars_50_words"] for x in selected),
-              "full_text_with_explicit_string_binary_label": sum(x["full_text_with_explicit_string_binary_label"] for x in selected),
-              "full_text_with_explicit_string_binary_label_and_source": sum(x["full_text_with_explicit_string_binary_label_and_source"] for x in selected),
-              "unique_source_domain_fingerprints": sorted({fp for x in selected for fp in x["source_domain_fingerprints"]}),
+              "total_rows_across_exports_not_deduplicated": sum(x["row_count"] for x in selected),
+              "full_text_rows_300_chars_50_words_across_exports_not_deduplicated": sum(x["full_text_rows_300_chars_50_words"] for x in selected),
+              "full_text_with_explicit_string_binary_label_across_exports_not_deduplicated": sum(x["full_text_with_explicit_string_binary_label"] for x in selected),
+              "full_text_with_explicit_string_binary_label_and_source_across_exports_not_deduplicated": sum(x["full_text_with_explicit_string_binary_label_and_source"] for x in selected),
+              "unique_full_text_article_fingerprints": len(unique_articles),
+              "unique_full_text_with_explicit_binary_label": len(unique_with_binary_label),
+              "unique_full_text_with_unambiguous_binary_label_and_source": len(unique_unambiguous_binary_with_source),
+              "unique_full_text_with_unambiguous_binary_label_and_source_disjoint_from_candidate_development_publishers": len(unique_publisher_disjoint),
+              "unique_full_text_with_unambiguous_binary_label_and_source_overlapping_candidate_development_publishers": len(unique_publisher_overlap),
+              "unique_full_text_with_conflicting_binary_labels": sum(1 for x in unique_articles.values() if len(x["labels"]) > 1),
+              "candidate_development_publisher_count": len(candidate_domain_fingerprints),
+              "external_eligible_article_publisher_count": len(all_external_domain_fingerprints),
+              "overlapping_publisher_count": len(overlap_fingerprints),
+              "overlapping_publisher_fingerprints_sha256": hashlib.sha256(json.dumps(overlap_fingerprints, separators=(",", ":")).encode()).hexdigest(),
+              "candidate_model_version": expected_model_version,
+              "candidate_artifact_sha256": expected_artifact_sha256,
+              "candidate_training_archive_sha256": candidate_dataset_sha256,
+              "candidate_fingerprint_source_run_id": 40112758824,
               "source_domain_fingerprint_algorithm": "SHA-256 of canonical registrable domain UTF-8; unsalted equality fingerprint, not anonymization",
-              "rows_with_unmapped_labels_not_guessed": "counted by per-column distribution only; numeric/ambiguous labels not mapped"
+              "text_deduplication_algorithm": "SHA-256 of case-folded full text with all Unicode whitespace collapsed; only counts are emitted",
+              "release_screening_gate_passed": len(unique_publisher_disjoint) >= 10000 and len(overlap_fingerprints) == 0,
+              "rows_with_unmapped_labels_not_guessed": "Only explicit strings for binary FAKE/REAL are mapped; numeric and ambiguous labels are not guessed"
           }
           with archive.open("rb") as archive_stream:
               archive_sha256 = hashlib.file_digest(archive_stream, "sha256").hexdigest()
@@ -274,12 +348,18 @@ jobs:
               "top_level_delimited_files": report,
               "nested_delimited_files": nested_reports,
               "aggregate": aggregate,
+              "candidate_model": {
+                  "model_version": expected_model_version,
+                  "artifact_sha256": expected_artifact_sha256,
+                  "training_archive_sha256": candidate_dataset_sha256,
+                  "source_run_id": 40112758824
+              },
               "notes": [
-                  "Structural/schema audit only; no article body, title, URL, domain or individual row is emitted.",
+                  "Structural/schema audit only; no article body, title, URL, domain or per-article fingerprint is emitted.",
                   "Only explicit string values for binary FAKE/REAL are mapped. Numeric and ambiguous labels are not guessed.",
-                  "A large row count does not prove independent publishers or valid item-level ground truth.",
-                  "External performance evaluation must remain blocked until text/source overlap against candidate-fitting corpora is checked.",
-                  "Source-domain fingerprints are unsalted SHA-256 equality fingerprints, not anonymization; no raw source domain is emitted."
+                  "All aggregate row counts across multiple CSV exports are marked not deduplicated; release screening uses unique text fingerprints.",
+                  "Publisher overlap is checked against the candidate's pinned development publisher set; overlapping publishers are not independent external evidence.",
+                  "Text deduplication fingerprints are internal to the audit and not emitted; source-domain fingerprints are unsalted SHA-256 equality fingerprints, not anonymization."
               ],
               "release_gate_passed": False
           }
