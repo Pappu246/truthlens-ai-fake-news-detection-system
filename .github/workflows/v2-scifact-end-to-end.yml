@@ -8,6 +8,7 @@ on:
     paths:
       - 'server/v2/**'
       - 'scripts/v2ScifactEndToEnd.ts'
+      - 'scripts/v2DownloadModels.ts'
       - 'data/v2/**'
       - 'package.json'
       - 'package-lock.json'
@@ -18,6 +19,7 @@ on:
     paths:
       - 'server/v2/**'
       - 'scripts/v2ScifactEndToEnd.ts'
+      - 'scripts/v2DownloadModels.ts'
       - 'data/v2/**'
       - 'package.json'
       - 'package-lock.json'
