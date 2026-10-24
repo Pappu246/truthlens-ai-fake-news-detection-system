@@ -85,6 +85,41 @@ function readConfigFromDisk(modelId) {
   return JSON.parse(fs.readFileSync(p, 'utf-8'));
 }
 
+/**
+ * Replace the active NLI model without disposing/restarting the worker thread.
+ * onnxruntime-node can fail to self-register when a second worker thread tries
+ * to load its native binding in the same Node process. Reusing this worker
+ * keeps the runtime loaded once, while the previous NLI session is explicitly
+ * disposed before the sealed candidate is loaded.
+ */
+async function setNliModel(body) {
+  const modelId = typeof body.modelId === 'string' ? body.modelId.trim() : '';
+  if (!modelId || path.isAbsolute(modelId) || modelId.split(/[\\/]/).includes('..')) {
+    throw new Error('setNliModel requires a safe relative model ID.');
+  }
+
+  const modelRoot = path.resolve(config.modelDir, modelId);
+  const allowedRoot = path.resolve(config.modelDir) + path.sep;
+  if (!modelRoot.startsWith(allowedRoot)) {
+    throw new Error('Requested NLI model resolves outside the configured local model directory.');
+  }
+  if (!fs.existsSync(path.join(modelRoot, 'config.json'))) {
+    throw new Error(`NLI model config not found locally for ${modelId}; models must be provisioned and seal-verified before switching.`);
+  }
+  const nextConfig = readConfigFromDisk(modelId);
+  if (!nextConfig.id2label || typeof nextConfig.id2label !== 'object' || Object.keys(nextConfig.id2label).length < 2) {
+    throw new Error(`NLI model config has no usable id2label map: ${modelId}`);
+  }
+
+  const previous = nliPromise ? await nliPromise.catch(() => null) : null;
+  if (previous && previous.model && typeof previous.model.dispose === 'function') {
+    await previous.model.dispose();
+  }
+  nliPromise = null;
+  config.nliModelId = modelId;
+  return { nliModelId: modelId, id2label: nextConfig.id2label };
+}
+
 async function embed(body) {
   const extractor = await getExtractor();
   const out = await extractor(String(body.text || ''), { pooling: 'mean', normalize: true });
@@ -164,7 +199,7 @@ async function classifyBatch(body) {
   return { outputs };
 }
 
-const OPS = { embed, embedBatch, classify, classifyBatch };
+const OPS = { embed, embedBatch, classify, classifyBatch, setNliModel };
 
 async function meta() {
   const nliCfg = readConfigFromDisk(config.nliModelId);

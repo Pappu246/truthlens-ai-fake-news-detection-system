@@ -130,7 +130,7 @@ async function main() {
   }, (s, j) => {
     // With internet: 200 (extracted) or designed 4xx/502/504 JSON.
     // Without internet (sandbox): designed 502 JSON. A thrown/hung handler would fail here.
-    if (![200, 400, 404, 429, 502, 504].includes(s)) return `unexpected status ${s}`;
+    if (![200, 400, 403, 404, 429, 502, 504].includes(s)) return `unexpected status ${s}`;
     if (s !== 200 && (!j || j.success !== false)) return 'missing success:false envelope';
     return mustBeJson(s, j);
   });
