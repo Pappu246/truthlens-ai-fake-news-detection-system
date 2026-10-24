@@ -21,7 +21,7 @@ Each JSONL row follows `scripts/validate_open_web_holdout.py` and contains:
 1. Define the sampling window, claim-date policy, coverage strata, and inclusion/exclusion criteria **before** collecting records. Preserve claim-date context; do not judge a historical claim using a current headline without accounting for when it was made.
 2. Collect open-web claims and evidence using a documented retrieval process. Record original URLs, publisher groups, timestamps, exact-byte hashes, stable archived snapshots, and provenance for every item. Two different hostnames are not automatically independent publishers; the data steward must manually review ownership, wire-service syndication, and copied text.
 3. Assign randomized claim IDs and remove model outputs, model predictions, confidence scores, and explanations from the annotation packet. Labelers must not access those outputs before their independent labels are submitted.
-4. Obtain two human labels and signed attestations. Adjudicate disagreements with an independent adjudicator, recording the evidence and rationale. Do not replace unavailable/ambiguous evidence with a fake/real classification.
+4. Obtain two human labels and signed attestations. Complete both annotations and adjudication before sealing. Adjudicate disagreements with an independent adjudicator, recording the evidence and rationale. Do not replace unavailable/ambiguous evidence with a fake/real classification.
 5. Exclude duplicate claims and syndication copies. Retain cluster decisions and an auditable exclusion register outside the public repository. At least 100 unique adjudicated clusters must remain.
 6. Store the claim/evidence JSONL and signed attestations in access-controlled storage, **not in this public repository**. Compute a SHA-256 of the exact JSONL bytes. The data steward must seal those bytes, independently review provenance and attestation references, and record the seal timestamp before granting evaluator access.
 7. Bind the single authorized evaluation to the exact candidate commit and artifact SHA-256 in the manifest. The evaluator must not be given access before sealing; any later mutation changes the hash and invalidates the seal.
@@ -33,7 +33,7 @@ The sealed manifest must state:
 
 - `schema_version: 1`, `dataset_id: truthlens-open-web-claims-v1`, task `open_web_claim_verification`, record count, and exact JSONL SHA-256.
 - Seal status, sealer ID, seal timestamp, seal digest, and `model_outputs_accessible_before_seal: false`.
-- Human-review status, a separate reviewer ID, review timestamp, provenance-audit reference, protocol version, and the complete list of human attestation references.
+- Human-review status, a reviewer ID distinct from every annotator, adjudicator, and sealer, review timestamp, provenance-audit reference, protocol version, and the complete list of human attestation references.
 - Evaluation authorization timestamp after both seal and human review, authorized-by ID, the exact 40-character evaluation commit SHA, and the candidate artifact SHA-256.
 
 ## Validation command
@@ -42,10 +42,12 @@ The sealed manifest must state:
 python3 scripts/validate_open_web_holdout.py \
   --records /secure/path/open_web_holdout.jsonl \
   --manifest /secure/path/manifest.json \
+  --expected-commit-sha "$CANDIDATE_COMMIT_SHA" \
+  --expected-artifact-sha256 "$CANDIDATE_ARTIFACT_SHA256" \
   --output /secure/path/holdout-validation-report.json
 ```
 
-The generated report contains aggregate counts and hashes, not claim text or excerpts. The report is a structural check, **not** proof that annotations are truthful or publishers are independent.
+The two expected-candidate flags are mandatory and must be sourced from the exact evaluator invocation and candidate artifact being evaluated, not copied from the manifest; the validator compares them against the manifest authorization pin. The validator also rejects duplicate JSON object keys, annotations or adjudication timestamps after the seal, report paths that alias either input, and minimum-claim overrides below 100. The generated report contains aggregate counts and hashes, not claim text or excerpts. The report is a structural check, **not** proof that annotations are truthful or publishers are independent.
 
 ## Current status
 
