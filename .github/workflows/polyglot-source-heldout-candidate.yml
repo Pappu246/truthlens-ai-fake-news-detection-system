@@ -50,49 +50,45 @@ jobs:
             --retry 2 --retry-all-errors --retry-delay 3 \
             --user-agent "TruthLens-Source-Heldout-Research/1.0" \
             "https://data.mendeley.com/public-api/zip/8yfrm6z9dx/download/1" \
-            -o /tmp/polyglotfakefacts-outer.zip
-          mkdir -p /tmp/polyglot-workbooks
+            -o /tmp/polyglotfakefacts-v2.zip
+          mkdir -p /tmp/polyglot-workbooks artifacts/independent-data
           python - <<'PY'
-          import hashlib, io, json, zipfile
+          import hashlib, json, zipfile
           from pathlib import Path
+
           expected = "06762bfccc55c3236e51bab2d8907218c4c2705e84e3932a5587d29f9879016e"
-          outer_path = Path("/tmp/polyglotfakefacts-outer.zip")
-          with zipfile.ZipFile(outer_path) as outer:
-              if outer.testzip():
-                  raise SystemExit("Outer Mendeley ZIP failed integrity check.")
-              inner_names = [n for n in outer.namelist() if Path(n).name.lower() == "polyglotfakefacts-v2.zip"]
-              if len(inner_names) != 1:
-                  raise SystemExit(f"Expected one inner PolyglotFakeFacts ZIP, found {inner_names}")
-              inner_bytes = outer.read(inner_names[0])
-          actual = hashlib.sha256(inner_bytes).hexdigest()
+          archive = Path("/tmp/polyglotfakefacts-v2.zip")
+          actual = hashlib.sha256(archive.read_bytes()).hexdigest()
           if actual != expected:
-              raise SystemExit(f"Inner dataset SHA-256 mismatch: {actual}")
-          inner_path = Path("/tmp/polyglotfakefacts-v2.zip")
-          inner_path.write_bytes(inner_bytes)
-          with zipfile.ZipFile(io.BytesIO(inner_bytes)) as inner:
-              if inner.testzip():
-                  raise SystemExit("Pinned inner dataset ZIP failed integrity check.")
+              raise SystemExit(f"PolyglotFakeFacts SHA-256 mismatch: {actual}")
+          with zipfile.ZipFile(archive) as zf:
+              bad = zf.testzip()
+              if bad:
+                  raise SystemExit(f"Dataset ZIP failed integrity check: {bad}")
               for wanted in ("fake.xlsx", "real.xlsx"):
-                  matches = [n for n in inner.namelist() if Path(n).name.lower() == wanted]
+                  matches = [name for name in zf.namelist() if Path(name).name.lower() == wanted]
                   if len(matches) != 1:
                       raise SystemExit(f"Expected exactly one {wanted}: {matches}")
-                  output = Path("/tmp/polyglot-workbooks") / Path(matches[0]).name
-                  output.write_bytes(inner.read(matches[0]))
+                  target = Path("/tmp/polyglot-workbooks") / Path(matches[0]).name
+                  target.write_bytes(zf.read(matches[0]))
           result = {
-              "outer_archive_sha256": hashlib.sha256(outer_path.read_bytes()).hexdigest(),
-              "inner_archive_sha256": actual,
-              "inner_archive_bytes": len(inner_bytes),
+              "archive_sha256": actual,
+              "archive_bytes": archive.stat().st_size,
               "workbooks": {
-                  p.name: {"bytes": p.stat().st_size, "sha256": hashlib.sha256(p.read_bytes()).hexdigest()}
-                  for p in sorted(Path("/tmp/polyglot-workbooks").glob("*.xlsx"))
+                  item.name: {
+                      "bytes": item.stat().st_size,
+                      "sha256": hashlib.sha256(item.read_bytes()).hexdigest(),
+                  }
+                  for item in sorted(Path("/tmp/polyglot-workbooks").glob("*.xlsx"))
               },
               "license": "CC BY 4.0",
-              "release_gate_note": "This corpus does not by itself prove independence from candidate-fitting sources."
+              "release_gate_note": "Publisher holdout within this corpus is not independent external validation.",
           }
-          if set(result["workbooks"]) != {"Fake.xlsx", "Real.xlsx"}:
-              raise SystemExit(f"Workbook filenames differ from expected canonical names: {list(result['workbooks'])}")
-          Path("artifacts/independent-data").mkdir(parents=True, exist_ok=True)
-          Path("artifacts/independent-data/source-archive-metadata.json").write_text(json.dumps(result, indent=2) + "\n")
+          if {name.lower() for name in result["workbooks"]} != {"fake.xlsx", "real.xlsx"}:
+              raise SystemExit(f"Workbook filenames differ from expected: {list(result['workbooks'])}")
+          Path("artifacts/independent-data/source-archive-metadata.json").write_text(
+              json.dumps(result, indent=2) + "\n", encoding="utf-8"
+          )
           print(json.dumps(result, indent=2))
           PY
 
