@@ -28,6 +28,9 @@ jobs:
         with:
           python-version: "3.11.16"
 
+      - name: Install pinned publisher-domain parser
+        run: python -m pip install publicsuffix2==2.20191221
+
       - name: Fetch and verify official Zenodo record metadata
         shell: bash
         run: |
