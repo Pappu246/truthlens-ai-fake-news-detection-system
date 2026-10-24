@@ -108,7 +108,7 @@ jobs:
           def norm(value):
               return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
 
-          SHORTENERS = {"bit.ly", "t.co", "tinyurl.com", "goo.gl", "ow.ly", "is.gd", "buff.ly", "trib.al", "sptnk.ne.ws"}
+          SHORTENERS = {"bit.ly", "t.co", "tinyurl.com", "goo.gl", "ow.ly", "is.gd", "buff.ly", "trib.al", "sptnk.ws"}
 
           def domain_from(value):
               raw = str(value or "").strip()
