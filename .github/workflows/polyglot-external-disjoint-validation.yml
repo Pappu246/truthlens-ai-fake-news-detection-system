@@ -107,14 +107,32 @@ jobs:
           echo "64b4e8888f95ec104611de9d01ffe903  /tmp/zenodo-datasets.zip" | md5sum --check -
 
       - name: Prepare external publisher exclusions and near-duplicate-filtered evaluation set
+        shell: bash
         run: |
-          set -euo pipefail
+          set -uo pipefail
+          prep_dir=/tmp/truthlens-external-source-disjoint
+          summary=artifacts/independent-data/external-preparation-summary.json
+          mkdir -p artifacts/independent-data
+          prep_status=0
           python scripts/prepare_external_source_disjoint_data.py \
             --external-archive /tmp/zenodo-datasets.zip \
             --candidate-dataset-dir /tmp/polyglot-workbooks \
-            --output-dir /tmp/truthlens-external-source-disjoint
-          mkdir -p artifacts/independent-data
-          cp /tmp/truthlens-external-source-disjoint/external-preparation-summary.json artifacts/independent-data/
+            --output-dir "$prep_dir" || prep_status=$?
+
+          # Preserve sanitized counts/schema diagnostics even when screening rejects
+          # the corpus. Never upload external article text or the JSONL evaluation set.
+          if [ -f "$prep_dir/external-preparation-summary.json" ]; then
+            cp "$prep_dir/external-preparation-summary.json" "$summary"
+          else
+            echo "::warning::External preparation failed before writing its sanitized summary."
+          fi
+
+          if [ "$prep_status" -ne 0 ]; then
+            echo "::error::External dataset preparation failed; candidate training and scoring remain blocked."
+            exit "$prep_status"
+          fi
+
+          test -f "$prep_dir/external-disjoint-evaluation.jsonl"
 
       - name: Snapshot canonical production artifact
         run: |
