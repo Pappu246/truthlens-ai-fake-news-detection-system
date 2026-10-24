@@ -45,7 +45,9 @@
     "test:phase2-adapters": "tsx scripts/phase2BenchmarkAdaptersTests.ts",
     "materialize:phase2": "tsx scripts/materializePhase2Benchmarks.ts",
     "test:phase2-materialization": "tsx scripts/phase2MaterializationTests.ts",
-    "test:analysis-signals": "tsx scripts/analysisSignalsSurfaceTests.ts"
+    "test:analysis-signals": "tsx scripts/analysisSignalsSurfaceTests.ts",
+    "download:v2-candidate": "tsx scripts/v2DownloadCandidateModel.ts",
+    "eval:v2-nli-candidate-comparison": "tsx scripts/v2NliCandidateComparison.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
