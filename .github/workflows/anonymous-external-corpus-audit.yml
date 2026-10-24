@@ -133,8 +133,8 @@ jobs:
                       source_present = 0
                       label_values = defaultdict(Counter)
                       source_sets = defaultdict(set)
-                      body_lengths = []
-                      sample_field_lengths = {}
+                      body_len_min = None
+                      body_len_max = None
                       for row in reader:
                           rows += 1
                           if not row:
