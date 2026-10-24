@@ -8,3 +8,4 @@ scikit-learn==1.9.1
 scipy==1.17.1
 joblib==1.6.0
 datasketch==2.0.0
+publicsuffix2==2.20191221
