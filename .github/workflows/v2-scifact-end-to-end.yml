@@ -114,6 +114,13 @@ jobs:
           assert re.fullmatch(r"[0-9a-f]{64}", provenance["config_sha256"])
           assert re.fullmatch(r"[0-9a-f]{64}", provenance["model_manifest_sha256"])
           assert provenance["model_manifest_sha256"] == report["models"]["manifest_sha256"]
+          assert hashlib.sha256(json.dumps(report["config"], separators=(",", ":")).encode()).hexdigest() == provenance["config_sha256"]
+          assert hashlib.sha256(json.dumps(report["models"]["sealed_manifest"], separators=(",", ":")).encode()).hexdigest() == provenance["model_manifest_sha256"]
+          model_manifest = report["models"]["sealed_manifest"]
+          for model_key, model_kind in (("nli", "nli"), ("embedding", "embedding")):
+              model_record = next(item for item in model_manifest if item["kind"] == model_kind)
+              expected_weight = next(item["sha256"] for item in model_record["files"] if item["path"] == "onnx/model_quantized.onnx")
+              assert report["models"][model_key]["artifact_sha256"] == expected_weight
 
           rows = report["rows"]
           evidence_claims = sum(bool(row["gold_evidence_ids"]) for row in rows)
