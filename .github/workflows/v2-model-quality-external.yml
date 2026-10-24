@@ -11,6 +11,8 @@ on:
       - 'scripts/v2ModelQualityExternalSmoke.ts'
       - 'scripts/v2ModelQualityLocal.ts'
       - 'scripts/v2ModelQualityTests.ts'
+      - 'scripts/v2DownloadCandidateModel.ts'
+      - 'scripts/v2NliCandidateComparison.ts'
       - 'data/v2/**'
       - 'package.json'
       - 'package-lock.json'
@@ -175,6 +177,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npm run download:v2-models
 
+      - name: Download sealed comparison-only DistilBERT MNLI candidate
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run download:v2-candidate -- --model=Xenova/distilbert-base-uncased-mnli
+
       - name: Run real local pretrained model-quality comparison
         env:
           TRUTHLENS_V2_ML_CALL_TIMEOUT_MS: 180000
@@ -186,6 +193,17 @@ jobs:
             --max-claims=300 \
             --output=artifacts/v2-model-quality/local-pretrained-model-quality.json \
             2>&1 | tee artifacts/v2-model-quality/local-pretrained-evaluation.log
+
+      - name: Compare sealed NLI candidate on matched SciFact evidence pairs
+        env:
+          TRUTHLENS_V2_ML_CALL_TIMEOUT_MS: 180000
+        run: |
+          set -euo pipefail
+          npm run eval:v2-nli-candidate-comparison -- \\
+            --data-dir=/tmp/truthlens-model-quality/scifact \\
+            --max-claims=300 \\
+            --output=artifacts/v2-model-quality/nli-candidate-comparison.json \\
+            2>&1 | tee artifacts/v2-model-quality/nli-candidate-comparison.log
 
       - name: Upload local pretrained evaluation results
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
