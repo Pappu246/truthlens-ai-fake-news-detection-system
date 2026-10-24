@@ -101,6 +101,8 @@ export interface NliClassification {
   modelName: string;
   modelVersion: string;
   basis: string;
+  /** Cosine similarity between claim and passage from the fixed bi-encoder, when available. */
+  relatednessScore?: number | null;
 }
 
 /** A fully classified, reranked piece of evidence — the unit the decision
@@ -157,6 +159,8 @@ export interface ProvenanceEvidenceRecord {
   exact_passage: string;
   nli_label: NliLabel;
   nli_confidence: number;
+  nli_scores: NliScoreDistribution;
+  nli_relatedness_score: number | null;
   nli_model: { name: string; version: string };
   rerank_score: number;
   rerank_signals: RerankSignals;
