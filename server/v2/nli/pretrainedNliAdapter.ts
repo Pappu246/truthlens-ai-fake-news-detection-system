@@ -308,6 +308,7 @@ export class PretrainedNliAdapter implements NliAdapter {
       label,
       scores,
       confidence,
+      relatednessScore: rel,
       modelName: this.modelName,
       modelVersion: this.modelVersion,
       basis
@@ -360,13 +361,14 @@ export class PretrainedNliAdapter implements NliAdapter {
       return Math.max(-1, Math.min(1, dot));
     });
     const results: Array<NliClassification | null> = new Array(passages.length).fill(null);
-    const directionalInputs: Array<{ index: number; premise: string; hypothesis: string }> = [];
+    const directionalInputs: Array<{ index: number; premise: string; hypothesis: string; relatednessScore: number }> = [];
     for (let i = 0; i < passages.length; i++) {
       if (relatednessValues[i] < this.relatednessFloor) {
         results[i] = {
           label: 'NEUTRAL',
           scores: { supports: 0.005, refutes: 0.005, neutral: 0.98, unclear: 0.01 },
           confidence: 0.98,
+          relatednessScore: relatednessValues[i],
           modelName: this.modelName,
           modelVersion: this.modelVersion,
           basis:
@@ -374,7 +376,7 @@ export class PretrainedNliAdapter implements NliAdapter {
             'cross-encoder NLI not consulted (MNLI models are only valid on topically related pairs). Label=NEUTRAL indicates irrelevance, not a fact-check outcome.'
         };
       } else {
-        directionalInputs.push({ index: i, premise: (passages[i] || '').trim(), hypothesis: fullClaimText });
+        directionalInputs.push({ index: i, premise: (passages[i] || '').trim(), hypothesis: fullClaimText, relatednessScore: relatednessValues[i] });
       }
     }
     if (!directionalInputs.length) return results as NliClassification[];
@@ -383,7 +385,7 @@ export class PretrainedNliAdapter implements NliAdapter {
       hypothesis: item.hypothesis,
       maxTokens: this.maxPairTokens
     })));
-    const fallbackInputs: Array<{ index: number; premise: string; hypothesis: string; passA: { probs: Record<string, number>; scores: NliScoreDistribution; maxModelProb: number } }> = [];
+    const fallbackInputs: Array<{ index: number; premise: string; hypothesis: string; relatednessScore: number; passA: { probs: Record<string, number>; scores: NliScoreDistribution; maxModelProb: number } }> = [];
     for (let i = 0; i < directionalInputs.length; i++) {
       const item = directionalInputs[i];
       const raw = passA[i];
@@ -394,16 +396,22 @@ export class PretrainedNliAdapter implements NliAdapter {
         const label = raw.probs.entailment >= 0.5 ? 'SUPPORTS' : raw.probs.contradiction >= 0.5 ? 'REFUTES' : null;
         if (label) {
           const basis = `passA (hypothesis=claim-as-stated) directional (${label})`;
-          results[item.index] = this.classifyOneResult({ probs: raw.probs, scores: mapped.scores, maxModelProb: mapped.maxModelProb }, basis, 'passA:claim-as-stated');
+          results[item.index] = {
+        ...this.classifyOneResult({ probs: raw.probs, scores: mapped.scores, maxModelProb: mapped.maxModelProb }, basis, 'passA:claim-as-stated'),
+        relatednessScore: item.relatednessScore
+      };
         } else {
-          results[item.index] = this.classifyOneResult(
-            { probs: raw.probs, scores: mapped.scores, maxModelProb: mapped.maxModelProb },
-            `passA (hypothesis=claim-as-stated) produced NO DIRECTIONAL MAJORITY (entailment=${raw.probs.entailment.toFixed(3)}, contradiction=${raw.probs.contradiction.toFixed(3)}, both <0.5); claim carries no attribution clause, so no second pass is applicable`,
-            'passA:claim-as-stated'
-          );
+          results[item.index] = {
+            ...this.classifyOneResult(
+              { probs: raw.probs, scores: mapped.scores, maxModelProb: mapped.maxModelProb },
+              `passA (hypothesis=claim-as-stated) produced NO DIRECTIONAL MAJORITY (entailment=${raw.probs.entailment.toFixed(3)}, contradiction=${raw.probs.contradiction.toFixed(3)}, both <0.5); claim carries no attribution clause, so no second pass is applicable`,
+              'passA:claim-as-stated'
+            ),
+            relatednessScore: item.relatednessScore
+          };
         }
       } else {
-        fallbackInputs.push({ index: item.index, premise: item.premise, hypothesis: conditioning.hypothesis, passA: { probs: raw.probs, scores: mapped.scores, maxModelProb: mapped.maxModelProb } });
+        fallbackInputs.push({ index: item.index, premise: item.premise, hypothesis: conditioning.hypothesis, relatednessScore: item.relatednessScore, passA: { probs: raw.probs, scores: mapped.scores, maxModelProb: mapped.maxModelProb } });
       }
     }
     if (fallbackInputs.length) {
@@ -414,7 +422,10 @@ export class PretrainedNliAdapter implements NliAdapter {
         const mapped = mapModelProbsToNliScores(raw.probs);
         const basis =
           `passA (hypothesis=claim-as-stated) produced NO DIRECTIONAL MAJORITY (entailment=${item.passA.probs.entailment.toFixed(3)}, contradiction=${item.passA.probs.contradiction.toFixed(3)}, both <0.5); fall through to passB (hypothesis=content proposition, attribution stripped)`;
-        results[item.index] = this.classifyOneResult({ probs: raw.probs, scores: mapped.scores, maxModelProb: mapped.maxModelProb }, basis, 'passB:content-proposition');
+        results[item.index] = {
+          ...this.classifyOneResult({ probs: raw.probs, scores: mapped.scores, maxModelProb: mapped.maxModelProb }, basis, 'passB:content-proposition'),
+          relatednessScore: item.relatednessScore
+        };
       }
     }
     return results as NliClassification[];
@@ -445,6 +456,7 @@ export class PretrainedNliAdapter implements NliAdapter {
         label: 'NEUTRAL',
         scores: { supports: 0.005, refutes: 0.005, neutral: 0.98, unclear: 0.01 },
         confidence: 0.98,
+        relatednessScore: rel,
         modelName: this.modelName,
         modelVersion: this.modelVersion,
         basis:
