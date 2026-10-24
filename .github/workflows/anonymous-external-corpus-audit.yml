@@ -95,6 +95,12 @@ jobs:
               # Numeric labels and ambiguous ordinal/hyperpartisanship labels are intentionally unmapped.
               return None
 
+          archive_hasher = hashlib.sha256()
+          with archive.open("rb") as archive_stream:
+              for chunk in iter(lambda: archive_stream.read(8 * 1024 * 1024), b""):
+                  archive_hasher.update(chunk)
+          archive_sha256 = archive_hasher.hexdigest()
+
           with zipfile.ZipFile(archive) as zf:
               infos = [i for i in zf.infolist() if not i.is_dir()]
               archive_entries = [{
@@ -148,7 +154,9 @@ jobs:
                           article = " ".join(p for p in parts if p).strip()
                           body = str(row.get(text_cols[0]) or "").strip() if text_cols else ""
                           if body:
-                              body_lengths.append(len(body))
+                              length = len(body)
+                              body_len_min = length if body_len_min is None else min(body_len_min, length)
+                              body_len_max = length if body_len_max is None else max(body_len_max, length)
                           is_full = len(article) >= 300 and len(article.split()) >= 50
                           if is_full:
                               text_eligible += 1
@@ -178,8 +186,8 @@ jobs:
                           "rows_with_full_text_binary_label_and_source": binary_eligible,
                           "label_value_counts": {col: dict(counts.most_common(30)) for col, counts in label_values.items()},
                           "source_domain_counts_by_explicit_label": {label: len(values) for label, values in source_sets.items()},
-                          "body_character_length_sample_min": min(body_lengths) if body_lengths else None,
-                          "body_character_length_sample_max": max(body_lengths) if body_lengths else None,
+                          "body_character_length_min": body_len_min,
+                          "body_character_length_max": body_len_max,
                       })
 
           result = {
@@ -187,7 +195,7 @@ jobs:
               "doi": "10.5281/zenodo.1181814",
               "license": "CC BY 4.0",
               "published_archive_md5": "7cc9a7210e705fac5a09e408f55e6d77",
-              "observed_archive_sha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
+              "observed_archive_sha256": archive_sha256,
               "archive_bytes": archive.stat().st_size,
               "zip_member_count": len(archive_entries),
               "archive_entries": archive_entries,
