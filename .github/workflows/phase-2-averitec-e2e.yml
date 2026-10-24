@@ -14,7 +14,8 @@ on:
 
 concurrency:
   group: truthlens-phase2-averitec-pr-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: false
+  # New PR-head commits supersede stale benchmark work; exact-head evidence is mandatory.
+  cancel-in-progress: true
 
 permissions:
   contents: read
