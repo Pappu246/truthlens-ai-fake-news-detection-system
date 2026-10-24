@@ -92,6 +92,8 @@ jobs:
           mkdir -p artifacts/external-corpus-audit
           python - <<'PY'
           import csv, hashlib, io, json, re, zipfile
+          # News/article fields can exceed Python csv's 128 KiB default.
+          csv.field_size_limit(50 * 1024 * 1024)
           from collections import Counter
           from pathlib import Path
           from urllib.parse import urlsplit
