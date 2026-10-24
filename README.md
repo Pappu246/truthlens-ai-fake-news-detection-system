@@ -54,7 +54,7 @@ TruthLens is not just a **FAKE / REAL** classifier.
 
 The project combines several parts into one application:
 
-- **Article analysis** using the ISOT-trained Linear SVM. Production currently runs in a safety-gated legacy mode; calibrated probability output is withheld until the exact calibrated runtime artifact is formally promoted.
+- **Article analysis** using the deployed ISOT-trained Linear SVM calibrated ensemble. The live `/api/health` and `/api/model/diagnostics` endpoints currently report `calibrated_ensemble` with exact calibration; individual predictions may still withhold scores when input-quality or safety guards require abstention.
 - **Claim analysis** using a separate LIAR-based model.
 - **Article URL extraction** with SSRF-safe fetching and redirect validation.
 - **Evidence verification** with retrieval, source provenance, and explicit abstention.
@@ -107,7 +107,7 @@ flowchart LR
 
 ### 1. Article analysis
 
-The production article classifier is the ISOT-trained Linear SVM. The currently deployed artifact is running in **safety-gated legacy mode** because it does not contain the exact calibrated runtime ensemble required for faithful probability output. TruthLens therefore withholds fake/real probability percentages in production until a formally promoted exact-calibrated artifact is available.
+The production article classifier is the ISOT-trained Linear SVM with a calibrated three-member Platt ensemble. The live production health and diagnostics endpoints report `inference_mode: calibrated_ensemble`, exact calibration enabled, and calibrated probability output available. The UI displays fake/real percentages only when inference returns a valid calibrated probability pair and the input-quality/safety gates permit it; it must not fabricate percentages for abstentions or unavailable scores.
 
 | Metric | Held-out ISOT result |
 |---|---:|
@@ -117,7 +117,7 @@ The production article classifier is the ISOT-trained Linear SVM. The currently 
 | Recall | **99.66%** |
 | F1-score | **99.54%** |
 
-The production model is served as a separate article-analysis component and is not mixed with claim-model metrics. The benchmark figures above describe the underlying ISOT model evaluation; they do not imply that calibrated probabilities are currently exposed in production.
+The production article model is served separately from the LIAR claim model. These figures are a held-out ISOT benchmark result, not a guarantee of current-news, Hindi/Hinglish, satire, or out-of-domain performance. A calibrated probability is a model estimate, not proof that an article is true or false.
 
 ---
 
@@ -266,20 +266,17 @@ flowchart TB
 
 ## Production verification
 
-The current production line is separated from the research benchmark track.
+The production application and the research model candidate are separate release tracks. The following live GET checks were observed on 24 October 2026 (UTC date in response headers: 23 October 2026):
 
-- **Production commit:** `b899cf265349f8ba215aaf8219aef4a139eca851` — merged through security PR #61.
-- **Vercel production deployment:** `dpl_GZ5Z981mR6Rm9jZFEgPcc11KC53c`
-- **Vercel state:** `READY`
-- **Production URL:** `truthlens-ai-fake-news-detection-system-r7xo1k9t1.vercel.app`
-- **Current production branch:** `main`
-- **PR #61 CI:** passed before merge; the merge was security-only and did not alter application/model behavior.
-- **Production model boundary:** `legacy_single_svm` with probability output withheld until an exact calibrated runtime artifact is formally promoted.
-- **Research boundary:** Phase 2 benchmark work remains on a separate research branch and is not promoted into production.
+- **Production commit:** `6d2296d24059765a31b226f4c9816ea0ac718b26` on `main`.
+- **Vercel production deployment:** `dpl_EYLiuZrMP64Un99eUf1TnCm4jTeR` — `READY`.
+- **Production URL:** [`https://truthlens-ai-fake-news-detection-sy.vercel.app/`](https://truthlens-ai-fake-news-detection-sy.vercel.app/).
+- **Live smoke checks:** `/` returned HTTP 200; `/api/health`, `/api/model/diagnostics`, and `/api/models/metrics` returned HTTP 200.
+- **Reported article runtime:** `calibrated_ensemble`, exact calibration reported true, model version `3.1.0-isot`; the health response reported the article and claim models ready. The V2 evidence stack is explicitly experimental.
+- **Runtime-log limitation:** the latest sampled 30-minute error-level logs contained a Node.js `url.parse()` deprecation warning. The Vercel Hobby log query rejected a 24-hour window due to retention limits, so this does not establish a complete historical error audit.
+- **Research boundary:** PR #131 remains a draft research candidate. It must not be merged/promoted unless frozen runtime-quality gates, artifact-bound safety checks, and defensible independent-validation requirements pass. Production model artifacts and thresholds are not changed by the research branch.
 
-Vercel's current 24-hour aggregated runtime-error view identifies the observed `url.parse()` deprecation warnings and two article-extraction 404s on the **previous** deployment `dpl_4NNGFPPg9NsyAdJ5HyedU7zdWG1a`; those findings are not evidence that the current production deployment is failing.
-
-Direct live HTTP smoke testing is not independently executable from this environment because outbound DNS/network access is unavailable. Deployment state and connected GitHub/Vercel checks are verified through the integrations instead.
+The ISOT metrics above are benchmark results, not a guarantee of performance on current news, Hindi/Hinglish, satire, or domains outside the training distribution. Live deployment readiness does not by itself qualify a research candidate for promotion.
 
 The production runtime and research benchmarks must remain separate: benchmark figures are evaluation evidence, not a guarantee of real-world accuracy, and no production accuracy claim is inferred from the research track.
 
