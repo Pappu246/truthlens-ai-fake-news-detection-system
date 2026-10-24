@@ -2,12 +2,24 @@
 name: V2 SciFact End-to-End Benchmark
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'server/v2/**'
+      - 'scripts/v2ScifactEndToEnd.ts'
+      - 'scripts/v2DownloadModels.ts'
+      - 'data/v2/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/v2-*.yml'
   pull_request:
     branches:
       - main
     paths:
       - 'server/v2/**'
       - 'scripts/v2ScifactEndToEnd.ts'
+      - 'scripts/v2DownloadModels.ts'
       - 'data/v2/**'
       - 'package.json'
       - 'package-lock.json'
@@ -86,6 +98,52 @@ jobs:
           set -euo pipefail
           mkdir -p artifacts/v2-scifact-e2e
           npm run eval:v2-scifact-e2e --             --data-dir=/tmp/truthlens-scifact/scifact             --max-claims=300             --candidate-k=100             --dense-k=300             --final-k=8             --output=artifacts/v2-scifact-e2e/scifact-end-to-end.json             2>&1 | tee artifacts/v2-scifact-e2e/scifact-end-to-end.log
+
+      - name: Validate benchmark provenance and metric denominators
+        env:
+          EXPECTED_COMMIT_SHA: ${{ github.sha }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, re
+          from pathlib import Path
+
+          path = Path("artifacts/v2-scifact-e2e/scifact-end-to-end.json")
+          report = json.loads(path.read_text(encoding="utf-8"))
+          assert report.get("benchmark") is True
+          provenance = report["run_provenance"]
+          assert provenance["source_commit_sha"] == os.environ["EXPECTED_COMMIT_SHA"]
+          assert re.fullmatch(r"[0-9a-f]{40}", provenance["source_commit_sha"])
+          assert re.fullmatch(r"[0-9a-f]{64}", provenance["config_sha256"])
+          assert re.fullmatch(r"[0-9a-f]{64}", provenance["model_manifest_sha256"])
+          assert provenance["model_manifest_sha256"] == report["models"]["manifest_sha256"]
+          assert hashlib.sha256(json.dumps(report["config"], separators=(",", ":")).encode()).hexdigest() == provenance["config_sha256"]
+          assert hashlib.sha256(json.dumps(report["models"]["sealed_manifest"], separators=(",", ":")).encode()).hexdigest() == provenance["model_manifest_sha256"]
+          model_manifest = report["models"]["sealed_manifest"]
+          for model_key, model_kind in (("nli", "nli"), ("embedding", "embedding")):
+              model_record = next(item for item in model_manifest if item["kind"] == model_kind)
+              expected_weight = next(item["sha256"] for item in model_record["files"] if item["path"] == "onnx/model_quantized.onnx")
+              assert report["models"][model_key]["artifact_sha256"] == expected_weight
+
+          rows = report["rows"]
+          evidence_claims = sum(bool(row["gold_evidence_ids"]) for row in rows)
+          end_to_end = report["end_to_end"]
+          assert evidence_claims == end_to_end["open_candidate_recall_denominator"]
+          assert evidence_claims == end_to_end["gold_evidence_recall_at_5_denominator"]
+          assert end_to_end["open_candidate_recall_hits"] == sum(
+              bool(row["gold_evidence_ids"]) and row["candidate_pool_recall_hit"] for row in rows
+          )
+          assert end_to_end["gold_evidence_recall_at_5_hits"] <= evidence_claims
+          assert end_to_end["benchmark_directional_accuracy"] >= 0
+          assert end_to_end["benchmark_directional_accuracy"] <= 1
+          confusion = end_to_end["benchmark_directional_confusion_matrix"]
+          assert sum(sum(row["predicted"].values()) for row in confusion) == len(rows)
+          assert report["dataset"]["claims_evaluated"] == 300
+          assert report["dataset"]["corpus_documents"] == 5183
+          print("SciFact benchmark provenance + metric denominators: PASS")
+          print("commit=" + provenance["source_commit_sha"])
+          print("candidate_recall=" + str(end_to_end["open_candidate_recall_hits"]) + "/" + str(evidence_claims))
+          print("evidence_recall_at_5=" + str(end_to_end["gold_evidence_recall_at_5_hits"]) + "/" + str(evidence_claims))
+          PY
 
       - name: Upload benchmark artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
