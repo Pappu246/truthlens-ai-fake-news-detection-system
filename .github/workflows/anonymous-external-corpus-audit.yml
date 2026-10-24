@@ -1,0 +1,238 @@
+name: Independent Expert-Labelled Corpus Audit
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/anonymous-external-corpus-audit.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: truthlens-anonymous-corpus-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    name: Audit licensed external corpus schema and eligibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.11.16"
+
+      - name: Install pinned publisher-domain parser
+        run: python -m pip install publicsuffix2==2.20191221
+
+      - name: Download and fingerprint the published CC BY 4.0 corpus
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --show-error --connect-timeout 30 --max-time 2700 \
+            --retry 1 --retry-all-errors --retry-delay 5 \
+            --user-agent "TruthLens-External-Corpus-Audit/1.0" \
+            "https://zenodo.org/records/1181814/files/anonymous-fake-news-corpus.zip?download=1" \
+            -o /tmp/anonymous-fake-news-corpus.zip
+          test -s /tmp/anonymous-fake-news-corpus.zip
+          echo "7cc9a7210e705fac5a09e408f55e6d77  /tmp/anonymous-fake-news-corpus.zip" | md5sum --check -
+          sha256sum /tmp/anonymous-fake-news-corpus.zip | tee /tmp/anonymous-fake-news-corpus.sha256
+
+      - name: Stream-audit schema, binary veracity labels, article lengths, and source metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/external-corpus-audit
+          python - <<'PY'
+          import csv, hashlib, io, json, re, zipfile
+          from collections import Counter, defaultdict
+          from pathlib import Path
+          from urllib.parse import urlsplit
+          from publicsuffix2 import get_sld
+
+          archive = Path("/tmp/anonymous-fake-news-corpus.zip")
+          output = Path("artifacts/external-corpus-audit/anonymous-corpus-audit.json")
+          suffixes = {".csv": ",", ".tsv": "\t"}
+          text_terms = ("articletext", "articlebody", "body", "content", "fulltext", "fullarticle", "newsarticle", "storytext", "text")
+          label_terms = ("label", "truth", "veracity", "class", "fake", "factuality", "credibility")
+          source_terms = ("url", "domain", "publisher", "source", "outlet", "website", "site", "host", "media")
+          title_terms = ("title", "headline", "newstitle", "articletitle")
+
+          def norm(value):
+              return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
+
+          def domain_from(value):
+              raw = str(value or "").strip()
+              if not raw:
+                  return None
+              if "://" not in raw:
+                  raw = "https://" + raw
+              try:
+                  host = (urlsplit(raw).hostname or "").lower().rstrip(".")
+                  if host.startswith("www."):
+                      host = host[4:]
+                  if not host:
+                      return None
+                  suffix = get_sld(host, strict=True)
+                  return str(suffix).lower() if suffix else None
+              except Exception:
+                  return None
+
+          def explicit_label(value):
+              value = re.sub(r"[^a-z0-9]+", " ", str(value or "").strip().lower()).strip()
+              if not value:
+                  return None
+              if value in {"fake", "fake news", "false", "disinformation", "misinformation", "untrue", "not true", "noncredible", "unreliable"}:
+                  return "FAKE"
+              if value in {"real", "real news", "true", "credible", "reliable", "factual", "not fake", "nonfake"}:
+                  return "REAL"
+              # Numeric labels and ambiguous ordinal/hyperpartisanship labels are intentionally unmapped.
+              return None
+
+          with zipfile.ZipFile(archive) as zf:
+              infos = [i for i in zf.infolist() if not i.is_dir()]
+              archive_entries = [{
+                  "name": i.filename,
+                  "compressed_bytes": i.compress_size,
+                  "uncompressed_bytes": i.file_size,
+                  "suffix": Path(i.filename).suffix.lower(),
+              } for i in infos]
+              candidate_files = [i for i in infos if Path(i.filename).suffix.lower() in suffixes]
+              file_reports = []
+              total_binary_eligible = 0
+              total_text_eligible = 0
+              total_with_source = 0
+              total_rows = 0
+              for info in candidate_files:
+                  delimiter = suffixes[Path(info.filename).suffix.lower()]
+                  with zf.open(info, "r") as raw:
+                      text_stream = io.TextIOWrapper(raw, encoding="utf-8-sig", errors="replace", newline="")
+                      reader = csv.DictReader(text_stream, delimiter=delimiter)
+                      header = reader.fieldnames or []
+                      normalized = {norm(c): c for c in header}
+                      text_cols = [c for c in header if any(term in norm(c) for term in text_terms)]
+                      title_cols = [c for c in header if any(norm(c) == term or norm(c).endswith(term) for term in title_terms)]
+                      label_cols = [c for c in header if any(term in norm(c) for term in label_terms)]
+                      source_cols = [c for c in header if any(term in norm(c) for term in source_terms)]
+                      # Do not report arbitrary data or article text. Only aggregate schema and metrics.
+                      rows = 0
+                      text_eligible = 0
+                      binary_eligible = 0
+                      source_present = 0
+                      label_values = defaultdict(Counter)
+                      source_sets = defaultdict(set)
+                      body_lengths = []
+                      sample_field_lengths = {}
+                      for row in reader:
+                          rows += 1
+                          if not row:
+                              continue
+                          label_mappings = {}
+                          for col in label_cols:
+                              raw_label = str(row.get(col) or "").strip()
+                              if raw_label:
+                                  key = re.sub(r"\s+", " ", raw_label.lower())[:80]
+                                  label_values[col][key] += 1
+                                  mapped = explicit_label(raw_label)
+                                  if mapped:
+                                      label_mappings[col] = mapped
+                          label_col = next((c for c in label_cols if norm(c) in {"label", "truthlabel", "truthfulness", "veracity", "class", "isfake", "fakelabel", "factuality"}), None)
+                          mapped = explicit_label(row.get(label_col)) if label_col else None
+                          parts = [str(row.get(c) or "").strip() for c in title_cols[:1] + text_cols[:2]]
+                          article = " ".join(p for p in parts if p).strip()
+                          body = str(row.get(text_cols[0]) or "").strip() if text_cols else ""
+                          if body:
+                              body_lengths.append(len(body))
+                          is_full = len(article) >= 300 and len(article.split()) >= 50
+                          if is_full:
+                              text_eligible += 1
+                          has_domain = any(domain_from(row.get(c)) for c in source_cols)
+                          if has_domain:
+                              source_present += 1
+                          if is_full and has_domain and mapped:
+                              binary_eligible += 1
+                              source_value = next((domain_from(row.get(c)) for c in source_cols if domain_from(row.get(c))), None)
+                              source_sets[mapped].add(source_value)
+                      total_rows += rows
+                      total_text_eligible += text_eligible
+                      total_binary_eligible += binary_eligible
+                      total_with_source += source_present
+                      file_reports.append({
+                          "path": info.filename,
+                          "compressed_bytes": info.compress_size,
+                          "uncompressed_bytes": info.file_size,
+                          "row_count": rows,
+                          "columns": header,
+                          "candidate_article_text_columns": text_cols,
+                          "candidate_title_columns": title_cols,
+                          "candidate_label_columns": label_cols,
+                          "candidate_source_columns": source_cols,
+                          "rows_meeting_300_chars_50_words": text_eligible,
+                          "rows_with_registrable_source_domain": source_present,
+                          "rows_with_full_text_binary_label_and_source": binary_eligible,
+                          "label_value_counts": {col: dict(counts.most_common(30)) for col, counts in label_values.items()},
+                          "source_domain_counts_by_explicit_label": {label: len(values) for label, values in source_sets.items()},
+                          "body_character_length_sample_min": min(body_lengths) if body_lengths else None,
+                          "body_character_length_sample_max": max(body_lengths) if body_lengths else None,
+                      })
+
+          result = {
+              "dataset": "Anonymous Fake News Corpus",
+              "doi": "10.5281/zenodo.1181814",
+              "license": "CC BY 4.0",
+              "published_archive_md5": "7cc9a7210e705fac5a09e408f55e6d77",
+              "observed_archive_sha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
+              "archive_bytes": archive.stat().st_size,
+              "zip_member_count": len(archive_entries),
+              "archive_entries": archive_entries,
+              "delimited_files": file_reports,
+              "aggregate": {
+                  "rows_scanned_in_delimited_files": total_rows,
+                  "rows_meeting_full_text_length_filters": total_text_eligible,
+                  "rows_with_registrable_source_domain": total_with_source,
+                  "rows_with_full_text_explicit_binary_label_and_source": total_binary_eligible,
+              },
+              "notes": [
+                  "This is a schema/eligibility audit, not a performance benchmark.",
+                  "Only explicit text labels are mapped; numeric and ambiguous labels are not guessed.",
+                  "No article body, title, URL, publisher name, or row-level record is written to the artifact.",
+                  "The dataset’s own CC BY 4.0 license and expert-label description are documented on Zenodo.",
+                  "Source-level independence from a candidate’s fitting corpora must still be assessed before release approval."
+              ],
+              "release_gate_passed": False,
+          }
+          output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+          print(json.dumps({
+              "archive_bytes": result["archive_bytes"],
+              "zip_member_count": result["zip_member_count"],
+              "delimited_files": [{
+                  "path": f["path"],
+                  "row_count": f["row_count"],
+                  "columns": f["columns"],
+                  "candidate_article_text_columns": f["candidate_article_text_columns"],
+                  "candidate_label_columns": f["candidate_label_columns"],
+                  "candidate_source_columns": f["candidate_source_columns"],
+                  "rows_meeting_300_chars_50_words": f["rows_meeting_300_chars_50_words"],
+                  "rows_with_full_text_binary_label_and_source": f["rows_with_full_text_binary_label_and_source"],
+                  "label_value_counts": f["label_value_counts"],
+              } for f in file_reports],
+              "aggregate": result["aggregate"],
+              "release_gate_passed": False
+          }, indent=2))
+          PY
+
+      - name: Upload structural audit only
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: truthlens-anonymous-external-corpus-audit
+          path: artifacts/external-corpus-audit/anonymous-corpus-audit.json
+          if-no-files-found: warn
+          compression-level: 6
+          retention-days: 30
