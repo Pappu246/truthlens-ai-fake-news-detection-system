@@ -119,10 +119,24 @@ function candidateSeal() {
 }
 
 async function main(): Promise<void> {
-  const dataDir = path.resolve(arg('data-dir') || path.join('data', 'external', 'scifact'));
+  const explicitDataDir = arg('data-dir') || process.env.TRUTHLENS_SCIFACT_DATA_DIR;
+  // Prefer an explicit caller path. For local CI workflows that download the
+  // frozen data to a temporary directory, discover only known scratch paths
+  // when no argument/environment override was supplied; never guess another
+  // dataset or bypass the exact SHA-256 checks below.
+  const defaultCandidates = [
+    path.join('data', 'external', 'scifact'),
+    '/tmp/truthlens-model-quality/scifact',
+    '/tmp/truthlens-scifact/scifact'
+  ];
+  const selectedDataDir = explicitDataDir || defaultCandidates.find(candidate =>
+    fs.existsSync(path.join(candidate, 'claims_dev.jsonl')) &&
+    fs.existsSync(path.join(candidate, 'corpus.jsonl'))
+  ) || defaultCandidates[0];
+  const dataDir = path.resolve(selectedDataDir);
   const claimsPath = path.join(dataDir, 'claims_dev.jsonl');
   const corpusPath = path.join(dataDir, 'corpus.jsonl');
-  if (!fs.existsSync(claimsPath) || !fs.existsSync(corpusPath)) throw new Error(`SciFact data missing under ${dataDir}`);
+  if (!fs.existsSync(claimsPath) || !fs.existsSync(corpusPath)) throw new Error(`SciFact data missing under ${dataDir}; set --data-dir or TRUTHLENS_SCIFACT_DATA_DIR.`);
   const claimsSha = sha256File(claimsPath);
   const corpusSha = sha256File(corpusPath);
   if (claimsSha !== EXPECTED_CLAIMS_SHA || corpusSha !== EXPECTED_CORPUS_SHA) {
