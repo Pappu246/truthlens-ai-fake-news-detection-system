@@ -25,10 +25,15 @@ def sha(data: bytes) -> str:
 def norm_header(value) -> str:
     return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
 
+def normalize_label_value(value):
+    normalized = re.sub(r"[^a-z0-9]+", " ", str(value or "").strip().lower()).strip()
+    # Diagnostics contain normalized categorical labels only, never article text.
+    return normalized[:80] if normalized else "<blank>"
+
+
 def map_binary_label(value, column=None):
     """Map documented label strings, respecting explicit boolean-field semantics."""
-    raw = str(value or "").strip().lower()
-    normalized = re.sub(r"[^a-z0-9]+", " ", raw).strip()
+    normalized = normalize_label_value(value)
     field = norm_header(column or "")
 
     # Boolean-like values are only interpreted when the field name makes the
@@ -270,7 +275,7 @@ def scan_external_archive(archive_path: Path):
         stats["source_schema_sha256"] = sha(signature.encode("utf-8"))
         group_label_stats = group_stats.setdefault(signature, {})
         for column in label_columns:
-            group_label_stats.setdefault(column, {"fake": 0, "real": 0, "unmapped": 0})
+            group_label_stats.setdefault(column, {"fake": 0, "real": 0, "unmapped": 0, "values": {}})
 
         for row in reader:
             stats["rows_scanned"] += 1
@@ -286,6 +291,9 @@ def scan_external_archive(archive_path: Path):
             for column in label_columns:
                 label = map_binary_label(row.get(column), column)
                 counts = group_label_stats[column]
+                raw_category = normalize_label_value(row.get(column))
+                category_counts = counts["values"]
+                category_counts[raw_category] = category_counts.get(raw_category, 0) + 1
                 if label == "FAKE":
                     counts["fake"] += 1
                 elif label == "REAL":
@@ -322,9 +330,18 @@ def scan_external_archive(archive_path: Path):
             ),
         )[0] if viable else None
         selected_by_schema[signature] = selected
+        bounded_candidate_stats = {}
+        for column, counts in candidate_stats.items():
+            values = counts.get("values", {})
+            top_values = sorted(values.items(), key=lambda item: (-item[1], item[0]))[:30]
+            bounded_candidate_stats[column] = {
+                **{key: value for key, value in counts.items() if key != "values"},
+                "normalized_value_counts_top30": dict(top_values),
+                "distinct_normalized_value_count": len(values),
+            }
         group_diagnostics[signature] = {
             "schema_sha256": sha(signature.encode("utf-8")),
-            "candidate_label_columns": candidate_stats,
+            "candidate_label_columns": bounded_candidate_stats,
             "selected_label_column": selected,
             "selection_reason": (
                 "selected one explicit label field with both binary classes across this compatible schema group"

@@ -138,4 +138,7 @@ def test_balanced_label_field_can_span_compatible_single_class_files(tmp_path):
     assert labels == {"FAKE", "REAL"}
     assert counts["compatible_schema_group_count"] == 1
     assert counts["schema_groups_without_single_mixed_label_field"] == 0
+    group = counts["label_schema_group_diagnostics"][0]
+    assert group["candidate_label_columns"]["label"]["normalized_value_counts_top30"]["false"] == 2
+    assert group["candidate_label_columns"]["label"]["normalized_value_counts_top30"]["true"] == 2
     assert all(item["selected_label_column"] == "label" for item in counts["source_file_label_diagnostics"])
