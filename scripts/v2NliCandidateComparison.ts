@@ -11,7 +11,7 @@ import path from 'node:path';
 import { buildClaim } from '../server/v2/queryExpansion.js';
 import { PretrainedNliAdapter } from '../server/v2/nli/pretrainedNliAdapter.js';
 import { TransformerEmbeddingModel } from '../server/v2/retrieval/transformerEmbeddingModel.js';
-import { MlWorkerClient, disposeMlWorker } from '../server/v2/ml/mlWorkerClient.js';
+import { MlWorkerClient } from '../server/v2/ml/mlWorkerClient.js';
 import {
   ALL_MODEL_MANIFESTS,
   DISTILBERT_MNLI_CANDIDATE,
@@ -200,18 +200,21 @@ async function main(): Promise<void> {
     rationale_index: item.rationaleIndex,
     gold: item.gold
   })));
+  // Keep one native ONNX worker for the full comparison. Recreating a second
+  // worker in the same parent process can make onnxruntime-node fail native
+  // module self-registration even after the first worker has been terminated.
+  const comparisonClient = new MlWorkerClient();
+  const sharedEmbeddingModel = new TransformerEmbeddingModel(comparisonClient);
   const baseline = new PretrainedNliAdapter({
-    embeddingModel: new TransformerEmbeddingModel(),
+    client: comparisonClient,
+    embeddingModel: sharedEmbeddingModel,
     relatednessFloor: RELATEDNESS_FLOOR
   });
-  let candidateClient: MlWorkerClient | null = null;
   let candidate: PretrainedNliAdapter | null = null;
 
   try {
-    // ONNX Runtime's native binding is not reliable when two independently
-    // initialized worker-thread environments execute concurrently under Node
-    // 22 (V8 HandleScope fatal crash). Run each model in its own worker lifetime
-    // instead; predictions remain paired by the frozen rows above.
+    // Both models receive the exact same pre-materialized ordered evidence pairs.
+    // Only the NLI sessions change; the shared embedding model remains fixed.
     let cursor = 0;
     for (const [groupIndex, group] of groups.entries()) {
       const baseResults = baseline.classifyBatch(group.builtClaim, group.passages.map(item => item.text));
@@ -233,14 +236,13 @@ async function main(): Promise<void> {
       }
     }
 
-    // Fully dispose the default embedding+NLI worker before creating the
-    // candidate worker. Never host two ONNX Runtime worker environments at once.
-    await disposeMlWorker();
-    candidateClient = new MlWorkerClient({ nliModelId: DISTILBERT_MNLI_CANDIDATE.id });
-    const candidateEmbeddingModel = new TransformerEmbeddingModel(candidateClient);
+    // Reuse the initialized native worker and embedding session. The worker
+    // explicitly disposes the previous NLI ONNX sessions before loading the
+    // already provisioned and hash-verified comparison-only candidate.
+    comparisonClient.setNliModel(DISTILBERT_MNLI_CANDIDATE.id);
     candidate = new PretrainedNliAdapter({
-      client: candidateClient,
-      embeddingModel: candidateEmbeddingModel,
+      client: comparisonClient,
+      embeddingModel: sharedEmbeddingModel,
       relatednessFloor: RELATEDNESS_FLOOR,
       modelName: DISTILBERT_MNLI_CANDIDATE.id,
       modelVersion: DISTILBERT_MNLI_CANDIDATE.versionSeal ?? 'unsealed'
@@ -349,8 +351,7 @@ async function main(): Promise<void> {
       artifact: output
     }, null, 2));
   } finally {
-    if (candidateClient) await candidateClient.dispose();
-    await disposeMlWorker();
+    await comparisonClient.dispose();
   }
 }
 
