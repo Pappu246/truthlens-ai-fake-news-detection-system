@@ -204,6 +204,21 @@ export class MlWorkerClient {
     return result.vectors;
   }
 
+  /**
+   * Switch the active local NLI model without creating a second worker thread.
+   * The worker verifies that the model config exists under the sealed local
+   * model directory and disposes the previous ONNX sessions before switching.
+   */
+  public setNliModel(modelId: string): void {
+    const requested = modelId.trim();
+    if (!requested) throw new ModelInferenceError('NLI model ID must be non-empty.');
+    const result = this.call<{ nliModelId: string }>('setNliModel', { modelId: requested });
+    if (result.nliModelId !== requested) {
+      throw new ModelInferenceError(`ML worker switched to an unexpected NLI model: ${result.nliModelId}`);
+    }
+    this.metaCache = null;
+  }
+
   /** Batch NLI inference through the same synchronous worker facade. */
   public classifyBatch(
     pairs: Array<{ premise: string; hypothesis: string; maxTokens?: number }>
