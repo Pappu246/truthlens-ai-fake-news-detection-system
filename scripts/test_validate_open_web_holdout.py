@@ -252,7 +252,7 @@ class OpenWebHoldoutValidationTests(unittest.TestCase):
 
     def test_duplicate_json_keys_in_manifest_are_rejected(self):
         raw = self.manifest_path.read_text()
-        raw = raw.replace('"schema_version": 1,', '"schema_version": 1,\\n  "schema_version": 1,', 1)
+        raw = raw.replace('"schema_version": 1,', '"schema_version": 1,\n  "schema_version": 1,', 1)
         self.manifest_path.write_text(raw)
         with self.assertRaisesRegex(HoldoutValidationError, "duplicate JSON object key: 'schema_version'"):
             self.validate_current_candidate()
