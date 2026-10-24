@@ -6,6 +6,7 @@ from train_polyglot_source_heldout_candidate import (
     normalize_domain,
     publisher_split,
     source_domain,
+    publisher_domain_fingerprints,
 )
 
 
@@ -78,3 +79,24 @@ def test_domain_split_keeps_publishers_disjoint_and_both_classes_in_every_split(
     for name, items in split.items():
         assert {item["y"] for item in items} == {0, 1}
         assert len({item["domain"] for item in items}) > 0
+
+
+def test_publisher_domain_fingerprints_are_canonical_stable_and_non_raw():
+    values = publisher_domain_fingerprints([
+        "https://www.news.example.co.uk/article",
+        "example.co.uk",
+        "https://sub.publisher.example.com/story",
+    ])
+    expected = sorted([
+        __import__("hashlib").sha256(b"example.co.uk").hexdigest(),
+        __import__("hashlib").sha256(b"example.com").hexdigest(),
+    ])
+    assert values == expected
+    assert values == publisher_domain_fingerprints(list(reversed([
+        "https://www.news.example.co.uk/article",
+        "example.co.uk",
+        "https://sub.publisher.example.com/story",
+    ])))
+    assert all(len(value) == 64 for value in values)
+    assert "example.co.uk" not in repr(values)
+    assert "example.com" not in repr(values)
