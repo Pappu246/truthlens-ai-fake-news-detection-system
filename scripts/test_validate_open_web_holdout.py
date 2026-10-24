@@ -246,7 +246,7 @@ class OpenWebHoldoutValidationTests(unittest.TestCase):
     def test_duplicate_json_keys_in_records_are_rejected(self):
         lines = self.records_path.read_text().splitlines()
         lines[0] = lines[0].replace('"split": "holdout"', '"split": "holdout", "split": "holdout"', 1)
-        self.records_path.write_text("\\n".join(lines) + "\\n")
+        self.records_path.write_text("\n".join(lines) + "\n")
         with self.assertRaisesRegex(HoldoutValidationError, "duplicate JSON object key: 'split'"):
             self.validate_current_candidate()
 
