@@ -362,8 +362,12 @@ def main():
         default=16000,
         help="candidate-only vocabulary cap; production artifact is unchanged",
     )
+    parser.add_argument("--min-df", type=int, default=2,
+                        help="candidate-only minimum document frequency for vocabulary terms")
     parser.add_argument("--welfake", default=None, help="optional verified WELFake CSV for multi-source candidate training")
     args = parser.parse_args()
+    if args.max_features < 1000 or args.min_df < 1:
+        raise SystemExit("--max-features must be >=1000 and --min-df must be >=1.")
 
     fake = DATA / "Fake.csv"
     true = DATA / "True.csv"
@@ -404,7 +408,7 @@ def main():
         lowercase=False,
         token_pattern=None,
         max_features=args.max_features,
-        min_df=2,
+        min_df=args.min_df,
         sublinear_tf=True,
         norm="l2",
     )
@@ -586,7 +590,7 @@ def main():
         "welfake_split_method": welfake["manifest"]["split_method"] if welfake else None,
         "seed": SEED,
         "max_features": args.max_features,
-        "tfidf_min_df": 2,
+        "tfidf_min_df": args.min_df,
         "tfidf_analyzer": "TruthLens runtime unigram/bigram analyzer",
         "tfidf_sublinear_tf": True,
         "selected_svm_c": selected_svm_c,
@@ -799,7 +803,7 @@ def main():
             "calibration": "Platt sigmoid on disjoint validation split",
             "tfidf": {
                 "max_features": args.max_features,
-                "min_df": 2,
+                "min_df": args.min_df,
                 "sublinear_tf": True,
                 "norm": "l2",
                 "analyzer": "TruthLens runtime analyzer",
