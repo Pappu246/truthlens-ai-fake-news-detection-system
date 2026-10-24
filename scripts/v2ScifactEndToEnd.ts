@@ -17,6 +17,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { verifyClaimV2 } from '../server/v2/pipeline';
+import { DEFAULT_DECISION_THRESHOLDS } from '../server/v2/decision/decisionPolicy';
 import { PretrainedNliAdapter } from '../server/v2/nli/pretrainedNliAdapter';
 import { TransformerEmbeddingModel } from '../server/v2/retrieval/transformerEmbeddingModel';
 import { SciFactOpenCorpusSource, SciFactDocumentInput } from '../server/v2/retrieval/scifactCorpusSource';
@@ -50,6 +51,26 @@ function readJsonl<T>(file: string): T[] {
 
 function sha256(file: string): string {
   return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+}
+
+function sha256Json(value: unknown): string {
+  return crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
+}
+
+function sealedModelManifest() {
+  return ALL_MODEL_MANIFESTS.map(manifest => ({
+    kind: manifest.kind,
+    id: manifest.id,
+    base_model: manifest.baseModel,
+    quantization: manifest.quantization,
+    version_seal: manifest.versionSeal,
+    files: manifest.files.map(file => ({
+      path: file.path,
+      bytes: file.bytes,
+      sha256: file.sha256,
+      git_blob_sha1: file.gitBlobSha1 ?? null
+    }))
+  }));
 }
 
 function macroF1(predictions: string[], gold: string[], labels: string[]) {
@@ -133,11 +154,31 @@ async function main(): Promise<void> {
   const topCandidates = Math.max(20, Math.min(Number(arg('candidate-k') || 100), corpus.length));
   const denseTopK = Math.max(topCandidates, Math.min(Number(arg('dense-k') || topCandidates), corpus.length));
   const finalTopK = Math.max(5, Math.min(Number(arg('final-k') || 8), 20));
+  const perQueryTopK = 15;
+  const nliConcurrency = 8;
+  const enableFullTextEnrichment = false;
+  const minCandidatesExpectedWarning = 0;
+  const relatednessFloor = 0.15;
+  const runConfig = {
+    candidate_pool_k: topCandidates,
+    dense_retrieval_k: denseTopK,
+    final_pipeline_k: finalTopK,
+    per_query_top_k: perQueryTopK,
+    nli_concurrency: nliConcurrency,
+    enable_full_text_enrichment: enableFullTextEnrichment,
+    min_candidates_expected_warning: minCandidatesExpectedWarning,
+    relatedness_floor: relatednessFloor,
+    decision_thresholds: DEFAULT_DECISION_THRESHOLDS
+  };
+  const modelManifest = sealedModelManifest();
+  const modelManifestSha256 = sha256Json(modelManifest);
+  const sourceCommitSha = process.env.GITHUB_SHA || null;
 
   console.log(`SciFact retrieval config: candidate-k=${topCandidates}, dense-k=${denseTopK}, final-k=${finalTopK}`);
+  console.log(`SciFact provenance: commit=${sourceCommitSha ?? 'un-pinned-local-run'}, config_sha256=${sha256Json(runConfig)}, model_manifest_sha256=${modelManifestSha256}`);
 
   const embeddingModel = new TransformerEmbeddingModel();
-  const nliAdapter = new PretrainedNliAdapter({ embeddingModel });
+  const nliAdapter = new PretrainedNliAdapter({ embeddingModel, relatednessFloor });
   const source = new SciFactOpenCorpusSource(corpus, {
     topK: topCandidates,
     denseEmbeddingModel: embeddingModel,
@@ -169,10 +210,11 @@ async function main(): Promise<void> {
       const result = await verifyClaimV2(claim.claim, {
         corpus: source,
         nliAdapter,
-        nliConcurrency: 8,
-        retrieval: { embeddingModel, perQueryTopK: 15, finalTopK },
-        enableFullTextEnrichment: false,
-        minCandidatesExpectedWarning: 0
+        nliConcurrency,
+        retrieval: { embeddingModel, perQueryTopK, finalTopK },
+        thresholds: DEFAULT_DECISION_THRESHOLDS,
+        enableFullTextEnrichment,
+        minCandidatesExpectedWarning
       });
 
       const candidateIds = new Set(source.getCandidateIds());
@@ -227,9 +269,24 @@ async function main(): Promise<void> {
       }
     }
 
-    const benchmarkMetrics = macroF1(benchmarkPredictions, goldPredictions, ['SUPPORT', 'CONTRADICT', 'NOT_ENOUGH_INFO']);
-    const productionMetrics = macroF1(productionPredictions, goldPredictions, ['SUPPORT', 'CONTRADICT', 'NOT_ENOUGH_INFO']);
+    const metricLabels: GoldLabel[] = ['SUPPORT', 'CONTRADICT', 'NOT_ENOUGH_INFO'];
+    const benchmarkMetrics = macroF1(benchmarkPredictions, goldPredictions, metricLabels);
+    const productionMetrics = macroF1(productionPredictions, goldPredictions, metricLabels);
     const evidenceRecall = evidenceRecallDenominator ? evidenceRecallAt5 / evidenceRecallDenominator : null;
+    const benchmarkConfusionMatrix = metricLabels.map(gold => ({
+      gold,
+      predicted: Object.fromEntries(metricLabels.map(predicted => [
+        predicted,
+        goldPredictions.reduce((count, actual, index) => count + Number(actual === gold && benchmarkPredictions[index] === predicted), 0)
+      ]))
+    }));
+    const productionConfusionMatrix = metricLabels.map(gold => ({
+      gold,
+      predicted: Object.fromEntries(metricLabels.map(predicted => [
+        predicted,
+        goldPredictions.reduce((count, actual, index) => count + Number(actual === gold && productionPredictions[index] === predicted), 0)
+      ]))
+    }));
     const calibrationSplit = calibrationSamples.filter((_sample, index) => index % 2 === 0);
     const calibrationHoldout = calibrationSamples.filter((_sample, index) => index % 2 === 1);
     const fittedTemperature = fitConfidenceTemperature(calibrationSplit);
@@ -242,9 +299,19 @@ async function main(): Promise<void> {
     const calibratedHoldoutCalibration = expectedCalibrationError(calibratedHoldout, 10);
 
     const output = {
-      protocol_version: 'truthlens-v2-scifact-end-to-end-v1',
+      protocol_version: 'truthlens-v2-scifact-end-to-end-v2',
       generated_at: new Date().toISOString(),
       benchmark: true,
+      run_provenance: {
+        source_commit_sha: sourceCommitSha,
+        source_ref: process.env.GITHUB_REF || null,
+        event_name: process.env.GITHUB_EVENT_NAME || 'local',
+        workflow_run_id: process.env.GITHUB_RUN_ID || null,
+        workflow_run_attempt: process.env.GITHUB_RUN_ATTEMPT || null,
+        config_sha256: sha256Json(runConfig),
+        model_manifest_sha256: modelManifestSha256
+      },
+      config: runConfig,
       dataset: {
         name: 'SciFact',
         split: 'dev',
@@ -257,15 +324,34 @@ async function main(): Promise<void> {
         final_pipeline_k: finalTopK
       },
       models: {
-        nli: { name: nliAdapter.modelName, version: nliAdapter.modelVersion },
-        embedding: { name: embeddingModel.name, version: embeddingModel.version }
+        nli: {
+          name: nliAdapter.modelName,
+          version: nliAdapter.modelVersion,
+          artifact_sha256: modelManifest.find(manifest => manifest.kind === 'nli')?.files.find(file => file.path === 'onnx/model_quantized.onnx')?.sha256 ?? null
+        },
+        embedding: {
+          name: embeddingModel.name,
+          version: embeddingModel.version,
+          artifact_sha256: modelManifest.find(manifest => manifest.kind === 'embedding')?.files.find(file => file.path === 'onnx/model_quantized.onnx')?.sha256 ?? null
+        },
+        manifest_sha256: modelManifestSha256,
+        sealed_manifest: modelManifest
       },
       end_to_end: {
-        open_candidate_recall: candidateRecall / claims.length,
+        // Recall is defined only over claims that have gold evidence. NEI claims
+        // have no gold evidence IDs and must not be counted as retrieval misses.
+        open_candidate_recall: evidenceRecallDenominator ? candidateRecall / evidenceRecallDenominator : null,
+        open_candidate_recall_hits: candidateRecall,
+        open_candidate_recall_denominator: evidenceRecallDenominator,
         gold_evidence_recall_at_5: evidenceRecall,
+        gold_evidence_recall_at_5_hits: evidenceRecallAt5,
+        gold_evidence_recall_at_5_denominator: evidenceRecallDenominator,
         benchmark_directional_accuracy: benchmarkMetrics.accuracy,
         benchmark_directional_macro_f1: benchmarkMetrics.macroF1,
-        benchmark_directional_per_class: benchmarkMetrics.perClass
+        benchmark_directional_per_class: benchmarkMetrics.perClass,
+        benchmark_directional_confusion_matrix: benchmarkConfusionMatrix,
+        gold_label_counts: Object.fromEntries(metricLabels.map(label => [label, goldPredictions.filter(value => value === label).length])),
+        predicted_label_counts: Object.fromEntries(metricLabels.map(label => [label, benchmarkPredictions.filter(value => value === label).length]))
       },
       calibration: {
         target: 'benchmark_direction_correctness',
@@ -283,6 +369,7 @@ async function main(): Promise<void> {
         mapped_accuracy: productionMetrics.accuracy,
         mapped_macro_f1: productionMetrics.macroF1,
         mapped_per_class: productionMetrics.perClass,
+        mapped_confusion_matrix: productionConfusionMatrix,
         abstention_rate: pipelineAbstentions / claims.length,
         conflicted_rate: conflicted / claims.length,
         non_abstain_coverage: productionNonAbstain / claims.length,
