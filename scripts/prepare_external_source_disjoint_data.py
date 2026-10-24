@@ -50,27 +50,33 @@ def scan_delimited(stream, delimiter, unique, counters):
     title_columns = [h for h in headers if norm_header(h) in TITLE_ALIASES]
     source_columns = [h for h in headers if norm_header(h) in SOURCE_ALIASES or any(term in norm_header(h) for term in ("sourceurl", "sourcedomain", "publisherdomain", "websiteurl"))]
     label_columns = [h for h in headers if norm_header(h) in LABEL_ALIASES or any(term in norm_header(h) for term in ("truthlabel", "veracitylabel", "fakelabel"))]
-    if not body_columns or not label_columns or not source_columns:
+    # Combined exports can contain multiple label taxonomies. Prefer one primary
+    # class column; do not union unrelated secondary annotations into one label.
+    label_priority = ("class", "truthlabel", "veracity", "truthfulness", "fakenewslabel", "factuality", "isfake", "label", "reliability", "credibility")
+    label_column = next((h for key in label_priority for h in label_columns if norm_header(h) == key), None)
+    if label_column is None and label_columns:
+        label_column = label_columns[0]
+    if not body_columns or not label_column or not source_columns:
         return
     for row in reader:
         counters["rows_scanned"] += 1
-        body = str(row.get(body_columns[0]) or "").strip()
-        title = str(row.get(title_columns[0]) or "").strip() if title_columns else ""
+        # Combined exports can leave the first body field blank and use text/text_english.
+        body = next((str(row.get(column) or "").strip() for column in body_columns if str(row.get(column) or "").strip()), "")
+        title = next((str(row.get(column) or "").strip() for column in title_columns if str(row.get(column) or "").strip()), "")
         text = re.sub(r"\s+", " ", (title + " " + body).strip())
         if len(text) < 300 or len(text.split()) < 50:
             continue
         counters["full_text_rows"] += 1
-        labels = {mapped for column in label_columns if (mapped := map_binary_label(row.get(column)))}
+        label = map_binary_label(row.get(label_column))
         sources = {fp for column in source_columns if (fp := domain_fingerprint(row.get(column)))}
-        if not labels or not sources:
+        if label is None or not sources:
             continue
         counters["full_text_with_explicit_label_and_source"] += 1
         fingerprint = article_text_fingerprint(text)
         article = unique.setdefault(fingerprint, {"text": text, "labels": set(), "source_fingerprints": set()})
-        article["labels"].update(labels)
+        article["labels"].add(label)
         article["source_fingerprints"].update(sources)
         article["text"] = min(article["text"], text)
-
 def scan_external_archive(archive_path: Path):
     csv.field_size_limit(50 * 1024 * 1024)
     unique = {}
@@ -140,6 +146,10 @@ def main():
         })
     if not eligible:
         raise SystemExit("No unique external articles meet the full-text, explicit-label and source filters.")
+    eligible_label_counts = {
+        "FAKE": sum(record["y"] == 1 for record in eligible),
+        "REAL": sum(record["y"] == 0 for record in eligible),
+    }
 
     external_publishers = sorted({fp for record in eligible for fp in record["source_fingerprints"]})
     fingerprint_set_sha = sha(json.dumps(external_publishers, separators=(",", ":")).encode("utf-8"))
@@ -208,6 +218,7 @@ def main():
         "exact_unique_full_text_article_fingerprints": len(unique),
         "exact_duplicate_articles_with_conflicting_labels_excluded": conflicting_label_articles,
         "eligible_unique_articles_before_cross_corpus_near_dedup": len(eligible),
+        "eligible_unique_articles_by_label": eligible_label_counts,
         "external_publisher_fingerprint_count": len(external_publishers),
         "external_publisher_fingerprint_set_sha256": fingerprint_set_sha,
         "candidate_input_records_before_source_exclusion": len(candidate_rows),
@@ -217,6 +228,10 @@ def main():
         "external_records_removed_for_external_near_duplicates": external_near_duplicates_removed,
         "external_records_removed_for_near_duplicate_label_conflicts": conflicting_near_duplicates_removed,
         "independent_external_evaluation_count": len(selected_external),
+        "independent_external_evaluation_by_label": {
+            "FAKE": sum(record["y"] == 1 for record in selected_external),
+            "REAL": sum(record["y"] == 0 for record in selected_external),
+        },
         "external_evaluation_jsonl_sha256": sha(evaluation_path.read_bytes()),
         "method_notes": [
             "Only unique full-text articles with explicit, unambiguous binary labels and source metadata enter evaluation.",

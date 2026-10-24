@@ -36,3 +36,24 @@ def test_external_archive_consolidates_exact_duplicates_and_requires_source_and_
     assert len(eligible) == 1
     assert eligible[0]["labels"] == {"REAL"}
     assert len(eligible[0]["source_fingerprints"]) == 1
+
+
+def test_nonempty_text_column_wins_over_blank_primary_body_and_class_has_priority(tmp_path):
+    archive = tmp_path / "combined.zip"
+    body = " ".join(["independent"] * 70) + " This full article uses the secondary text field."
+    rows = [
+        {"article_title": "", "article_text": "", "text": body, "article_url": "https://real.example.org/news", "class": "true", "label": "disinformation"},
+        {"article_title": "False report", "article_text": body + " changed content", "text": "", "article_url": "https://fake.example.net/news", "class": "disinformation", "label": "disinformation"},
+    ]
+    raw = io.StringIO()
+    writer = csv.DictWriter(raw, fieldnames=["article_title", "article_text", "text", "article_url", "class", "label"])
+    writer.writeheader()
+    writer.writerows(rows)
+    with zipfile.ZipFile(archive, "w") as z:
+        z.writestr("combined.csv", raw.getvalue())
+    unique, counts, files_scanned = scan_external_archive(archive)
+    labels = {next(iter(item["labels"])) for item in unique.values() if len(item["labels"]) == 1}
+    assert files_scanned == 1
+    assert counts["rows_scanned"] == 2
+    assert len(unique) == 2
+    assert labels == {"FAKE", "REAL"}
