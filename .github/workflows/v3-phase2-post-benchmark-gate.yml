@@ -13,6 +13,7 @@ name: TruthLens Phase 2 Post-Benchmark Exit Gate
     workflows:
       - V3 Phase 2 Scoring Recovery
       - Phase 2 AVeriTeC End-to-End Benchmark
+      - TruthLens Open-Web V1 Holdout Gate
     types:
       - completed
 
@@ -40,7 +41,7 @@ jobs:
 
   gate:
     name: Recheck Phase 2 after benchmark completion
-    if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.head_branch == 'research/v3-phase2-current-main' && github.event.workflow_run.head_repository.full_name == github.repository }}
+    if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.head_branch == 'research/phase2-current-head-evidence-20261024' && github.event.workflow_run.head_repository.full_name == github.repository }}
     runs-on: ubuntu-latest
     steps:
       - name: Resolve latest benchmark runs for this exact research commit
@@ -52,9 +53,10 @@ jobs:
         run: |
           set -euo pipefail
           api="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs"
-          recovery_json="$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "${api}?workflow_id=374135353&head_sha=${TARGET_SHA}&per_page=100" | jq -c '[.workflow_runs[]] | sort_by(.run_number) | last // empty')"
-          averitec_json="$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "${api}?workflow_id=373715227&head_sha=${TARGET_SHA}&per_page=100" | jq -c '[.workflow_runs[]] | sort_by(.run_number) | last // empty')"
-          holdout_json="$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "${api}?workflow_id=374147287&head_sha=${TARGET_SHA}&per_page=100" | jq -c '[.workflow_runs[] | select(.conclusion=="success")] | sort_by(.run_number) | last // empty')"
+          run_list="$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "${api}?head_sha=${TARGET_SHA}&per_page=100")"
+          recovery_json="$(jq -c --arg sha "$TARGET_SHA" '[.workflow_runs[] | select(.head_sha==$sha and .name=="V3 Phase 2 Scoring Recovery")] | sort_by(.run_number) | last // empty' <<<"$run_list")"
+          averitec_json="$(jq -c --arg sha "$TARGET_SHA" '[.workflow_runs[] | select(.head_sha==$sha and .name=="Phase 2 AVeriTeC End-to-End Benchmark")] | sort_by(.run_number) | last // empty' <<<"$run_list")"
+          holdout_json="$(jq -c --arg sha "$TARGET_SHA" '[.workflow_runs[] | select(.head_sha==$sha and .name=="TruthLens Open-Web V1 Holdout Gate" and .conclusion=="success")] | sort_by(.run_number) | last // empty' <<<"$run_list")"
 
           if [ -z "$recovery_json" ] || [ -z "$averitec_json" ]; then
             echo "gate_ready=false" >> "$GITHUB_OUTPUT"
