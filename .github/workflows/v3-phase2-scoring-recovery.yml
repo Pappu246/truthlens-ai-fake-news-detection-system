@@ -16,7 +16,7 @@ on:
       - '.github/workflows/v3-phase2-scoring-recovery.yml'
 
 concurrency:
-  group: truthlens-v3-phase2-scoring-recovery-pr-${{ github.event.pull_request.number || github.ref }}
+  group: truthlens-v3-phase2-scoring-recovery-currenthead-pr-${{ github.event.pull_request.number || github.ref }}
   # New PR-head commits supersede stale benchmark work; exact-head evidence is mandatory.
   cancel-in-progress: true
 
