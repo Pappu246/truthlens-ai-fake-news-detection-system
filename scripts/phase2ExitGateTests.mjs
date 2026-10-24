@@ -118,7 +118,7 @@ async function main() {
     await fs.rm(path.join(root, 'research/open-web-v1-holdout.jsonl'), { force: true });
     const noHumanHoldout = await runGate(root);
     assert.notEqual(noHumanHoldout.result.status, 0);
-    assert.ok(noHumanHoldout.report.failures.some((item) => item.includes('Open-Web human-labelled blind holdout is not sealed')));
+    assert.ok(noHumanHoldout.report.failures.some((item) => item.includes('Open-Web human-labelled blind holdout and successful validator evidence are not sealed')));
 
     console.log('Phase 2 exit gate tests: PASS (exact-head provenance, stale/missing SHA blocked, 100-claim holdout + annotation attestation required)');
   } finally {
