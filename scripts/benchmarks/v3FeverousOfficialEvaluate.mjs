@@ -7,6 +7,7 @@ function arg(name) { const hit = process.argv.find((v) => v.startsWith("--" + na
 function run(command, args, cwd, env = process.env) { return new Promise((resolve, reject) => { const child = spawn(command, args, { cwd, env, stdio: "inherit" }); child.on("error", reject); child.on("exit", (code) => code === 0 ? resolve() : reject(new Error(command + " exited " + code))); }); }
 async function main() {
   const input = path.resolve(arg("input") || "artifacts/v3/feverous/predictions.jsonl");
+  const evaluatedCommitSha = arg("commit-sha") || process.env.TRUTHLENS_EVALUATED_COMMIT_SHA || process.env.GITHUB_SHA || null;
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "truthlens-feverous-"));
   try {
     await run("git", ["clone", "--depth", "50", "https://github.com/Raldir/FEVEROUS.git", "repo"], tmp);
@@ -47,6 +48,7 @@ async function main() {
       evaluator_source: "https://github.com/Raldir/FEVEROUS/blob/32b68ce4e33c53f34ae2e6d88b51cd073ab85ab6/src/feverous/evaluation/evaluate.py",
       input,
       evaluation_count: predictedLines.length,
+      truthlens_git_sha: evaluatedCommitSha,
       metrics,
       scorer_stdout: scorerRun.stdout,
       scorer_stderr: scorerRun.stderr,

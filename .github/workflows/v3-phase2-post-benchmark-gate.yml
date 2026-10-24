@@ -140,6 +140,8 @@ jobs:
 
       - name: Evaluate fail-closed Phase 2 gate
         if: steps.resolve.outputs.gate_ready == 'true'
+        env:
+          TRUTHLENS_EXPECTED_COMMIT_SHA: ${{ steps.resolve.outputs.target_sha }}
         run: node scripts/phase2ExitGate.mjs
 
       - name: Upload post-benchmark gate result

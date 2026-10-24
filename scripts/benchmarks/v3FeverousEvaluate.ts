@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { FixtureCorpusSource } from '../../server/v2/retrieval/corpusSource';
 import { verifyClaimV2 } from '../../server/v2/pipeline';
@@ -18,6 +19,10 @@ async function main() {
   const input = path.resolve(arg('input', 'artifacts/v3/feverous/candidates.jsonl')!);
   const output = path.resolve(arg('output', 'artifacts/v3/feverous/truthlens-predictions.jsonl')!);
   const rows: Row[] = fs.readFileSync(input, 'utf8').split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line) as Row);
+  const evaluatedCommitSha = arg('commit-sha') || process.env.TRUTHLENS_EVALUATED_COMMIT_SHA || process.env.GITHUB_SHA || null;
+  const protocolManifestPath = path.resolve('research/multibenchmark-manifest.json');
+  const configurationSha256 = crypto.createHash('sha256').update(fs.readFileSync(protocolManifestPath)).digest('hex');
+
   const maxClaims = Number(arg('max-claims', '0'));
   const selected = maxClaims > 0 ? rows.slice(0, maxClaims) : rows;
   const predictions: any[] = [];
@@ -66,7 +71,8 @@ async function main() {
     benchmark_id: 'feverous', protocol_version: 'truthlens-v3-benchmark-protocol-v1',
     dataset: { name: 'FEVEROUS', version_or_split: 'dev', evaluation_count: predictions.length },
     metrics: { label_accuracy: predictions.length ? labelCorrect / predictions.length : 0, open_candidate_recall: predictions.length ? candidateRecall / predictions.length : 0 },
-    predictions_output: output, scorer_revision: 'Raldir/FEVEROUS@32b68ce4e33c53f34ae2e6d88b51cd073ab85ab6', generated_at: new Date().toISOString()
+    predictions_output: output, scorer_revision: 'Raldir/FEVEROUS@32b68ce4e33c53f34ae2e6d88b51cd073ab85ab6',
+    provenance: { commit_sha: evaluatedCommitSha, configuration_sha256: configurationSha256 }, generated_at: new Date().toISOString()
   };
   const reportPath = path.resolve(arg('report', 'artifacts/v3/feverous/truthlens-adapter-report.json')!);
   fs.writeFileSync(reportPath, JSON.stringify(report, null, 2) + '\n');

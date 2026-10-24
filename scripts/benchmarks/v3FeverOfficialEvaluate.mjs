@@ -21,6 +21,7 @@ function runPython(cwd, script) {
 async function fetchText(url) { const res = await fetch(url, { headers: { "user-agent": "TruthLens-V3-Benchmark-Adapter/1.0" } }); if (!res.ok) throw new Error("failed to fetch " + url + ": HTTP " + res.status); return res.text(); }
 async function main() {
   const predictions = path.resolve(arg("predictions") || "artifacts/v3/fever/predictions.json");
+  const evaluatedCommitSha = arg("commit-sha") || process.env.TRUTHLENS_EVALUATED_COMMIT_SHA || process.env.GITHUB_SHA || null;
   const actual = path.resolve(arg("actual") || "data/external/fever/shared_task_dev.jsonl");
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "truthlens-fever-"));
   try {
@@ -40,6 +41,7 @@ async function main() {
       predictions,
       actual,
       evaluation_count: Array.isArray(predictions) ? predictions.length : 0,
+      truthlens_git_sha: evaluatedCommitSha,
       metrics,
       scorer_stdout: scorerRun.stdout,
       scorer_stderr: scorerRun.stderr,

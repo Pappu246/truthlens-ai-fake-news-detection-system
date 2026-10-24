@@ -6,9 +6,11 @@ import crypto from "node:crypto";
 
 const manifestPath = path.resolve("research/multibenchmark-manifest.json");
 const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
+const expectedCommitSha = process.env.TRUTHLENS_EXPECTED_COMMIT_SHA || "";
 
 const failures = [];
 const checks = [];
+if (!/^[a-f0-9]{40}$/i.test(expectedCommitSha)) failures.push("expected evaluated commit SHA missing or invalid");
 
 async function exists(file) {
   try {
@@ -25,6 +27,37 @@ async function readJson(file) {
 
 async function sha256(file) {
   return crypto.createHash("sha256").update(await fs.readFile(file)).digest("hex");
+}
+
+async function checkCommitProvenance(label, file, selectCommitSha) {
+  const fileExists = await exists(file);
+  if (!fileExists) {
+    checks.push({ label, file, pass: false, reason: "provenance artifact missing" });
+    failures.push(label + ": provenance artifact missing");
+    return;
+  }
+  try {
+    const artifact = await readJson(file);
+    const actualCommitSha = selectCommitSha(artifact);
+    const expectedValid = /^[a-f0-9]{40}$/i.test(expectedCommitSha);
+    const actualValid = /^[a-f0-9]{40}$/i.test(actualCommitSha || "");
+    const pass = expectedValid && actualValid && actualCommitSha.toLowerCase() === expectedCommitSha.toLowerCase();
+    checks.push({
+      label,
+      file,
+      pass,
+      expected_commit_sha: expectedValid ? expectedCommitSha : null,
+      actual_commit_sha: actualValid ? actualCommitSha : null
+    });
+    if (!expectedValid) failures.push(label + ": expected evaluated commit SHA missing or invalid");
+    if (!actualValid) failures.push(label + ": artifact commit SHA missing or invalid");
+    else if (expectedValid && actualCommitSha.toLowerCase() !== expectedCommitSha.toLowerCase()) {
+      failures.push(label + ": commit SHA mismatch (expected " + expectedCommitSha + ", got " + actualCommitSha + ")");
+    }
+  } catch (error) {
+    checks.push({ label, file, pass: false, reason: "invalid provenance JSON" });
+    failures.push(label + ": invalid provenance JSON (" + String(error) + ")");
+  }
 }
 
 async function checkArtifact(label, file, expectedBenchmarkId, expectedEvaluationCount = null) {
@@ -98,6 +131,13 @@ await checkArtifact(
   manifest.benchmarks.find((item) => item.id === "averitec")?.expected_evaluation_claims ?? null
 );
 
+await checkCommitProvenance("FEVER score evaluated commit", "artifacts/v3/fever/official-scorer-run.json", (artifact) => artifact.truthlens_git_sha);
+await checkCommitProvenance("FEVER adapter evaluated commit", "artifacts/v3/fever/truthlens-adapter-report.json", (artifact) => artifact.provenance?.commit_sha);
+await checkCommitProvenance("FEVEROUS score evaluated commit", "artifacts/v3/feverous/official-scorer-run.json", (artifact) => artifact.truthlens_git_sha);
+await checkCommitProvenance("FEVEROUS adapter evaluated commit", "artifacts/v3/feverous/truthlens-adapter-report.json", (artifact) => artifact.provenance?.commit_sha);
+await checkCommitProvenance("AVeriTeC score evaluated commit", "artifacts/v2-averitec-e2e/official-evaluation.json", (artifact) => artifact.truthlens_git_sha);
+await checkCommitProvenance("AVeriTeC reproducibility manifest evaluated commit", "artifacts/v2-averitec-e2e/reproducibility-manifest.json", (artifact) => artifact.truthlens_git_sha);
+
 const openWebHoldout = "research/open-web-v1-holdout.jsonl";
 const openWebManifest = "artifacts/v3/open-web-v1/holdout-release-manifest.json";
 const holdoutExists = await exists(openWebHoldout);
@@ -117,6 +157,7 @@ if (!holdoutExists || !openManifestExists) {
 const gate = {
   schema_version: 1,
   generated_at: new Date().toISOString(),
+  evaluated_commit_sha: /^[a-f0-9]{40}$/i.test(expectedCommitSha) ? expectedCommitSha : null,
   phase: 2,
   status: failures.length ? "BLOCKED" : "READY_FOR_HUMAN_REVIEW",
   complete: failures.length === 0,

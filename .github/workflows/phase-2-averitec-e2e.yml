@@ -27,6 +27,7 @@ env:
   AV_STORE_URL: 'https://huggingface.co/chenxwh/AVeriTeC/resolve/26238ae/data_store/knowledge_store/dev_knowledge_store.zip'
   AV_STORE_SHA256: '021e258cd6fb5fe6d627a4667d663e95c184c966939c15124df9206142fc2212'
   AV_OFFICIAL_COMMIT: '7c62d1ec8df3fb560d6efe2b85fa191135636f81'
+  TRUTHLENS_EVALUATED_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
   NODE_OPTIONS: '--max-old-space-size=6144 --expose-gc'
   TRUTHLENS_V2_ML_CALL_TIMEOUT_MS: '600000'
 
@@ -55,6 +56,8 @@ jobs:
             end: 500
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -144,6 +147,8 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -187,7 +192,7 @@ jobs:
           import json,re,os
           from pathlib import Path
           text=Path("artifacts/v2-averitec-e2e/official-evaluation.txt").read_text()
-          out={"evaluation_count":len(json.loads(Path("artifacts/v2-averitec-e2e/predictions.json").read_text())),"benchmark_id":"averitec","protocol_version":"truthlens-v3-benchmark-protocol-v1","evaluation_scope":"dev_500_claims","evaluator":{"repository":"MichSchli/AVeriTeC","commit":os.environ["AV_OFFICIAL_COMMIT"]},"metrics":{"veracity_f1":{},"averitec_veracity":{},"averitec_justification":{}},"generated_at":__import__("datetime").datetime.utcnow().isoformat()+"Z","truthlens_git_sha":os.environ.get("GITHUB_SHA"),"workflow_run_id":os.environ.get("GITHUB_RUN_ID")}
+          out={"evaluation_count":len(json.loads(Path("artifacts/v2-averitec-e2e/predictions.json").read_text())),"benchmark_id":"averitec","protocol_version":"truthlens-v3-benchmark-protocol-v1","evaluation_scope":"dev_500_claims","evaluator":{"repository":"MichSchli/AVeriTeC","commit":os.environ["AV_OFFICIAL_COMMIT"]},"metrics":{"veracity_f1":{},"averitec_veracity":{},"averitec_justification":{}},"generated_at":__import__("datetime").datetime.utcnow().isoformat()+"Z","truthlens_git_sha":os.environ.get("TRUTHLENS_EVALUATED_COMMIT_SHA"),"workflow_run_id":os.environ.get("GITHUB_RUN_ID")}
           section=None
           for line in text.splitlines():
               line=line.strip()
@@ -206,7 +211,7 @@ jobs:
       - name: Write reproducibility manifest
         run: |
           cat > artifacts/v2-averitec-e2e/reproducibility-manifest.json <<EOF
-          {"benchmark":"AVeriTeC","split":"dev","claims":500,"claims_sha256":"$AV_DATA_SHA256","official_data_commit":"$AV_DATA_COMMIT","evidence_store_revision":"$AV_STORE_REVISION","evidence_store_sha256":"$AV_STORE_SHA256","truthlens_git_sha":"$GITHUB_SHA","workflow_run_id":"$GITHUB_RUN_ID","shard_count":4,"shard_size":125,"production_boundary":"research_only_no_production_model_threshold_or_runtime_change","gold_evidence_in_retrieval":false}
+          {"benchmark":"AVeriTeC","split":"dev","claims":500,"claims_sha256":"$AV_DATA_SHA256","official_data_commit":"$AV_DATA_COMMIT","evidence_store_revision":"$AV_STORE_REVISION","evidence_store_sha256":"$AV_STORE_SHA256","truthlens_git_sha":"$TRUTHLENS_EVALUATED_COMMIT_SHA","workflow_run_id":"$GITHUB_RUN_ID","shard_count":4,"shard_size":125,"production_boundary":"research_only_no_production_model_threshold_or_runtime_change","gold_evidence_in_retrieval":false}
           EOF
           sha256sum artifacts/v2-averitec-e2e/*.json artifacts/v2-averitec-e2e/*.txt | sort > artifacts/v2-averitec-e2e/artifact-file-sha256.txt
       - name: Upload complete AVeriTeC score artifact
@@ -222,6 +227,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@v4
         with: {node-version: 22}
       - name: Install dependencies

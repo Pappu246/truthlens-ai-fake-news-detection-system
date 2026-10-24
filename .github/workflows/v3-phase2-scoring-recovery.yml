@@ -9,6 +9,7 @@ on:
       - 'scripts/benchmarks/**'
       - 'scripts/v3Phase2ResumableCoordinator.mjs'
       - 'scripts/phase2ExitGate.mjs'
+      - 'scripts/phase2ExitGateTests.mjs'
       - 'scripts/publicBenchmarkExitGate.mjs'
       - 'scripts/publicBenchmarkExitGateTests.mjs'
       - 'research/multibenchmark-manifest.json'
@@ -52,6 +53,9 @@ jobs:
           node --check scripts/publicBenchmarkExitGate.mjs
           node --check scripts/publicBenchmarkExitGateTests.mjs
           node scripts/publicBenchmarkExitGateTests.mjs
+          node --check scripts/phase2ExitGate.mjs
+          node --check scripts/phase2ExitGateTests.mjs
+          node scripts/phase2ExitGateTests.mjs
           npm run check:phase2-protocol
       - name: Assert full-split gate requirements
         run: |

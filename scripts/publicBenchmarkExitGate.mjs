@@ -24,6 +24,7 @@ function finiteUnitMetric(value) {
 const manifestPath = path.resolve(arg('manifest', 'research/multibenchmark-manifest.json'));
 const protocolPath = path.resolve(arg('protocol', 'docs/V3_PHASE2_BENCHMARK_PROTOCOL.md'));
 const outputPath = path.resolve(arg('output', 'artifacts/v3/public-benchmark-gate.json'));
+const expectedCommitSha = arg('expected-commit-sha') || process.env.TRUTHLENS_EXPECTED_COMMIT_SHA || '';
 const specs = [
   {
     id: 'fever_v1', benchmarkId: 'fever', expectedCount: 19998,
@@ -47,6 +48,7 @@ const specs = [
 
 const failures = [];
 const checks = [];
+if (!/^[a-f0-9]{40}$/i.test(expectedCommitSha)) failures.push('expected evaluated commit SHA missing or invalid');
 const results = [];
 let manifest = null;
 try {
@@ -92,6 +94,7 @@ for (const spec of specs) {
   };
   if (!scoreExists) failures.push(spec.benchmarkId + ': official score artifact missing');
   if (!adapterExists) failures.push(spec.benchmarkId + ': adapter/provenance artifact missing');
+  const failuresAtStart = failures.length;
   if (scoreExists && adapterExists) {
     try {
       const score = await readJson(spec.scorePath);
@@ -100,6 +103,25 @@ for (const spec of specs) {
       if (score.protocol_version !== 'truthlens-v3-benchmark-protocol-v1') failures.push(spec.benchmarkId + ': scoring protocol version mismatch');
       if (score.evaluation_count !== spec.expectedCount) failures.push(spec.benchmarkId + ': official score evaluation_count expected ' + spec.expectedCount + ', got ' + score.evaluation_count);
       if (typeof score.generated_at !== 'string' || !Number.isFinite(Date.parse(score.generated_at))) failures.push(spec.benchmarkId + ': official score generated_at missing or invalid');
+
+      const adapterCommitSha = spec.benchmarkId === 'averitec'
+        ? adapter.truthlens_git_sha
+        : adapter.provenance?.commit_sha;
+      const scoreCommitSha = score.truthlens_git_sha || score.provenance?.commit_sha;
+      if (!/^[a-f0-9]{40}$/i.test(adapterCommitSha || '')) {
+        failures.push(spec.benchmarkId + ': adapter evaluated commit SHA missing or invalid');
+      } else if (/^[a-f0-9]{40}$/i.test(expectedCommitSha) && adapterCommitSha.toLowerCase() !== expectedCommitSha.toLowerCase()) {
+        failures.push(spec.benchmarkId + ': adapter commit SHA mismatch (expected ' + expectedCommitSha + ', got ' + adapterCommitSha + ')');
+      }
+      if (!/^[a-f0-9]{40}$/i.test(scoreCommitSha || '')) {
+        failures.push(spec.benchmarkId + ': official score evaluated commit SHA missing or invalid');
+      } else if (/^[a-f0-9]{40}$/i.test(expectedCommitSha) && scoreCommitSha.toLowerCase() !== expectedCommitSha.toLowerCase()) {
+        failures.push(spec.benchmarkId + ': official score commit SHA mismatch (expected ' + expectedCommitSha + ', got ' + scoreCommitSha + ')');
+      }
+      if (/^[a-f0-9]{40}$/i.test(adapterCommitSha || '') && /^[a-f0-9]{40}$/i.test(scoreCommitSha || '') &&
+          adapterCommitSha.toLowerCase() !== scoreCommitSha.toLowerCase()) {
+        failures.push(spec.benchmarkId + ': score and adapter commit SHA mismatch');
+      }
 
       if (spec.benchmarkId === 'fever' || spec.benchmarkId === 'feverous') {
         if (adapter.benchmark_id !== spec.benchmarkId) failures.push(spec.benchmarkId + ': adapter report benchmark_id mismatch');
@@ -136,7 +158,7 @@ for (const spec of specs) {
       item.provenance_sha256 = await sha256(spec.adapterPath);
       item.generated_at = score.generated_at;
       item.metrics = score.metrics;
-      check.pass = true;
+      check.pass = failures.length === failuresAtStart;
     } catch (error) {
       failures.push(spec.benchmarkId + ': invalid score/provenance JSON: ' + String(error));
     }
@@ -149,6 +171,7 @@ const report = {
   schema_version: 1,
   suite_id: 'truthlens_public_benchmark_suite_v1',
   generated_at: new Date().toISOString(),
+  evaluated_commit_sha: /^[a-f0-9]{40}$/i.test(expectedCommitSha) ? expectedCommitSha : null,
   status: complete ? 'READY_PUBLIC_BENCHMARKS_ONLY' : 'BLOCKED',
   public_benchmarks_complete: complete,
   required_benchmarks: specs.map(({ benchmarkId, expectedCount }) => ({ benchmark_id: benchmarkId, expected_evaluation_count: expectedCount })),

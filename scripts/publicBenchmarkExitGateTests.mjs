@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const GATE = path.join(ROOT, 'publicBenchmarkExitGate.mjs');
 const NOW = '2026-10-10T08:51:37.078Z';
+const TEST_COMMIT_SHA = 'c'.repeat(40);
 
 function makeManifest() {
   return {
@@ -39,39 +40,40 @@ async function makeFixtures(root) {
   await Promise.all([
     write(root, 'research/manifest.json', makeManifest()),
     write(root, 'artifacts/fever-score.json', {
-      benchmark_id: 'fever', protocol_version: 'truthlens-v3-benchmark-protocol-v1', evaluation_count: 19998, generated_at: NOW,
+      benchmark_id: 'fever', protocol_version: 'truthlens-v3-benchmark-protocol-v1', evaluation_count: 19998, generated_at: NOW, truthlens_git_sha: TEST_COMMIT_SHA,
       metrics: { strict_score: 0.3, label_accuracy: 0.4, evidence_precision: 0.5, evidence_recall: 0.6, evidence_f1: 0.55 }
     }),
     write(root, 'artifacts/fever-adapter.json', {
       benchmark_id: 'fever', protocol_version: 'truthlens-v3-benchmark-protocol-v1',
       dataset: { evaluation_count: 19998, claims_sha256: 'a'.repeat(64), corpus_sha256: 'b'.repeat(64) },
-      provenance: { commit_sha: 'c'.repeat(40), configuration_sha256: 'd'.repeat(64) }
+      provenance: { commit_sha: TEST_COMMIT_SHA, configuration_sha256: 'd'.repeat(64) }
     }),
     write(root, 'artifacts/feverous-score.json', {
-      benchmark_id: 'feverous', protocol_version: 'truthlens-v3-benchmark-protocol-v1', evaluation_count: 7890, generated_at: NOW,
+      benchmark_id: 'feverous', protocol_version: 'truthlens-v3-benchmark-protocol-v1', evaluation_count: 7890, generated_at: NOW, truthlens_git_sha: TEST_COMMIT_SHA,
       metrics: { strict_score: 0.2, label_accuracy: 0.3, evidence_precision: 0.4, evidence_recall: 0.5, evidence_f1: 0.44 }
     }),
     write(root, 'artifacts/feverous-adapter.json', {
-      benchmark_id: 'feverous', protocol_version: 'truthlens-v3-benchmark-protocol-v1', dataset: { evaluation_count: 7890 }, scorer_revision: 'Raldir/FEVEROUS@32b68ce'
+      benchmark_id: 'feverous', protocol_version: 'truthlens-v3-benchmark-protocol-v1', dataset: { evaluation_count: 7890 }, scorer_revision: 'Raldir/FEVEROUS@32b68ce', provenance: { commit_sha: TEST_COMMIT_SHA, configuration_sha256: 'd'.repeat(64) }
     }),
     write(root, 'artifacts/averitec-score.json', {
-      benchmark_id: 'averitec', protocol_version: 'truthlens-v3-benchmark-protocol-v1', evaluation_count: 500, generated_at: NOW,
+      benchmark_id: 'averitec', protocol_version: 'truthlens-v3-benchmark-protocol-v1', evaluation_count: 500, generated_at: NOW, truthlens_git_sha: TEST_COMMIT_SHA,
       evaluator: { repository: 'MichSchli/AVeriTeC', commit: '7c62d1ec8df3fb560d6efe2b85fa191135636f81' },
       metrics: { veracity_f1: { macro: 0.28, acc: 0.52 }, averitec_veracity: { '0.1': 0.38 }, averitec_justification: { '0.1': 0.10 } }
     }),
     write(root, 'artifacts/averitec-manifest.json', {
-      benchmark: 'AVeriTeC', split: 'dev', claims: 500, claims_sha256: 'e'.repeat(64), evidence_store_sha256: 'f'.repeat(64),
+      benchmark: 'AVeriTeC', split: 'dev', claims: 500, claims_sha256: 'e'.repeat(64), evidence_store_sha256: 'f'.repeat(64), truthlens_git_sha: TEST_COMMIT_SHA,
       gold_evidence_in_retrieval: false, production_boundary: 'research_only_no_production_model_threshold_or_runtime_change'
     })
   ]);
 }
-async function runGate(root, shouldPass) {
+async function runGate(root, shouldPass, expectedCommitSha = TEST_COMMIT_SHA) {
   const out = path.join(root, 'result', 'gate.json');
   const args = [
     GATE,
     '--manifest=' + path.join(root, 'research/manifest.json'),
     '--protocol=' + path.join(root, 'docs/protocol.md'),
     '--output=' + out,
+    '--expected-commit-sha=' + expectedCommitSha,
     '--fever=' + path.join(root, 'artifacts/fever-score.json'),
     '--fever-adapter=' + path.join(root, 'artifacts/fever-adapter.json'),
     '--feverous=' + path.join(root, 'artifacts/feverous-score.json'),
@@ -101,6 +103,9 @@ async function main() {
     await makeFixtures(root);
     const valid = await runGate(root, true);
     assert.equal(valid.results.length, 3);
+    assert.equal(valid.evaluated_commit_sha, TEST_COMMIT_SHA);
+    const staleSha = await runGate(root, false, 'd'.repeat(40));
+    assert.ok(staleSha.failures.some((failure) => failure.includes('commit SHA mismatch')));
     const feverousScore = path.join(root, 'artifacts/feverous-score.json');
     const original = JSON.parse(await fs.readFile(feverousScore, 'utf8'));
     original.evaluation_count = 7889;
@@ -110,7 +115,7 @@ async function main() {
     await fs.rm(feverousScore, { force: true });
     const missing = await runGate(root, false);
     assert.ok(missing.failures.some((failure) => failure.includes('feverous: official score artifact missing')));
-    console.log('Public benchmark gate tests: PASS (complete artifacts, pinned counts/provenance, fail-closed missing/wrong-count cases, human/production gates remain separate)');
+    console.log('Public benchmark gate tests: PASS (exact commit provenance, complete artifacts, pinned counts, stale/missing artifact rejection, human/production gates remain separate)');
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }
