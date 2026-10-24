@@ -2,7 +2,7 @@ import csv
 import io
 import zipfile
 
-from prepare_external_source_disjoint_data import article_text_fingerprint, map_binary_label, scan_external_archive
+from prepare_external_source_disjoint_data import article_text_fingerprint, external_sample_screening_gate, map_binary_label, scan_external_archive
 
 
 def test_binary_label_mapper_normalizes_explicit_labels_but_does_not_guess():
@@ -142,3 +142,21 @@ def test_balanced_label_field_can_span_compatible_single_class_files(tmp_path):
     assert group["candidate_label_columns"]["label"]["normalized_value_counts_top30"]["false"] == 2
     assert group["candidate_label_columns"]["label"]["normalized_value_counts_top30"]["true"] == 2
     assert all(item["selected_label_column"] == "label" for item in counts["source_file_label_diagnostics"])
+
+
+def test_external_sample_screening_requires_10000_and_both_classes():
+    balanced = [{"y": 1} for _ in range(5000)] + [{"y": 0} for _ in range(5000)]
+    passed, failures, counts = external_sample_screening_gate(balanced)
+    assert passed is True
+    assert failures == []
+    assert counts == {"FAKE": 5000, "REAL": 5000}
+
+    too_small = balanced[:-1]
+    passed, failures, counts = external_sample_screening_gate(too_small)
+    assert passed is False
+    assert any("9999 < 10000" in failure for failure in failures)
+
+    one_class = [{"y": 1} for _ in range(10000)]
+    passed, failures, counts = external_sample_screening_gate(one_class)
+    assert passed is False
+    assert any("missing binary class(es): REAL" in failure for failure in failures)

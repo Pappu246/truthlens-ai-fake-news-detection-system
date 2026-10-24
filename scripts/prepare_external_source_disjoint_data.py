@@ -12,6 +12,7 @@ from datasketch import MinHash, MinHashLSH
 from train_polyglot_source_heldout_candidate import load_records, normalize_domain
 
 EXPECTED_EXTERNAL_MD5 = "64b4e8888f95ec104611de9d01ffe903"
+MIN_EXTERNAL_SAMPLES = 10000
 TEXT_ALIASES = {"articletext", "fulltext", "fullarticle", "articlebody", "body", "content", "text", "newscontent", "articlecontent"}
 TITLE_ALIASES = {"title", "headline", "newstitle", "articletitle", "newsheadline"}
 SOURCE_ALIASES = {"url", "articleurl", "sourceurl", "domain", "sourcedomain", "publisher", "source", "outlet", "website", "site", "host", "media"}
@@ -29,6 +30,21 @@ def normalize_label_value(value):
     normalized = re.sub(r"[^a-z0-9]+", " ", str(value or "").strip().lower()).strip()
     # Diagnostics contain normalized categorical labels only, never article text.
     return normalized[:80] if normalized else "<blank>"
+
+
+def external_sample_screening_gate(records, minimum=MIN_EXTERNAL_SAMPLES):
+    """Require sufficient independently labelled binary examples before model training."""
+    label_counts = {
+        "FAKE": sum(record.get("y") == 1 for record in records),
+        "REAL": sum(record.get("y") == 0 for record in records),
+    }
+    failures = []
+    if len(records) < minimum:
+        failures.append(f"independent external sample below required minimum: {len(records)} < {minimum}")
+    missing = [label for label, count in label_counts.items() if count == 0]
+    if missing:
+        failures.append("independent external sample missing binary class(es): " + ", ".join(missing))
+    return not failures, failures, label_counts
 
 
 def map_binary_label(value, column=None):
@@ -490,6 +506,7 @@ def main():
     selected_external.sort(key=lambda item: item["text_hash"])
     evaluation_path = output_dir / "external-disjoint-evaluation.jsonl"
     write_jsonl(evaluation_path, selected_external)
+    screening_gate_passed, screening_gate_failures, selected_external_label_counts = external_sample_screening_gate(selected_external)
     summary = {
         "protocol_version": "truthlens-external-publisher-disjoint-v1",
         "dataset": "Disinformation Detection: Code and Datasets v1.1",
@@ -513,10 +530,9 @@ def main():
         "external_records_removed_for_external_near_duplicates": external_near_duplicates_removed,
         "external_records_removed_for_near_duplicate_label_conflicts": conflicting_near_duplicates_removed,
         "independent_external_evaluation_count": len(selected_external),
-        "independent_external_evaluation_by_label": {
-            "FAKE": sum(record["y"] == 1 for record in selected_external),
-            "REAL": sum(record["y"] == 0 for record in selected_external),
-        },
+        "independent_external_evaluation_by_label": selected_external_label_counts,
+        "minimum_required_sample_count": MIN_EXTERNAL_SAMPLES,
+        "screening_gate_failures": screening_gate_failures,
         "external_evaluation_jsonl_sha256": sha(evaluation_path.read_bytes()),
         "method_notes": [
             "Only unique full-text articles with explicit, unambiguous binary labels and source metadata enter evaluation.",
@@ -526,13 +542,13 @@ def main():
             "External labels and scores are not used for feature/model/calibration/threshold selection.",
             "Raw external text is temporary and is not uploaded as an artifact.",
         ],
-        "screening_gate_passed": len(selected_external) >= 10000,
+        "screening_gate_passed": screening_gate_passed,
     }
     summary_path = output_dir / "external-preparation-summary.json"
     summary_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({k: v for k, v in summary.items() if k != "method_notes"}, indent=2))
-    if not eligible:
-        raise SystemExit("No unique external articles meet the full-text, explicit-label and source filters; diagnostic summary was written.")
+    if not screening_gate_passed:
+        raise SystemExit("External dataset screening gate failed before model training; diagnostic summary was written: " + "; ".join(screening_gate_failures))
 
 if __name__ == "__main__":
     main()
