@@ -125,6 +125,62 @@ def main():
         and preparation.get("protocol_version") == "truthlens-external-publisher-disjoint-v1"
     )
     screening_passed = not structural_errors and internal_policy_gate and data_independence_gate and external_quality_gate
+    quality_requirements = {
+        "minimum_coverage": 0.50,
+        "minimum_operational_balanced_accuracy": 0.70,
+        "minimum_fake_recall": 0.70,
+        "minimum_real_recall": 0.70,
+    }
+    quality_metrics = {
+        "coverage": policy.get("coverage"),
+        "operational_balanced_accuracy_abstentions_count_as_not_correct": policy.get(
+            "operational_balanced_accuracy_abstentions_count_as_not_correct"
+        ),
+        "fake_recall_all_fake_samples": policy.get("fake_recall_all_fake_samples"),
+        "real_recall_all_real_samples": policy.get("real_recall_all_real_samples"),
+    }
+    quality_failure_reasons = []
+    if len(set(y.tolist())) != 2:
+        quality_failure_reasons.append("external evaluation must contain both FAKE and REAL labels")
+    quality_checks = (
+        ("coverage", "coverage", quality_requirements["minimum_coverage"]),
+        (
+            "operational_balanced_accuracy_abstentions_count_as_not_correct",
+            "operational_balanced_accuracy_abstentions_count_as_not_correct",
+            quality_requirements["minimum_operational_balanced_accuracy"],
+        ),
+        (
+            "fake_recall_all_fake_samples",
+            "fake_recall_all_fake_samples",
+            quality_requirements["minimum_fake_recall"],
+        ),
+        (
+            "real_recall_all_real_samples",
+            "real_recall_all_real_samples",
+            quality_requirements["minimum_real_recall"],
+        ),
+    )
+    for metric_name, field_name, minimum in quality_checks:
+        value = quality_metrics.get(field_name)
+        if not isinstance(value, (int, float)) or not np.isfinite(value) or value < minimum:
+            quality_failure_reasons.append(f"{metric_name}={value!r} is below required {minimum}")
+
+    screening_failure_reasons = []
+    if structural_errors:
+        screening_failure_reasons.extend(structural_errors)
+    if not internal_policy_gate:
+        screening_failure_reasons.append("internal frozen-policy gate failed")
+    if len(records) < MIN_EXTERNAL_SAMPLES:
+        screening_failure_reasons.append(
+            f"external sample count {len(records)} is below required {MIN_EXTERNAL_SAMPLES}"
+        )
+    if source_overlap:
+        screening_failure_reasons.append(
+            f"external and candidate-development publishers overlap ({len(source_overlap)} fingerprints)"
+        )
+    if preparation.get("protocol_version") != "truthlens-external-publisher-disjoint-v1":
+        screening_failure_reasons.append("external preparation protocol version is not recognized")
+    screening_failure_reasons.extend(quality_failure_reasons)
     report = {
         "protocol_version": "truthlens-external-publisher-disjoint-evaluation-v1",
         "benchmark": False,
@@ -159,6 +215,15 @@ def main():
             "source_independence_method": "Eligible external source domains are excluded from candidate development; any external article sharing a repository-defined near-duplicate cluster with candidate-development text is removed.",
         },
         "metrics": {"raw_binary": raw, "frozen_runtime_policy": policy},
+        "diagnostics": {
+            "external_label_counts": {
+                "FAKE": int(np.count_nonzero(y == 1)),
+                "REAL": int(np.count_nonzero(y == 0)),
+            },
+            "external_quality_gate_requirements": quality_requirements,
+            "external_quality_gate_failed_conditions": quality_failure_reasons,
+            "screening_failure_reasons": screening_failure_reasons,
+        },
         "gates": {
             "candidate_integrity_errors": structural_errors,
             "internal_frozen_policy_gate_passed": internal_policy_gate,
@@ -183,7 +248,7 @@ def main():
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-    print(json.dumps({"candidate": report["candidate"], "dataset": report["dataset"], "gates": report["gates"], "release_gate": report["release_gate"]}, indent=2))
+    print(json.dumps({"candidate": report["candidate"], "dataset": report["dataset"], "metrics": report["metrics"], "diagnostics": report["diagnostics"], "gates": report["gates"], "release_gate": report["release_gate"]}, indent=2))
     if not screening_passed:
         raise SystemExit("External candidate screening gate failed; inspect the saved report. Production remains unchanged.")
 
