@@ -100,18 +100,12 @@ def build_index(db_path, index_path, batch_size=250):
     dst.execute("DROP TABLE IF EXISTS pages_fts")
     dst.execute("DROP TABLE IF EXISTS pages")
     dst.execute("DROP TABLE IF EXISTS index_metadata")
-    dst.execute("""
-        CREATE TABLE pages(
-          page_id TEXT PRIMARY KEY,
-          text TEXT NOT NULL
-        )
-    """)
+    # Keep the index self-contained: write each source page directly once,
+    # avoiding a second content table and the per-batch readback into FTS5.
     dst.execute("""
         CREATE VIRTUAL TABLE pages_fts USING fts5(
           page_id UNINDEXED,
-          text,
-          content='pages',
-          content_rowid='rowid'
+          text
         )
     """)
     stat = db_path.stat()
@@ -131,32 +125,22 @@ def build_index(db_path, index_path, batch_size=250):
     batch = []
     count = 0
     next_report = 10000
-    last_rowid = 0
     batches_since_commit = 0
     dst.execute("BEGIN")
 
     def flush_batch():
-        nonlocal count, next_report, last_rowid, batches_since_commit
+        nonlocal count, next_report, batches_since_commit
         if not batch:
             return
 
-        # The content table is canonical. Ignore duplicate page ids and index
-        # only newly inserted rows, avoiding one expensive full FTS5 rebuild.
-        dst.executemany("INSERT OR IGNORE INTO pages(page_id,text) VALUES(?,?)", batch)
-        fresh_rows = dst.execute(
-            "SELECT rowid,page_id,text FROM pages WHERE rowid > ? ORDER BY rowid",
-            (last_rowid,),
-        ).fetchall()
-        if fresh_rows:
-            dst.executemany(
-                "INSERT INTO pages_fts(rowid,page_id,text) VALUES(?,?,?)",
-                fresh_rows,
-            )
-            last_rowid = fresh_rows[-1][0]
-            count += len(fresh_rows)
-            while count >= next_report:
-                print(f"Indexed FEVEROUS pages: {next_report}", flush=True)
-                next_report += 10000
+        # The source wiki table has a unique page id. Write the page id and text
+        # straight into the FTS5 content table, avoiding an intermediate write
+        # and a second full-text read for every indexed page.
+        dst.executemany("INSERT INTO pages_fts(page_id,text) VALUES(?,?)", batch)
+        count += len(batch)
+        while count >= next_report:
+            print(f"Indexed FEVEROUS pages: {next_report}", flush=True)
+            next_report += 10000
 
         batch.clear()
         batches_since_commit += 1
@@ -183,13 +167,11 @@ def build_index(db_path, index_path, batch_size=250):
     check = dst.execute("PRAGMA integrity_check").fetchone()[0]
     if check != "ok":
         raise RuntimeError(f"FEVEROUS SQLite integrity check failed: {check}")
-    # For an external-content FTS5 table, also verify postings against the
-    # canonical content table before declaring the index reusable.
-    dst.execute("INSERT INTO pages_fts(pages_fts, rank) VALUES('integrity-check', 1)")
-    page_count = dst.execute("SELECT COUNT(*) FROM pages").fetchone()[0]
+    # Validate the self-contained FTS5 table before making the index reusable.
+    dst.execute("INSERT INTO pages_fts(pages_fts) VALUES('integrity-check')")
     fts_count = dst.execute("SELECT COUNT(*) FROM pages_fts").fetchone()[0]
-    if page_count != fts_count:
-        raise RuntimeError(f"FEVEROUS index count mismatch: pages={page_count}, fts={fts_count}")
+    if count != fts_count:
+        raise RuntimeError(f"FEVEROUS index count mismatch: inserted={count}, fts={fts_count}")
     dst.execute("UPDATE index_metadata SET value='complete' WHERE key='status'")
     dst.commit()
     dst.close()
