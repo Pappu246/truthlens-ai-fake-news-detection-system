@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse, csv, hashlib, io, json, re, sys, zipfile
 from collections import defaultdict
 from pathlib import Path
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from publicsuffix2 import get_sld
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -12,6 +13,8 @@ from datasketch import MinHash, MinHashLSH
 from train_polyglot_source_heldout_candidate import load_records, normalize_domain
 
 EXPECTED_EXTERNAL_MD5 = "64b4e8888f95ec104611de9d01ffe903"
+EXPECTED_EUVSDISINFO_METADATA_MD5 = "40b80c97bc563a7aba6a3e62aacf97d8"
+EUVSDISINFO_METADATA_URL = "https://zenodo.org/records/10514307/files/euvsdisinfo_base.csv?download=1"
 MIN_EXTERNAL_SAMPLES = 10000
 TEXT_ALIASES = {"articletext", "fulltext", "fullarticle", "articlebody", "body", "content", "text", "newscontent", "articlecontent"}
 TITLE_ALIASES = {"title", "headline", "newstitle", "articletitle", "newsheadline"}
@@ -70,6 +73,132 @@ def map_binary_label(value, column=None):
     if normalized in REAL_LABELS:
         return "REAL"
     return None
+
+
+def normalize_article_url(value):
+    """Canonicalize an article URL conservatively for a metadata crosswalk."""
+    try:
+        parsed = urlsplit(str(value or "").strip())
+        scheme = parsed.scheme.lower()
+        if scheme not in {"http", "https"} or not parsed.hostname:
+            return None
+        host = parsed.hostname.lower().rstrip(".")
+        if host.startswith("www."):
+            host = host[4:]
+        try:
+            port = parsed.port
+        except ValueError:
+            return None
+        if port and not ((scheme == "http" and port == 80) or (scheme == "https" and port == 443)):
+            host = f"{host}:{port}"
+        clean_path = re.sub(r"/{2,}", "/", parsed.path or "/")
+        if len(clean_path) > 1:
+            clean_path = clean_path.rstrip("/")
+        tracking_keys = {"fbclid", "gclid", "mc_cid", "mc_eid", "ref_src"}
+        query = [
+            (key, value) for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+            if not key.lower().startswith("utm_") and key.lower() not in tracking_keys
+        ]
+        normalized_query = urlencode(sorted(query))
+        # Normalize http/https and www; preserve path case and non-tracking query parameters.
+        return urlunsplit(("https", host, clean_path, normalized_query, ""))
+    except (TypeError, ValueError):
+        return None
+
+
+def load_authoritative_label_registry(registry_path: Path, expected_md5=EXPECTED_EUVSDISINFO_METADATA_MD5):
+    """Load official EUvsDisinfo article URL classes; never infer 'support' by name."""
+    raw = Path(registry_path).read_bytes()
+    md5 = hashlib.md5(raw).hexdigest()
+    if expected_md5 is not None and md5.lower() != expected_md5.lower():
+        raise SystemExit(f"Authoritative EUvsDisinfo metadata MD5 mismatch: {md5}")
+
+    reader = csv.DictReader(io.StringIO(raw.decode("utf-8-sig")))
+    headers = {norm_header(header): header for header in (reader.fieldnames or [])}
+    url_column = headers.get("articleurl")
+    class_column = headers.get("class")
+    if not url_column or not class_column:
+        raise SystemExit("Authoritative label registry must contain article_url and class fields")
+
+    labels = {}
+    conflicts = set()
+    counts = {"FAKE": 0, "REAL": 0, "unmapped": 0}
+    rows_scanned = 0
+    invalid_url_rows = 0
+    for row in reader:
+        rows_scanned += 1
+        key = normalize_article_url(row.get(url_column))
+        category = normalize_label_value(row.get(class_column))
+        if category == "disinformation":
+            label = "FAKE"
+        elif category == "trustworthy":
+            label = "REAL"
+        else:
+            counts["unmapped"] += 1
+            continue
+        if key is None:
+            invalid_url_rows += 1
+            continue
+        counts[label] += 1
+        if key in conflicts:
+            continue
+        existing = labels.get(key)
+        if existing is not None and existing != label:
+            labels.pop(key, None)
+            conflicts.add(key)
+        else:
+            labels[key] = label
+
+    metadata = {
+        "source_url": EUVSDISINFO_METADATA_URL,
+        "source_record": "https://zenodo.org/records/10514307",
+        "expected_md5": expected_md5,
+        "actual_md5": md5,
+        "sha256": hashlib.sha256(raw).hexdigest(),
+        "rows_scanned": rows_scanned,
+        "recognized_label_rows": {"FAKE": counts["FAKE"], "REAL": counts["REAL"]},
+        "unmapped_label_rows": counts["unmapped"],
+        "invalid_url_rows": invalid_url_rows,
+        "unique_unambiguous_article_urls": len(labels),
+        "conflicting_article_url_count": len(conflicts),
+        "article_url_values_uploaded": False,
+        "metadata_file_uploaded": False,
+    }
+    return labels, conflicts, metadata
+
+
+def get_article_url(row, source_columns):
+    """Return an HTTP(S) article URL if one is present among source metadata fields."""
+    for column in source_columns:
+        value = str(row.get(column) or "").strip()
+        if normalize_article_url(value) is not None:
+            return value
+    return None
+
+
+def resolve_external_label(value, column, article_url, authoritative_labels=None, authoritative_conflicts=None):
+    """
+    Resolve labels conservatively. The word 'support' is never mapped by itself.
+    Only an exact URL join to official metadata may resolve an otherwise unknown label.
+    """
+    raw_label = map_binary_label(value, column)
+    key = normalize_article_url(article_url)
+    labels = authoritative_labels or {}
+    conflicts = authoritative_conflicts or set()
+
+    if key is not None and key in conflicts:
+        return None, "ambiguous_authoritative_url"
+    authority_label = labels.get(key) if key is not None else None
+    if authority_label is not None:
+        if raw_label is not None and raw_label != authority_label:
+            return None, "raw_label_conflicts_with_authoritative_url"
+        if raw_label is None:
+            return authority_label, "authoritative_url_fallback"
+        return authority_label, "raw_and_authoritative_agree"
+
+    if raw_label is not None:
+        return raw_label, "explicit_raw_label_without_authority_match"
+    return None, "unmapped_without_authority_match"
 
 def article_text_fingerprint(text: str) -> str:
     normalized = re.sub(r"\s+", " ", text or "").strip().casefold()
@@ -244,7 +373,7 @@ def iter_archive_delimited_files(archive_path: Path):
                             yield info.filename + "!" + nested.filename, "," if nested_suffix == ".csv" else "\t", stream
 
 
-def scan_external_archive(archive_path: Path):
+def scan_external_archive(archive_path: Path, authoritative_labels=None, authoritative_conflicts=None):
     """
     Two-pass scan: infer one label field per compatible header schema, then ingest
     rows using only that field. Class-partitioned files can be combined only when
@@ -256,6 +385,8 @@ def scan_external_archive(archive_path: Path):
     group_stats = {}
     file_stats = {}
     files_scanned = 0
+    authoritative_labels = authoritative_labels or {}
+    authoritative_conflicts = authoritative_conflicts or set()
 
     # Pass 1: establish label distributions across compatible schemas.
     for source_name, delimiter, stream in iter_archive_delimited_files(archive_path):
@@ -276,6 +407,7 @@ def scan_external_archive(archive_path: Path):
             "selected_label_column": None,
             "selected_label_counts": {"FAKE": 0, "REAL": 0},
             "selection_reason": None,
+            "label_resolution_counts": {"schema_inference": {}, "selected_field": {}},
         }
 
         if not body_columns or not source_columns or not label_columns:
@@ -296,6 +428,7 @@ def scan_external_archive(archive_path: Path):
         for row in reader:
             stats["rows_scanned"] += 1
             text, sources, full_text = get_eligible_article_fields(row, body_columns, title_columns, source_columns)
+            article_url = get_article_url(row, source_columns)
             if not full_text:
                 continue
             stats["full_text_rows"] += 1
@@ -305,7 +438,9 @@ def scan_external_archive(archive_path: Path):
             stats["full_text_with_source_rows"] += 1
             counters["full_text_with_source_rows"] += 1
             for column in label_columns:
-                label = map_binary_label(row.get(column), column)
+                label, resolution = resolve_external_label(row.get(column), column, article_url, authoritative_labels, authoritative_conflicts)
+                resolutions = stats["label_resolution_counts"]["schema_inference"]
+                resolutions[resolution] = resolutions.get(resolution, 0) + 1
                 counts = group_label_stats[column]
                 raw_category = normalize_label_value(row.get(column))
                 category_counts = counts["values"]
@@ -394,7 +529,10 @@ def scan_external_archive(archive_path: Path):
             text, sources, full_text = get_eligible_article_fields(row, body_columns, title_columns, source_columns)
             if not full_text or not sources:
                 continue
-            label = map_binary_label(row.get(selected_label_column), selected_label_column)
+            article_url = get_article_url(row, source_columns)
+            label, resolution = resolve_external_label(row.get(selected_label_column), selected_label_column, article_url, authoritative_labels, authoritative_conflicts)
+            resolutions = stats["label_resolution_counts"]["selected_field"]
+            resolutions[resolution] = resolutions.get(resolution, 0) + 1
             if label is None:
                 counters["rows_unmapped_on_selected_label_field"] += 1
                 continue
@@ -430,6 +568,7 @@ def write_jsonl(path: Path, records):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--external-archive", required=True)
+    parser.add_argument("--authoritative-label-registry", required=True)
     parser.add_argument("--candidate-dataset-dir", required=True)
     parser.add_argument("--output-dir", required=True)
     args = parser.parse_args()
@@ -445,7 +584,8 @@ def main():
     if md5.hexdigest() != EXPECTED_EXTERNAL_MD5:
         raise SystemExit(f"External archive MD5 mismatch: {md5.hexdigest()}")
 
-    unique, scan_counts, files_scanned = scan_external_archive(archive)
+    authoritative_labels, authoritative_conflicts, authoritative_registry_metadata = load_authoritative_label_registry(Path(args.authoritative_label_registry))
+    unique, scan_counts, files_scanned = scan_external_archive(archive, authoritative_labels, authoritative_conflicts)
     source_file_label_diagnostics = scan_counts.pop("source_file_label_diagnostics", [])
     eligible, conflicting_label_articles = [], 0
     for fingerprint, article in sorted(unique.items()):
@@ -514,6 +654,7 @@ def main():
         "license": "CC BY 4.0",
         "source_archive_md5": md5.hexdigest(),
         "source_archive_sha256": archive_sha.hexdigest(),
+        "authoritative_label_registry": authoritative_registry_metadata,
         "delimited_files_scanned": files_scanned,
         "scan_counts": scan_counts,
         "source_file_label_diagnostics": source_file_label_diagnostics,
@@ -535,7 +676,8 @@ def main():
         "screening_gate_failures": screening_gate_failures,
         "external_evaluation_jsonl_sha256": sha(evaluation_path.read_bytes()),
         "method_notes": [
-            "Only unique full-text articles with explicit, unambiguous binary labels and source metadata enter evaluation.",
+            "Only unique full-text articles with unambiguous labels and source metadata enter evaluation.",
+            "The source word 'support' is never mapped to REAL by name; a row with an unknown label is retained only when its article URL joins to official EUvsDisinfo metadata classed as trustworthy. URL-label conflicts and ambiguous authority URLs are excluded.",
             "Every eligible external publisher is excluded from candidate development before training.",
             "Near-duplicate clusters use the repository's 5-word-shingle, 128-permutation, Jaccard 0.70 method.",
             "External records with any near-duplicate match to candidate-development articles are removed.",

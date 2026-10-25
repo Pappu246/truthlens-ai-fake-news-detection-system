@@ -106,6 +106,14 @@ jobs:
             "$(cat /tmp/zenodo-dataset-url.txt)" -o /tmp/zenodo-datasets.zip
           echo "64b4e8888f95ec104611de9d01ffe903  /tmp/zenodo-datasets.zip" | md5sum --check -
 
+      - name: Download and verify pinned official EUvsDisinfo label registry
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --show-error --connect-timeout 20 --max-time 120 --retry 2 --retry-all-errors --retry-delay 3 \
+            "https://zenodo.org/records/10514307/files/euvsdisinfo_base.csv?download=1" -o /tmp/euvsdisinfo_base.csv
+          echo "40b80c97bc563a7aba6a3e62aacf97d8  /tmp/euvsdisinfo_base.csv" | md5sum --check -
+
       - name: Prepare external publisher exclusions and near-duplicate-filtered evaluation set
         shell: bash
         run: |
@@ -116,6 +124,7 @@ jobs:
           prep_status=0
           python scripts/prepare_external_source_disjoint_data.py \
             --external-archive /tmp/zenodo-datasets.zip \
+            --authoritative-label-registry /tmp/euvsdisinfo_base.csv \
             --candidate-dataset-dir /tmp/polyglot-workbooks \
             --output-dir "$prep_dir" || prep_status=$?
 

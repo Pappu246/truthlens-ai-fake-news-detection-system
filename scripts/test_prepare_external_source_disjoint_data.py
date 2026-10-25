@@ -2,7 +2,15 @@ import csv
 import io
 import zipfile
 
-from prepare_external_source_disjoint_data import article_text_fingerprint, external_sample_screening_gate, map_binary_label, scan_external_archive
+from prepare_external_source_disjoint_data import (
+    article_text_fingerprint,
+    external_sample_screening_gate,
+    load_authoritative_label_registry,
+    map_binary_label,
+    normalize_article_url,
+    resolve_external_label,
+    scan_external_archive,
+)
 
 
 def test_binary_label_mapper_normalizes_explicit_labels_but_does_not_guess():
@@ -160,3 +168,79 @@ def test_external_sample_screening_requires_10000_and_both_classes():
     passed, failures, counts = external_sample_screening_gate(one_class)
     assert passed is False
     assert any("missing binary class(es): REAL" in failure for failure in failures)
+
+
+def test_authoritative_url_registry_resolves_support_only_when_official_url_label_matches(tmp_path):
+    registry = tmp_path / "euvsdisinfo_base.csv"
+    raw = (
+        "article_url,class\n"
+        "https://www.example.org/news/support-story?utm_source=feed,trustworthy\n"
+        "http://misinfo.example.net/story#debunk,disinformation\n"
+        "https://conflict.example.org/a,trustworthy\n"
+        "https://www.conflict.example.org/a?utm_medium=share,disinformation\n"
+    ).encode("utf-8")
+    registry.write_bytes(raw)
+
+    labels, conflicts, metadata = load_authoritative_label_registry(registry, expected_md5=None)
+    assert metadata["rows_scanned"] == 4
+    assert metadata["recognized_label_rows"] == {"FAKE": 2, "REAL": 2}
+    assert metadata["conflicting_article_url_count"] == 1
+    assert normalize_article_url("https://www.example.org/news/support-story?utm_source=other") in labels
+    assert normalize_article_url("https://conflict.example.org/a") in conflicts
+
+    assert resolve_external_label(
+        "support", "class", "https://example.org/news/support-story",
+        labels, conflicts
+    ) == ("REAL", "authoritative_url_fallback")
+    assert resolve_external_label(
+        "disinformation", "class", "https://misinfo.example.net/story",
+        labels, conflicts
+    ) == ("FAKE", "raw_and_authoritative_agree")
+    assert resolve_external_label(
+        "support", "class", "https://unmatched.example.net/article",
+        labels, conflicts
+    ) == (None, "unmapped_without_authority_match")
+    assert resolve_external_label(
+        "disinformation", "class", "https://example.org/news/support-story",
+        labels, conflicts
+    ) == (None, "raw_label_conflicts_with_authoritative_url")
+    assert resolve_external_label(
+        "support", "class", "https://conflict.example.org/a",
+        labels, conflicts
+    ) == (None, "ambiguous_authoritative_url")
+
+
+def test_source_disjoint_scan_uses_official_url_crosswalk_for_support_rows(tmp_path):
+    archive = tmp_path / "synthetic.zip"
+    body_a = " ".join(["independent"] * 70) + " This is a full supporting article with the official source URL."
+    body_b = " ".join(["different"] * 70) + " This is a separate disinformation article with its source URL."
+    rows = [
+        {"article_title": "Support story", "article_text": body_a, "article_url": "https://www.example.org/support-story?utm_source=copy", "class": "support"},
+        {"article_title": "Disinformation story", "article_text": body_b, "article_url": "http://misinfo.example.net/story", "class": "disinformation"},
+    ]
+    raw_csv = io.StringIO()
+    writer = csv.DictWriter(raw_csv, fieldnames=["article_title", "article_text", "article_url", "class"])
+    writer.writeheader()
+    writer.writerows(rows)
+    with zipfile.ZipFile(archive, "w") as zipped:
+        zipped.writestr("articles.csv", raw_csv.getvalue())
+
+    registry = tmp_path / "euvsdisinfo_base.csv"
+    registry.write_text(
+        "article_url,class\n"
+        "https://example.org/support-story,trustworthy\n"
+        "https://misinfo.example.net/story,disinformation\n",
+        encoding="utf-8",
+    )
+    labels, conflicts, _ = load_authoritative_label_registry(registry, expected_md5=None)
+    unique, counts, _ = scan_external_archive(archive, labels, conflicts)
+
+    assert counts["compatible_schema_group_count"] == 1
+    assert counts["schema_groups_without_single_mixed_label_field"] == 0
+    assert len(unique) == 2
+    labels_found = {next(iter(article["labels"])) for article in unique.values() if len(article["labels"]) == 1}
+    assert labels_found == {"FAKE", "REAL"}
+    diagnostic = counts["source_file_label_diagnostics"][0]
+    assert diagnostic["selected_label_column"] == "class"
+    assert diagnostic["selected_label_counts"] == {"FAKE": 1, "REAL": 1}
+    assert diagnostic["label_resolution_counts"]["selected_field"]["authoritative_url_fallback"] == 1
