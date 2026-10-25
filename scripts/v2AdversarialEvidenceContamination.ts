@@ -142,7 +142,7 @@ function makeAttacks(count: number): RawDocument[] {
       'attack-' + number,
       'https://repost-' + number + '.example/copy/' + (index + 1),
       'Synthetic Repost ' + (index + 1),
-      'Synthetic claim-adjacent report ' + (index + 1),
+      CLAIM + ' — synthetic related-event report ' + (index + 1),
       snippet
     );
   });
