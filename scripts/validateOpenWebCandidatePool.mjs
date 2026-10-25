@@ -10,7 +10,7 @@ const DEFAULT_INPUT = path.join(ROOT, "research/open-web-v1-candidate-pool.json"
 
 function fail(message) { throw new Error(message); }
 function timestamp(value) {
-  if (typeof value !== "string" || !/^\\d{4}-\\d{2}-\\d{2}T.*(?:Z|[+-]\\d{2}:\\d{2})$/.test(value)) return null;
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(value)) return null;
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
@@ -44,7 +44,7 @@ async function main() {
     if (claims.has(normalizedClaim)) fail(where + ": duplicate claim text");
     ids.add(row.claim_id); urls.add(row.claim_source_url); claims.add(normalizedClaim);
 
-    if (!/^https?:\\/\\/[^/]+/i.test(row.claim_source_url)) fail(where + ": invalid HTTP(S) source URL");
+    if (!/^https?:\/\/[^/]+/i.test(row.claim_source_url)) fail(where + ": invalid HTTP(S) source URL");
     if (!Object.hasOwn(mix, row.claim_source_type)) fail(where + ": invalid claim_source_type");
     mix[row.claim_source_type]++;
 
