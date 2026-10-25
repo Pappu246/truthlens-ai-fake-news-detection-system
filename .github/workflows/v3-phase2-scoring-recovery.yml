@@ -23,12 +23,19 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  # Benchmark provenance and checkout must use the PR head SHA, not GitHub's synthetic merge SHA.
+  TRUTHLENS_EVALUATED_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
 jobs:
   syntax:
     name: Benchmark scoring syntax and protocol
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -78,6 +85,9 @@ jobs:
     needs: syntax
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -101,14 +111,12 @@ jobs:
       - name: Assert full FEVER candidate count
         run: test "$(wc -l < artifacts/v3/fever/candidates.jsonl)" -eq 19998
       - name: Run TruthLens FEVER full evaluation
-        env:
-          GITHUB_SHA: ${{ github.sha }}
         run: |
-          npx tsx scripts/benchmarks/v3FeverEvaluate.ts             --input=artifacts/v3/fever/candidates.jsonl             --max-claims=19998             --output=artifacts/v3/fever/truthlens-adapter-report.json             --predictions-output=artifacts/v3/fever/truthlens-predictions.json             --claims-sha256="$(jq -r '.files[] | select(.name=="shared_task_dev.jsonl") | .sha256' artifacts/v3/benchmark-assets/fever/asset-manifest.json)"             --corpus-sha256="$(jq -r '.files[] | select(.name=="wiki-pages.zip") | .sha256' artifacts/v3/benchmark-assets/fever/asset-manifest.json)"             --commit-sha="$GITHUB_SHA"             --config-sha256="$(sha256sum research/multibenchmark-manifest.json | cut -d' ' -f1)"
+          npx tsx scripts/benchmarks/v3FeverEvaluate.ts             --input=artifacts/v3/fever/candidates.jsonl             --max-claims=19998             --output=artifacts/v3/fever/truthlens-adapter-report.json             --predictions-output=artifacts/v3/fever/truthlens-predictions.json             --claims-sha256="$(jq -r '.files[] | select(.name=="shared_task_dev.jsonl") | .sha256' artifacts/v3/benchmark-assets/fever/asset-manifest.json)"             --corpus-sha256="$(jq -r '.files[] | select(.name=="wiki-pages.zip") | .sha256' artifacts/v3/benchmark-assets/fever/asset-manifest.json)"             --commit-sha="$TRUTHLENS_EVALUATED_COMMIT_SHA"             --config-sha256="$(sha256sum research/multibenchmark-manifest.json | cut -d' ' -f1)"
       - name: Run official FEVER scorer
         run: |
           python3 -m pip install --disable-pip-version-check --no-input six
-          node scripts/benchmarks/v3FeverOfficialEvaluate.mjs             --predictions=artifacts/v3/fever/truthlens-predictions.json             --actual=artifacts/v3/benchmark-assets/fever/shared_task_dev.jsonl             --output=artifacts/v3/fever/official-scorer-run.json
+          node scripts/benchmarks/v3FeverOfficialEvaluate.mjs             --predictions=artifacts/v3/fever/truthlens-predictions.json             --actual=artifacts/v3/benchmark-assets/fever/shared_task_dev.jsonl             --output=artifacts/v3/fever/official-scorer-run.json             --commit-sha="$TRUTHLENS_EVALUATED_COMMIT_SHA"
       - name: Assert complete FEVER score artifact
         run: |
           node - <<'NODE'
@@ -135,6 +143,9 @@ jobs:
     needs: syntax
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
       - name: Reclaim runner disk for the FEVEROUS database and FTS5 index
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1 (pinned)
         with:
@@ -182,10 +193,10 @@ jobs:
         env:
           TRUTHLENS_NLI_CONCURRENCY: '8'
         run: |
-          npx tsx scripts/benchmarks/v3FeverousEvaluate.ts             --input=artifacts/v3/feverous/candidates.jsonl             --max-claims=7890             --output=artifacts/v3/feverous/truthlens-predictions.jsonl             --report=artifacts/v3/feverous/truthlens-adapter-report.json
+          npx tsx scripts/benchmarks/v3FeverousEvaluate.ts             --input=artifacts/v3/feverous/candidates.jsonl             --max-claims=7890             --output=artifacts/v3/feverous/truthlens-predictions.jsonl             --report=artifacts/v3/feverous/truthlens-adapter-report.json             --commit-sha="$TRUTHLENS_EVALUATED_COMMIT_SHA"
       - name: Run official FEVEROUS scorer
         run: |
-          node scripts/benchmarks/v3FeverousOfficialEvaluate.mjs             --input=artifacts/v3/feverous/truthlens-predictions.jsonl             --output=artifacts/v3/feverous/official-scorer-run.json
+          node scripts/benchmarks/v3FeverousOfficialEvaluate.mjs             --input=artifacts/v3/feverous/truthlens-predictions.jsonl             --output=artifacts/v3/feverous/official-scorer-run.json             --commit-sha="$TRUTHLENS_EVALUATED_COMMIT_SHA"
       - name: Assert complete FEVEROUS score artifact
         run: |
           node - <<'NODE'
