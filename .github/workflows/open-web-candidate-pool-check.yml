@@ -1,0 +1,24 @@
+name: Open-Web Candidate Pool Integrity
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'research/open-web-v1-candidate-pool.json'
+      - 'scripts/validateOpenWebCandidatePool.mjs'
+      - '.github/workflows/open-web-candidate-pool-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Validate 100-row unlabeled candidate pool
+        run: node scripts/validateOpenWebCandidatePool.mjs
