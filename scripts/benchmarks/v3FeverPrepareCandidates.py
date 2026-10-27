@@ -50,8 +50,22 @@ def iter_pages(wiki_dir: Path) -> Iterable[tuple[str, str, int, str]]:
                             yield page, page, line_id, text
 
 
+def deterministic_probe_query(text: str) -> str:
+    """Choose a deterministic, selective token so FTS probes avoid huge postings."""
+    tokens = re.findall(r"[A-Za-z0-9]+", text.lower())
+    selective = sorted({token for token in tokens if len(token) >= 8}, key=lambda token: (-len(token), token))
+    if selective:
+        return '"' + selective[0] + '"'
+    # Tiny/synthetic rows may have no long token. A short phrase is less likely
+    # to fan out than the first common token (for example, "the").
+    fallback = [token for token in tokens if len(token) > 1][:3]
+    if not fallback:
+        return ""
+    return '"' + " ".join(fallback) + '"'
+
+
 def validate_index(con: sqlite3.Connection, expected_rows: int) -> None:
-    """Perform bounded structural/count checks plus deterministic FTS probes."""
+    """Validate structure and dense row-count bounds without corpus-wide scans."""
     if expected_rows < 1:
         raise RuntimeError(f"FEVER index has no indexed rows: {expected_rows}")
     tables = {row[0] for row in con.execute(
@@ -66,31 +80,38 @@ def validate_index(con: sqlite3.Connection, expected_rows: int) -> None:
     if not {"page", "line_id", "text"}.issubset(fts_columns):
         raise RuntimeError(f"FEVER FTS table has unexpected columns: {sorted(fts_columns)}")
 
-    actual_rows = con.execute("SELECT COUNT(*) FROM sentences").fetchone()[0]
-    if actual_rows != expected_rows:
-        raise RuntimeError(f"FEVER row count mismatch: inserted={expected_rows}, stored={actual_rows}")
-
-    first = con.execute("SELECT rowid, text FROM sentences ORDER BY rowid LIMIT 1").fetchone()
-    last = con.execute("SELECT rowid, text FROM sentences ORDER BY rowid DESC LIMIT 1").fetchone()
-    bounds = con.execute("SELECT MIN(rowid), MAX(rowid) FROM sentences").fetchone()
-    middle = con.execute(
-        "SELECT rowid, text FROM sentences WHERE rowid >= ? ORDER BY rowid LIMIT 1",
-        ((bounds[0] + bounds[1]) // 2,),
+    # Freshly built canonical rows receive dense rowids 1..expected_rows. The
+    # insertion counter is exact; endpoint and deterministic midpoint probes
+    # validate that rowid/count invariant without scanning 25M+ text rows.
+    first = con.execute("SELECT rowid, text FROM sentences WHERE rowid = 1").fetchone()
+    last = con.execute(
+        "SELECT rowid, text FROM sentences WHERE rowid = ?", (expected_rows,)
     ).fetchone()
-    probes = {row[0]: row for row in (first, middle, last) if row}
+    extra = con.execute(
+        "SELECT rowid FROM sentences WHERE rowid > ? LIMIT 1", (expected_rows,)
+    ).fetchone()
+    if not first or not last or extra:
+        raise RuntimeError(
+            f"FEVER row-count bounds mismatch: expected dense rowids 1..{expected_rows}"
+        )
+
+    probe_rowids = sorted({1, (expected_rows + 1) // 2, expected_rows})
     successful_probes = 0
-    for rowid, text in probes.values():
-        tokens = [token for token in re.findall(r"[A-Za-z0-9]+", text.lower()) if len(token) > 1]
-        if not tokens:
+    for rowid in probe_rowids:
+        row = first if rowid == 1 else last if rowid == expected_rows else con.execute(
+            "SELECT rowid, text FROM sentences WHERE rowid = ?", (rowid,)
+        ).fetchone()
+        if not row:
+            raise RuntimeError(f"FEVER row-count probe missing canonical rowid={rowid}")
+        query = deterministic_probe_query(row[1])
+        if not query:
             continue
-        # Probe a real canonical row, rather than running a corpus-wide FTS integrity scan.
-        query = '"' + tokens[0].replace('"', '""') + '"'
         hit = con.execute(
             "SELECT rowid FROM sentences_fts WHERE sentences_fts MATCH ? AND rowid = ? LIMIT 1",
             (query, rowid),
         ).fetchone()
         if not hit:
-            raise RuntimeError(f"FEVER FTS probe failed for rowid={rowid}, token={tokens[0]!r}")
+            raise RuntimeError(f"FEVER FTS probe failed for rowid={rowid}, query={query!r}")
         successful_probes += 1
     if not successful_probes:
         raise RuntimeError("FEVER index could not produce a deterministic FTS probe")

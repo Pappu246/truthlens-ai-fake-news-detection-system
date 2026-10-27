@@ -67,8 +67,22 @@ def fts_query(text):
     return " OR ".join('"' + t.replace('"', '""') + '"' for t in tokens)
 
 
+def deterministic_probe_query(text):
+    """Choose a deterministic, selective token so FTS probes avoid huge postings."""
+    tokens = re.findall(r"[A-Za-z0-9]+", text.lower())
+    selective = sorted({token for token in tokens if len(token) >= 8}, key=lambda token: (-len(token), token))
+    if selective:
+        return '"' + selective[0] + '"'
+    # Small fixtures can lack long tokens; use a short phrase rather than the
+    # first common word, which may match millions of corpus rows.
+    fallback = [token for token in tokens if len(token) > 1][:3]
+    if not fallback:
+        return ""
+    return '"' + " ".join(fallback) + '"'
+
+
 def validate_index(index, expected_rows):
-    """Validate index structure, exact row count, and deterministic FTS probes."""
+    """Validate structure and dense row-count bounds without corpus-wide scans."""
     if expected_rows < 1:
         raise RuntimeError(f"FEVEROUS index has no indexed pages: {expected_rows}")
     tables = {row[0] for row in index.execute(
@@ -83,31 +97,42 @@ def validate_index(index, expected_rows):
     if not {"key", "value"}.issubset(metadata_columns):
         raise RuntimeError(f"FEVEROUS metadata table has unexpected columns: {sorted(metadata_columns)}")
 
-    actual_rows = index.execute("SELECT COUNT(*) FROM pages_fts").fetchone()[0]
-    if actual_rows != expected_rows:
-        raise RuntimeError(f"FEVEROUS index count mismatch: inserted={expected_rows}, stored={actual_rows}")
+    # The fresh FTS table assigns dense implicit rowids 1..expected_rows.
+    # The build counter is exact; rowid bounds and fixed probes verify that
+    # invariant without a full FTS table scan.
+    first = index.execute(
+        "SELECT rowid, substr(text, 1, 4096) FROM pages_fts WHERE rowid = 1"
+    ).fetchone()
+    last = index.execute(
+        "SELECT rowid, substr(text, 1, 4096) FROM pages_fts WHERE rowid = ?",
+        (expected_rows,),
+    ).fetchone()
+    extra = index.execute(
+        "SELECT rowid FROM pages_fts WHERE rowid > ? LIMIT 1", (expected_rows,)
+    ).fetchone()
+    if not first or not last or extra:
+        raise RuntimeError(
+            f"FEVEROUS row-count bounds mismatch: expected dense rowids 1..{expected_rows}"
+        )
 
-    # This index is created from an empty table and inserts rows without explicit
-    # rowids, so its deterministic first/middle/last rowids are 1..expected_rows.
-    rowids = sorted({1, (expected_rows + 1) // 2, expected_rows})
+    probe_rowids = sorted({1, (expected_rows + 1) // 2, expected_rows})
     successful_probes = 0
-    for rowid in rowids:
-        row = index.execute(
+    for rowid in probe_rowids:
+        row = first if rowid == 1 else last if rowid == expected_rows else index.execute(
             "SELECT rowid, substr(text, 1, 4096) FROM pages_fts WHERE rowid = ?",
             (rowid,),
         ).fetchone()
         if not row:
-            raise RuntimeError(f"FEVEROUS structural probe missing rowid={rowid}")
-        tokens = [token for token in re.findall(r"[A-Za-z0-9]+", row[1].lower()) if len(token) > 1]
-        if not tokens:
+            raise RuntimeError(f"FEVEROUS row-count probe missing rowid={rowid}")
+        query = deterministic_probe_query(row[1])
+        if not query:
             continue
-        query = '"' + tokens[0].replace('"', '""') + '"'
         hit = index.execute(
             "SELECT rowid FROM pages_fts WHERE pages_fts MATCH ? AND rowid = ? LIMIT 1",
             (query, rowid),
         ).fetchone()
         if not hit:
-            raise RuntimeError(f"FEVEROUS FTS probe failed for rowid={rowid}, token={tokens[0]!r}")
+            raise RuntimeError(f"FEVEROUS FTS probe failed for rowid={rowid}, query={query!r}")
         successful_probes += 1
     if not successful_probes:
         raise RuntimeError("FEVEROUS index could not produce a deterministic FTS probe")

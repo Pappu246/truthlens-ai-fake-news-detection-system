@@ -28,6 +28,10 @@ def main() -> None:
             {
                 "order": ["sentence_0"],
                 "sentence_0": "Apollo 12 was a later crewed lunar mission in November 1969."
+            },
+            {
+                "order": ["sentence_0"],
+                "sentence_0": "Astrophotography observations documented extraordinary planetary alignment."
             }
         ]
         con = sqlite3.connect(db_path)
@@ -77,7 +81,7 @@ def main() -> None:
             indexed_page_count = indexed.execute(
                 "SELECT value FROM index_metadata WHERE key='indexed_page_count'"
             ).fetchone()[0]
-            assert indexed_page_count == "2", f"Expected exact indexed page count 2, found {indexed_page_count}"
+            assert indexed_page_count == "3", f"Expected exact indexed page count 2, found {indexed_page_count}"
             indexed.execute(
                 "UPDATE index_metadata SET value='building' WHERE key='status'"
             )
@@ -113,15 +117,15 @@ def main() -> None:
             status = indexed.execute(
                 "SELECT value FROM index_metadata WHERE key='status'"
             ).fetchone()[0]
-            assert fts_count == 2, f"Expected 2 indexed pages after rebuild, found {fts_count}"
+            assert fts_count == 3, f"Expected 2 indexed pages after rebuild, found {fts_count}"
             assert status == "complete", f"Rebuild did not seal the index: {status}"
             indexed_page_count = indexed.execute(
                 "SELECT value FROM index_metadata WHERE key='indexed_page_count'"
             ).fetchone()[0]
-            assert indexed_page_count == "2", f"Rebuild did not record exact count: {indexed_page_count}"
+            assert indexed_page_count == "3", f"Rebuild did not record exact count: {indexed_page_count}"
             # A complete marker must not hide a stale row count: reuse validation
             # should reject this index and rebuild it from the source wiki DB.
-            indexed.execute("DELETE FROM pages_fts WHERE rowid=1")
+            indexed.execute("DELETE FROM pages_fts WHERE rowid=2")
             indexed.commit()
         finally:
             indexed.close()
@@ -147,7 +151,7 @@ def main() -> None:
             indexed_page_count = indexed.execute(
                 "SELECT value FROM index_metadata WHERE key='indexed_page_count'"
             ).fetchone()[0]
-            assert fts_count == 2 and indexed_page_count == "2", (
+            assert fts_count == 3 and indexed_page_count == "3", (
                 f"Row-count mismatch was not repaired: actual={fts_count}, metadata={indexed_page_count}"
             )
         finally:
@@ -156,6 +160,8 @@ def main() -> None:
         source = SCRIPT.read_text(encoding="utf-8")
         assert "PRAGMA integrity_check" not in source
         assert "VALUES('integrity-check')" not in source
+        assert "SELECT COUNT(*) FROM pages_fts" not in source
+        assert "deterministic_probe_query" in source
 
     print("FEVEROUS candidate preparation regression: PASS (exact counts, bounded FTS probes, interrupted/stale-index recovery)")
 

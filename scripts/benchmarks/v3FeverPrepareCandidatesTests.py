@@ -34,6 +34,26 @@ def main() -> None:
             actual = con.execute("SELECT COUNT(*) FROM sentences").fetchone()[0]
             assert actual == 3, f"Expected 3 canonical sentence rows, found {actual}"
             MODULE.validate_index(con, 3)
+            assert MODULE.deterministic_probe_query("the and extraordinary") == '"extraordinary"'
+
+            # A missing deterministic midpoint must fail the bounded row-count check.
+            middle = con.execute(
+                "SELECT page, line_id, text FROM sentences WHERE rowid = 2"
+            ).fetchone()
+            con.execute("DELETE FROM sentences WHERE rowid = 2")
+            con.commit()
+            try:
+                MODULE.validate_index(con, 3)
+            except RuntimeError as error:
+                assert "row-count probe" in str(error), str(error)
+            else:
+                raise AssertionError("Missing FEVER midpoint row was accepted")
+            con.execute(
+                "INSERT INTO sentences(rowid, page, line_id, text) VALUES(2, ?, ?, ?)",
+                middle,
+            )
+            con.commit()
+            MODULE.validate_index(con, 3)
 
             # Simulate a stale external-content FTS index while preserving the
             # canonical sentence table/count. The deterministic probes must catch it.
@@ -51,6 +71,8 @@ def main() -> None:
         source = SCRIPT.read_text(encoding="utf-8")
         assert "PRAGMA integrity_check" not in source
         assert "integrity-check" not in source
+        assert "SELECT COUNT(*) FROM sentences" not in source
+        assert "SELECT COUNT(*) FROM sentences_fts" not in source
 
     print("FEVER candidate preparation regression: PASS (exact row count and deterministic FTS probes)")
 
