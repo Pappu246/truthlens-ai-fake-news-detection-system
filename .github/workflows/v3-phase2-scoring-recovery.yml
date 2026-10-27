@@ -56,6 +56,8 @@ jobs:
           node --check scripts/benchmarks/v3FeverousOfficialEvaluate.mjs
           npx tsc --noEmit
           python3 -m py_compile scripts/benchmarks/v3FeverPrepareCandidates.py scripts/benchmarks/v3FeverousPrepareCandidates.py
+          python3 -m py_compile scripts/benchmarks/v3FeverPrepareCandidatesTests.py scripts/benchmarks/v3FeverousPrepareCandidatesTests.py
+          python3 scripts/benchmarks/v3FeverPrepareCandidatesTests.py
           python3 scripts/benchmarks/v3FeverousPrepareCandidatesTests.py
           python3 scripts/benchmarks/v3FtsRankQueryTests.py
           node --check scripts/publicBenchmarkExitGate.mjs

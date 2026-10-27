@@ -49,6 +49,53 @@ def iter_pages(wiki_dir: Path) -> Iterable[tuple[str, str, int, str]]:
                             line_id, text = parsed
                             yield page, page, line_id, text
 
+
+def validate_index(con: sqlite3.Connection, expected_rows: int) -> None:
+    """Perform bounded structural/count checks plus deterministic FTS probes."""
+    if expected_rows < 1:
+        raise RuntimeError(f"FEVER index has no indexed rows: {expected_rows}")
+    tables = {row[0] for row in con.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'"
+    )}
+    if not {"sentences", "sentences_fts"}.issubset(tables):
+        raise RuntimeError("FEVER index is missing required tables")
+    sentence_columns = {row[1] for row in con.execute("PRAGMA table_info(sentences)")}
+    fts_columns = {row[1] for row in con.execute("PRAGMA table_info(sentences_fts)")}
+    if not {"rowid", "page", "line_id", "text"}.issubset(sentence_columns):
+        raise RuntimeError(f"FEVER sentence table has unexpected columns: {sorted(sentence_columns)}")
+    if not {"page", "line_id", "text"}.issubset(fts_columns):
+        raise RuntimeError(f"FEVER FTS table has unexpected columns: {sorted(fts_columns)}")
+
+    actual_rows = con.execute("SELECT COUNT(*) FROM sentences").fetchone()[0]
+    if actual_rows != expected_rows:
+        raise RuntimeError(f"FEVER row count mismatch: inserted={expected_rows}, stored={actual_rows}")
+
+    first = con.execute("SELECT rowid, text FROM sentences ORDER BY rowid LIMIT 1").fetchone()
+    last = con.execute("SELECT rowid, text FROM sentences ORDER BY rowid DESC LIMIT 1").fetchone()
+    bounds = con.execute("SELECT MIN(rowid), MAX(rowid) FROM sentences").fetchone()
+    middle = con.execute(
+        "SELECT rowid, text FROM sentences WHERE rowid >= ? ORDER BY rowid LIMIT 1",
+        ((bounds[0] + bounds[1]) // 2,),
+    ).fetchone()
+    probes = {row[0]: row for row in (first, middle, last) if row}
+    successful_probes = 0
+    for rowid, text in probes.values():
+        tokens = [token for token in re.findall(r"[A-Za-z0-9]+", text.lower()) if len(token) > 1]
+        if not tokens:
+            continue
+        # Probe a real canonical row, rather than running a corpus-wide FTS integrity scan.
+        query = '"' + tokens[0].replace('"', '""') + '"'
+        hit = con.execute(
+            "SELECT rowid FROM sentences_fts WHERE sentences_fts MATCH ? AND rowid = ? LIMIT 1",
+            (query, rowid),
+        ).fetchone()
+        if not hit:
+            raise RuntimeError(f"FEVER FTS probe failed for rowid={rowid}, token={tokens[0]!r}")
+        successful_probes += 1
+    if not successful_probes:
+        raise RuntimeError("FEVER index could not produce a deterministic FTS probe")
+
+
 def build_index(wiki_dir: Path, db_path: Path) -> None:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(db_path)
@@ -132,11 +179,9 @@ def build_index(wiki_dir: Path, db_path: Path) -> None:
     flush_batch()
     con.commit()
 
-    check = con.execute("PRAGMA integrity_check").fetchone()[0]
-    if check != "ok":
-        raise RuntimeError(f"FEVER SQLite integrity check failed: {check}")
+    validate_index(con, processed_rows)
     con.close()
-    print(f"Built FEVER sentence index: rows={processed_rows} db={db_path}")
+    print(f"Built FEVER sentence index: rows={processed_rows} db={db_path} (bounded validation passed)")
 
 def fts_query(text: str) -> str:
     tokens = TOKEN.findall(text.lower())

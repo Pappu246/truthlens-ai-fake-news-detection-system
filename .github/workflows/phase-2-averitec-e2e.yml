@@ -8,6 +8,7 @@ on:
     paths:
       - 'scripts/v2AveritecEndToEnd.ts'
       - 'scripts/mergeAveritecShards.mjs'
+      - 'scripts/mergeAveritecShardsTests.mjs'
       - '.github/workflows/phase-2-averitec-e2e.yml'
       - 'scripts/benchmarks/v3MaterializeScoringAssets.mjs'
       - 'scripts/benchmarks/v3RangeDownload.mjs'
@@ -237,4 +238,6 @@ jobs:
       - name: Check scripts
         run: |
           node --check scripts/mergeAveritecShards.mjs
+          node --check scripts/mergeAveritecShardsTests.mjs
+          node scripts/mergeAveritecShardsTests.mjs
           npx tsc --noEmit

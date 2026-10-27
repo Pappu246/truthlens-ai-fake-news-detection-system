@@ -66,6 +66,53 @@ def fts_query(text):
     tokens = [t for t in TOKEN.findall(text.lower()) if len(t) > 1][:48]
     return " OR ".join('"' + t.replace('"', '""') + '"' for t in tokens)
 
+
+def validate_index(index, expected_rows):
+    """Validate index structure, exact row count, and deterministic FTS probes."""
+    if expected_rows < 1:
+        raise RuntimeError(f"FEVEROUS index has no indexed pages: {expected_rows}")
+    tables = {row[0] for row in index.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'"
+    )}
+    if not {"pages_fts", "index_metadata"}.issubset(tables):
+        raise RuntimeError("FEVEROUS index is missing required tables")
+    fts_columns = {row[1] for row in index.execute("PRAGMA table_info(pages_fts)")}
+    metadata_columns = {row[1] for row in index.execute("PRAGMA table_info(index_metadata)")}
+    if not {"page_id", "text"}.issubset(fts_columns):
+        raise RuntimeError(f"FEVEROUS FTS table has unexpected columns: {sorted(fts_columns)}")
+    if not {"key", "value"}.issubset(metadata_columns):
+        raise RuntimeError(f"FEVEROUS metadata table has unexpected columns: {sorted(metadata_columns)}")
+
+    actual_rows = index.execute("SELECT COUNT(*) FROM pages_fts").fetchone()[0]
+    if actual_rows != expected_rows:
+        raise RuntimeError(f"FEVEROUS index count mismatch: inserted={expected_rows}, stored={actual_rows}")
+
+    # This index is created from an empty table and inserts rows without explicit
+    # rowids, so its deterministic first/middle/last rowids are 1..expected_rows.
+    rowids = sorted({1, (expected_rows + 1) // 2, expected_rows})
+    successful_probes = 0
+    for rowid in rowids:
+        row = index.execute(
+            "SELECT rowid, substr(text, 1, 4096) FROM pages_fts WHERE rowid = ?",
+            (rowid,),
+        ).fetchone()
+        if not row:
+            raise RuntimeError(f"FEVEROUS structural probe missing rowid={rowid}")
+        tokens = [token for token in re.findall(r"[A-Za-z0-9]+", row[1].lower()) if len(token) > 1]
+        if not tokens:
+            continue
+        query = '"' + tokens[0].replace('"', '""') + '"'
+        hit = index.execute(
+            "SELECT rowid FROM pages_fts WHERE pages_fts MATCH ? AND rowid = ? LIMIT 1",
+            (query, rowid),
+        ).fetchone()
+        if not hit:
+            raise RuntimeError(f"FEVEROUS FTS probe failed for rowid={rowid}, token={tokens[0]!r}")
+        successful_probes += 1
+    if not successful_probes:
+        raise RuntimeError("FEVEROUS index could not produce a deterministic FTS probe")
+
+
 def index_is_complete(index_path, source_db_path):
     """Only reuse an index that reached its completion marker for this source file."""
     if not index_path.exists():
@@ -76,14 +123,18 @@ def index_is_complete(index_path, source_db_path):
         idx = sqlite3.connect(index_path)
         try:
             metadata = dict(idx.execute("SELECT key, value FROM index_metadata"))
-            return (
-                metadata.get("status") == "complete"
-                and metadata.get("source_size") == str(stat.st_size)
-                and metadata.get("source_mtime_ns") == str(stat.st_mtime_ns)
-            )
+            if (
+                metadata.get("status") != "complete"
+                or metadata.get("source_size") != str(stat.st_size)
+                or metadata.get("source_mtime_ns") != str(stat.st_mtime_ns)
+            ):
+                return False
+            expected_rows = int(metadata.get("indexed_page_count", ""))
+            validate_index(idx, expected_rows)
+            return True
         finally:
             idx.close()
-    except (OSError, sqlite3.Error, ValueError):
+    except (OSError, sqlite3.Error, ValueError, RuntimeError, TypeError):
         return False
 
 
@@ -164,14 +215,11 @@ def build_index(db_path, index_path, batch_size=250):
 
     flush_batch()
     dst.commit()
-    check = dst.execute("PRAGMA integrity_check").fetchone()[0]
-    if check != "ok":
-        raise RuntimeError(f"FEVEROUS SQLite integrity check failed: {check}")
-    # Validate the self-contained FTS5 table before making the index reusable.
-    dst.execute("INSERT INTO pages_fts(pages_fts) VALUES('integrity-check')")
-    fts_count = dst.execute("SELECT COUNT(*) FROM pages_fts").fetchone()[0]
-    if count != fts_count:
-        raise RuntimeError(f"FEVEROUS index count mismatch: inserted={count}, fts={fts_count}")
+    validate_index(dst, count)
+    dst.execute(
+        "INSERT OR REPLACE INTO index_metadata(key, value) VALUES('indexed_page_count', ?)",
+        (str(count),),
+    )
     dst.execute("UPDATE index_metadata SET value='complete' WHERE key='status'")
     dst.commit()
     dst.close()

@@ -74,6 +74,10 @@ def main() -> None:
                 "SELECT value FROM index_metadata WHERE key='status'"
             ).fetchone()[0]
             assert status == "complete", f"Expected complete index marker, found {status}"
+            indexed_page_count = indexed.execute(
+                "SELECT value FROM index_metadata WHERE key='indexed_page_count'"
+            ).fetchone()[0]
+            assert indexed_page_count == "2", f"Expected exact indexed page count 2, found {indexed_page_count}"
             indexed.execute(
                 "UPDATE index_metadata SET value='building' WHERE key='status'"
             )
@@ -111,10 +115,49 @@ def main() -> None:
             ).fetchone()[0]
             assert fts_count == 2, f"Expected 2 indexed pages after rebuild, found {fts_count}"
             assert status == "complete", f"Rebuild did not seal the index: {status}"
+            indexed_page_count = indexed.execute(
+                "SELECT value FROM index_metadata WHERE key='indexed_page_count'"
+            ).fetchone()[0]
+            assert indexed_page_count == "2", f"Rebuild did not record exact count: {indexed_page_count}"
+            # A complete marker must not hide a stale row count: reuse validation
+            # should reject this index and rebuild it from the source wiki DB.
+            indexed.execute("DELETE FROM pages_fts WHERE rowid=1")
+            indexed.commit()
         finally:
             indexed.close()
 
-    print("FEVEROUS candidate preparation regression: PASS (JSONL, row boundaries, incremental FTS5)")
+        subprocess.run(
+            [
+                sys.executable, str(SCRIPT),
+                f"--db={db_path}",
+                f"--claims={claims_path}",
+                f"--output={output_path}",
+                "--top-pages=5",
+                "--elements-per-page=10",
+                "--index-batch-size=1"
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=60
+        )
+        indexed = sqlite3.connect(index_path)
+        try:
+            fts_count = indexed.execute("SELECT COUNT(*) FROM pages_fts").fetchone()[0]
+            indexed_page_count = indexed.execute(
+                "SELECT value FROM index_metadata WHERE key='indexed_page_count'"
+            ).fetchone()[0]
+            assert fts_count == 2 and indexed_page_count == "2", (
+                f"Row-count mismatch was not repaired: actual={fts_count}, metadata={indexed_page_count}"
+            )
+        finally:
+            indexed.close()
+
+        source = SCRIPT.read_text(encoding="utf-8")
+        assert "PRAGMA integrity_check" not in source
+        assert "VALUES('integrity-check')" not in source
+
+    print("FEVEROUS candidate preparation regression: PASS (exact counts, bounded FTS probes, interrupted/stale-index recovery)")
 
 
 if __name__ == "__main__":

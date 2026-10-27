@@ -25,6 +25,10 @@ on:
       - 'scripts/v2DownloadModels.ts'
       - 'data/v2/**'
       - 'package-lock.json'
+      # Keep the coordinated Phase 2 research benchmarks on one exact PR-head SHA.
+      - 'scripts/benchmarks/**'
+      - 'scripts/mergeAveritecShards.mjs'
+      - 'research/multibenchmark-manifest.json'
       - '.github/workflows/v2-scifact-end-to-end.yml'
   workflow_dispatch:
 
