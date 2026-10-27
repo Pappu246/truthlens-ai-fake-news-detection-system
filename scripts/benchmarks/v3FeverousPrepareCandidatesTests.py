@@ -2,6 +2,7 @@
 """Small regression for the FEVEROUS candidate-preparation pipeline."""
 from __future__ import annotations
 
+import importlib.util
 import json
 import sqlite3
 import subprocess
@@ -10,9 +11,17 @@ import tempfile
 from pathlib import Path
 
 SCRIPT = Path(__file__).with_name("v3FeverousPrepareCandidates.py").resolve()
+SPEC = importlib.util.spec_from_file_location("v3_feverous_prepare_candidates", SCRIPT)
+assert SPEC and SPEC.loader
+MODULE = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(MODULE)
 
 
 def main() -> None:
+    expected_probe = '"extraordinary" AND "and" AND "the"'
+    assert MODULE.deterministic_probe_query("the and extraordinary") == expected_probe
+    assert MODULE.deterministic_probe_query("the and extraordinary") == expected_probe
+    assert MODULE.deterministic_probe_query("a") == ""
     with tempfile.TemporaryDirectory(prefix="truthlens-feverous-test-") as temp:
         root = Path(temp)
         db_path = root / "wiki.db"
@@ -162,6 +171,8 @@ def main() -> None:
         assert "VALUES('integrity-check')" not in source
         assert "SELECT COUNT(*) FROM pages_fts" not in source
         assert "deterministic_probe_query" in source
+        assert "FTS probe start rowid=" in source
+        assert "source traversal complete" in source
 
     print("FEVEROUS candidate preparation regression: PASS (exact counts, bounded FTS probes, interrupted/stale-index recovery)")
 

@@ -68,18 +68,14 @@ def fts_query(text):
 
 
 def deterministic_probe_query(text):
-    """Choose a deterministic, selective token so FTS probes avoid huge postings."""
-    tokens = re.findall(r"[A-Za-z0-9]+", text.lower())
-    selective = sorted({token for token in tokens if len(token) >= 8}, key=lambda token: (-len(token), token))
-    if selective:
-        return '"' + selective[0] + '"'
-    # Small fixtures can lack long tokens; use a short phrase rather than the
-    # first common word, which may match millions of corpus rows.
-    fallback = [token for token in tokens if len(token) > 1][:3]
-    if not fallback:
-        return ""
-    return '"' + " ".join(fallback) + '"'
-
+    """Build a selective, deterministic FTS conjunction rather than a single-term scan."""
+    tokens = sorted(
+        {token for token in re.findall(r"[A-Za-z0-9]+", text.lower()) if len(token) > 1},
+        key=lambda token: (-len(token), token),
+    )
+    # The longest terms are placed first; requiring several terms sharply
+    # narrows postings while still probing terms present in the sampled row.
+    return " AND ".join('"' + token + '"' for token in tokens[:3])
 
 def validate_index(index, expected_rows):
     """Validate structure and dense row-count bounds without corpus-wide scans."""
@@ -127,10 +123,12 @@ def validate_index(index, expected_rows):
         query = deterministic_probe_query(row[1])
         if not query:
             continue
+        print(f"FEVEROUS FTS probe start rowid={rowid} query={query!r}", flush=True)
         hit = index.execute(
             "SELECT rowid FROM pages_fts WHERE pages_fts MATCH ? AND rowid = ? LIMIT 1",
             (query, rowid),
         ).fetchone()
+        print(f"FEVEROUS FTS probe end rowid={rowid} matched={bool(hit)}", flush=True)
         if not hit:
             raise RuntimeError(f"FEVEROUS FTS probe failed for rowid={rowid}, query={query!r}")
         successful_probes += 1
@@ -239,8 +237,14 @@ def build_index(db_path, index_path, batch_size=250):
             flush_batch()
 
     flush_batch()
+    print(
+        f"FEVEROUS source traversal complete: indexed_pages={count}; committing final transaction",
+        flush=True,
+    )
     dst.commit()
+    print("FEVEROUS final transaction committed; starting bounded index validation", flush=True)
     validate_index(dst, count)
+    print("FEVEROUS bounded index validation complete", flush=True)
     dst.execute(
         "INSERT OR REPLACE INTO index_metadata(key, value) VALUES('indexed_page_count', ?)",
         (str(count),),

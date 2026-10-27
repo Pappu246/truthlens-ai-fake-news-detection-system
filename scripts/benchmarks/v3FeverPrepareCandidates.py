@@ -51,18 +51,14 @@ def iter_pages(wiki_dir: Path) -> Iterable[tuple[str, str, int, str]]:
 
 
 def deterministic_probe_query(text: str) -> str:
-    """Choose a deterministic, selective token so FTS probes avoid huge postings."""
-    tokens = re.findall(r"[A-Za-z0-9]+", text.lower())
-    selective = sorted({token for token in tokens if len(token) >= 8}, key=lambda token: (-len(token), token))
-    if selective:
-        return '"' + selective[0] + '"'
-    # Tiny/synthetic rows may have no long token. A short phrase is less likely
-    # to fan out than the first common token (for example, "the").
-    fallback = [token for token in tokens if len(token) > 1][:3]
-    if not fallback:
-        return ""
-    return '"' + " ".join(fallback) + '"'
-
+    """Build a selective, deterministic FTS conjunction rather than a single-term scan."""
+    tokens = sorted(
+        {token for token in re.findall(r"[A-Za-z0-9]+", text.lower()) if len(token) > 1},
+        key=lambda token: (-len(token), token),
+    )
+    # The longest terms are placed first; requiring several terms sharply
+    # narrows postings while still probing terms present in the sampled row.
+    return " AND ".join('"' + token + '"' for token in tokens[:3])
 
 def validate_index(con: sqlite3.Connection, expected_rows: int) -> None:
     """Validate structure and dense row-count bounds without corpus-wide scans."""
@@ -106,10 +102,12 @@ def validate_index(con: sqlite3.Connection, expected_rows: int) -> None:
         query = deterministic_probe_query(row[1])
         if not query:
             continue
+        print(f"FEVER FTS probe start rowid={rowid} query={query!r}", flush=True)
         hit = con.execute(
             "SELECT rowid FROM sentences_fts WHERE sentences_fts MATCH ? AND rowid = ? LIMIT 1",
             (query, rowid),
         ).fetchone()
+        print(f"FEVER FTS probe end rowid={rowid} matched={bool(hit)}", flush=True)
         if not hit:
             raise RuntimeError(f"FEVER FTS probe failed for rowid={rowid}, query={query!r}")
         successful_probes += 1
@@ -198,9 +196,14 @@ def build_index(wiki_dir: Path, db_path: Path) -> None:
         if len(batch) >= 5000:
             flush_batch()
     flush_batch()
+    print(
+        f"FEVER source traversal complete: inserted_rows={processed_rows}; committing final transaction",
+        flush=True,
+    )
     con.commit()
-
+    print("FEVER final transaction committed; starting bounded index validation", flush=True)
     validate_index(con, processed_rows)
+    print("FEVER bounded index validation complete", flush=True)
     con.close()
     print(f"Built FEVER sentence index: rows={processed_rows} db={db_path} (bounded validation passed)")
 

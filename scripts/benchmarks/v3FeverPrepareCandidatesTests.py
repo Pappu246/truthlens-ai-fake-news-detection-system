@@ -34,7 +34,10 @@ def main() -> None:
             actual = con.execute("SELECT COUNT(*) FROM sentences").fetchone()[0]
             assert actual == 3, f"Expected 3 canonical sentence rows, found {actual}"
             MODULE.validate_index(con, 3)
-            assert MODULE.deterministic_probe_query("the and extraordinary") == '"extraordinary"'
+            expected_probe = '"extraordinary" AND "and" AND "the"'
+            assert MODULE.deterministic_probe_query("the and extraordinary") == expected_probe
+            assert MODULE.deterministic_probe_query("the and extraordinary") == expected_probe
+            assert MODULE.deterministic_probe_query("a") == ""
 
             # A missing deterministic midpoint must fail the bounded row-count check.
             middle = con.execute(
@@ -73,6 +76,8 @@ def main() -> None:
         assert "integrity-check" not in source
         assert "SELECT COUNT(*) FROM sentences" not in source
         assert "SELECT COUNT(*) FROM sentences_fts" not in source
+        assert "FTS probe start rowid=" in source
+        assert "source traversal complete" in source
 
     print("FEVER candidate preparation regression: PASS (exact row count and deterministic FTS probes)")
 
