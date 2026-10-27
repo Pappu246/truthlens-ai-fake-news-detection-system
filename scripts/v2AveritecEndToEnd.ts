@@ -416,7 +416,8 @@ async function main(): Promise<void> {
       claims_sha256: DATA_SHA256,
       evidence_store: { source: STORE_URL, pinned_revision: STORE_REVISION, sha256: STORE_SHA256 },
       workflow_run_id: process.env.GITHUB_RUN_ID || null,
-      git_sha: process.env.GITHUB_SHA || null,
+      // Prefer the explicitly evaluated PR-head SHA over GitHub's synthetic merge SHA.
+      git_sha: process.env.TRUTHLENS_EVALUATED_COMMIT_SHA || process.env.GITHUB_SHA || null,
       runner: {
         coarse_bm25_k: coarseBm25K,
         per_query_top_k: 15,
