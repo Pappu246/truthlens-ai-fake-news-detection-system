@@ -13,6 +13,7 @@ except ImportError:
 
 TOKEN = re.compile(r"[A-Za-z0-9_]+")
 JSON_LOADS = orjson.loads if orjson is not None else json.loads
+PROGRESS_INTERVAL = 100
 
 def text_value(value):
     if isinstance(value, str):
@@ -251,9 +252,13 @@ def build_index(db_path, index_path, batch_size=250):
     )
     dst.execute("UPDATE index_metadata SET value='complete' WHERE key='status'")
     dst.commit()
+    print("FEVEROUS closing index connection", flush=True)
     dst.close()
+    print("FEVEROUS index connection closed", flush=True)
+    print("FEVEROUS closing source database connection", flush=True)
     src.close()
-    print(f"FEVEROUS page index built: pages={count}, batch_size={batch_size}")
+    print("FEVEROUS source database connection closed", flush=True)
+    print(f"FEVEROUS page index built: pages={count}, batch_size={batch_size}", flush=True)
 
 def load_claims(path, limit):
     rows = []
@@ -287,9 +292,11 @@ def make_candidates(claims_path, db_path, output, top_pages, per_page_elements, 
     db = sqlite3.connect(db_path)
     idx = sqlite3.connect(index_path)
     output.parent.mkdir(parents=True, exist_ok=True)
+    claims = load_claims(claims_path, limit)
+    print(f"FEVEROUS candidate retrieval started: claims_total={len(claims)}", flush=True)
 
     with output.open("w", encoding="utf-8") as out:
-        for row in load_claims(claims_path, limit):
+        for claim_index, row in enumerate(claims, 1):
             claim_id = row.get("id") or row.get("annotation_id") or row.get("claim_id")
             query = fts_query(row.get("claim", ""))
             page_hits = []
@@ -334,9 +341,19 @@ def make_candidates(claims_path, db_path, output, top_pages, per_page_elements, 
                 "gold_evidence": row.get("evidence", []),
                 "candidates": candidates
             }) + "\n")
+            if claim_index % PROGRESS_INTERVAL == 0:
+                print(
+                    f"FEVEROUS candidate retrieval progress: claims_processed={claim_index}/{len(claims)}",
+                    flush=True,
+                )
 
+    print(f"FEVEROUS candidate retrieval complete: claims_processed={len(claims)}", flush=True)
+    print("FEVEROUS closing source database connection", flush=True)
     db.close()
+    print("FEVEROUS source database connection closed", flush=True)
+    print("FEVEROUS closing FTS index connection", flush=True)
     idx.close()
+    print("FEVEROUS FTS index connection closed", flush=True)
 
 def main():
     p = argparse.ArgumentParser()

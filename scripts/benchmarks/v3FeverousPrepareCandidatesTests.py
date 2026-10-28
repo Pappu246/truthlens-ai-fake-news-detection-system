@@ -2,7 +2,9 @@
 """Small regression for the FEVEROUS candidate-preparation pipeline."""
 from __future__ import annotations
 
+import contextlib
 import importlib.util
+import io
 import json
 import sqlite3
 import subprocess
@@ -58,7 +60,7 @@ def main() -> None:
         ]
         claims_path.write_text("".join(json.dumps(row) + "\n" for row in claims), encoding="utf-8")
 
-        subprocess.run(
+        first_run = subprocess.run(
             [
                 sys.executable, str(SCRIPT),
                 f"--db={db_path}",
@@ -73,6 +75,20 @@ def main() -> None:
             text=True,
             timeout=60
         )
+        assert "FEVEROUS candidate retrieval started: claims_total=2" in first_run.stdout
+        assert "FEVEROUS candidate retrieval complete: claims_processed=2" in first_run.stdout
+
+        old_interval = MODULE.PROGRESS_INTERVAL
+        MODULE.PROGRESS_INTERVAL = 1
+        captured = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(captured):
+                MODULE.make_candidates(claims_path, db_path, output_path, 5, 10, 0, 1)
+        finally:
+            MODULE.PROGRESS_INTERVAL = old_interval
+        progress = captured.getvalue()
+        assert "FEVEROUS candidate retrieval progress: claims_processed=1/2" in progress
+        assert "FEVEROUS candidate retrieval complete: claims_processed=2" in progress
 
         lines = output_path.read_text(encoding="utf-8").splitlines()
         assert len(lines) == 2, f"Expected two JSONL records, found {len(lines)}"
@@ -173,6 +189,8 @@ def main() -> None:
         assert "deterministic_probe_query" in source
         assert "FTS probe start rowid=" in source
         assert "source traversal complete" in source
+        assert "FEVEROUS closing index connection" in source
+        assert "FEVEROUS candidate retrieval progress:" in source
 
     print("FEVEROUS candidate preparation regression: PASS (exact counts, bounded FTS probes, interrupted/stale-index recovery)")
 

@@ -20,6 +20,7 @@ from typing import Iterable
 
 TOKEN = re.compile(r"[A-Za-z0-9_]+")
 JSON_LOADS = orjson.loads if orjson is not None else json.loads
+PROGRESS_INTERVAL = 100
 
 def parse_line(raw: str):
     raw = raw.rstrip("\n")
@@ -204,8 +205,10 @@ def build_index(wiki_dir: Path, db_path: Path) -> None:
     print("FEVER final transaction committed; starting bounded index validation", flush=True)
     validate_index(con, processed_rows)
     print("FEVER bounded index validation complete", flush=True)
+    print("FEVER closing index connection", flush=True)
     con.close()
-    print(f"Built FEVER sentence index: rows={processed_rows} db={db_path} (bounded validation passed)")
+    print("FEVER index connection closed", flush=True)
+    print(f"Built FEVER sentence index: rows={processed_rows} db={db_path} (bounded validation passed)", flush=True)
 
 def fts_query(text: str) -> str:
     tokens = TOKEN.findall(text.lower())
@@ -228,6 +231,8 @@ def make_candidates(claims_path: Path, db_path: Path, output: Path, top_k: int):
     con = sqlite3.connect(db_path)
     cur = con.cursor()
     output.parent.mkdir(parents=True, exist_ok=True)
+    claims_processed = 0
+    print("FEVER candidate retrieval started", flush=True)
     with output.open("w", encoding="utf-8") as out:
         with claims_path.open("r", encoding="utf-8") as fh:
             for raw in fh:
@@ -274,7 +279,13 @@ def make_candidates(claims_path: Path, db_path: Path, output: Path, top_k: int):
                     "gold_evidence": claim.get("evidence", []),
                     "candidates": candidates
                 }) + "\n")
+                claims_processed += 1
+                if claims_processed % PROGRESS_INTERVAL == 0:
+                    print(f"FEVER candidate retrieval progress: claims_processed={claims_processed}", flush=True)
+    print(f"FEVER candidate retrieval complete: claims_processed={claims_processed}", flush=True)
+    print("FEVER closing retrieval connection", flush=True)
     con.close()
+    print("FEVER retrieval connection closed", flush=True)
 
 def main():
     p = argparse.ArgumentParser()
