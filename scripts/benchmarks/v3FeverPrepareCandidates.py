@@ -36,7 +36,7 @@ QUERY_STOP_WORDS = frozenset({
     "shall", "it", "its", "he", "she", "they", "them", "their", "we", "our",
     "you", "your", "i", "me", "my", "his", "her", "this", "that", "these", "those",
 })
-MAX_QUERY_TERMS = 8
+MAX_QUERY_TERMS = 3
 
 def parse_line(raw: str):
     raw = raw.rstrip("\n")
@@ -226,20 +226,35 @@ def build_index(wiki_dir: Path, db_path: Path) -> None:
     print("FEVER index connection closed", flush=True)
     print(f"Built FEVER sentence index: rows={processed_rows} db={db_path} (bounded validation passed)", flush=True)
 
-def fts_query(text: str) -> str:
-    """Build a bounded, deterministic query from informative claim terms.
-
-    Full-corpus benchmarks cannot afford broad OR queries dominated by common
-    function words. Keep negation terms (for example, "not" and "without"),
-    deduplicate tokens, prefer longer terms as a rarity proxy, and cap the
-    query size. This is research candidate retrieval, not production policy.
-    """
+def _query_terms(text: str) -> list[str]:
+    """Return deterministic informative terms; gold evidence is never consulted."""
     tokens = {
         token for token in TOKEN.findall(text.lower())
         if len(token) > 1 and token not in QUERY_STOP_WORDS
     }
-    selected = sorted(tokens, key=lambda token: (-len(token), token))[:MAX_QUERY_TERMS]
-    return " OR ".join('"' + token.replace('"', '""') + '"' for token in selected)
+    return sorted(tokens, key=lambda token: (-len(token), token))
+
+
+def fts_query(text: str) -> str:
+    """Return the most selective bounded conjunction for FEVER candidate retrieval."""
+    return " AND ".join(
+        '"' + token.replace('"', '""') + '"'
+        for token in _query_terms(text)[:MAX_QUERY_TERMS]
+    )
+
+
+def fts_query_variants(text: str) -> list[str]:
+    """Try a three-term conjunction first, then a two-term fallback if needed."""
+    terms = _query_terms(text)
+    if not terms:
+        return []
+    sizes = [min(MAX_QUERY_TERMS, len(terms))]
+    if len(terms) > 2:
+        sizes.append(2)
+    return [
+        " AND ".join('"' + token.replace('"', '""') + '"' for token in terms[:size])
+        for size in sizes
+    ]
 
 def load_claims(path: Path, limit: int | None):
     rows = []
@@ -263,22 +278,31 @@ def make_candidates(claims_path: Path, db_path: Path, output: Path, top_k: int):
                 if not raw.strip():
                     continue
                 claim = JSON_LOADS(raw)
-                q = fts_query(claim.get("claim", ""))
                 hits = []
-                if q:
+                seen_rowids = set()
+                for query in fts_query_variants(claim.get("claim", "")):
+                    if len(hits) >= top_k:
+                        break
                     try:
-                        hits = cur.execute(
+                        rows = cur.execute(
                             """
-                            SELECT page, line_id, text, rank
+                            SELECT rowid, page, line_id, text, rank
                             FROM sentences_fts
                             WHERE sentences_fts MATCH ?
                             ORDER BY rank
                             LIMIT ?
                             """,
-                            (q, top_k)
+                            (query, top_k)
                         ).fetchall()
                     except sqlite3.OperationalError:
-                        hits = []
+                        continue
+                    for rowid, page, line_id, text, score in rows:
+                        if rowid in seen_rowids:
+                            continue
+                        seen_rowids.add(rowid)
+                        hits.append((page, line_id, text, score))
+                        if len(hits) >= top_k:
+                            break
                 candidates = []
                 for page, line_id, text, score in hits:
                     candidates.append({

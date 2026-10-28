@@ -56,6 +56,7 @@ jobs:
           node --check scripts/benchmarks/v3FeverousOfficialEvaluate.mjs
           npx tsc --noEmit
           npx tsx scripts/benchmarks/v3JsonlTests.ts
+          npx tsx scripts/benchmarks/v3FeverousEvidenceRecallTests.ts
           python3 -m py_compile scripts/benchmarks/v3FeverPrepareCandidates.py scripts/benchmarks/v3FeverousPrepareCandidates.py
           python3 -m py_compile scripts/benchmarks/v3FeverPrepareCandidatesTests.py scripts/benchmarks/v3FeverousPrepareCandidatesTests.py
           python3 scripts/benchmarks/v3FeverPrepareCandidatesTests.py
@@ -197,6 +198,10 @@ jobs:
           TRUTHLENS_NLI_CONCURRENCY: '8'
         run: |
           npx tsx scripts/benchmarks/v3FeverousEvaluate.ts             --input=artifacts/v3/feverous/candidates.jsonl             --max-claims=7890             --output=artifacts/v3/feverous/truthlens-predictions.jsonl             --report=artifacts/v3/feverous/truthlens-adapter-report.json             --commit-sha="$TRUTHLENS_EVALUATED_COMMIT_SHA"
+      - name: Install pinned FEVEROUS scorer dependencies
+        run: |
+          python3 -m pip install --disable-pip-version-check --no-input "jsonlines==3.1.0" "clean-text==0.6.0"
+          python3 -c 'import jsonlines; from cleantext import clean; print("Pinned FEVEROUS scorer dependencies import successfully")'
       - name: Run official FEVEROUS scorer
         run: |
           node scripts/benchmarks/v3FeverousOfficialEvaluate.mjs             --input=artifacts/v3/feverous/truthlens-predictions.jsonl             --output=artifacts/v3/feverous/official-scorer-run.json             --commit-sha="$TRUTHLENS_EVALUATED_COMMIT_SHA"

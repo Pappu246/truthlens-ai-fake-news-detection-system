@@ -4,9 +4,10 @@ import path from 'node:path';
 import { readJsonl } from './v3Jsonl';
 import { FixtureCorpusSource } from '../../server/v2/retrieval/corpusSource';
 import { verifyClaimV2 } from '../../server/v2/pipeline';
+import { hasGoldCandidate } from './v3FeverousEvidenceRecall';
 
 type Candidate = { id: string; url: string; title: string; snippet: string; body?: string; contentType: 'FULL_ARTICLE' | 'SUMMARY' | 'HEADLINE_ONLY'; publisher: string; publishedAt?: string | null; retrievedAt: string; retrievalMethod: string; feverous_page: string; feverous_element_id: string; feverous_type: string; feverous_id: string; };
-type Row = { id: string | number; claim: string; label: string; gold_evidence: string[][]; candidates: Candidate[]; };
+type Row = { id: string | number; claim: string; label: string; gold_evidence: unknown; candidates: Candidate[]; };
 
 function arg(name: string, fallback?: string) { const hit = process.argv.find((v) => v.startsWith('--' + name + '=')); return hit ? hit.slice(name.length + 3) : fallback; }
 
@@ -51,8 +52,7 @@ async function main() {
     const predictedLabel = mapVerdict(result.provenance.final_verdict);
     if (predictedLabel === row.label) labelCorrect += 1;
     const candidateIds = new Set(row.candidates.map((c) => c.feverous_id));
-    const goldFlat = (row.gold_evidence || []).flat();
-    if (goldFlat.some((id) => candidateIds.has(id))) candidateRecall += 1;
+    if (hasGoldCandidate(row.gold_evidence, candidateIds)) candidateRecall += 1;
     const scoredEvidence = result.provenance.evidence.slice().sort((a, b) => b.rerank_score - a.rerank_score).slice(0, 5)
       .map((e) => { const c = row.candidates.find((x) => x.url === e.url); return c?.feverous_id || null; })
       .filter((x): x is string => Boolean(x));
