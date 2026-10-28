@@ -2,7 +2,9 @@
 """Focused regression tests for bounded FEVER SQLite/FTS5 index validation."""
 from __future__ import annotations
 
+import contextlib
 import importlib.util
+import io
 import json
 import sqlite3
 import tempfile
@@ -29,6 +31,28 @@ def main() -> None:
         shard.write_text("\n".join(json.dumps(page) for page in pages) + "\n", encoding="utf-8")
 
         MODULE.build_index(wiki_dir, db_path)
+        claims_path = root / "claims.jsonl"
+        candidates_path = root / "candidates.jsonl"
+        claims = [
+            {"id": "claim-1", "claim": "Apollo 11 landed on the Moon in July 1969.", "label": "SUPPORTS", "evidence": []},
+            {"id": "claim-2", "claim": "Apollo 12 was a later lunar mission in November 1969.", "label": "SUPPORTS", "evidence": []},
+        ]
+        claims_path.write_text("".join(json.dumps(row) + "\n" for row in claims), encoding="utf-8")
+        old_interval = MODULE.PROGRESS_INTERVAL
+        MODULE.PROGRESS_INTERVAL = 1
+        captured = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(captured):
+                MODULE.make_candidates(claims_path, db_path, candidates_path, top_k=5)
+        finally:
+            MODULE.PROGRESS_INTERVAL = old_interval
+        progress = captured.getvalue()
+        assert "FEVER candidate retrieval started" in progress
+        assert "FEVER candidate retrieval progress: claims_processed=1" in progress
+        assert "FEVER candidate retrieval complete: claims_processed=2" in progress
+        candidate_rows = [json.loads(line) for line in candidates_path.read_text(encoding="utf-8").splitlines()]
+        assert len(candidate_rows) == 2, f"Expected 2 candidate rows, found {len(candidate_rows)}"
+
         con = sqlite3.connect(db_path)
         try:
             actual = con.execute("SELECT COUNT(*) FROM sentences").fetchone()[0]
@@ -78,6 +102,8 @@ def main() -> None:
         assert "SELECT COUNT(*) FROM sentences_fts" not in source
         assert "FTS probe start rowid=" in source
         assert "source traversal complete" in source
+        assert "FEVER closing index connection" in source
+        assert "FEVER candidate retrieval progress:" in source
 
     print("FEVER candidate preparation regression: PASS (exact row count and deterministic FTS probes)")
 
