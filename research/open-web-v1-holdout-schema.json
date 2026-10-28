@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "benchmark_id": "truthlens_open_web_v1",
+  "target_claims": 100,
+  "label_set": ["SUPPORTED", "REFUTED", "INSUFFICIENT_EVIDENCE", "CONFLICTED"],
+  "required_fields": [
+    "claim_id",
+    "claim",
+    "claim_date",
+    "claim_source_url",
+    "claim_source_type",
+    "claim_source_published_at",
+    "human_label",
+    "human_reviewed_at",
+    "duplicate_cluster_id",
+    "evidence_items"
+  ],
+  "claim_source_types": ["PRIMARY", "MAJOR_NEWS"],
+  "evidence_item_required_fields": [
+    "url",
+    "publisher",
+    "published_at",
+    "source_class",
+    "evidence_text"
+  ],
+  "source_classes": ["PRIMARY", "MAJOR_NEWS", "OTHER"],
+  "rules": {
+    "human_label_required": true,
+    "human_blind_attestation_required": true,
+    "minimum_independent_annotators": 2,
+    "independent_adjudicator_required": true,
+    "blind_holdout_required": true,
+    "no_post_claim_evidence": true,
+    "duplicate_syndication_cluster_required": true,
+    "balanced_primary_and_major_news_required": true,
+    "production_evaluation_forbidden_before_seal": true
+  },
+  "release_states": ["DRAFT", "ANNOTATED", "SEALED", "RELEASED_FOR_EVALUATION"]
+}
