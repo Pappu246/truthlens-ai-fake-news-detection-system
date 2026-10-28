@@ -20,6 +20,14 @@ SPEC.loader.exec_module(MODULE)
 
 
 def main() -> None:
+    expected_query = '"apollo" OR "landed" OR "1969" OR "july" OR "moon" OR "12"'
+    claim_text = "The Apollo Apollo landed on the Moon in July 1969 and Apollo 12"
+    assert MODULE.fts_query(claim_text) == expected_query
+    assert MODULE.fts_query(claim_text) == MODULE.fts_query(claim_text)
+    assert '"not"' in MODULE.fts_query("Apollo was not the cause")
+    long_query = MODULE.fts_query("alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar")
+    assert len(long_query.split(" OR ")) <= MODULE.MAX_QUERY_TERMS
+
     expected_probe = '"extraordinary" AND "and" AND "the"'
     assert MODULE.deterministic_probe_query("the and extraordinary") == expected_probe
     assert MODULE.deterministic_probe_query("the and extraordinary") == expected_probe
@@ -45,6 +53,25 @@ def main() -> None:
                 "sentence_0": "Astrophotography observations documented extraordinary planetary alignment."
             }
         ]
+        element_page = {
+            "order": ["sentence_0", "section_0", "list_0", "table_0"],
+            "sentence_0": "first sentence",
+            "section_0": {"text": "section text"},
+            "list_0": {"list": [{"id": "item-1", "value": "one"}, {"id": "item-2", "value": "two"}]},
+            "table_0": {
+                "caption": "table caption",
+                "table": [[
+                    {"id": "header-1", "value": "Header", "is_header": True},
+                    {"id": "cell-1", "value": "Cell"},
+                ]],
+            },
+        }
+        all_elements = MODULE.extract_elements(element_page)
+        assert len(all_elements) >= 6
+        assert MODULE.extract_elements_limited(element_page, 0) == []
+        for limit in (1, 2, 4, len(all_elements), len(all_elements) + 2):
+            assert MODULE.extract_elements_limited(element_page, limit) == all_elements[:limit]
+
         con = sqlite3.connect(db_path)
         con.execute("CREATE TABLE wiki (id TEXT PRIMARY KEY, data TEXT NOT NULL)")
         con.executemany(
