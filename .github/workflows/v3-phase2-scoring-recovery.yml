@@ -55,6 +55,7 @@ jobs:
           node --check scripts/v3Phase2ResumableCoordinator.mjs
           node --check scripts/benchmarks/v3FeverousOfficialEvaluate.mjs
           npx tsc --noEmit
+          npx tsx scripts/benchmarks/v3JsonlTests.ts
           python3 -m py_compile scripts/benchmarks/v3FeverPrepareCandidates.py scripts/benchmarks/v3FeverousPrepareCandidates.py
           python3 -m py_compile scripts/benchmarks/v3FeverPrepareCandidatesTests.py scripts/benchmarks/v3FeverousPrepareCandidatesTests.py
           python3 scripts/benchmarks/v3FeverPrepareCandidatesTests.py

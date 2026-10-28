@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { readJsonl } from './v3Jsonl';
 import { FixtureCorpusSource } from '../../server/v2/retrieval/corpusSource';
 import { verifyClaimV2 } from '../../server/v2/pipeline';
 
@@ -51,19 +52,17 @@ function goldIds(groups: unknown[][]): Set<string> {
 
 async function main() {
   const input = path.resolve(arg('input') || 'artifacts/v3/fever/candidates.jsonl');
-  const rows: Row[] = fs.readFileSync(input, 'utf8')
-    .split(/\r?\n/)
-    .filter(Boolean)
-    .map((line) => JSON.parse(line) as Row);
-
-  const maxClaims = Number(arg('max-claims') || rows.length);
-  const selected = rows.slice(0, Math.min(rows.length, maxClaims));
+  const maxClaimsArg = arg('max-claims');
+  const maxClaims = maxClaimsArg === undefined ? undefined : Number(maxClaimsArg);
+  if (maxClaims !== undefined && (!Number.isSafeInteger(maxClaims) || maxClaims < 0)) {
+    throw new Error(`Invalid --max-claims value: ${maxClaimsArg}`);
+  }
 
   const predictions: unknown[] = [];
   let candidateRecall = 0;
   let labelCorrect = 0;
 
-  for (const row of selected) {
+  for await (const row of readJsonl<Row>(input, maxClaims)) {
     const raw = row.candidates.map((c) => ({
       id: c.id,
       url: c.url,
@@ -112,6 +111,10 @@ async function main() {
     });
   }
 
+  if (maxClaims !== undefined && predictions.length !== maxClaims) {
+    throw new Error(`Expected ${maxClaims} FEVER claims, read ${predictions.length}`);
+  }
+
   const report = {
     benchmark_id: 'fever',
     protocol_version: 'truthlens-v3-benchmark-protocol-v1',
@@ -120,7 +123,7 @@ async function main() {
       version_or_split: 'shared_task_dev',
       claims_sha256: arg('claims-sha256') || 'PIN_REQUIRED',
       corpus_sha256: arg('corpus-sha256') || 'PIN_REQUIRED',
-      evaluation_count: selected.length
+      evaluation_count: predictions.length
     },
     model: {
       pipeline: 'TruthLens V2 evidence-grounded runtime',
@@ -128,8 +131,8 @@ async function main() {
       embedding: process.env.TRUTHLENS_EMBEDDING_MODEL || 'configured-runtime'
     },
     metrics: {
-      label_accuracy: selected.length ? labelCorrect / selected.length : 0,
-      open_candidate_recall: selected.length ? candidateRecall / selected.length : 0
+      label_accuracy: predictions.length ? labelCorrect / predictions.length : 0,
+      open_candidate_recall: predictions.length ? candidateRecall / predictions.length : 0
     },
     provenance: {
       commit_sha: arg('commit-sha') || process.env.GITHUB_SHA || '0000000000000000000000000000000000000000',
@@ -147,7 +150,7 @@ async function main() {
   fs.writeFileSync(predictionsOut, JSON.stringify(predictions, null, 2) + '\n');
   console.log(JSON.stringify({
     benchmark_id: report.benchmark_id,
-    evaluation_count: selected.length,
+    evaluation_count: predictions.length,
     label_accuracy: report.metrics.label_accuracy,
     open_candidate_recall: report.metrics.open_candidate_recall,
     report_output: out,

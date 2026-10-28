@@ -12,6 +12,10 @@ on:
       - '.github/workflows/phase-2-averitec-e2e.yml'
       - 'scripts/benchmarks/v3MaterializeScoringAssets.mjs'
       - 'scripts/benchmarks/v3RangeDownload.mjs'
+      # Keep coordinated full-split evidence current when benchmark evaluators change.
+      - 'scripts/benchmarks/v3FeverEvaluate.ts'
+      - 'scripts/benchmarks/v3FeverousEvaluate.ts'
+      - 'scripts/benchmarks/v3Jsonl.ts'
 
 concurrency:
   group: truthlens-phase2-averitec-currenthead-pr-${{ github.event.pull_request.number || github.ref }}

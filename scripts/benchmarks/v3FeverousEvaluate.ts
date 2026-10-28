@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import path from 'node:path';
+import { readJsonl } from './v3Jsonl';
 import { FixtureCorpusSource } from '../../server/v2/retrieval/corpusSource';
 import { verifyClaimV2 } from '../../server/v2/pipeline';
 
@@ -18,19 +19,22 @@ function mapVerdict(verdict: string): string {
 async function main() {
   const input = path.resolve(arg('input', 'artifacts/v3/feverous/candidates.jsonl')!);
   const output = path.resolve(arg('output', 'artifacts/v3/feverous/truthlens-predictions.jsonl')!);
-  const rows: Row[] = fs.readFileSync(input, 'utf8').split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line) as Row);
+  const maxClaims = Number(arg('max-claims', '0'));
+  if (!Number.isSafeInteger(maxClaims) || maxClaims < 0) {
+    throw new Error('Invalid --max-claims value: ' + String(maxClaims));
+  }
+  const limit = maxClaims > 0 ? maxClaims : undefined;
   const evaluatedCommitSha = arg('commit-sha') || process.env.TRUTHLENS_EVALUATED_COMMIT_SHA || process.env.GITHUB_SHA || null;
   const protocolManifestPath = path.resolve('research/multibenchmark-manifest.json');
   const configurationSha256 = crypto.createHash('sha256').update(fs.readFileSync(protocolManifestPath)).digest('hex');
 
-  const maxClaims = Number(arg('max-claims', '0'));
-  const selected = maxClaims > 0 ? rows.slice(0, maxClaims) : rows;
   const predictions: any[] = [];
   let candidateRecall = 0;
   let labelCorrect = 0;
 
-  for (let i = 0; i < selected.length; i += 1) {
-    const row = selected[i];
+  let processed = 0;
+  for await (const row of readJsonl<Row>(input, limit)) {
+    processed += 1;
     const corpus = new FixtureCorpusSource(row.candidates.map((c) => ({
       id: c.id, url: c.url, title: c.title, snippet: c.snippet, body: c.body,
       contentType: c.contentType, publisher: c.publisher, publishedAt: c.publishedAt ?? null,
@@ -63,8 +67,14 @@ async function main() {
         evidence_urls: result.provenance.evidence.map((e) => e.url)
       }
     });
-    if ((i + 1) % 25 === 0 || i + 1 === selected.length) console.log('Evaluated ' + (i + 1) + '/' + selected.length);
+    if (processed % 25 === 0) {
+      console.log('Evaluated ' + processed + (limit !== undefined ? '/' + limit : ' claims'));
+    }
   }
+  if (limit !== undefined && predictions.length !== limit) {
+    throw new Error('Expected ' + limit + ' FEVEROUS claims, read ' + predictions.length);
+  }
+  console.log('FEVEROUS evaluation complete: claims_processed=' + predictions.length);
   fs.mkdirSync(path.dirname(output), { recursive: true });
   fs.writeFileSync(output, predictions.map((x) => JSON.stringify(x)).join('\n') + '\n');
   const report = {
