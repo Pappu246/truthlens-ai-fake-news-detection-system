@@ -18,6 +18,14 @@ SPEC.loader.exec_module(MODULE)
 
 
 def main() -> None:
+    expected_query = '"apollo" OR "landed" OR "1969" OR "july" OR "moon" OR "12"'
+    claim_text = "The Apollo Apollo landed on the Moon in July 1969 and Apollo 12"
+    assert MODULE.fts_query(claim_text) == expected_query
+    assert MODULE.fts_query(claim_text) == MODULE.fts_query(claim_text)
+    assert '"not"' in MODULE.fts_query("Apollo was not the cause")
+    long_query = MODULE.fts_query("alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar")
+    assert len(long_query.split(" OR ")) <= MODULE.MAX_QUERY_TERMS
+
     with tempfile.TemporaryDirectory(prefix="truthlens-fever-index-test-") as temp:
         root = Path(temp)
         wiki_dir = root / "wiki"
