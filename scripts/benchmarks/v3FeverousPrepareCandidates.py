@@ -11,9 +11,25 @@ try:
 except ImportError:
     orjson = None
 
-TOKEN = re.compile(r"[A-Za-z0-9_]+")
+TOKEN = re.compile(r"[A-Za-z0-9]+")
 JSON_LOADS = orjson.loads if orjson is not None else json.loads
 PROGRESS_INTERVAL = 100
+QUERY_STOP_WORDS = frozenset({
+    "a", "an", "the", "and", "or", "but", "if", "then", "than", "as", "at",
+    "by", "for", "from", "in", "into", "of", "on", "onto", "to", "with",
+    "about", "after", "before", "during", "until", "while", "over", "under",
+    "between", "among", "through", "across", "around", "against", "per", "via",
+    "near", "behind", "above", "below", "within", "outside", "inside", "toward",
+    "towards", "because", "since", "although", "though", "whereas", "where",
+    "when", "what", "which", "who", "whom", "whose", "how", "why", "whether",
+    "all", "any", "each", "every", "both", "either", "few", "many", "much",
+    "more", "most", "other", "some", "such", "same", "is", "are", "was", "were",
+    "be", "been", "being", "am", "do", "does", "did", "have", "has", "had",
+    "having", "can", "could", "should", "would", "will", "may", "might", "must",
+    "shall", "it", "its", "he", "she", "they", "them", "their", "we", "our",
+    "you", "your", "i", "me", "my", "his", "her", "this", "that", "these", "those",
+})
+MAX_QUERY_TERMS = 8
 
 def text_value(value):
     if isinstance(value, str):
@@ -24,31 +40,30 @@ def text_value(value):
                 return value[key].strip()
     return ""
 
-def extract_elements(page):
-    elements = []
-
+def iter_elements(page):
+    """Yield page elements in the historical order without materializing all of them."""
     if not isinstance(page, dict):
-        return elements
+        return
 
     for key in page.get("order", []):
         value = page.get(key)
         if key.startswith("sentence_") and isinstance(value, str) and value.strip():
-            elements.append((key, value.strip(), "SENTENCE"))
+            yield key, value.strip(), "SENTENCE"
         elif key.startswith("section_"):
-            value_text = text_value(value)
-            if value_text:
-                elements.append((key, value_text, "SECTION"))
+            value_text_ = text_value(value)
+            if value_text_:
+                yield key, value_text_, "SECTION"
         elif key.startswith("list_") and isinstance(value, dict):
             for item in value.get("list", []):
                 item_id = item.get("id")
                 item_text = text_value(item.get("value"))
                 if item_id and item_text:
-                    elements.append((item_id, item_text, "LIST"))
+                    yield item_id, item_text, "LIST"
         elif key.startswith("table_") and isinstance(value, dict):
             caption = text_value(value.get("caption"))
             caption_id = "table_caption_" + key.split("_")[-1]
             if caption:
-                elements.append((caption_id, caption, "TABLE_CAPTION"))
+                yield caption_id, caption, "TABLE_CAPTION"
             for row in value.get("table", []):
                 if not isinstance(row, list):
                     continue
@@ -59,13 +74,29 @@ def extract_elements(page):
                     cell_text = text_value(cell.get("value"))
                     if cell_id and cell_text:
                         kind = "HEADER_CELL" if cell.get("is_header") else "CELL"
-                        elements.append((cell_id, cell_text, kind))
+                        yield cell_id, cell_text, kind
 
-    return elements
+
+def extract_elements(page):
+    """Return all elements in the same order used by the original candidate builder."""
+    return list(iter_elements(page))
+
+
+def extract_elements_limited(page, limit):
+    """Return only the first N elements while avoiding traversal of the remainder."""
+    from itertools import islice
+    if limit <= 0:
+        return []
+    return list(islice(iter_elements(page), limit))
 
 def fts_query(text):
-    tokens = [t for t in TOKEN.findall(text.lower()) if len(t) > 1][:48]
-    return " OR ".join('"' + t.replace('"', '""') + '"' for t in tokens)
+    """Use a bounded deterministic set of informative terms for full-corpus retrieval."""
+    tokens = {
+        token for token in TOKEN.findall(text.lower())
+        if len(token) > 1 and token not in QUERY_STOP_WORDS
+    }
+    selected = sorted(tokens, key=lambda token: (-len(token), token))[:MAX_QUERY_TERMS]
+    return " OR ".join('"' + token.replace('"', '""') + '"' for token in selected)
 
 
 def deterministic_probe_query(text):
@@ -312,10 +343,10 @@ def make_candidates(claims_path, db_path, output, top_pages, per_page_elements, 
                 if not raw:
                     continue
                 try:
-                    page = json.loads(raw[0])
+                    page = JSON_LOADS(raw[0])
                 except Exception:
                     continue
-                elements = extract_elements(page)[:per_page_elements]
+                elements = extract_elements_limited(page, per_page_elements)
                 for element_id, text_value_, kind in elements:
                     candidates.append({
                         "id": f"{page_id}::{element_id}",

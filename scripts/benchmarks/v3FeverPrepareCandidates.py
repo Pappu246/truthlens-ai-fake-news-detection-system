@@ -18,9 +18,25 @@ except ImportError:
     orjson = None
 from typing import Iterable
 
-TOKEN = re.compile(r"[A-Za-z0-9_]+")
+TOKEN = re.compile(r"[A-Za-z0-9]+")
 JSON_LOADS = orjson.loads if orjson is not None else json.loads
 PROGRESS_INTERVAL = 100
+QUERY_STOP_WORDS = frozenset({
+    "a", "an", "the", "and", "or", "but", "if", "then", "than", "as", "at",
+    "by", "for", "from", "in", "into", "of", "on", "onto", "to", "with",
+    "about", "after", "before", "during", "until", "while", "over", "under",
+    "between", "among", "through", "across", "around", "against", "per", "via",
+    "near", "behind", "above", "below", "within", "outside", "inside", "toward",
+    "towards", "because", "since", "although", "though", "whereas", "where",
+    "when", "what", "which", "who", "whom", "whose", "how", "why", "whether",
+    "all", "any", "each", "every", "both", "either", "few", "many", "much",
+    "more", "most", "other", "some", "such", "same", "is", "are", "was", "were",
+    "be", "been", "being", "am", "do", "does", "did", "have", "has", "had",
+    "having", "can", "could", "should", "would", "will", "may", "might", "must",
+    "shall", "it", "its", "he", "she", "they", "them", "their", "we", "our",
+    "you", "your", "i", "me", "my", "his", "her", "this", "that", "these", "those",
+})
+MAX_QUERY_TERMS = 8
 
 def parse_line(raw: str):
     raw = raw.rstrip("\n")
@@ -211,11 +227,19 @@ def build_index(wiki_dir: Path, db_path: Path) -> None:
     print(f"Built FEVER sentence index: rows={processed_rows} db={db_path} (bounded validation passed)", flush=True)
 
 def fts_query(text: str) -> str:
-    tokens = TOKEN.findall(text.lower())
-    tokens = [t for t in tokens if len(t) > 1]
-    if not tokens:
-        return ""
-    return " OR ".join('"' + t.replace('"', '""') + '"' for t in tokens[:32])
+    """Build a bounded, deterministic query from informative claim terms.
+
+    Full-corpus benchmarks cannot afford broad OR queries dominated by common
+    function words. Keep negation terms (for example, "not" and "without"),
+    deduplicate tokens, prefer longer terms as a rarity proxy, and cap the
+    query size. This is research candidate retrieval, not production policy.
+    """
+    tokens = {
+        token for token in TOKEN.findall(text.lower())
+        if len(token) > 1 and token not in QUERY_STOP_WORDS
+    }
+    selected = sorted(tokens, key=lambda token: (-len(token), token))[:MAX_QUERY_TERMS]
+    return " OR ".join('"' + token.replace('"', '""') + '"' for token in selected)
 
 def load_claims(path: Path, limit: int | None):
     rows = []
