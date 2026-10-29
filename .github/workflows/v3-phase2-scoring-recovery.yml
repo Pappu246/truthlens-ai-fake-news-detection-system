@@ -2,6 +2,18 @@ name: V3 Phase 2 Scoring Recovery
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - research/phase2-current-head-evidence-20261024
+    paths:
+      - 'scripts/benchmarks/**'
+      - 'scripts/v3Phase2ResumableCoordinator.mjs'
+      - 'scripts/phase2ExitGate.mjs'
+      - 'scripts/phase2ExitGateTests.mjs'
+      - 'scripts/publicBenchmarkExitGate.mjs'
+      - 'scripts/publicBenchmarkExitGateTests.mjs'
+      - 'research/multibenchmark-manifest.json'
+      - '.github/workflows/v3-phase2-scoring-recovery.yml'
   pull_request:
     branches:
       - main
