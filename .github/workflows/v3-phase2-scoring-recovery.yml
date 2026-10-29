@@ -207,6 +207,8 @@ jobs:
           python3 -c 'import jsonlines; from cleantext import clean; print("Pinned FEVEROUS scorer dependencies import successfully")'
       - name: Install FEVEROUS official scorer dependency
         run: python3 -m pip install --disable-pip-version-check --no-input jsonlines
+      - name: Verify FEVEROUS scorer dependency import
+        run: python3 -c 'import jsonlines; print("FEVEROUS scorer dependency import passed")'
       - name: Run official FEVEROUS scorer
         run: |
           node scripts/benchmarks/v3FeverousOfficialEvaluate.mjs             --input=artifacts/v3/feverous/truthlens-predictions.jsonl             --output=artifacts/v3/feverous/official-scorer-run.json             --commit-sha="$TRUTHLENS_EVALUATED_COMMIT_SHA"
