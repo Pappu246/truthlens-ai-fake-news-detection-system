@@ -39,6 +39,10 @@ async function main() {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ claim: '' })
   });
   check('empty claim -> 400', empty.status === 400, String(empty.status));
+  // Drain the response before issuing the next fetch. Undici can assert in
+  // Parser.finish if a keep-alive response body is left unread while the
+  // server closes/reuses the socket during the next request.
+  await empty.text();
 
   // ---- happy path shape (retrieval outcome not asserted; see header) -----
   const res = await fetch(base + '/api/v2/evidence/verify', {
