@@ -8,6 +8,7 @@
  * contract are checked.
  */
 import { createExpressApp } from '../server/appFactory';
+import { evidenceProvider } from '../server/verification/evidenceProvider';
 
 let pass = 0;
 let fail = 0;
@@ -23,6 +24,12 @@ function check(name: string, condition: boolean, detail = ''): void {
 }
 
 async function main() {
+  // Keep this route-contract test deterministic and offline. The live evidence
+  // provider is covered by its own tests; real network fetches here can trigger
+  // undici socket assertions on CI when upstream hosts close connections.
+  const originalSearch = evidenceProvider.search;
+  evidenceProvider.search = async () => [];
+
   const app = await createExpressApp({ isProduction: true, includeVite: false });
   const server = await new Promise<any>(r => { const s = app.listen(0, '127.0.0.1', () => r(s)); });
   const port = server.address().port;
@@ -50,6 +57,7 @@ async function main() {
     body: JSON.stringify({ claim: 'The national statistics office confirmed unemployment fell to 4.1 percent in March 2024.' })
   });
   const data = await res.json();
+  evidenceProvider.search = originalSearch;
   check('claim verification -> 200', res.status === 200, String(res.status));
   check('response carries a provenance object', !!data.provenance);
   check('provenance carries pipeline identifier', data.provenance?.pipeline === 'truthlens_v2_evidence_grounded');
