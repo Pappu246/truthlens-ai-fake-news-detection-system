@@ -333,7 +333,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
       } catch (err: any) {
         claimBlock = {
           status: err instanceof ClaimModelUnavailableError ? 'UNAVAILABLE' : 'NOT_APPLICABLE',
-          reason: err.message
+          reason: 'The claim model could not process this claim.'
         };
       }
       result.claim_model = claimBlock;
@@ -514,7 +514,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
       } catch (err: any) {
         claimBlock = {
           status: err instanceof ClaimModelUnavailableError ? 'UNAVAILABLE' : 'NOT_APPLICABLE',
-          reason: err.message
+          reason: 'The claim model could not process this claim.'
         };
       }
       analysis.claim_model = claimBlock;
@@ -720,7 +720,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
     } catch (err: any) {
       const message = typeof err?.message === 'string' ? err.message : 'Dataset validation failed.';
       const limitExceeded = message.startsWith('CSV exceeds the ') && message.endsWith('limit.');
-      res.status(limitExceeded ? 413 : 400).json({ detail: message });
+      res.status(limitExceeded ? 413 : 400).json({ detail: limitExceeded ? 'Dataset validation payload exceeds the allowed size.' : 'Dataset validation failed. Check the CSV format and required columns.' });
     }
   });
 
