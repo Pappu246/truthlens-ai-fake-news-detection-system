@@ -220,11 +220,11 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
         return res.status(503).json({
           error: 'Claim model artifact is not available in this runtime.',
           code: err.code,
-          detail: err.message
+          detail: 'The requested operation could not be completed.'
         });
       }
       console.error('[API /api/claim/predict error]', err.message);
-      res.status(400).json({ error: err.message || 'Claim prediction failed.' });
+      res.status(400).json({ error: 'Claim prediction failed. Check the supplied claim and try again.' });
     }
   });
 
@@ -236,7 +236,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
         status: 'UNAVAILABLE',
         model_role: 'claim_model',
         error: 'Claim model artifact is not available in this runtime.',
-        detail: err.message
+        detail: 'The requested operation could not be completed.'
       });
     }
   });
@@ -256,7 +256,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
       res.json(report);
     } catch (err: any) {
       console.error('[API /api/evidence/verify error]', err.message);
-      res.status(500).json({ error: err.message || 'Evidence verification failed.' });
+      res.status(500).json({ error: 'Evidence verification failed. Please try again later.' });
     }
   });
 
@@ -280,7 +280,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
       res.json(result);
     } catch (err: any) {
       console.error('[API /api/v2/evidence/verify error]', err.message);
-      res.status(500).json({ error: err.message || 'V2 evidence verification failed.' });
+      res.status(500).json({ error: 'V2 evidence verification failed. Please try again later.' });
     }
   });
 
@@ -353,7 +353,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
       res.json(result);
     } catch (err: any) {
       console.error('[API /api/analyze error]', err.message);
-      res.status(400).json({ detail: err.message || 'Analysis failed' });
+      res.status(400).json({ detail: 'The requested operation could not be completed.' || 'Analysis failed' });
     }
   });
 
@@ -435,7 +435,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
 
       res.status(status).json({
         success: false,
-        error: message,
+        error: status === 400 ? 'The supplied URL failed security validation.' : status === 403 ? 'The publisher denied access to this URL.' : status === 404 ? 'The requested article was not found.' : status === 429 ? 'The publisher rate-limited this request.' : status === 504 ? 'The publisher request timed out.' : 'Article extraction failed. Please try again later.',
         httpStatus: status
       });
     }
@@ -542,7 +542,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
       else if (/HTTP 403|Access forbidden|blocked the extraction request/i.test(message)) status = 403;
       else if (/Invalid URL|Security violation|SSRF|forbidden protocol|DNS resolution failed|Could not resolve|URL is required/i.test(message)) status = 400;
 
-      res.status(status).json({ detail: message, httpStatus: status });
+      res.status(status).json({ detail: status === 400 ? 'The supplied URL failed security validation.' : status === 403 ? 'The publisher denied access to this URL.' : status === 404 ? 'The requested article was not found.' : status === 429 ? 'The publisher rate-limited this request.' : status === 504 ? 'The publisher request timed out.' : 'Article analysis failed. Please try again later.', httpStatus: status });
     }
   });
 
@@ -571,7 +571,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
         fetchedAt: new Date().toISOString(),
         provider: 'RSSNewsProvider',
         categories: [],
-        warnings: [`Failed to retrieve news: ${err.message}`]
+        warnings: ['Failed to retrieve news. Please try again later.']
       });
     }
   });
@@ -582,7 +582,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
       const diag = mlEngine.getDiagnostics();
       res.json(diag);
     } catch (err: any) {
-      res.status(500).json({ detail: err.message });
+      res.status(500).json({ detail: 'The requested operation could not be completed.' });
     }
   };
   app.get('/api/model/diagnostics', handleDiagnostics);
@@ -602,7 +602,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
           status: 'UNAVAILABLE',
           model_role: 'claim_model',
           error: 'Claim model artifact is not available in this runtime.',
-          detail: err.message
+          detail: 'The requested operation could not be completed.'
         };
       }
 
@@ -644,7 +644,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
         }
       });
     } catch (err: any) {
-      res.status(500).json({ detail: err.message });
+      res.status(500).json({ detail: 'The requested operation could not be completed.' });
     }
   };
   app.get('/api/models/metrics', handleMetrics);
@@ -663,7 +663,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
       }
       res.json(report);
     } catch (err: any) {
-      res.status(500).json({ detail: err.message });
+      res.status(500).json({ detail: 'The requested operation could not be completed.' });
     }
   };
   app.get('/api/external-validation', handleExternalValidation);
@@ -686,7 +686,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
         diagnostics_truncated: issues.length > MAX_DIAGNOSTICS || warnings.length > MAX_DIAGNOSTICS
       });
     } catch (err: any) {
-      res.status(500).json({ detail: err.message });
+      res.status(500).json({ detail: 'The requested operation could not be completed.' });
     }
   });
 
@@ -746,7 +746,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
         metrics: result.metrics
       });
     } catch (err: any) {
-      res.status(500).json({ detail: err.message });
+      res.status(500).json({ detail: 'The requested operation could not be completed.' });
     }
   });
 
@@ -761,7 +761,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
       const metrics = mlEngine.train();
       res.json({ status: 'success', message: 'Reset to demo dataset successfully.', metrics });
     } catch (err: any) {
-      res.status(500).json({ detail: err.message });
+      res.status(500).json({ detail: 'The requested operation could not be completed.' });
     }
   });
 
@@ -782,7 +782,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
       const verification = await verifyClaim(text, sourceUrl);
       res.json(verification);
     } catch (err: any) {
-      res.status(400).json({ detail: err.message });
+      res.status(400).json({ detail: 'The requested operation could not be completed.' });
     }
   });
 
@@ -811,7 +811,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
       });
     } catch (err: any) {
       console.error('[API /api/claims/extract error]', err);
-      res.status(500).json({ error: err.message || 'Failed to extract claims.' });
+      res.status(500).json({ error: 'Failed to extract claims. Please try again later.' });
     }
   });
 
@@ -858,7 +858,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
       });
     } catch (err: any) {
       console.error('[API /api/evidence/search error]', err);
-      res.status(500).json({ error: err.message || 'Failed to search evidence.' });
+      res.status(500).json({ error: 'Evidence search failed. Please try again later.' });
     }
   });
 
@@ -882,7 +882,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
       });
     } catch (err: any) {
       console.error('[API /api/verify-claims error]', err);
-      res.status(500).json({ error: err.message || 'Failed to verify claims.' });
+      res.status(500).json({ error: 'Claim verification failed. Please try again later.' });
     }
   });
 
@@ -938,7 +938,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
       res.json(verification);
     } catch (err: any) {
       console.error('[API /api/verify-article error]', err);
-      res.status(500).json({ error: err.message || 'Failed to verify article.' });
+      res.status(500).json({ error: 'Article verification failed. Please try again later.' });
     }
   });
 
@@ -951,7 +951,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
       }
       res.json(verification);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: 'The verification record could not be loaded.' });
     }
   });
 
@@ -986,7 +986,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
       const updated = mlEngine.updateThresholds(fake, real, minLength);
       res.json({ status: 'success', thresholds: updated });
     } catch (err: any) {
-      res.status(400).json({ detail: err.message });
+      res.status(400).json({ detail: 'The requested operation could not be completed.' });
     }
   });
 
@@ -996,7 +996,7 @@ export async function createExpressApp(options?: { isProduction?: boolean; inclu
       const results = mlEngine.train();
       res.json({ status: 'success', results });
     } catch (err: any) {
-      res.status(500).json({ detail: err.message });
+      res.status(500).json({ detail: 'The requested operation could not be completed.' });
     }
   });
 
