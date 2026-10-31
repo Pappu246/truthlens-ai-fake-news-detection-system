@@ -87,6 +87,9 @@ jobs:
 
       - name: Contract tests
         run: npm run test:contracts
+ 
+      - name: API error sanitization tests
+        run: npm run test:error-sanitizer
 
       - name: Analysis claim/evidence signal mapping
         run: npm run test:analysis-signals
