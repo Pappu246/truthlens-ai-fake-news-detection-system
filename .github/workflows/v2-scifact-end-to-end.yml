@@ -25,6 +25,7 @@ on:
       - 'scripts/v2DownloadModels.ts'
       - 'data/v2/**'
       - 'package-lock.json'
+      - '.github/workflows/v2-scifact-end-to-end.yml'
   workflow_dispatch:
 
 concurrency:
@@ -98,7 +99,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p artifacts/v2-scifact-e2e
-          npm run eval:v2-scifact-e2e --             --data-dir=/tmp/truthlens-scifact/scifact             --max-claims=300             --candidate-k=100             --dense-k=300             --final-k=8             --output=artifacts/v2-scifact-e2e/scifact-end-to-end.json             2>&1 | tee artifacts/v2-scifact-e2e/scifact-end-to-end.log
+          npm run eval:v2-scifact-e2e --             --data-dir=/tmp/truthlens-scifact/scifact             --max-claims=300             --candidate-k=100             --dense-k=300             --final-k=8             --research-trace=true             --output=artifacts/v2-scifact-e2e/scifact-end-to-end.json             2>&1 | tee artifacts/v2-scifact-e2e/scifact-end-to-end.log
 
       - name: Validate benchmark provenance and metric denominators
         env:
