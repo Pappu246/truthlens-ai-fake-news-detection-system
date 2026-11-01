@@ -221,12 +221,21 @@ export class MlWorkerClient {
 
   /** Batch NLI inference through the same synchronous worker facade. */
   public classifyBatch(
-    pairs: Array<{ premise: string; hypothesis: string; maxTokens?: number }>
-  ): Array<{ probs: Record<string, number>; id2label: Record<string, string> }> {
+    pairs: Array<{ premise: string; hypothesis: string; maxTokens?: number }>,
+    includeDiagnostics = false
+  ): Array<{
+    probs: Record<string, number>;
+    id2label: Record<string, string>;
+    diagnostics?: { tokenCountAfterTruncation: number; atMaxLength: boolean };
+  }> {
     if (pairs.length === 0) return [];
     const result = this.call<{
-      outputs: Array<{ probs: Record<string, number>; id2label: Record<string, string> }>
-    }>('classifyBatch', { pairs });
+      outputs: Array<{
+        probs: Record<string, number>;
+        id2label: Record<string, string>;
+        diagnostics?: { tokenCountAfterTruncation: number; atMaxLength: boolean };
+      }>
+    }>('classifyBatch', { pairs, includeDiagnostics });
     if (!Array.isArray(result.outputs) || result.outputs.length !== pairs.length) {
       throw new ModelInferenceError(
         `ML worker classifyBatch returned ${Array.isArray(result.outputs) ? result.outputs.length : 'non-array'} outputs for ${pairs.length} inputs.`
