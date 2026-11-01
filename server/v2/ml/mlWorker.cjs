@@ -160,7 +160,7 @@ async function classify(body) {
     const maxTokens = Number(body.maxTokens || 384);
     output.diagnostics = {
       tokenCountAfterTruncation,
-      atMaxLength: tokenCountAfterTruncation !== null && tokenCountAfterTruncation >= maxTokens
+      atMaxLength: tokenCountAfterTruncation !== null ? tokenCountAfterTruncation >= maxTokens : null
     };
   }
   return output;
@@ -211,7 +211,7 @@ async function classifyBatch(body) {
   for (let i = 0; i < pairs.length; i++) {
     const output = softmaxNliLogits(raw.slice(i * numLabels, (i + 1) * numLabels), id2label);
     if (body.includeDiagnostics) {
-      let tokenCountAfterTruncation = sequenceLength;
+      let tokenCountAfterTruncation = attentionMask && sequenceLength ? null : null;
       if (attentionMask && sequenceLength) {
         const row = attentionMask.slice(i * sequenceLength, (i + 1) * sequenceLength);
         tokenCountAfterTruncation = row.reduce((sum, value) => sum + Number(value > 0), 0);
@@ -219,7 +219,7 @@ async function classifyBatch(body) {
       const maxTokensForPair = Number(pairs[i].maxTokens || 384);
       output.diagnostics = {
         tokenCountAfterTruncation,
-        atMaxLength: tokenCountAfterTruncation !== null && tokenCountAfterTruncation >= maxTokensForPair
+        atMaxLength: tokenCountAfterTruncation !== null ? tokenCountAfterTruncation >= maxTokensForPair : null
       };
     }
     outputs.push(output);
