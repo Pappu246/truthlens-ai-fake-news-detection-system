@@ -389,7 +389,7 @@ export class PretrainedNliAdapter implements NliAdapter {
     const directionalInputs: Array<{ index: number; premise: string; hypothesis: string }> = [];
     for (let i = 0; i < passages.length; i++) {
       if (relatednessValues[i] < this.relatednessFloor) {
-        traceDecisions[i] = { selectedPass: 'relatedness_gate', rawProbabilities: null, tokenization: null, passAProbabilities: null, passATokenization: item.passA.diagnostics ? { max_tokens: this.maxPairTokens, token_count_after_truncation: item.passA.diagnostics.tokenCountAfterTruncation, at_max_length: item.passA.diagnostics.atMaxLength, truncation_enabled: true } : null };
+        traceDecisions[i] = { selectedPass: 'relatedness_gate', rawProbabilities: null, tokenization: null, passAProbabilities: null, passATokenization: null };
         results[i] = {
           label: 'NEUTRAL',
           scores: { supports: 0.005, refutes: 0.005, neutral: 0.98, unclear: 0.01 },
