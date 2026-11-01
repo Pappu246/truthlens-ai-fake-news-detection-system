@@ -178,6 +178,7 @@ async function main(): Promise<void> {
 
   console.log(`SciFact retrieval config: candidate-k=${topCandidates}, dense-k=${denseTopK}, final-k=${finalTopK}`);
   console.log(`SciFact provenance: commit=${sourceCommitSha ?? 'un-pinned-local-run'}, config_sha256=${sha256Json(runConfig)}, model_manifest_sha256=${modelManifestSha256}`);
+  console.log(`SciFact per-evidence NLI research trace: ${researchTraceEnabled ? 'ENABLED' : 'disabled'}`);
 
   const embeddingModel = new TransformerEmbeddingModel();
   const nliAdapter = new PretrainedNliAdapter({ embeddingModel, relatednessFloor, researchTrace: researchTraceEnabled });
