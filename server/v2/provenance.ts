@@ -38,7 +38,16 @@ function toEvidenceRecord(e: ClassifiedEvidence): ProvenanceEvidenceRecord {
     rerank_score: e.rerankScore,
     rerank_signals: e.rerankSignals,
     is_duplicate_cluster: e.isDuplicateCluster,
-    source_type: e.sourceType
+    source_type: e.sourceType,
+    ...(e.nli.research_trace ? {
+      research_trace: e.nli.research_trace,
+      research_decision_trace: {
+        vote_direction: e.nli.label === 'SUPPORTS' || e.nli.label === 'REFUTES' ? e.nli.label : 'NONE',
+        duplicate_penalty: e.isDuplicateCluster ? 0.35 : 1,
+        vote_weight: e.nli.confidence * e.rerankScore * (e.isDuplicateCluster ? 0.35 : 1),
+        contributes_to_directional_tally: e.nli.label === 'SUPPORTS' || e.nli.label === 'REFUTES'
+      }
+    } : {})
   };
 }
 
