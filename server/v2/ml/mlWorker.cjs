@@ -211,7 +211,7 @@ async function classifyBatch(body) {
   for (let i = 0; i < pairs.length; i++) {
     const output = softmaxNliLogits(raw.slice(i * numLabels, (i + 1) * numLabels), id2label);
     if (body.includeDiagnostics) {
-      let tokenCountAfterTruncation = attentionMask && sequenceLength ? null : null;
+      let tokenCountAfterTruncation = null;
       if (attentionMask && sequenceLength) {
         const row = attentionMask.slice(i * sequenceLength, (i + 1) * sequenceLength);
         tokenCountAfterTruncation = row.reduce((sum, value) => sum + Number(value > 0), 0);
