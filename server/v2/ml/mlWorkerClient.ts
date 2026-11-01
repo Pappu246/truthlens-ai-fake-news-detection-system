@@ -226,14 +226,14 @@ export class MlWorkerClient {
   ): Array<{
     probs: Record<string, number>;
     id2label: Record<string, string>;
-    diagnostics?: { tokenCountAfterTruncation: number; atMaxLength: boolean };
+    diagnostics?: { tokenCountAfterTruncation: number | null; atMaxLength: boolean };
   }> {
     if (pairs.length === 0) return [];
     const result = this.call<{
       outputs: Array<{
         probs: Record<string, number>;
         id2label: Record<string, string>;
-        diagnostics?: { tokenCountAfterTruncation: number; atMaxLength: boolean };
+        diagnostics?: { tokenCountAfterTruncation: number | null; atMaxLength: boolean };
       }>
     }>('classifyBatch', { pairs, includeDiagnostics });
     if (!Array.isArray(result.outputs) || result.outputs.length !== pairs.length) {
