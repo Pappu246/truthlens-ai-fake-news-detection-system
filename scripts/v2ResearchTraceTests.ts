@@ -21,13 +21,14 @@ function makeAdapter(researchTrace: boolean): PretrainedNliAdapter {
     embed: (_text: string) => [1, 0],
     embedBatch: (texts: string[]) => texts.map(() => [1, 0])
   } as any;
+  const makeOutput = (includeDiagnostics = false) => ({
+    probs: { entailment: 0.8, contradiction: 0.1, neutral: 0.1 },
+    id2label: { 0: 'contradiction', 1: 'neutral', 2: 'entailment' },
+    ...(includeDiagnostics ? { diagnostics: { tokenCountAfterTruncation: 42, atMaxLength: false } } : {})
+  });
   const client = {
-    classifyBatch: (pairs: Array<{ premise: string; hypothesis: string }>, includeDiagnostics = false) =>
-      pairs.map(() => ({
-        probs: { entailment: 0.8, contradiction: 0.1, neutral: 0.1 },
-        id2label: { 0: 'contradiction', 1: 'neutral', 2: 'entailment' },
-        ...(includeDiagnostics ? { diagnostics: { tokenCountAfterTruncation: 42, atMaxLength: false } } : {})
-      }))
+    classifyBatch: (pairs: Array<{ premise: string; hypothesis: string }>, includeDiagnostics = false) => pairs.map(() => makeOutput(includeDiagnostics)),
+    call: (_op: string, payload: Record<string, unknown>) => makeOutput(payload.includeDiagnostics === true)
   } as any;
   return new PretrainedNliAdapter({ embeddingModel, client, researchTrace });
 }
@@ -52,6 +53,15 @@ async function main(): Promise<void> {
   check('trace records token count and truncation boundary diagnostics',
     trace?.tokenization?.token_count_after_truncation === 42 && trace?.tokenization?.at_max_length === false &&
     trace?.tokenization?.truncation_enabled === true);
+
+  const singleBaseline = makeAdapter(false).classify(claim, passages[0]);
+  const singleTraced = makeAdapter(true).classify(claim, passages[0]);
+  const { research_trace: _singleTrace, ...singlePrediction } = singleTraced;
+  check('single-passage trace does not change label, scores, confidence, or basis',
+    JSON.stringify(singleBaseline) === JSON.stringify(singlePrediction));
+  check('single-passage trace includes raw probabilities and token diagnostics',
+    singleTraced.research_trace?.raw_probabilities?.entailment === 0.8 &&
+    singleTraced.research_trace?.tokenization?.token_count_after_truncation === 42);
   console.log(`Completed ${passed} research trace checks.`);
 }
 
