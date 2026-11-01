@@ -389,7 +389,7 @@ export class PretrainedNliAdapter implements NliAdapter {
     const directionalInputs: Array<{ index: number; premise: string; hypothesis: string }> = [];
     for (let i = 0; i < passages.length; i++) {
       if (relatednessValues[i] < this.relatednessFloor) {
-        traceDecisions[i] = { selectedPass: 'relatedness_gate', rawProbabilities: null, tokenization: null, passAProbabilities: null, passATokenization: item.passA.diagnostics ? { max_tokens: this.maxPairTokens, token_count_after_truncation: item.passA.diagnostics.tokenCountAfterTruncation, at_max_length: item.passA.diagnostics.atMaxLength, truncation_enabled: true } : null };
+        traceDecisions[i] = { selectedPass: 'relatedness_gate', rawProbabilities: null, tokenization: null, passAProbabilities: null, passATokenization: null };
         results[i] = {
           label: 'NEUTRAL',
           scores: { supports: 0.005, refutes: 0.005, neutral: 0.98, unclear: 0.01 },
@@ -410,7 +410,7 @@ export class PretrainedNliAdapter implements NliAdapter {
       hypothesis: item.hypothesis,
       maxTokens: this.maxPairTokens
     })), this.researchTrace);
-    const fallbackInputs: Array<{ index: number; premise: string; hypothesis: string; passA: { probs: Record<string, number>; scores: NliScoreDistribution; maxModelProb: number; diagnostics?: { tokenCountAfterTruncation: number; atMaxLength: boolean } } }> = [];
+    const fallbackInputs: Array<{ index: number; premise: string; hypothesis: string; passA: { probs: Record<string, number>; scores: NliScoreDistribution; maxModelProb: number; diagnostics?: { tokenCountAfterTruncation: number | null; atMaxLength: boolean } } }> = [];
     for (let i = 0; i < directionalInputs.length; i++) {
       const item = directionalInputs[i];
       const raw = passA[i];
@@ -444,15 +444,15 @@ export class PretrainedNliAdapter implements NliAdapter {
         const basis =
           `passA (hypothesis=claim-as-stated) produced NO DIRECTIONAL MAJORITY (entailment=${item.passA.probs.entailment.toFixed(3)}, contradiction=${item.passA.probs.contradiction.toFixed(3)}, both <0.5); fall through to passB (hypothesis=content proposition, attribution stripped)`;
         results[item.index] = this.classifyOneResult({ probs: raw.probs, scores: mapped.scores, maxModelProb: mapped.maxModelProb }, basis, 'passB:content-proposition');
-        traceDecisions[item.index] = { selectedPass: 'passB:content-proposition', rawProbabilities: { entailment: raw.probs.entailment, contradiction: raw.probs.contradiction, neutral: raw.probs.neutral }, tokenization: raw.diagnostics ? { max_tokens: this.maxPairTokens, token_count_after_truncation: raw.diagnostics.tokenCountAfterTruncation, at_max_length: raw.diagnostics.atMaxLength, truncation_enabled: true } : null, passAProbabilities: { entailment: item.passA.probs.entailment, contradiction: item.passA.probs.contradiction, neutral: item.passA.probs.neutral }, passATokenization: null };
+        traceDecisions[item.index] = { selectedPass: 'passB:content-proposition', rawProbabilities: { entailment: raw.probs.entailment, contradiction: raw.probs.contradiction, neutral: raw.probs.neutral }, tokenization: raw.diagnostics ? { max_tokens: this.maxPairTokens, token_count_after_truncation: raw.diagnostics.tokenCountAfterTruncation, at_max_length: raw.diagnostics.atMaxLength, truncation_enabled: true } : null, passAProbabilities: { entailment: item.passA.probs.entailment, contradiction: item.passA.probs.contradiction, neutral: item.passA.probs.neutral }, passATokenization: item.passA.diagnostics ? { max_tokens: this.maxPairTokens, token_count_after_truncation: item.passA.diagnostics.tokenCountAfterTruncation, at_max_length: item.passA.diagnostics.atMaxLength, truncation_enabled: true } : null };
       }
     }
     return finalize();
   }
 
   /** Single cross-encoder run over one hypothesis framing. */
-  private runOnce(premise: string, hypothesis: string): { probs: Record<string, number>; scores: NliScoreDistribution; maxModelProb: number; diagnostics?: { tokenCountAfterTruncation: number; atMaxLength: boolean } } {
-    const output = this.client.call<{ probs: Record<string, number>; diagnostics?: { tokenCountAfterTruncation: number; atMaxLength: boolean } }>('classify', {
+  private runOnce(premise: string, hypothesis: string): { probs: Record<string, number>; scores: NliScoreDistribution; maxModelProb: number; diagnostics?: { tokenCountAfterTruncation: number | null; atMaxLength: boolean } } {
+    const output = this.client.call<{ probs: Record<string, number>; diagnostics?: { tokenCountAfterTruncation: number | null; atMaxLength: boolean } }>('classify', {
       premise,
       hypothesis,
       maxTokens: this.maxPairTokens,
