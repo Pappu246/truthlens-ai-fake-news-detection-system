@@ -153,7 +153,17 @@ async function classify(body) {
   const { logits } = await model(inputs);
   const raw = Array.from(logits.data);
   const id2label = model.config.id2label;
-  return softmaxNliLogits(raw, id2label);
+  const output = softmaxNliLogits(raw, id2label);
+  if (body.includeDiagnostics) {
+    const mask = inputs.attention_mask && inputs.attention_mask.data ? Array.from(inputs.attention_mask.data) : null;
+    const tokenCountAfterTruncation = mask ? mask.reduce((sum, value) => sum + Number(value > 0), 0) : null;
+    const maxTokens = Number(body.maxTokens || 384);
+    output.diagnostics = {
+      tokenCountAfterTruncation,
+      atMaxLength: tokenCountAfterTruncation !== null && tokenCountAfterTruncation >= maxTokens
+    };
+  }
+  return output;
 }
 
 function softmaxNliLogits(raw, id2label) {
