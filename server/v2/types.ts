@@ -94,6 +94,23 @@ export interface NliScoreDistribution {
   unclear: number;
 }
 
+export interface NliResearchTrace {
+  relatedness_cosine: number;
+  relatedness_floor: number;
+  relatedness_gate_passed: boolean;
+  selected_hypothesis_pass: 'passA:claim-as-stated' | 'passB:content-proposition' | 'relatedness_gate';
+  hypothesis_mode: 'attribution_stripped' | 'full_text';
+  premise_char_count: number;
+  hypothesis_char_count: number;
+  raw_probabilities: { entailment: number; contradiction: number; neutral: number } | null;
+  tokenization: {
+    max_tokens: number;
+    token_count_after_truncation: number | null;
+    at_max_length: boolean | null;
+    truncation_enabled: true;
+  } | null;
+}
+
 export interface NliClassification {
   label: NliLabel;
   scores: NliScoreDistribution;
@@ -101,6 +118,8 @@ export interface NliClassification {
   modelName: string;
   modelVersion: string;
   basis: string;
+  /** Opt-in diagnostics only; never consumed by the decision policy. */
+  research_trace?: NliResearchTrace;
 }
 
 /** A fully classified, reranked piece of evidence — the unit the decision
@@ -162,6 +181,14 @@ export interface ProvenanceEvidenceRecord {
   rerank_signals: RerankSignals;
   is_duplicate_cluster: boolean;
   source_type: string;
+  /** Present only when the research trace flag is explicitly enabled. */
+  research_trace?: NliResearchTrace;
+  research_decision_trace?: {
+    vote_direction: 'SUPPORTS' | 'REFUTES' | 'NONE';
+    duplicate_penalty: number;
+    vote_weight: number;
+    contributes_to_directional_tally: boolean;
+  };
 }
 
 export interface ProvenanceRecord {
