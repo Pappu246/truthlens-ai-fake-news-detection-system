@@ -169,6 +169,9 @@ jobs:
       - name: V2 pipeline tests
         run: npm run test:v2
 
+      - name: V2 research trace invariance tests
+        run: npm run test:v2-research-trace
+
       - name: V2 route tests
         run: npm run test:v2-route
 
