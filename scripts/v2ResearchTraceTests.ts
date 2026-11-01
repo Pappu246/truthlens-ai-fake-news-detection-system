@@ -14,7 +14,7 @@ function check(name: string, ok: boolean): void {
 const claimText = 'The national statistics office confirmed unemployment fell to 4.1 percent in March 2024.';
 const passages = ['The statistics office confirmed the unemployment rate was 4.1 percent in March 2024.'];
 
-function makeAdapter(researchTrace: boolean): PretrainedNliAdapter {
+function makeAdapter(researchTrace = false, exerciseFallback = false): PretrainedNliAdapter {
   const embeddingModel = {
     name: 'fixture-embedding',
     version: 'fixture-1',
@@ -26,8 +26,20 @@ function makeAdapter(researchTrace: boolean): PretrainedNliAdapter {
     id2label: { 0: 'contradiction', 1: 'neutral', 2: 'entailment' },
     ...(includeDiagnostics ? { diagnostics: { tokenCountAfterTruncation: 42, atMaxLength: false } } : {})
   });
+  let batchCall = 0;
   const client = {
-    classifyBatch: (pairs: Array<{ premise: string; hypothesis: string }>, includeDiagnostics = false) => pairs.map(() => makeOutput(includeDiagnostics)),
+    classifyBatch: (pairs: Array<{ premise: string; hypothesis: string }>, includeDiagnostics = false) => {
+      const callIndex = batchCall++;
+      return pairs.map(() => {
+        if (exerciseFallback && callIndex === 0) {
+          return { ...makeOutput(includeDiagnostics), probs: { entailment: 0.2, contradiction: 0.2, neutral: 0.6 } };
+        }
+        if (exerciseFallback) {
+          return { ...makeOutput(includeDiagnostics), probs: { entailment: 0.1, contradiction: 0.8, neutral: 0.1 } };
+        }
+        return makeOutput(includeDiagnostics);
+      });
+    },
     call: (_op: string, payload: Record<string, unknown>) => makeOutput(payload.includeDiagnostics === true)
   } as any;
   return new PretrainedNliAdapter({ embeddingModel, client, researchTrace });
@@ -35,7 +47,7 @@ function makeAdapter(researchTrace: boolean): PretrainedNliAdapter {
 
 async function main(): Promise<void> {
   const claim = { normalizedText: claimText } as any;
-  const baseline = makeAdapter(false).classifyBatch(claim, passages);
+  const baseline = makeAdapter().classifyBatch(claim, passages);
   const traced = makeAdapter(true).classifyBatch(claim, passages);
   const stripTrace = (items: any[]) => items.map(({ research_trace: _trace, ...prediction }) => prediction);
 
@@ -45,8 +57,10 @@ async function main(): Promise<void> {
   const trace = traced[0].research_trace;
   check('trace includes relatedness cosine and gate result', trace?.relatedness_cosine === 1 && trace?.relatedness_gate_passed === true);
   check('trace records the selected hypothesis pass', trace?.selected_hypothesis_pass === 'passA:claim-as-stated');
-  check('trace records raw NLI class probabilities',
+  check('trace records raw NLI class probabilities for the selected pass',
     trace?.raw_probabilities?.entailment === 0.8 && trace?.raw_probabilities?.contradiction === 0.1 && trace?.raw_probabilities?.neutral === 0.1);
+  check('trace records first-pass probabilities independently',
+    trace?.pass_a_probabilities?.entailment === 0.8 && trace?.pass_a_tokenization?.token_count_after_truncation === 42);
   check('trace records text lengths without storing claim or passage text',
     trace?.premise_char_count === passages[0].length && trace?.hypothesis_char_count === claimText.length &&
     !JSON.stringify(trace).includes(claimText) && !JSON.stringify(trace).includes(passages[0]));
@@ -61,7 +75,14 @@ async function main(): Promise<void> {
     JSON.stringify(singleBaseline) === JSON.stringify(singlePrediction));
   check('single-passage trace includes raw probabilities and token diagnostics',
     singleTraced.research_trace?.raw_probabilities?.entailment === 0.8 &&
+    singleTraced.research_trace?.pass_a_probabilities?.entailment === 0.8 &&
     singleTraced.research_trace?.tokenization?.token_count_after_truncation === 42);
+
+  const fallback = makeAdapter(true, true).classifyBatch(claim, passages)[0];
+  check('attribution fallback trace retains pass A and pass B probabilities',
+    fallback.research_trace?.selected_hypothesis_pass === 'passB:content-proposition' &&
+    fallback.research_trace?.pass_a_probabilities?.neutral === 0.6 &&
+    fallback.research_trace?.raw_probabilities?.contradiction === 0.8);
   console.log(`Completed ${passed} research trace checks.`);
 }
 
