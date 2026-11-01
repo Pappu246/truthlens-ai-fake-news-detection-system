@@ -410,7 +410,7 @@ export class PretrainedNliAdapter implements NliAdapter {
       hypothesis: item.hypothesis,
       maxTokens: this.maxPairTokens
     })), this.researchTrace);
-    const fallbackInputs: Array<{ index: number; premise: string; hypothesis: string; passA: { probs: Record<string, number>; scores: NliScoreDistribution; maxModelProb: number; diagnostics?: { tokenCountAfterTruncation: number | null; atMaxLength: boolean } } }> = [];
+    const fallbackInputs: Array<{ index: number; premise: string; hypothesis: string; passA: { probs: Record<string, number>; scores: NliScoreDistribution; maxModelProb: number; diagnostics?: { tokenCountAfterTruncation: number | null; atMaxLength: boolean | null } } }> = [];
     for (let i = 0; i < directionalInputs.length; i++) {
       const item = directionalInputs[i];
       const raw = passA[i];
@@ -451,8 +451,8 @@ export class PretrainedNliAdapter implements NliAdapter {
   }
 
   /** Single cross-encoder run over one hypothesis framing. */
-  private runOnce(premise: string, hypothesis: string): { probs: Record<string, number>; scores: NliScoreDistribution; maxModelProb: number; diagnostics?: { tokenCountAfterTruncation: number | null; atMaxLength: boolean } } {
-    const output = this.client.call<{ probs: Record<string, number>; diagnostics?: { tokenCountAfterTruncation: number | null; atMaxLength: boolean } }>('classify', {
+  private runOnce(premise: string, hypothesis: string): { probs: Record<string, number>; scores: NliScoreDistribution; maxModelProb: number; diagnostics?: { tokenCountAfterTruncation: number | null; atMaxLength: boolean | null } } {
+    const output = this.client.call<{ probs: Record<string, number>; diagnostics?: { tokenCountAfterTruncation: number | null; atMaxLength: boolean | null } }>('classify', {
       premise,
       hypothesis,
       maxTokens: this.maxPairTokens,
