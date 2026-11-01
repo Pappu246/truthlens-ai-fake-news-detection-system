@@ -389,7 +389,7 @@ export class PretrainedNliAdapter implements NliAdapter {
     const directionalInputs: Array<{ index: number; premise: string; hypothesis: string }> = [];
     for (let i = 0; i < passages.length; i++) {
       if (relatednessValues[i] < this.relatednessFloor) {
-        traceDecisions[i] = { selectedPass: 'relatedness_gate', rawProbabilities: null, tokenization: null, passAProbabilities: null, passATokenization: null };
+        traceDecisions[i] = { selectedPass: 'relatedness_gate', rawProbabilities: null, tokenization: null, passAProbabilities: null, passATokenization: item.passA.diagnostics ? { max_tokens: this.maxPairTokens, token_count_after_truncation: item.passA.diagnostics.tokenCountAfterTruncation, at_max_length: item.passA.diagnostics.atMaxLength, truncation_enabled: true } : null };
         results[i] = {
           label: 'NEUTRAL',
           scores: { supports: 0.005, refutes: 0.005, neutral: 0.98, unclear: 0.01 },
@@ -410,7 +410,7 @@ export class PretrainedNliAdapter implements NliAdapter {
       hypothesis: item.hypothesis,
       maxTokens: this.maxPairTokens
     })), this.researchTrace);
-    const fallbackInputs: Array<{ index: number; premise: string; hypothesis: string; passA: { probs: Record<string, number>; scores: NliScoreDistribution; maxModelProb: number } }> = [];
+    const fallbackInputs: Array<{ index: number; premise: string; hypothesis: string; passA: { probs: Record<string, number>; scores: NliScoreDistribution; maxModelProb: number; diagnostics?: { tokenCountAfterTruncation: number; atMaxLength: boolean } } }> = [];
     for (let i = 0; i < directionalInputs.length; i++) {
       const item = directionalInputs[i];
       const raw = passA[i];
@@ -432,7 +432,7 @@ export class PretrainedNliAdapter implements NliAdapter {
           traceDecisions[item.index] = { selectedPass: 'passA:claim-as-stated', rawProbabilities: { entailment: raw.probs.entailment, contradiction: raw.probs.contradiction, neutral: raw.probs.neutral }, tokenization: raw.diagnostics ? { max_tokens: this.maxPairTokens, token_count_after_truncation: raw.diagnostics.tokenCountAfterTruncation, at_max_length: raw.diagnostics.atMaxLength, truncation_enabled: true } : null, passAProbabilities: { entailment: raw.probs.entailment, contradiction: raw.probs.contradiction, neutral: raw.probs.neutral }, passATokenization: raw.diagnostics ? { max_tokens: this.maxPairTokens, token_count_after_truncation: raw.diagnostics.tokenCountAfterTruncation, at_max_length: raw.diagnostics.atMaxLength, truncation_enabled: true } : null };
         }
       } else {
-        fallbackInputs.push({ index: item.index, premise: item.premise, hypothesis: conditioning.hypothesis, passA: { probs: raw.probs, scores: mapped.scores, maxModelProb: mapped.maxModelProb } });
+        fallbackInputs.push({ index: item.index, premise: item.premise, hypothesis: conditioning.hypothesis, passA: { probs: raw.probs, scores: mapped.scores, maxModelProb: mapped.maxModelProb, diagnostics: raw.diagnostics } });
       }
     }
     if (fallbackInputs.length) {
@@ -487,7 +487,7 @@ export class PretrainedNliAdapter implements NliAdapter {
         relatedness_cosine: rel, relatedness_floor: this.relatednessFloor, relatedness_gate_passed: false,
         selected_hypothesis_pass: 'relatedness_gate', hypothesis_mode: mode,
         premise_char_count: premise.length, hypothesis_char_count: fullClaimText.length,
-        raw_probabilities: null, tokenization: null
+        raw_probabilities: null, pass_a_probabilities: null, pass_a_tokenization: null, tokenization: null
       };
       return gated;
     }
@@ -569,6 +569,8 @@ export class PretrainedNliAdapter implements NliAdapter {
       hypothesis_mode: mode, premise_char_count: premise.length,
       hypothesis_char_count: (decidedBy === 'passB:content-proposition' ? conditioned : fullClaimText).length,
       raw_probabilities: { entailment: winner.probs.entailment, contradiction: winner.probs.contradiction, neutral: winner.probs.neutral },
+      pass_a_probabilities: { entailment: passA.probs.entailment, contradiction: passA.probs.contradiction, neutral: passA.probs.neutral },
+      pass_a_tokenization: passA.diagnostics ? { max_tokens: this.maxPairTokens, token_count_after_truncation: passA.diagnostics.tokenCountAfterTruncation, at_max_length: passA.diagnostics.atMaxLength, truncation_enabled: true } : null,
       tokenization: winner.diagnostics ? {
         max_tokens: this.maxPairTokens, token_count_after_truncation: winner.diagnostics.tokenCountAfterTruncation,
         at_max_length: winner.diagnostics.atMaxLength, truncation_enabled: true
