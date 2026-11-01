@@ -103,6 +103,13 @@ export interface NliResearchTrace {
   premise_char_count: number;
   hypothesis_char_count: number;
   raw_probabilities: { entailment: number; contradiction: number; neutral: number } | null;
+  pass_a_probabilities: { entailment: number; contradiction: number; neutral: number } | null;
+  pass_a_tokenization: {
+    max_tokens: number;
+    token_count_after_truncation: number | null;
+    at_max_length: boolean | null;
+    truncation_enabled: true;
+  } | null;
   tokenization: {
     max_tokens: number;
     token_count_after_truncation: number | null;
