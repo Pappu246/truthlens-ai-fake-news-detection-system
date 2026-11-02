@@ -3,6 +3,7 @@ import { validateScifactArtifact } from './scifactArtifactGate.mjs';
 
 const report = {
   benchmark: true,
+  gold_evidence_in_retrieval: false,
   protocol_version: 'truthlens-v2-scifact-end-to-end-v2',
   dataset: {
     claims_evaluated: 300,
@@ -40,6 +41,9 @@ const report = {
 };
 assert.deepEqual(validateScifactArtifact(report, 'a'.repeat(40), 'f545488704f895af94b781601c3a746b2e371e30bc8cdec7431f44917d9a1832'), { complete: true, failures: [] });
 assert.equal(validateScifactArtifact(report, 'd'.repeat(40), 'f545488704f895af94b781601c3a746b2e371e30bc8cdec7431f44917d9a1832').complete, false);
+const goldLeak = structuredClone(report);
+goldLeak.gold_evidence_in_retrieval = true;
+assert.ok(validateScifactArtifact(goldLeak, 'a'.repeat(40), 'f545488704f895af94b781601c3a746b2e371e30bc8cdec7431f44917d9a1832').failures.includes('SciFact retrieval must not inject gold evidence'));
 const bad = structuredClone(report);
 bad.rows = bad.rows.slice(1);
 assert.ok(validateScifactArtifact(bad, 'a'.repeat(40), 'f545488704f895af94b781601c3a746b2e371e30bc8cdec7431f44917d9a1832').failures.includes('SciFact row count must equal 300'));
