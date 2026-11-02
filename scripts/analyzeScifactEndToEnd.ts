@@ -125,7 +125,7 @@ function main() {
     || 'artifacts/v2-scifact-e2e/scifact-end-to-end.json';
   const outputPath = process.argv.find(value => value.startsWith('--output='))?.slice(9);
   const report = analyzeScifactReport(JSON.parse(fs.readFileSync(inputPath, 'utf8')));
-  const serialized = JSON.stringify(report, null, 2) + '\\n';
+  const serialized = JSON.stringify(report, null, 2) + String.fromCharCode(10);
   if (outputPath) fs.writeFileSync(outputPath, serialized);
   console.log(serialized);
 }
