@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const GATE = path.join(ROOT, 'publicBenchmarkExitGate.mjs');
 const NOW = '2026-10-10T08:51:37.078Z';
-const TEST_COMMIT_SHA = 'c'.repeat(40);
+const TEST_COMMIT_SHA = 'c'.repeat(40);\nconst MODEL_MANIFEST_SHA = '1'.repeat(64);\nconst NLI_ARTIFACT_SHA = '2'.repeat(64);\nconst EMBEDDING_ARTIFACT_SHA = '3'.repeat(64);
 
 function makeManifest() {
   return {
@@ -46,14 +46,14 @@ async function makeFixtures(root) {
     write(root, 'artifacts/fever-adapter.json', {
       benchmark_id: 'fever', protocol_version: 'truthlens-v3-benchmark-protocol-v1',
       dataset: { evaluation_count: 19998, claims_sha256: 'a'.repeat(64), corpus_sha256: 'b'.repeat(64) },
-      provenance: { commit_sha: TEST_COMMIT_SHA, configuration_sha256: 'd'.repeat(64) }
+      model: { manifest_sha256: MODEL_MANIFEST_SHA, nli: { artifact_sha256: NLI_ARTIFACT_SHA }, embedding: { artifact_sha256: EMBEDDING_ARTIFACT_SHA } },\n      provenance: { commit_sha: TEST_COMMIT_SHA, configuration_sha256: 'd'.repeat(64) }
     }),
     write(root, 'artifacts/feverous-score.json', {
       benchmark_id: 'feverous', protocol_version: 'truthlens-v3-benchmark-protocol-v1', evaluation_count: 7890, generated_at: NOW, truthlens_git_sha: TEST_COMMIT_SHA,
       metrics: { strict_score: 0.2, label_accuracy: 0.3, evidence_precision: 0.4, evidence_recall: 0.5, evidence_f1: 0.44 }
     }),
     write(root, 'artifacts/feverous-adapter.json', {
-      benchmark_id: 'feverous', protocol_version: 'truthlens-v3-benchmark-protocol-v1', dataset: { evaluation_count: 7890 }, scorer_revision: 'Raldir/FEVEROUS@32b68ce', provenance: { commit_sha: TEST_COMMIT_SHA, configuration_sha256: 'd'.repeat(64) }
+      benchmark_id: 'feverous', protocol_version: 'truthlens-v3-benchmark-protocol-v1', dataset: { evaluation_count: 7890 }, scorer_revision: 'Raldir/FEVEROUS@32b68ce', model: { manifest_sha256: MODEL_MANIFEST_SHA, nli: { artifact_sha256: NLI_ARTIFACT_SHA }, embedding: { artifact_sha256: EMBEDDING_ARTIFACT_SHA } }, provenance: { commit_sha: TEST_COMMIT_SHA, configuration_sha256: 'd'.repeat(64) }
     }),
     write(root, 'artifacts/averitec-score.json', {
       benchmark_id: 'averitec', protocol_version: 'truthlens-v3-benchmark-protocol-v1', evaluation_count: 500, generated_at: NOW, truthlens_git_sha: TEST_COMMIT_SHA,
@@ -62,7 +62,7 @@ async function makeFixtures(root) {
     }),
     write(root, 'artifacts/averitec-manifest.json', {
       benchmark: 'AVeriTeC', split: 'dev', claims: 500, claims_sha256: 'e'.repeat(64), evidence_store_sha256: 'f'.repeat(64), truthlens_git_sha: TEST_COMMIT_SHA,
-      gold_evidence_in_retrieval: false, production_boundary: 'research_only_no_production_model_threshold_or_runtime_change'
+      gold_evidence_in_retrieval: false, model_manifest_sha256: MODEL_MANIFEST_SHA, nli_artifact_sha256: NLI_ARTIFACT_SHA, embedding_artifact_sha256: EMBEDDING_ARTIFACT_SHA, production_boundary: 'research_only_no_production_model_threshold_or_runtime_change'
     })
   ]);
 }
@@ -102,7 +102,7 @@ async function main() {
   try {
     await makeFixtures(root);
     const valid = await runGate(root, true);
-    assert.equal(valid.results.length, 3);
+    assert.equal(valid.results.length, 3);\n    assert.equal(valid.model_manifest_sha256, MODEL_MANIFEST_SHA);
     assert.equal(valid.evaluated_commit_sha, TEST_COMMIT_SHA);
     const staleSha = await runGate(root, false, 'd'.repeat(40));
     assert.ok(staleSha.failures.some((failure) => failure.includes('commit SHA mismatch')));
