@@ -7,7 +7,8 @@ import crypto from 'node:crypto';
 import { PretrainedNliAdapter } from '../../server/v2/nli/pretrainedNliAdapter.js';
 import { TransformerEmbeddingModel } from '../../server/v2/retrieval/transformerEmbeddingModel.js';
 import type { EmbeddingModel } from '../../server/v2/retrieval/embeddings.js';
-import type { NliAdapter, V2VerificationResult } from '../../server/v2/types.js';
+import type { NliAdapter } from '../../server/v2/nli/nliAdapter.js';
+import type { V2VerificationResult } from '../../server/v2/types.js';
 import {
   ALL_MODEL_MANIFESTS,
   getV2ModelDir,
