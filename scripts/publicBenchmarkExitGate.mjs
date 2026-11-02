@@ -128,6 +128,12 @@ for (const spec of specs) {
         if (adapter.protocol_version !== 'truthlens-v3-benchmark-protocol-v1') failures.push(spec.benchmarkId + ': adapter protocol version mismatch');
         const adapterCount = adapter.dataset?.evaluation_count;
         if (adapterCount !== spec.expectedCount) failures.push(spec.benchmarkId + ': adapter evaluation_count expected ' + spec.expectedCount + ', got ' + adapterCount);
+        const model = adapter.model || {};
+        const modelManifestSha = model.manifest_sha256 || '';
+        if (!/^[a-f0-9]{64}$/i.test(modelManifestSha)) failures.push(spec.benchmarkId + ': sealed model manifest SHA-256 missing or invalid');
+        if (!/^[a-f0-9]{64}$/i.test(model.nli?.artifact_sha256 || '')) failures.push(spec.benchmarkId + ': NLI model artifact SHA-256 missing or invalid');
+        if (!/^[a-f0-9]{64}$/i.test(model.embedding?.artifact_sha256 || '')) failures.push(spec.benchmarkId + ': embedding model artifact SHA-256 missing or invalid');
+        item.model_manifest_sha256 = modelManifestSha || null;
         if (spec.benchmarkId === 'fever') {
           const provenance = adapter.provenance || {};
           if (!/^[a-f0-9]{40}$/i.test(provenance.commit_sha || '')) failures.push('FEVER: evaluation commit SHA missing');
@@ -139,6 +145,11 @@ for (const spec of specs) {
         }
       } else {
         if (adapter.benchmark !== 'AVeriTeC') failures.push('AVeriTeC: reproducibility manifest benchmark mismatch');
+        const modelManifestSha = adapter.model_manifest_sha256 || '';
+        if (!/^[a-f0-9]{64}$/i.test(modelManifestSha)) failures.push('AVeriTeC: sealed model manifest SHA-256 missing or invalid');
+        if (!/^[a-f0-9]{64}$/i.test(adapter.nli_artifact_sha256 || '')) failures.push('AVeriTeC: NLI model artifact SHA-256 missing or invalid');
+        if (!/^[a-f0-9]{64}$/i.test(adapter.embedding_artifact_sha256 || '')) failures.push('AVeriTeC: embedding model artifact SHA-256 missing or invalid');
+        item.model_manifest_sha256 = modelManifestSha || null;
         if (adapter.split !== 'dev' || adapter.claims !== 500) failures.push('AVeriTeC: reproducibility manifest must pin dev split with 500 claims');
         if (!/^[a-f0-9]{64}$/i.test(adapter.claims_sha256 || '')) failures.push('AVeriTeC: claims SHA-256 provenance missing');
         if (!/^[a-f0-9]{64}$/i.test(adapter.evidence_store_sha256 || '')) failures.push('AVeriTeC: evidence-store SHA-256 provenance missing');
@@ -166,12 +177,18 @@ for (const spec of specs) {
   checks.push(check);
   results.push(item);
 }
+const modelManifestHashes = [...new Set(results.map(item => item.model_manifest_sha256).filter(Boolean))];
+if (modelManifestHashes.length !== 1) {
+  failures.push('FEVER, FEVEROUS and AVeriTeC must use the same sealed model manifest SHA-256');
+}
+const sharedModelManifestSha256 = modelManifestHashes.length === 1 ? modelManifestHashes[0] : null;
 const complete = failures.length === 0;
 const report = {
   schema_version: 1,
   suite_id: 'truthlens_public_benchmark_suite_v1',
   generated_at: new Date().toISOString(),
   evaluated_commit_sha: /^[a-f0-9]{40}$/i.test(expectedCommitSha) ? expectedCommitSha : null,
+  model_manifest_sha256: sharedModelManifestSha256,
   status: complete ? 'READY_PUBLIC_BENCHMARKS_ONLY' : 'BLOCKED',
   public_benchmarks_complete: complete,
   required_benchmarks: specs.map(({ benchmarkId, expectedCount }) => ({ benchmark_id: benchmarkId, expected_evaluation_count: expectedCount })),
