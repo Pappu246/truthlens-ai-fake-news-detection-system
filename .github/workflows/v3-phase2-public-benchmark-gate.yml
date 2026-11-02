@@ -1,0 +1,154 @@
+name: TruthLens Phase 2 Public Benchmark Gate
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/v3-phase2-public-benchmark-gate.yml'
+      - 'scripts/publicBenchmarkExitGate.mjs'
+      - 'scripts/scifactArtifactGate.mjs'
+  workflow_run:
+    workflows:
+      - V3 Phase 2 Scoring Recovery
+      - Phase 2 AVeriTeC End-to-End Benchmark
+      - V2 SciFact End-to-End Benchmark
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: truthlens-phase2-public-gate-${{ github.event.workflow_run.head_sha || github.event.pull_request.head.sha }}
+  cancel-in-progress: false
+
+jobs:
+  syntax:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate gate scripts and workflow
+        run: |
+          node --check scripts/publicBenchmarkExitGate.mjs
+          node scripts/publicBenchmarkExitGateTests.mjs
+          node --check scripts/scifactArtifactGate.mjs
+          node scripts/scifactArtifactGateTests.mjs
+          ruby -e 'require "yaml"; YAML.parse_file(".github/workflows/v3-phase2-public-benchmark-gate.yml"); puts "Workflow YAML syntax OK"'
+
+  gate:
+    if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.head_branch == 'research/phase2-benchmarks-current-main-2026-11-02' && github.event.workflow_run.head_repository.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Resolve exact-head benchmark workflow runs
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ github.event.workflow_run.head_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs"
+          runs="$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "${api}?head_sha=${TARGET_SHA}&per_page=100")"
+          resolve_run() {
+            jq -c --arg sha "$TARGET_SHA" --arg name "$1" '[.workflow_runs[] | select(.head_sha==$sha and .name==$name and .event=="pull_request")] | sort_by(.run_number) | last // empty' <<<"$runs"
+          }
+          recovery="$(resolve_run "V3 Phase 2 Scoring Recovery")"
+          averitec="$(resolve_run "Phase 2 AVeriTeC End-to-End Benchmark")"
+          scifact="$(resolve_run "V2 SciFact End-to-End Benchmark")"
+          if [ -z "$recovery" ] || [ -z "$averitec" ] || [ -z "$scifact" ]; then
+            echo "gate_ready=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Waiting for all exact-head benchmark workflows to appear."
+            exit 0
+          fi
+          for item in "$recovery" "$averitec" "$scifact"; do
+            status="$(jq -r '.status' <<<"$item")"
+            conclusion="$(jq -r '.conclusion // empty' <<<"$item")"
+            name="$(jq -r '.name' <<<"$item")"
+            if [ "$status" != "completed" ]; then
+              echo "gate_ready=false" >> "$GITHUB_OUTPUT"
+              echo "::notice::$name is still $status; a later workflow completion will re-run this gate."
+              exit 0
+            fi
+            if [ "$conclusion" != "success" ]; then
+              echo "::error::$name completed with conclusion=$conclusion for $TARGET_SHA"
+              exit 1
+            fi
+          done
+          echo "gate_ready=true" >> "$GITHUB_OUTPUT"
+          echo "target_sha=$TARGET_SHA" >> "$GITHUB_OUTPUT"
+          echo "recovery_id=$(jq -r '.id' <<<"$recovery")" >> "$GITHUB_OUTPUT"
+          echo "averitec_id=$(jq -r '.id' <<<"$averitec")" >> "$GITHUB_OUTPUT"
+          echo "scifact_id=$(jq -r '.id' <<<"$scifact")" >> "$GITHUB_OUTPUT"
+
+      - name: Check out the exact evaluated commit
+        if: steps.resolve.outputs.gate_ready == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.resolve.outputs.target_sha }}
+          persist-credentials: false
+
+      - name: Download full FEVER and FEVEROUS artifacts
+        if: steps.resolve.outputs.gate_ready == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.resolve.outputs.recovery_id }}
+          pattern: truthlens-v3-*-full-*
+          path: artifacts/v3
+          merge-multiple: false
+
+      - name: Download full AVeriTeC artifact
+        if: steps.resolve.outputs.gate_ready == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.resolve.outputs.averitec_id }}
+          name: truthlens-phase2-averitec-e2e-final
+          path: artifacts/v2-averitec-e2e
+
+      - name: Download exact-head SciFact artifact
+        if: steps.resolve.outputs.gate_ready == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.resolve.outputs.scifact_id }}
+          name: truthlens-v2-scifact-end-to-end
+          path: artifacts/v2-scifact-e2e
+
+      - name: Set up Node 22 and install project dependencies
+        if: steps.resolve.outputs.gate_ready == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        if: steps.resolve.outputs.gate_ready == 'true'
+        run: npm ci
+
+      - name: Validate public benchmark artifacts and exact-head provenance
+        if: steps.resolve.outputs.gate_ready == 'true'
+        env:
+          TRUTHLENS_EXPECTED_COMMIT_SHA: ${{ steps.resolve.outputs.target_sha }}
+        run: |
+          set -euo pipefail
+          node scripts/publicBenchmarkExitGate.mjs --output=artifacts/v3/public-benchmark-gate.json
+          node scripts/scifactArtifactGate.mjs --output=artifacts/v3/scifact-artifact-gate.json
+
+      - name: Upload public benchmark gate results
+        if: always() && steps.resolve.outputs.gate_ready == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: truthlens-phase2-public-benchmark-gate
+          path: |
+            artifacts/v3/public-benchmark-gate.json
+            artifacts/v3/scifact-artifact-gate.json
+          if-no-files-found: error
+          retention-days: 90
