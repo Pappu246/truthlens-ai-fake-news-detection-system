@@ -22,17 +22,38 @@ Frozen lanes:
 
 ## Current SciFact baseline
 
-The latest completed full-corpus SciFact artifact is **Run #87** (`36597257830`). The evaluated commit `5275121a425a2b8a297c6a3dd375d98ac46fa2c7` remains benchmark-runtime-equivalent to the current V2 implementation; the verified interval to the later documentation/test head contains no SciFact runtime, model, retrieval, NLI, or benchmark-workflow implementation change.
+The latest exact-current-main evaluation is workflow run **#376** (41191386168), evaluated against main commit 8b6df8c5c3d12b86d4384f6c01b19a22e4492d1a. It evaluated the complete frozen SciFact dev split: **300/300 claims** over **5,183 corpus documents**.
 
-- Open candidate recall: **60.33%**
-- Gold evidence Recall@5: **73.40%**
-- Directional accuracy: **34.33%**
-- Directional macro-F1: **0.320335**
-- Production-policy abstention: **75%**
-- Non-abstain coverage: **25%**
+- Open candidate recall: **99.47%** (187/188 evidence-bearing claims)
+- Gold evidence Recall@5: **86.17%** (162/188)
+- Benchmark directional accuracy: **37.33%**
+- Benchmark directional macro-F1: **0.356480**
+- Production-policy mapped accuracy: **34.67%**
+- Production-policy mapped macro-F1: **0.280330**
+- Production-policy abstention: **70%**
+- Conflicted rate: **4%**
+- Non-abstain coverage: **30%**
+- Accuracy among non-abstained claims: **31.11%**
 
-Artifact ID: `11051501500`. The benchmark remains a research/evaluation measurement only; it does not establish production or universal real-world accuracy.
+Directional per-class metrics:
+- SUPPORT — precision **1.000**, recall **0.137**, F1 **0.241** (124 claims)
+- CONTRADICT — precision **0.279**, recall **0.750**, F1 **0.407** (64 claims)
+- NOT_ENOUGH_INFO — precision **0.423**, recall **0.420**, F1 **0.422** (112 claims)
 
+The low SUPPORT recall is a material weakness; high candidate recall must not be presented as high verification accuracy. The benchmark directional evaluator is single-source-compatible because classic SciFact evidence is tied to cited papers. Production-policy metrics are reported separately because the production two-independent-source rule does not map cleanly to this dataset.
+
+Calibration is a research diagnostic only: raw ECE-10 **0.397657**, raw Brier **0.414668**, raw holdout ECE-10 **0.388980**, and calibrated holdout ECE-10 **0.237063** using a deterministic even/odd 150/150 split and temperature 4. This does not change runtime confidence semantics.
+
+Provenance:
+- Frozen claims SHA-256: 86f0435d08fdb65d1aa41d1472684f57e6e71930626497bdf4d7a9ec1a632217
+- Frozen corpus SHA-256: b8d6c89624cb2ed74dee8938effc4f5d8bd2086887880af8110d64be4ceade62
+- Config SHA-256: 5f2bde4aeef1d2c781f5eeb86e781178a4baf392ada1bb775c576cfdf01373e8
+- Sealed model manifest SHA-256: f545488704f895af94b781601c3a746b2e371e30bc8cdec7431f44917d9a1832
+- NLI model: Xenova/nli-deberta-v3-xsmall, artifact SHA-256 3fac2500c45c75af42c7711de0d1b93d59577456100208be0dc1f9e8811946b6
+- Embedding model: Xenova/all-MiniLM-L6-v2, artifact SHA-256 afdb6f1a0e45b715d0bb9b11772f032c399babd23bfc31fed1c170afc848bdb1
+- Uploaded artifact ID: 13044720576; ZIP digest: sha256:ad13fc7c47af04bd1189112db26b7a61c7e75b05822503685f6947891ba512b4
+
+This is a research/evaluation measurement only. It does not establish production or universal real-world accuracy and does not change production model weights, thresholds, source rules, or abstention policy. The earlier Run #87 result remains historical and should not be described as the newest current-main baseline.
 ## External protocol sources
 
 - FEVER: https://fever.ai/dataset/fever.html
