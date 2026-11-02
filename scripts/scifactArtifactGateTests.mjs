@@ -21,7 +21,7 @@ const report = {
     config_sha256: 'b'.repeat(64),
     model_manifest_sha256: 'f545488704f895af94b781601c3a746b2e371e30bc8cdec7431f44917d9a1832'
   },
-  models: { manifest_sha256: 'f545488704f895af94b781601c3a746b2e371e30bc8cdec7431f44917d9a1832', nli: { name: 'Xenova/nli-deberta-v3-xsmall', artifact_sha256: '3fac2500c45c75af42c7711de0d1b93d59577456100208be0dc1f9e8811946b6' }, embedding: { name: 'Xenova/all-MiniLM-L6-v2', artifact_sha256: 'afdb6f1a0e45b715d0bb9b11772f032c399babd23bfc31fed1c170afc848bdb1' }, sealed_manifest: [{ kind: 'nli' }, { kind: 'embedding' }] },
+  models: { manifest_sha256: 'f545488704f895af94b781601c3a746b2e371e30bc8cdec7431f44917d9a1832', nli: { name: 'Xenova/nli-deberta-v3-xsmall', artifact_sha256: '3fac2500c45c75af42c7711de0d1b93d59577456100208be0dc1f9e8811946b6' }, embedding: { name: 'Xenova/all-MiniLM-L6-v2', artifact_sha256: 'afdb6f1a0e45b715d0bb9b11772f032c399babd23bfc31fed1c170afc848bdb1' }, runtime: { node_major: 22, transformers_js: '3.7.6', onnxruntime_node: '1.21.0' }, sealed_manifest: [{ kind: 'nli' }, { kind: 'embedding' }] },
   end_to_end: {
     benchmark_directional_accuracy: 0.37,
     benchmark_directional_macro_f1: 0.35,
