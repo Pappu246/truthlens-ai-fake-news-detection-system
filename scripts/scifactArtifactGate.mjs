@@ -35,6 +35,7 @@ export function validateScifactArtifact(report, expectedCommitSha, expectedModel
   add(provenance.model_manifest_sha256 === EXPECTED_MODEL_MANIFEST_SHA, 'SciFact model manifest differs from the pinned Phase 2 model');
   add(report?.models?.nli?.name === 'Xenova/nli-deberta-v3-xsmall' && report.models.nli.artifact_sha256 === EXPECTED_NLI_SHA, 'SciFact NLI model identity/hash differs from protocol pin');
   add(report?.models?.embedding?.name === 'Xenova/all-MiniLM-L6-v2' && report.models.embedding.artifact_sha256 === EXPECTED_EMBEDDING_SHA, 'SciFact embedding model identity/hash differs from protocol pin');
+  add(report?.models?.runtime?.node_major === 22 && report.models.runtime.transformers_js === '3.7.6' && report.models.runtime.onnxruntime_node === '1.21.0', 'SciFact inference runtime differs from protocol pin');
   add(Array.isArray(report?.models?.sealed_manifest) && report.models.sealed_manifest.length >= 2, 'sealed model manifest missing');
   const metrics = report?.end_to_end || {};
   for (const key of ['benchmark_directional_accuracy', 'benchmark_directional_macro_f1']) {
