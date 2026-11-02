@@ -28,6 +28,8 @@
     "test:production": "tsx scripts/productionSmokeTest.ts",
     "test:v2": "tsx scripts/v2PipelineTests.ts",
     "test:v2-research-trace": "tsx scripts/v2ResearchTraceTests.ts",
+    "test:v2-scifact-passage-granularity": "tsx scripts/v2ScifactPassageGranularityTests.ts",
+    "eval:v2-scifact-passage-granularity": "tsx scripts/v2ScifactPassageGranularity.ts",
     "test:v2-route": "tsx scripts/v2RouteTests.ts",
     "eval:v2": "tsx scripts/v2Evaluate.ts",
     "generate:v2-fixtures": "tsx scripts/generate_v2_eval_fixtures.ts",
