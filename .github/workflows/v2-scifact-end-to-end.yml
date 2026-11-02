@@ -8,6 +8,9 @@ on:
     paths:
       - 'server/v2/**'
       - 'scripts/v2ScifactEndToEnd.ts'
+      - 'research/multibenchmark-manifest.json'
+      - '.github/workflows/v3-phase2-scoring-recovery.yml'
+      - '.github/workflows/phase-2-averitec-e2e.yml'
       - 'scripts/v2DownloadModels.ts'
       - 'data/v2/**'
       - 'package.json'
