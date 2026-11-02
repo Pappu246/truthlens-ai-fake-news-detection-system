@@ -13,6 +13,7 @@ const cross = buildReplicaDocuments([base], 42, 'cross_domain', 3);
 assert.equal(same.length, 3);
 assert.equal(cross.length, 3);
 assert.equal(new Set(same.map(item => new URL(item.url).hostname)).size, 1);
+assert.ok(same.every(item => new URL(item.url).hostname === new URL(base.url).hostname));
 assert.equal(new Set(cross.map(item => new URL(item.url).hostname)).size, 3);
 assert.ok([...same, ...cross].every(item => item.snippet === base.snippet && item.title === base.title));
 assert.equal(new Set([...same, ...cross].map(item => item.id)).size, 6);
