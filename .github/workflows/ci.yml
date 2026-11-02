@@ -172,6 +172,9 @@ jobs:
       - name: V2 research trace invariance tests
         run: npm run test:v2-research-trace
 
+      - name: SciFact passage-granularity metric tests
+        run: npm run test:v2-scifact-passage-granularity
+
       - name: V2 route tests
         run: npm run test:v2-route
 
