@@ -4,6 +4,8 @@
  * family and exposes exact model artifact hashes in every report.
  */
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 import { PretrainedNliAdapter } from '../../server/v2/nli/pretrainedNliAdapter.js';
 import { TransformerEmbeddingModel } from '../../server/v2/retrieval/transformerEmbeddingModel.js';
 import type { EmbeddingModel } from '../../server/v2/retrieval/embeddings.js';
@@ -15,6 +17,33 @@ import {
   verifyModelHashes
 } from '../../server/v2/ml/modelManifest.js';
 import { disposeMlWorker } from '../../server/v2/ml/mlWorkerClient.js';
+
+export const LOCAL_ML_RUNTIME = {
+  node_major: 22,
+  transformers_js: '3.7.6',
+  onnxruntime_node: '1.21.0'
+} as const;
+
+export function verifyRuntimeVersions() {
+  const nodeMajor = Number(process.versions.node.split('.')[0]);
+  if (nodeMajor !== LOCAL_ML_RUNTIME.node_major) {
+    throw new Error(`Node runtime mismatch: expected ${LOCAL_ML_RUNTIME.node_major}.x, got ${process.versions.node}`);
+  }
+  const packageVersion = (packagePath: string): string => {
+    const fullPath = path.resolve('node_modules', packagePath, 'package.json');
+    if (!fs.existsSync(fullPath)) throw new Error(`Required local ML runtime package is missing: ${packagePath}`);
+    return (JSON.parse(fs.readFileSync(fullPath, 'utf8')) as { version?: string }).version || '';
+  };
+  const transformersVersion = packageVersion('@huggingface/transformers');
+  const onnxVersion = packageVersion('onnxruntime-node');
+  if (transformersVersion !== LOCAL_ML_RUNTIME.transformers_js) {
+    throw new Error(`Transformers.js version mismatch: expected ${LOCAL_ML_RUNTIME.transformers_js}, got ${transformersVersion}`);
+  }
+  if (onnxVersion !== LOCAL_ML_RUNTIME.onnxruntime_node) {
+    throw new Error(`ONNX Runtime version mismatch: expected ${LOCAL_ML_RUNTIME.onnxruntime_node}, got ${onnxVersion}`);
+  }
+  return { ...LOCAL_ML_RUNTIME, node_version: process.versions.node };
+}
 
 export function sha256Json(value: unknown): string {
   return crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -37,6 +66,7 @@ export function sealedModelManifest() {
 }
 
 export async function verifySealedModels(): Promise<void> {
+  verifyRuntimeVersions();
   const modelDir = getV2ModelDir();
   for (const manifest of ALL_MODEL_MANIFESTS) {
     const result = await verifyModelHashes(modelDir, manifest);
@@ -52,6 +82,7 @@ export function modelMetadata(
 ) {
   const manifest = sealedModelManifest();
   return {
+    runtime: verifyRuntimeVersions(),
     nli: {
       name: nliAdapter.modelName,
       version: nliAdapter.modelVersion,
