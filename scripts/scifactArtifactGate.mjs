@@ -5,6 +5,9 @@ import path from 'node:path';
 
 const EXPECTED_CLAIMS_SHA = '86f0435d08fdb65d1aa41d1472684f57e6e71930626497bdf4d7a9ec1a632217';
 const EXPECTED_CORPUS_SHA = 'b8d6c89624cb2ed74dee8938effc4f5d8bd2086887880af8110d64be4ceade62';
+const EXPECTED_MODEL_MANIFEST_SHA = 'f545488704f895af94b781601c3a746b2e371e30bc8cdec7431f44917d9a1832';
+const EXPECTED_NLI_SHA = '3fac2500c45c75af42c7711de0d1b93d59577456100208be0dc1f9e8811946b6';
+const EXPECTED_EMBEDDING_SHA = 'afdb6f1a0e45b715d0bb9b11772f032c399babd23bfc31fed1c170afc848bdb1';
 const input = path.resolve(process.argv.find(v => v.startsWith('--input='))?.slice(8) || 'artifacts/v2-scifact-e2e/scifact-end-to-end.json');
 const output = path.resolve(process.argv.find(v => v.startsWith('--output='))?.slice(9) || 'artifacts/v3/scifact-artifact-gate.json');
 const expectedCommit = process.env.TRUTHLENS_EXPECTED_COMMIT_SHA ||
@@ -29,6 +32,9 @@ export function validateScifactArtifact(report, expectedCommitSha, expectedModel
   add(report?.models?.manifest_sha256 === provenance.model_manifest_sha256, 'model manifest SHA mismatch');
   add(/^[a-f0-9]{64}$/i.test(expectedModelManifestSha), 'expected shared model manifest SHA-256 missing or invalid');
   add(provenance.model_manifest_sha256 === expectedModelManifestSha, 'SciFact model manifest does not match the shared Phase 2 model');
+  add(provenance.model_manifest_sha256 === EXPECTED_MODEL_MANIFEST_SHA, 'SciFact model manifest differs from the pinned Phase 2 model');
+  add(report?.models?.nli?.name === 'Xenova/nli-deberta-v3-xsmall' && report.models.nli.artifact_sha256 === EXPECTED_NLI_SHA, 'SciFact NLI model identity/hash differs from protocol pin');
+  add(report?.models?.embedding?.name === 'Xenova/all-MiniLM-L6-v2' && report.models.embedding.artifact_sha256 === EXPECTED_EMBEDDING_SHA, 'SciFact embedding model identity/hash differs from protocol pin');
   add(Array.isArray(report?.models?.sealed_manifest) && report.models.sealed_manifest.length >= 2, 'sealed model manifest missing');
   const metrics = report?.end_to_end || {};
   for (const key of ['benchmark_directional_accuracy', 'benchmark_directional_macro_f1']) {
