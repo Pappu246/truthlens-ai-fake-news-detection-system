@@ -221,12 +221,18 @@ jobs:
           nli_artifact_sha256="$(jq -r '.models.nli.artifact_sha256' artifacts/v2-averitec-e2e/provenance.json)"
           embedding_artifact_sha256="$(jq -r '.models.embedding.artifact_sha256' artifacts/v2-averitec-e2e/provenance.json)"
           configuration_sha256="$(jq -c '.runner' artifacts/v2-averitec-e2e/provenance.json | sha256sum | cut -d' ' -f1)"
+          node_major="$(jq -r '.models.runtime.node_major' artifacts/v2-averitec-e2e/provenance.json)"
+          transformers_js="$(jq -r '.models.runtime.transformers_js' artifacts/v2-averitec-e2e/provenance.json)"
+          onnxruntime_node="$(jq -r '.models.runtime.onnxruntime_node' artifacts/v2-averitec-e2e/provenance.json)"
           test "${#model_manifest_sha256}" = "64"
           test "${#nli_artifact_sha256}" = "64"
           test "${#embedding_artifact_sha256}" = "64"
           test "${#configuration_sha256}" = "64"
+          test "$node_major" = "22"
+          test "$transformers_js" = "3.7.6"
+          test "$onnxruntime_node" = "1.21.0"
           cat > artifacts/v2-averitec-e2e/reproducibility-manifest.json <<EOF
-          {"benchmark":"AVeriTeC","split":"dev","claims":500,"claims_sha256":"$AV_DATA_SHA256","official_data_commit":"$AV_DATA_COMMIT","evidence_store_revision":"$AV_STORE_REVISION","evidence_store_sha256":"$AV_STORE_SHA256","truthlens_git_sha":"$TRUTHLENS_EVALUATED_COMMIT_SHA","workflow_run_id":"$GITHUB_RUN_ID","shard_count":4,"shard_size":125,"model_manifest_sha256":"$model_manifest_sha256","nli_artifact_sha256":"$nli_artifact_sha256","embedding_artifact_sha256":"$embedding_artifact_sha256","configuration_sha256":"$configuration_sha256","production_boundary":"research_only_no_production_model_threshold_or_runtime_change","gold_evidence_in_retrieval":false}
+          {"benchmark":"AVeriTeC","split":"dev","claims":500,"claims_sha256":"$AV_DATA_SHA256","official_data_commit":"$AV_DATA_COMMIT","evidence_store_revision":"$AV_STORE_REVISION","evidence_store_sha256":"$AV_STORE_SHA256","truthlens_git_sha":"$TRUTHLENS_EVALUATED_COMMIT_SHA","workflow_run_id":"$GITHUB_RUN_ID","shard_count":4,"shard_size":125,"model_manifest_sha256":"$model_manifest_sha256","nli_artifact_sha256":"$nli_artifact_sha256","embedding_artifact_sha256":"$embedding_artifact_sha256","configuration_sha256":"$configuration_sha256","node_major":$node_major,"transformers_js":"$transformers_js","onnxruntime_node":"$onnxruntime_node","production_boundary":"research_only_no_production_model_threshold_or_runtime_change","gold_evidence_in_retrieval":false}
           EOF
           sha256sum artifacts/v2-averitec-e2e/*.json artifacts/v2-averitec-e2e/*.txt | sort > artifacts/v2-averitec-e2e/artifact-file-sha256.txt
       - name: Upload complete AVeriTeC score artifact
