@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict';
-import { hasGoldCandidate } from './v3FeverousEvidenceRecall';
+import { hasGoldCandidate, hasGoldEvidence } from './v3FeverousEvidenceRecall';
 
 const candidates = new Set(['Wiki_12_sentence_0', 'Wiki_9_table_2_cell_3']);
+
+assert.equal(hasGoldEvidence([{ content: ['Wiki_12_sentence_0'] }]), true);
+assert.equal(hasGoldEvidence([{ content: [] }, { content: ['Wiki_9_table_2_cell_3'] }]), true);
+assert.equal(hasGoldEvidence([]), false);
+assert.equal(hasGoldEvidence([{ content: [] }]), false);
+assert.equal(hasGoldEvidence([{ content: [null, 42] }]), false);
+assert.equal(hasGoldEvidence(null), false);
+
 
 assert.equal(
   hasGoldCandidate([{ content: ['Wiki_12_sentence_0'] }], candidates),
