@@ -19,9 +19,9 @@ const report = {
   run_provenance: {
     source_commit_sha: 'a'.repeat(40),
     config_sha256: 'b'.repeat(64),
-    model_manifest_sha256: 'c'.repeat(64)
+    model_manifest_sha256: 'f545488704f895af94b781601c3a746b2e371e30bc8cdec7431f44917d9a1832'
   },
-  models: { manifest_sha256: 'c'.repeat(64), nli: { name: 'Xenova/nli-deberta-v3-xsmall', artifact_sha256: '3fac2500c45c75af42c7711de0d1b93d59577456100208be0dc1f9e8811946b6' }, embedding: { name: 'Xenova/all-MiniLM-L6-v2', artifact_sha256: 'afdb6f1a0e45b715d0bb9b11772f032c399babd23bfc31fed1c170afc848bdb1' }, sealed_manifest: [{ kind: 'nli' }, { kind: 'embedding' }] },
+  models: { manifest_sha256: 'f545488704f895af94b781601c3a746b2e371e30bc8cdec7431f44917d9a1832', nli: { name: 'Xenova/nli-deberta-v3-xsmall', artifact_sha256: '3fac2500c45c75af42c7711de0d1b93d59577456100208be0dc1f9e8811946b6' }, embedding: { name: 'Xenova/all-MiniLM-L6-v2', artifact_sha256: 'afdb6f1a0e45b715d0bb9b11772f032c399babd23bfc31fed1c170afc848bdb1' }, sealed_manifest: [{ kind: 'nli' }, { kind: 'embedding' }] },
   end_to_end: {
     benchmark_directional_accuracy: 0.37,
     benchmark_directional_macro_f1: 0.35,
@@ -38,12 +38,12 @@ const report = {
     ]
   }
 };
-assert.deepEqual(validateScifactArtifact(report, 'a'.repeat(40), 'c'.repeat(64)), { complete: true, failures: [] });
-assert.equal(validateScifactArtifact(report, 'd'.repeat(40), 'c'.repeat(64)).complete, false);
+assert.deepEqual(validateScifactArtifact(report, 'a'.repeat(40), 'f545488704f895af94b781601c3a746b2e371e30bc8cdec7431f44917d9a1832'), { complete: true, failures: [] });
+assert.equal(validateScifactArtifact(report, 'd'.repeat(40), 'f545488704f895af94b781601c3a746b2e371e30bc8cdec7431f44917d9a1832').complete, false);
 const bad = structuredClone(report);
 bad.rows = bad.rows.slice(1);
-assert.ok(validateScifactArtifact(bad, 'a'.repeat(40), 'c'.repeat(64)).failures.includes('SciFact row count must equal 300'));
+assert.ok(validateScifactArtifact(bad, 'a'.repeat(40), 'f545488704f895af94b781601c3a746b2e371e30bc8cdec7431f44917d9a1832').failures.includes('SciFact row count must equal 300'));
 const wrongHash = structuredClone(report);
 wrongHash.dataset.claims_sha256 = '0'.repeat(64);
-assert.ok(validateScifactArtifact(wrongHash, 'a'.repeat(40), 'c'.repeat(64)).failures.includes('SciFact claims hash mismatch'));
+assert.ok(validateScifactArtifact(wrongHash, 'a'.repeat(40), 'f545488704f895af94b781601c3a746b2e371e30bc8cdec7431f44917d9a1832').failures.includes('SciFact claims hash mismatch'));
 console.log('SciFact artifact gate tests passed.');
