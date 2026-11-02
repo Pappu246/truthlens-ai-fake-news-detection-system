@@ -23,6 +23,7 @@ on:
     paths:
       - 'server/v2/**'
       - 'scripts/v2ScifactEndToEnd.ts'
+      - 'scripts/v2ScifactPassageGranularity.ts'
       - 'scripts/v2DownloadModels.ts'
       - 'data/v2/**'
       - 'package-lock.json'
