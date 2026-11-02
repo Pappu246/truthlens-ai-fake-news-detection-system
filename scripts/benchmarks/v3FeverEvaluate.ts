@@ -108,6 +108,7 @@ async function main() {
     }
     const report = {
       benchmark_id: 'fever',
+      gold_evidence_in_retrieval: false,
       protocol_version: 'truthlens-v3-benchmark-protocol-v1',
       dataset: {
         name: 'FEVER', version_or_split: 'shared_task_dev',
