@@ -25,6 +25,11 @@ function makeManifest() {
       production_artifact_must_remain_unchanged: true,
       complete_artifact_required_before_publishing_metrics: true
     },
+    models: {
+      nli: { name: 'Xenova/nli-deberta-v3-xsmall', artifact_sha256: NLI_ARTIFACT_SHA },
+      embedding: { name: 'Xenova/all-MiniLM-L6-v2', artifact_sha256: EMBEDDING_ARTIFACT_SHA },
+      manifest_sha256: MODEL_MANIFEST_SHA
+    },
     benchmarks: [
       { id: 'fever_v1', expected_evaluation_claims: 19998 },
       { id: 'feverous', expected_evaluation_claims: 7890 },
