@@ -134,7 +134,13 @@ def _validate_record(
     _require(record["split"] == "holdout", f"{prefix}: every record must be assigned to the sealed holdout split.")
     claim_day = _parse_date(record["claim_date"], f"{prefix}.claim_date")
     collected_at = _parse_aware_datetime(record["collected_at"], f"{prefix}.collected_at")
-    _require(claim_day <= collected_at.date(), f"{prefix}: claim_date cannot be after collected_at.")
+    collected_at_utc = collected_at.astimezone(timezone.utc)
+    _require(
+        claim_day <= collected_at_utc.date(),
+        f"{prefix}: claim_date cannot be after collected_at (UTC date).",
+    )
+    if sealed_at is not None:
+        _require(collected_at <= sealed_at, f"{prefix}: collection must be completed before the holdout is sealed.")
 
     sources = record["sources"]
     _require(isinstance(sources, list) and len(sources) >= 2, f"{prefix}: at least two evidence sources are required.")
@@ -158,7 +164,9 @@ def _validate_record(
             published_at.astimezone(timezone.utc).date() <= claim_day,
             f"{label}.published_at is after the claim-date cutoff.",
         )
-        _parse_aware_datetime(source["retrieved_at"], f"{label}.retrieved_at")
+        retrieved_at = _parse_aware_datetime(source["retrieved_at"], f"{label}.retrieved_at")
+        _require(retrieved_at >= published_at, f"{label}.retrieved_at cannot precede published_at.")
+        _require(retrieved_at <= collected_at, f"{label}.retrieved_at cannot be after collected_at.")
         _require(bool(HEX_256.fullmatch(str(source["content_sha256"]).lower())), f"{label}.content_sha256 must be a SHA-256 digest.")
         _require(source["evidence_role"] in ALLOWED_EVIDENCE_ROLES, f"{label}.evidence_role is invalid.")
         excerpt = source["evidence_excerpt"]
