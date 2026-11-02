@@ -85,14 +85,14 @@ export function buildReplicaDocuments(
     for (let replicaIndex = 0; replicaIndex < replicasPerSource; replicaIndex++) {
       const id = `00-replica-${claimId}-${sourceIndex}-${replicaIndex}`;
       const host = mode === 'same_domain'
-        ? 'replica-network.example'
+        ? new URL(original.url).hostname
         : `replica-${claimId}-${sourceIndex}-${replicaIndex}.example`;
       replicas.push({
         ...original,
         id,
         url: `https://${host}/repost/${encodeURIComponent(original.id)}/${replicaIndex}`,
         publisher: mode === 'same_domain'
-          ? 'Simulated Replica Network'
+          ? original.publisher
           : `Simulated Replica Publisher ${claimId}-${sourceIndex}-${replicaIndex}`,
         retrievalMethod: `scifact_controlled_${mode}_replica`
       });
@@ -143,7 +143,7 @@ class CachedEmbeddingModel implements EmbeddingModel {
 function rawDocuments(corpus: SciFactDocument[]): RawDocument[] {
   return corpus.map(document => ({
     id: String(document.doc_id),
-    url: `https://scifact.local/document/${document.doc_id}`,
+    url: `https://scifact-paper-${document.doc_id}.example/document/${document.doc_id}`,
     title: document.title,
     snippet: document.abstract.join(' '),
     contentType: 'SUMMARY',
