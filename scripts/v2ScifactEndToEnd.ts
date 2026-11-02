@@ -304,6 +304,7 @@ async function main(): Promise<void> {
       protocol_version: 'truthlens-v2-scifact-end-to-end-v2',
       generated_at: new Date().toISOString(),
       benchmark: true,
+      gold_evidence_in_retrieval: false,
       run_provenance: {
         source_commit_sha: sourceCommitSha,
         source_ref: process.env.GITHUB_REF || null,
