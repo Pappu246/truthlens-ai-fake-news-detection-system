@@ -107,6 +107,8 @@ For FEVER and FEVEROUS, the official benchmark label is produced from the same w
 
 The official scorer remains authoritative for each benchmark's task metric. Retrieval recall, directional label accuracy, production-policy metrics, and evidence quality are separate measures and must not be substituted for one another.
 
+All benchmark reports explicitly set `gold_evidence_in_retrieval: false`, and the public/SciFact gates fail closed if that declaration is absent or true. FEVER and FEVEROUS candidate-preparation regression tests include gold-only pages that do not match the claim query and assert that those pages are not injected into retrieval.
+
 The public benchmark gate is intentionally not the full Phase 2 exit gate. It cannot clear the separate blind, independently human-annotated Open-Web holdout requirement.
 
 ## Known NLI quality limitation (research diagnostic; not a release pass)
