@@ -160,6 +160,30 @@ class OpenWebHoldoutValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(HoldoutValidationError, "published_at is after the claim-date cutoff"):
             self.validate_current_candidate()
 
+    def test_collection_uses_utc_date_for_claim_date_cutoff(self):
+        self.records[0]["collected_at"] = "2026-01-03T00:30:00+02:00"
+        self.write_bundle()
+        with self.assertRaisesRegex(HoldoutValidationError, "claim_date cannot be after collected_at"):
+            self.validate_current_candidate()
+
+    def test_source_retrieval_cannot_precede_publication(self):
+        self.records[0]["sources"][0]["retrieved_at"] = "2026-01-02T11:59:59Z"
+        self.write_bundle()
+        with self.assertRaisesRegex(HoldoutValidationError, "retrieved_at cannot precede published_at"):
+            self.validate_current_candidate()
+
+    def test_source_retrieval_cannot_follow_collection(self):
+        self.records[0]["sources"][0]["retrieved_at"] = "2026-01-03T12:00:01Z"
+        self.write_bundle()
+        with self.assertRaisesRegex(HoldoutValidationError, "retrieved_at cannot be after collected_at"):
+            self.validate_current_candidate()
+
+    def test_collection_after_seal_is_rejected(self):
+        self.records[0]["collected_at"] = "2026-01-07T00:00:00Z"
+        self.write_bundle()
+        with self.assertRaisesRegex(HoldoutValidationError, "collection must be completed before the holdout is sealed"):
+            self.validate_current_candidate()
+
     def test_two_sources_from_same_publisher_group_are_rejected(self):
         self.records[0]["sources"][1]["publisher_group_id"] = self.records[0]["sources"][0]["publisher_group_id"]
         self.write_bundle()
