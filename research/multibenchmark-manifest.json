@@ -210,5 +210,11 @@
     },
     "manifest_sha256": "f545488704f895af94b781601c3a746b2e371e30bc8cdec7431f44917d9a1832",
     "policy": "All Phase 2 public benchmark runs use these exact sealed local model artifacts; benchmark-specific runtime configurations are separately hashed."
+  },
+  "runtime": {
+    "node_major": 22,
+    "transformers_js": "3.7.6",
+    "onnxruntime_node": "1.21.0",
+    "policy": "All public benchmark lanes must use the same Node/Transformers.js/ONNX Runtime versions."
   }
 }
