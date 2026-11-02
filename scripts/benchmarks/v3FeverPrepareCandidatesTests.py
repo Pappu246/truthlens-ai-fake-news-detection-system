@@ -72,7 +72,7 @@ def main() -> None:
         gold_only_claims.write_text(json.dumps({
             "id": "gold-only", "claim": "banana obelisk zyzzyva",
             "label": "SUPPORTS", "evidence": [[0, 0, "lunar", 0]]
-        }) + "\\n", encoding="utf-8")
+        }) + "\n", encoding="utf-8")
         MODULE.make_candidates(gold_only_claims, db_path, gold_only_output, top_k=5)
         gold_only_row = json.loads(gold_only_output.read_text(encoding="utf-8").splitlines()[0])
         assert gold_only_row["gold_evidence"] == [[0, 0, "lunar", 0]]
