@@ -133,6 +133,12 @@ async function main() {
     assert.ok(runtimeMismatch.failures.some((failure) => failure.includes('inference runtime differs from protocol pin')));
     originalFeverAdapter.model.runtime.transformers_js = '3.7.6';
     await fs.writeFile(feverAdapter, JSON.stringify(originalFeverAdapter, null, 2) + '\n');
+    originalFeverAdapter.gold_evidence_in_retrieval = true;
+    await fs.writeFile(feverAdapter, JSON.stringify(originalFeverAdapter, null, 2) + '\n');
+    const goldLeak = await runGate(root, false);
+    assert.ok(goldLeak.failures.some((failure) => failure.includes('gold evidence')));
+    originalFeverAdapter.gold_evidence_in_retrieval = false;
+    await fs.writeFile(feverAdapter, JSON.stringify(originalFeverAdapter, null, 2) + '\n');
     const feverousScore = path.join(root, 'artifacts/feverous-score.json');
     const original = JSON.parse(await fs.readFile(feverousScore, 'utf8'));
     original.evaluation_count = 7889;
