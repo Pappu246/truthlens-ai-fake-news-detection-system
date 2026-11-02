@@ -47,6 +47,7 @@ const specs = [
 ];
 
 const failures = [];
+let expectedModels = {};
 const checks = [];
 if (!/^[a-f0-9]{40}$/i.test(expectedCommitSha)) failures.push('expected evaluated commit SHA missing or invalid');
 const results = [];
@@ -59,7 +60,7 @@ try {
   checks.push({ label: 'multi-benchmark manifest readable', pass: false, file: manifestPath });
 }
 if (manifest) {
-  const expectedModels = manifest.models || {};
+  expectedModels = manifest.models || {};
   if (!/^[a-f0-9]{64}$/i.test(expectedModels.manifest_sha256 || '')) failures.push('manifest: pinned shared model manifest SHA-256 missing or invalid');
   if (!/^[a-f0-9]{64}$/i.test(expectedModels.nli?.artifact_sha256 || '')) failures.push('manifest: pinned NLI artifact SHA-256 missing or invalid');
   if (!/^[a-f0-9]{64}$/i.test(expectedModels.embedding?.artifact_sha256 || '')) failures.push('manifest: pinned embedding artifact SHA-256 missing or invalid');
