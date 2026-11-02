@@ -148,11 +148,13 @@ for (const spec of specs) {
         item.model_manifest_sha256 = modelManifestSha || null;
         if (spec.benchmarkId === 'fever') {
           const provenance = adapter.provenance || {};
+          if (adapter.gold_evidence_in_retrieval !== false) failures.push('FEVER: retrieval must not inject gold evidence');
           if (!/^[a-f0-9]{40}$/i.test(provenance.commit_sha || '')) failures.push('FEVER: evaluation commit SHA missing');
           if (!/^[a-f0-9]{64}$/i.test(adapter.dataset?.claims_sha256 || '')) failures.push('FEVER: claims SHA-256 provenance missing');
           if (!/^[a-f0-9]{64}$/i.test(adapter.dataset?.corpus_sha256 || '')) failures.push('FEVER: corpus SHA-256 provenance missing');
           if (!/^[a-f0-9]{64}$/i.test(provenance.configuration_sha256 || '')) failures.push('FEVER: configuration SHA-256 provenance missing');
         } else {
+          if (adapter.gold_evidence_in_retrieval !== false) failures.push('FEVEROUS: retrieval must not inject gold evidence');
           if (typeof adapter.scorer_revision !== 'string' || !adapter.scorer_revision) failures.push('FEVEROUS: scorer revision provenance missing');
           if (!/^[a-f0-9]{64}$/i.test(adapter.provenance?.configuration_sha256 || '')) failures.push('FEVEROUS: runtime configuration SHA-256 missing');
         }
