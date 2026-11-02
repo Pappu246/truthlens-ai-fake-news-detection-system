@@ -13,7 +13,7 @@ import json
 import re
 import sys
 import unicodedata
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -153,7 +153,11 @@ def _validate_record(
         _require(domain not in domains, f"{prefix}: evidence sources must use different hostnames.")
         publisher_groups.add(group)
         domains.add(domain)
-        _parse_aware_datetime(source["published_at"], f"{label}.published_at")
+        published_at = _parse_aware_datetime(source["published_at"], f"{label}.published_at")
+        _require(
+            published_at.astimezone(timezone.utc).date() <= claim_day,
+            f"{label}.published_at is after the claim-date cutoff.",
+        )
         _parse_aware_datetime(source["retrieved_at"], f"{label}.retrieved_at")
         _require(bool(HEX_256.fullmatch(str(source["content_sha256"]).lower())), f"{label}.content_sha256 must be a SHA-256 digest.")
         _require(source["evidence_role"] in ALLOWED_EVIDENCE_ROLES, f"{label}.evidence_role is invalid.")
