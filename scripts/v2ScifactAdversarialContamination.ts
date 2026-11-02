@@ -91,9 +91,7 @@ export function buildReplicaDocuments(
         ...original,
         id,
         url: `https://${host}/repost/${encodeURIComponent(original.id)}/${replicaIndex}`,
-        publisher: mode === 'same_domain'
-          ? original.publisher
-          : `Simulated Replica Publisher ${claimId}-${sourceIndex}-${replicaIndex}`,
+        publisher: original.publisher,
         retrievalMethod: `scifact_controlled_${mode}_replica`
       });
     }
