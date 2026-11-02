@@ -47,10 +47,6 @@ const specs = [
 ];
 
 const failures = [];
-const expectedModels = manifest.models || {};
-if (!/^[a-f0-9]{64}$/i.test(expectedModels.manifest_sha256 || '')) failures.push('manifest: pinned shared model manifest SHA-256 missing or invalid');
-if (!/^[a-f0-9]{64}$/i.test(expectedModels.nli?.artifact_sha256 || '')) failures.push('manifest: pinned NLI artifact SHA-256 missing or invalid');
-if (!/^[a-f0-9]{64}$/i.test(expectedModels.embedding?.artifact_sha256 || '')) failures.push('manifest: pinned embedding artifact SHA-256 missing or invalid');
 const checks = [];
 if (!/^[a-f0-9]{40}$/i.test(expectedCommitSha)) failures.push('expected evaluated commit SHA missing or invalid');
 const results = [];
@@ -63,6 +59,10 @@ try {
   checks.push({ label: 'multi-benchmark manifest readable', pass: false, file: manifestPath });
 }
 if (manifest) {
+  const expectedModels = manifest.models || {};
+  if (!/^[a-f0-9]{64}$/i.test(expectedModels.manifest_sha256 || '')) failures.push('manifest: pinned shared model manifest SHA-256 missing or invalid');
+  if (!/^[a-f0-9]{64}$/i.test(expectedModels.nli?.artifact_sha256 || '')) failures.push('manifest: pinned NLI artifact SHA-256 missing or invalid');
+  if (!/^[a-f0-9]{64}$/i.test(expectedModels.embedding?.artifact_sha256 || '')) failures.push('manifest: pinned embedding artifact SHA-256 missing or invalid');
   if (manifest.phase !== 2) failures.push('manifest phase must be 2');
   if (manifest.production_accuracy_claim !== false) failures.push('manifest must keep production_accuracy_claim=false');
   for (const key of ['metric_separation', 'no_benchmark_score_as_universal_accuracy', 'production_artifact_must_remain_unchanged', 'complete_artifact_required_before_publishing_metrics']) {
