@@ -140,8 +140,9 @@ for (const spec of specs) {
           if (!/^[a-f0-9]{64}$/i.test(adapter.dataset?.claims_sha256 || '')) failures.push('FEVER: claims SHA-256 provenance missing');
           if (!/^[a-f0-9]{64}$/i.test(adapter.dataset?.corpus_sha256 || '')) failures.push('FEVER: corpus SHA-256 provenance missing');
           if (!/^[a-f0-9]{64}$/i.test(provenance.configuration_sha256 || '')) failures.push('FEVER: configuration SHA-256 provenance missing');
-        } else if (typeof adapter.scorer_revision !== 'string' || !adapter.scorer_revision) {
-          failures.push('FEVEROUS: scorer revision provenance missing');
+        } else {
+          if (typeof adapter.scorer_revision !== 'string' || !adapter.scorer_revision) failures.push('FEVEROUS: scorer revision provenance missing');
+          if (!/^[a-f0-9]{64}$/i.test(adapter.provenance?.configuration_sha256 || '')) failures.push('FEVEROUS: runtime configuration SHA-256 missing');
         }
       } else {
         if (adapter.benchmark !== 'AVeriTeC') failures.push('AVeriTeC: reproducibility manifest benchmark mismatch');
@@ -149,6 +150,7 @@ for (const spec of specs) {
         if (!/^[a-f0-9]{64}$/i.test(modelManifestSha)) failures.push('AVeriTeC: sealed model manifest SHA-256 missing or invalid');
         if (!/^[a-f0-9]{64}$/i.test(adapter.nli_artifact_sha256 || '')) failures.push('AVeriTeC: NLI model artifact SHA-256 missing or invalid');
         if (!/^[a-f0-9]{64}$/i.test(adapter.embedding_artifact_sha256 || '')) failures.push('AVeriTeC: embedding model artifact SHA-256 missing or invalid');
+        if (!/^[a-f0-9]{64}$/i.test(adapter.configuration_sha256 || '')) failures.push('AVeriTeC: runtime configuration SHA-256 missing or invalid');
         item.model_manifest_sha256 = modelManifestSha || null;
         if (adapter.split !== 'dev' || adapter.claims !== 500) failures.push('AVeriTeC: reproducibility manifest must pin dev split with 500 claims');
         if (!/^[a-f0-9]{64}$/i.test(adapter.claims_sha256 || '')) failures.push('AVeriTeC: claims SHA-256 provenance missing');
