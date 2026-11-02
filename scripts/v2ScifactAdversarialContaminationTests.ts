@@ -16,6 +16,7 @@ assert.equal(new Set(same.map(item => new URL(item.url).hostname)).size, 1);
 assert.ok(same.every(item => new URL(item.url).hostname === new URL(base.url).hostname));
 assert.equal(new Set(cross.map(item => new URL(item.url).hostname)).size, 3);
 assert.ok([...same, ...cross].every(item => item.snippet === base.snippet && item.title === base.title));
+assert.ok([...same, ...cross].every(item => item.publisher === base.publisher));
 assert.equal(new Set([...same, ...cross].map(item => item.id)).size, 6);
 
 const claims = [
