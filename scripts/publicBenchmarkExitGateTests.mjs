@@ -10,7 +10,10 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const GATE = path.join(ROOT, 'publicBenchmarkExitGate.mjs');
 const NOW = '2026-10-10T08:51:37.078Z';
-const TEST_COMMIT_SHA = 'c'.repeat(40);\nconst MODEL_MANIFEST_SHA = '1'.repeat(64);\nconst NLI_ARTIFACT_SHA = '2'.repeat(64);\nconst EMBEDDING_ARTIFACT_SHA = '3'.repeat(64);
+const TEST_COMMIT_SHA = 'c'.repeat(40);
+const MODEL_MANIFEST_SHA = '1'.repeat(64);
+const NLI_ARTIFACT_SHA = '2'.repeat(64);
+const EMBEDDING_ARTIFACT_SHA = '3'.repeat(64);
 
 function makeManifest() {
   return {
@@ -46,7 +49,8 @@ async function makeFixtures(root) {
     write(root, 'artifacts/fever-adapter.json', {
       benchmark_id: 'fever', protocol_version: 'truthlens-v3-benchmark-protocol-v1',
       dataset: { evaluation_count: 19998, claims_sha256: 'a'.repeat(64), corpus_sha256: 'b'.repeat(64) },
-      model: { manifest_sha256: MODEL_MANIFEST_SHA, nli: { artifact_sha256: NLI_ARTIFACT_SHA }, embedding: { artifact_sha256: EMBEDDING_ARTIFACT_SHA } },\n      provenance: { commit_sha: TEST_COMMIT_SHA, configuration_sha256: 'd'.repeat(64) }
+      model: { manifest_sha256: MODEL_MANIFEST_SHA, nli: { artifact_sha256: NLI_ARTIFACT_SHA }, embedding: { artifact_sha256: EMBEDDING_ARTIFACT_SHA } },
+      provenance: { commit_sha: TEST_COMMIT_SHA, configuration_sha256: 'd'.repeat(64) }
     }),
     write(root, 'artifacts/feverous-score.json', {
       benchmark_id: 'feverous', protocol_version: 'truthlens-v3-benchmark-protocol-v1', evaluation_count: 7890, generated_at: NOW, truthlens_git_sha: TEST_COMMIT_SHA,
@@ -102,7 +106,8 @@ async function main() {
   try {
     await makeFixtures(root);
     const valid = await runGate(root, true);
-    assert.equal(valid.results.length, 3);\n    assert.equal(valid.model_manifest_sha256, MODEL_MANIFEST_SHA);
+    assert.equal(valid.results.length, 3);
+    assert.equal(valid.model_manifest_sha256, MODEL_MANIFEST_SHA);
     assert.equal(valid.evaluated_commit_sha, TEST_COMMIT_SHA);
     const staleSha = await runGate(root, false, 'd'.repeat(40));
     assert.ok(staleSha.failures.some((failure) => failure.includes('commit SHA mismatch')));
