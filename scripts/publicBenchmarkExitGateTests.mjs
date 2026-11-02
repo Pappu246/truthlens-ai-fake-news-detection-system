@@ -125,6 +125,14 @@ async function main() {
     assert.ok(modelMismatch.failures.some((failure) => failure.includes('same sealed model manifest')));
     originalManifest.model_manifest_sha256 = MODEL_MANIFEST_SHA;
     await fs.writeFile(averitecManifest, JSON.stringify(originalManifest, null, 2) + '\n');
+    const feverAdapter = path.join(root, 'artifacts/fever-adapter.json');
+    const originalFeverAdapter = JSON.parse(await fs.readFile(feverAdapter, 'utf8'));
+    originalFeverAdapter.model.runtime.transformers_js = '4.3.0';
+    await fs.writeFile(feverAdapter, JSON.stringify(originalFeverAdapter, null, 2) + '\n');
+    const runtimeMismatch = await runGate(root, false);
+    assert.ok(runtimeMismatch.failures.some((failure) => failure.includes('inference runtime differs from protocol pin')));
+    originalFeverAdapter.model.runtime.transformers_js = '3.7.6';
+    await fs.writeFile(feverAdapter, JSON.stringify(originalFeverAdapter, null, 2) + '\n');
     const feverousScore = path.join(root, 'artifacts/feverous-score.json');
     const original = JSON.parse(await fs.readFile(feverousScore, 'utf8'));
     original.evaluation_count = 7889;
