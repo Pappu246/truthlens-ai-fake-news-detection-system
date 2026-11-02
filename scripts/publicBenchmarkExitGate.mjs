@@ -47,6 +47,10 @@ const specs = [
 ];
 
 const failures = [];
+const expectedModels = manifest.models || {};
+if (!/^[a-f0-9]{64}$/i.test(expectedModels.manifest_sha256 || '')) failures.push('manifest: pinned shared model manifest SHA-256 missing or invalid');
+if (!/^[a-f0-9]{64}$/i.test(expectedModels.nli?.artifact_sha256 || '')) failures.push('manifest: pinned NLI artifact SHA-256 missing or invalid');
+if (!/^[a-f0-9]{64}$/i.test(expectedModels.embedding?.artifact_sha256 || '')) failures.push('manifest: pinned embedding artifact SHA-256 missing or invalid');
 const checks = [];
 if (!/^[a-f0-9]{40}$/i.test(expectedCommitSha)) failures.push('expected evaluated commit SHA missing or invalid');
 const results = [];
@@ -133,6 +137,9 @@ for (const spec of specs) {
         if (!/^[a-f0-9]{64}$/i.test(modelManifestSha)) failures.push(spec.benchmarkId + ': sealed model manifest SHA-256 missing or invalid');
         if (!/^[a-f0-9]{64}$/i.test(model.nli?.artifact_sha256 || '')) failures.push(spec.benchmarkId + ': NLI model artifact SHA-256 missing or invalid');
         if (!/^[a-f0-9]{64}$/i.test(model.embedding?.artifact_sha256 || '')) failures.push(spec.benchmarkId + ': embedding model artifact SHA-256 missing or invalid');
+        if (modelManifestSha !== expectedModels.manifest_sha256) failures.push(spec.benchmarkId + ': model manifest SHA-256 differs from protocol pin');
+        if (model.nli?.name !== expectedModels.nli?.name || model.nli?.artifact_sha256 !== expectedModels.nli?.artifact_sha256) failures.push(spec.benchmarkId + ': NLI model identity/hash differs from protocol pin');
+        if (model.embedding?.name !== expectedModels.embedding?.name || model.embedding?.artifact_sha256 !== expectedModels.embedding?.artifact_sha256) failures.push(spec.benchmarkId + ': embedding model identity/hash differs from protocol pin');
         item.model_manifest_sha256 = modelManifestSha || null;
         if (spec.benchmarkId === 'fever') {
           const provenance = adapter.provenance || {};
@@ -151,6 +158,9 @@ for (const spec of specs) {
         if (!/^[a-f0-9]{64}$/i.test(adapter.nli_artifact_sha256 || '')) failures.push('AVeriTeC: NLI model artifact SHA-256 missing or invalid');
         if (!/^[a-f0-9]{64}$/i.test(adapter.embedding_artifact_sha256 || '')) failures.push('AVeriTeC: embedding model artifact SHA-256 missing or invalid');
         if (!/^[a-f0-9]{64}$/i.test(adapter.configuration_sha256 || '')) failures.push('AVeriTeC: runtime configuration SHA-256 missing or invalid');
+        if (modelManifestSha !== expectedModels.manifest_sha256) failures.push('AVeriTeC: model manifest SHA-256 differs from protocol pin');
+        if (adapter.nli_artifact_sha256 !== expectedModels.nli?.artifact_sha256) failures.push('AVeriTeC: NLI model hash differs from protocol pin');
+        if (adapter.embedding_artifact_sha256 !== expectedModels.embedding?.artifact_sha256) failures.push('AVeriTeC: embedding model hash differs from protocol pin');
         item.model_manifest_sha256 = modelManifestSha || null;
         if (adapter.split !== 'dev' || adapter.claims !== 500) failures.push('AVeriTeC: reproducibility manifest must pin dev split with 500 claims');
         if (!/^[a-f0-9]{64}$/i.test(adapter.claims_sha256 || '')) failures.push('AVeriTeC: claims SHA-256 provenance missing');
