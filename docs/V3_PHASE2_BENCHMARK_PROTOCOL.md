@@ -99,6 +99,7 @@ All four public benchmark lanes use the same sealed local model artifacts:
 - NLI: `Xenova/nli-deberta-v3-xsmall`, artifact SHA-256 `3fac2500c45c75af42c7711de0d1b93d59577456100208be0dc1f9e8811946b6`.
 - Embeddings: `Xenova/all-MiniLM-L6-v2`, artifact SHA-256 `afdb6f1a0e45b715d0bb9b11772f032c399babd23bfc31fed1c170afc848bdb1`.
 - Sealed model-manifest SHA-256: `f545488704f895af94b781601c3a746b2e371e30bc8cdec7431f44917d9a1832`.
+- Runtime: Node.js 22, `@huggingface/transformers` 3.7.6, `onnxruntime-node` 1.21.0. The runners verify installed package versions and include them in provenance.
 
 Each benchmark report must bind the evaluated commit, runtime-configuration hash, model-manifest hash, and individual NLI/embedding artifact hashes. The exact-head public gate rejects model drift between FEVER, FEVEROUS, AVeriTeC, and SciFact.
 
