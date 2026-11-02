@@ -150,6 +150,9 @@ jobs:
         run: |
           set -euo pipefail
           node scripts/publicBenchmarkExitGate.mjs --output=artifacts/v3/public-benchmark-gate.json
+          model_manifest_sha256="$(jq -r '.model_manifest_sha256' artifacts/v3/public-benchmark-gate.json)"
+          test "${#model_manifest_sha256}" = "64"
+          echo "TRUTHLENS_EXPECTED_MODEL_MANIFEST_SHA256=$model_manifest_sha256" >> "$GITHUB_ENV"
           node scripts/scifactArtifactGate.mjs --output=artifacts/v3/scifact-artifact-gate.json
 
       - name: Upload public benchmark gate results
