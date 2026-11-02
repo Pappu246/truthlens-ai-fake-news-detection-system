@@ -95,15 +95,25 @@ jobs:
           ref: ${{ steps.resolve.outputs.target_sha }}
           persist-credentials: false
 
-      - name: Download full FEVER and FEVEROUS artifacts
+      - name: Download full FEVER artifact
         if: steps.resolve.outputs.gate_ready == 'true'
         uses: actions/download-artifact@v4
         with:
           github-token: ${{ github.token }}
           run-id: ${{ steps.resolve.outputs.recovery_id }}
-          pattern: truthlens-v3-*-full-*
-          path: artifacts/v3
-          merge-multiple: false
+          pattern: truthlens-v3-fever-full-*
+          path: artifacts/v3/fever
+          merge-multiple: true
+
+      - name: Download full FEVEROUS artifact
+        if: steps.resolve.outputs.gate_ready == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.resolve.outputs.recovery_id }}
+          pattern: truthlens-v3-feverous-full-*
+          path: artifacts/v3/feverous
+          merge-multiple: true
 
       - name: Download full AVeriTeC artifact
         if: steps.resolve.outputs.gate_ready == 'true'
