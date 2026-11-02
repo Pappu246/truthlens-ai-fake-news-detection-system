@@ -65,6 +65,19 @@ def main() -> None:
         candidate_rows = [json.loads(line) for line in candidates_path.read_text(encoding="utf-8").splitlines()]
         assert len(candidate_rows) == 2, f"Expected 2 candidate rows, found {len(candidate_rows)}"
 
+        # A claim whose gold evidence is present in the dataset but whose claim
+        # terms retrieve nothing must not receive that gold page by injection.
+        gold_only_claims = root / "gold-only-claims.jsonl"
+        gold_only_output = root / "gold-only-candidates.jsonl"
+        gold_only_claims.write_text(json.dumps({
+            "id": "gold-only", "claim": "banana obelisk zyzzyva",
+            "label": "SUPPORTS", "evidence": [[0, 0, "lunar", 0]]
+        }) + "\\n", encoding="utf-8")
+        MODULE.make_candidates(gold_only_claims, db_path, gold_only_output, top_k=5)
+        gold_only_row = json.loads(gold_only_output.read_text(encoding="utf-8").splitlines()[0])
+        assert gold_only_row["gold_evidence"] == [[0, 0, "lunar", 0]]
+        assert gold_only_row["candidates"] == [], "Gold evidence was injected into FEVER retrieval"
+
         con = sqlite3.connect(db_path)
         try:
             actual = con.execute("SELECT COUNT(*) FROM sentences").fetchone()[0]
