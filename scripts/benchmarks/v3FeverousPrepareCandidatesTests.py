@@ -123,6 +123,19 @@ def main() -> None:
         assert [row["id"] for row in records] == ["claim-1", "claim-2"]
         assert all(row["candidates"] for row in records), "FTS retrieval returned no candidates"
 
+        # Gold evidence is carried only for scoring. An unrelated claim with
+        # a known gold page must not receive that page unless FTS retrieves it.
+        gold_only_claims = root / "gold-only-claims.jsonl"
+        gold_only_output = root / "gold-only-candidates.jsonl"
+        gold_only_claims.write_text(json.dumps({
+            "id": "gold-only", "claim": "banana obelisk zyzzyva",
+            "label": "SUPPORTS", "evidence": [{"content": ["page-0_sentence_0"]}]
+        }) + "\\n", encoding="utf-8")
+        MODULE.make_candidates(gold_only_claims, db_path, gold_only_output, 5, 10, 0, 1)
+        gold_only_row = json.loads(gold_only_output.read_text(encoding="utf-8").splitlines()[0])
+        assert gold_only_row["gold_evidence"] == [{"content": ["page-0_sentence_0"]}]
+        assert gold_only_row["candidates"] == [], "Gold evidence was injected into FEVEROUS retrieval"
+
         index_path = Path(f"{db_path}.fts.sqlite")
         indexed = sqlite3.connect(index_path)
         try:
