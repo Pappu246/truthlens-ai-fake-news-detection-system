@@ -9,7 +9,8 @@ import {
   benchmarkDirection,
   createLocalNliContext,
   disposeLocalNliContext,
-  productionDirection
+  productionDirection,
+  sha256Json
 } from './v3LocalNli';
 
 type Candidate = {
@@ -35,7 +36,9 @@ async function main() {
   const evaluatedCommitSha = arg('commit-sha') || process.env.TRUTHLENS_EVALUATED_COMMIT_SHA || process.env.GITHUB_SHA || '';
   if (!/^[a-f0-9]{40}$/i.test(evaluatedCommitSha)) throw new Error('An exact evaluated commit SHA is required.');
   const protocolManifestPath = path.resolve('research/multibenchmark-manifest.json');
-  const configurationSha256 = crypto.createHash('sha256').update(fs.readFileSync(protocolManifestPath)).digest('hex');
+  const protocolManifestSha256 = crypto.createHash('sha256').update(fs.readFileSync(protocolManifestPath)).digest('hex');
+  const runtimeConfig = { per_query_top_k: 20, final_pipeline_k: 8, nli_concurrency: Number(process.env.TRUTHLENS_NLI_CONCURRENCY || 8), relatedness_floor: 0.15, max_pair_tokens: 384, full_text_enrichment: false, prior_override: 'disabled' };
+  const runtimeConfigSha256 = sha256Json(runtimeConfig);
   const context = await createLocalNliContext();
   const predictions: unknown[] = [];
   let candidateRecall = 0;
@@ -99,6 +102,7 @@ async function main() {
         candidate_recall_denominator: candidateRecallDenominator
       },
       model: context.models,
+      runtime_config: runtimeConfig,
       metrics: {
         label_accuracy: predictions.length ? labelCorrect / predictions.length : 0,
         production_policy_mapped_accuracy: predictions.length ? productionLabelCorrect / predictions.length : 0,
@@ -110,7 +114,8 @@ async function main() {
       scorer_revision: 'Raldir/FEVEROUS@32b68ce4e33c53f34ae2e6d88b51cd073ab85ab6',
       provenance: {
         commit_sha: evaluatedCommitSha,
-        configuration_sha256: configurationSha256,
+        configuration_sha256: runtimeConfigSha256,
+        protocol_manifest_sha256: protocolManifestSha256,
         model_manifest_sha256: context.models.manifest_sha256
       },
       generated_at: new Date().toISOString(),
