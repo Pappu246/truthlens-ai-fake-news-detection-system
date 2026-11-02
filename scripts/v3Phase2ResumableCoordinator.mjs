@@ -71,7 +71,7 @@ function expectedEvaluationCount(benchmark) {
 async function checkpoint(state) {
   await fsp.mkdir(OUT, { recursive: true });
   state.updated_at = new Date().toISOString();
-  state.git_sha = process.env.GITHUB_SHA || null;
+  state.git_sha = process.env.TRUTHLENS_EVALUATED_COMMIT_SHA || process.env.GITHUB_SHA || null;
   state.workflow_run_id = process.env.GITHUB_RUN_ID || null;
   state.config_sha256 = await sha256File(MANIFEST);
   await fsp.writeFile(path.join(OUT, "checkpoint.json"), JSON.stringify(state, null, 2) + "\n");
@@ -109,7 +109,7 @@ async function runFever(benchmark, maxClaims) {
     "--predictions-output=" + path.join(root, "truthlens-predictions.json"),
     "--claims-sha256=" + claimsSha,
     "--corpus-sha256=" + corpusSha,
-    "--commit-sha=" + (process.env.GITHUB_SHA || "local"),
+    "--commit-sha=" + (process.env.TRUTHLENS_EVALUATED_COMMIT_SHA || process.env.GITHUB_SHA || "local"),
     "--config-sha256=" + configSha
   ]);
 
@@ -214,6 +214,14 @@ async function main() {
         await checkpoint(state);
         continue;
       }
+      if (id === "averitec") {
+        state.checkpoints[id] = {
+          status: "EXTERNAL_WORKFLOW_REQUIRED",
+          reason: "AVeriTeC is executed by the separate sharded Phase 2 AVeriTeC workflow; this coordinator does not run or certify it."
+        };
+        await checkpoint(state);
+        continue;
+      }
       if (benchmark.status !== "FROZEN_AND_MATERIALIZED") {
         state.checkpoints[id] = { status: "BLOCKED", reason: "Benchmark is not materialized in the frozen protocol." };
         await checkpoint(state);
@@ -266,12 +274,12 @@ async function main() {
       await checkpoint(state);
     }
 
-    const requiredFullBenchmarksComplete = ["fever_v1", "feverous", "averitec"].every((id) => {
+    const feverAndFeverousComplete = ["fever_v1", "feverous"].every((id) => {
       const checkpoint = state.checkpoints[id];
       return checkpoint?.status === "COMPLETE";
     });
-    state.overall_status = requiredFullBenchmarksComplete
-      ? "FULL_BENCHMARKS_COMPLETE_PENDING_OPEN_WEB"
+    state.overall_status = feverAndFeverousComplete
+      ? "FEVER_AND_FEVEROUS_COMPLETE_PENDING_AVERITEC_AND_OPEN_WEB"
       : "RECOVERY_PROGRESS_RECORDED";
     await checkpoint(state);
 
