@@ -21,7 +21,7 @@ const report = {
     config_sha256: 'b'.repeat(64),
     model_manifest_sha256: 'c'.repeat(64)
   },
-  models: { manifest_sha256: 'c'.repeat(64), sealed_manifest: [{ kind: 'nli' }, { kind: 'embedding' }] },
+  models: { manifest_sha256: 'c'.repeat(64), nli: { name: 'Xenova/nli-deberta-v3-xsmall', artifact_sha256: '3fac2500c45c75af42c7711de0d1b93d59577456100208be0dc1f9e8811946b6' }, embedding: { name: 'Xenova/all-MiniLM-L6-v2', artifact_sha256: 'afdb6f1a0e45b715d0bb9b11772f032c399babd23bfc31fed1c170afc848bdb1' }, sealed_manifest: [{ kind: 'nli' }, { kind: 'embedding' }] },
   end_to_end: {
     benchmark_directional_accuracy: 0.37,
     benchmark_directional_macro_f1: 0.35,
