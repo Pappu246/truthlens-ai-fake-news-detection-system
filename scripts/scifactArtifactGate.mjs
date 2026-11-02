@@ -27,6 +27,9 @@ export function validateScifactArtifact(report, expectedCommitSha) {
   add(/^[a-f0-9]{64}$/i.test(provenance.config_sha256 || ''), 'config SHA-256 missing or invalid');
   add(/^[a-f0-9]{64}$/i.test(provenance.model_manifest_sha256 || ''), 'model manifest SHA-256 missing or invalid');
   add(report?.models?.manifest_sha256 === provenance.model_manifest_sha256, 'model manifest SHA mismatch');
+  const expectedModelManifestSha = process.env.TRUTHLENS_EXPECTED_MODEL_MANIFEST_SHA256 || '';
+  add(/^[a-f0-9]{64}$/i.test(expectedModelManifestSha), 'expected shared model manifest SHA-256 missing or invalid');
+  add(provenance.model_manifest_sha256 === expectedModelManifestSha, 'SciFact model manifest does not match the shared Phase 2 model');
   add(Array.isArray(report?.models?.sealed_manifest) && report.models.sealed_manifest.length >= 2, 'sealed model manifest missing');
   const metrics = report?.end_to_end || {};
   for (const key of ['benchmark_directional_accuracy', 'benchmark_directional_macro_f1']) {
