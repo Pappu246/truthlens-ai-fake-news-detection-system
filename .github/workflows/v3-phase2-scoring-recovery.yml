@@ -38,6 +38,8 @@ permissions:
 env:
   # Benchmark provenance and checkout must use the PR head SHA, not GitHub's synthetic merge SHA.
   TRUTHLENS_EVALUATED_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+  TRUTHLENS_V2_ML_CALL_TIMEOUT_MS: 600000
+  TRUTHLENS_NLI_CONCURRENCY: 8
 
 jobs:
   syntax:
@@ -50,7 +52,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -106,9 +108,13 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci
+      - name: Install local pretrained runtime
+        run: npm install --no-save --package-lock=false @huggingface/transformers@4.3.0 --onnxruntime-node-install=skip
+      - name: Download and verify sealed V2 models
+        run: npm run download:v2-models
       - name: Install research-only fast JSON parser
         run: python3 -m pip install --disable-pip-version-check --no-input orjson
       - name: Materialize exact FEVER inputs
@@ -185,12 +191,16 @@ jobs:
           fi
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       - run: npm ci
+      - name: Install local pretrained runtime
+        run: npm install --no-save --package-lock=false @huggingface/transformers@4.3.0 --onnxruntime-node-install=skip
+      - name: Download and verify sealed V2 models
+        run: npm run download:v2-models
       - name: Install research-only fast JSON parser
         run: python3 -m pip install --disable-pip-version-check --no-input orjson
       - name: Materialize exact FEVEROUS inputs
