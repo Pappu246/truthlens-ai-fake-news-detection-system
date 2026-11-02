@@ -42,7 +42,9 @@ async function main() {
   }
   const commitSha = arg('commit-sha') || process.env.TRUTHLENS_EVALUATED_COMMIT_SHA || process.env.GITHUB_SHA || '';
   if (!/^[a-f0-9]{40}$/i.test(commitSha)) throw new Error('An exact evaluated commit SHA is required.');
-  const configSha = arg('config-sha256') || 'PIN_REQUIRED';
+  const protocolManifestSha = arg('config-sha256') || 'PIN_REQUIRED';
+  const runtimeConfig = { per_query_top_k: 20, final_pipeline_k: 8, nli_concurrency: 8, relatedness_floor: 0.15, max_pair_tokens: 384, full_text_enrichment: false, prior_override: 'disabled' };
+  const runtimeConfigSha = sha256Json(runtimeConfig);
   const context = await createLocalNliContext();
   const predictions: unknown[] = [];
   let candidateRecall = 0;
@@ -115,6 +117,7 @@ async function main() {
         candidate_recall_denominator: candidateRecallDenominator
       },
       model: context.models,
+      runtime_config: runtimeConfig,
       metrics: {
         label_accuracy: predictions.length ? labelCorrect / predictions.length : 0,
         production_policy_mapped_accuracy: predictions.length ? productionLabelCorrect / predictions.length : 0,
