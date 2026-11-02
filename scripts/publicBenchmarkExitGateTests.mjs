@@ -111,6 +111,14 @@ async function main() {
     assert.equal(valid.evaluated_commit_sha, TEST_COMMIT_SHA);
     const staleSha = await runGate(root, false, 'd'.repeat(40));
     assert.ok(staleSha.failures.some((failure) => failure.includes('commit SHA mismatch')));
+    const averitecManifest = path.join(root, 'artifacts/averitec-manifest.json');
+    const originalManifest = JSON.parse(await fs.readFile(averitecManifest, 'utf8'));
+    originalManifest.model_manifest_sha256 = '4'.repeat(64);
+    await fs.writeFile(averitecManifest, JSON.stringify(originalManifest, null, 2) + '\\n');
+    const modelMismatch = await runGate(root, false);
+    assert.ok(modelMismatch.failures.some((failure) => failure.includes('same sealed model manifest')));
+    originalManifest.model_manifest_sha256 = MODEL_MANIFEST_SHA;
+    await fs.writeFile(averitecManifest, JSON.stringify(originalManifest, null, 2) + '\\n');
     const feverousScore = path.join(root, 'artifacts/feverous-score.json');
     const original = JSON.parse(await fs.readFile(feverousScore, 'utf8'));
     original.evaluation_count = 7889;
