@@ -24,7 +24,7 @@ const claims = [
   { id: 4, claim: 'supports claim two', evidence: { '12': [{ label: 'SUPPORT', sentences: [0] }] } },
   { id: 5, claim: 'refutes claim two', evidence: { '13': [{ label: 'CONTRADICT', sentences: [0] }] } },
   { id: 6, claim: 'unknown claim two', evidence: {} }
-];
+] as Parameters<typeof selectStratifiedClaims>[0];
 const selected = selectStratifiedClaims(claims, 6);
 assert.deepEqual(selected.map(item => item.id), [1, 4, 2, 5, 3, 6]);
 console.log('SciFact real-text contamination harness tests passed.');
