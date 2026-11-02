@@ -96,6 +96,7 @@ async function main() {
     fs.writeFileSync(output, predictions.map(value => JSON.stringify(value)).join('\n') + '\n');
     const report = {
       benchmark_id: 'feverous',
+      gold_evidence_in_retrieval: false,
       protocol_version: 'truthlens-v3-benchmark-protocol-v1',
       dataset: {
         name: 'FEVEROUS', version_or_split: 'dev', evaluation_count: predictions.length,
