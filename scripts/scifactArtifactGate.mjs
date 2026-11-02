@@ -10,7 +10,7 @@ const output = path.resolve(process.argv.find(v => v.startsWith('--output='))?.s
 const expectedCommit = process.env.TRUTHLENS_EXPECTED_COMMIT_SHA ||
   process.argv.find(v => v.startsWith('--expected-commit-sha='))?.slice(22) || '';
 
-export function validateScifactArtifact(report, expectedCommitSha) {
+export function validateScifactArtifact(report, expectedCommitSha, expectedModelManifestSha = process.env.TRUTHLENS_EXPECTED_MODEL_MANIFEST_SHA256 || '') {
   const failures = [];
   const add = (ok, message) => { if (!ok) failures.push(message); };
   add(report?.benchmark === true, 'benchmark flag must be true');
@@ -27,7 +27,6 @@ export function validateScifactArtifact(report, expectedCommitSha) {
   add(/^[a-f0-9]{64}$/i.test(provenance.config_sha256 || ''), 'config SHA-256 missing or invalid');
   add(/^[a-f0-9]{64}$/i.test(provenance.model_manifest_sha256 || ''), 'model manifest SHA-256 missing or invalid');
   add(report?.models?.manifest_sha256 === provenance.model_manifest_sha256, 'model manifest SHA mismatch');
-  const expectedModelManifestSha = process.env.TRUTHLENS_EXPECTED_MODEL_MANIFEST_SHA256 || '';
   add(/^[a-f0-9]{64}$/i.test(expectedModelManifestSha), 'expected shared model manifest SHA-256 missing or invalid');
   add(provenance.model_manifest_sha256 === expectedModelManifestSha, 'SciFact model manifest does not match the shared Phase 2 model');
   add(Array.isArray(report?.models?.sealed_manifest) && report.models.sealed_manifest.length >= 2, 'sealed model manifest missing');
@@ -52,7 +51,7 @@ async function main() {
   if (!/^[a-f0-9]{40}$/i.test(expectedCommit)) throw new Error('Set TRUTHLENS_EXPECTED_COMMIT_SHA to the exact evaluated PR-head SHA.');
   const bytes = await fs.readFile(input);
   const report = JSON.parse(bytes.toString('utf8'));
-  const validation = validateScifactArtifact(report, expectedCommit);
+  const validation = validateScifactArtifact(report, expectedCommit, process.env.TRUTHLENS_EXPECTED_MODEL_MANIFEST_SHA256 || '');
   const outputReport = {
     schema_version: 1,
     benchmark_id: 'scifact',
