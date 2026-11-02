@@ -8,6 +8,8 @@ on:
     paths:
       - 'server/v2/**'
       - 'scripts/v2ScifactEndToEnd.ts'
+      - 'scripts/v2ScifactAdversarialContamination.ts'
+      - 'scripts/v2ScifactAdversarialContaminationTests.ts'
       - 'research/multibenchmark-manifest.json'
       - '.github/workflows/v3-phase2-scoring-recovery.yml'
       - '.github/workflows/phase-2-averitec-e2e.yml'
@@ -107,6 +109,17 @@ jobs:
           set -euo pipefail
           mkdir -p artifacts/v2-scifact-e2e
           npm run eval:v2-scifact-e2e --             --data-dir=/tmp/truthlens-scifact/scifact             --max-claims=300             --candidate-k=100             --dense-k=300             --final-k=8             --output=artifacts/v2-scifact-e2e/scifact-end-to-end.json             2>&1 | tee artifacts/v2-scifact-e2e/scifact-end-to-end.log
+
+      - name: Run real-text SciFact contamination diagnostic
+        env:
+          TRUTHLENS_V2_ML_CALL_TIMEOUT_MS: 180000
+        run: |
+          set -euo pipefail
+          npx tsx scripts/v2ScifactAdversarialContaminationTests.ts
+          npx tsx scripts/v2ScifactAdversarialContamination.ts \
+            --data-dir=/tmp/truthlens-scifact/scifact \
+            --max-claims=12 \
+            --output=artifacts/v2-scifact-e2e/scifact-real-text-contamination.json
 
       - name: Validate benchmark provenance and metric denominators
         env:
