@@ -128,7 +128,8 @@ async function main() {
       provenance: {
         commit_sha: commitSha,
         generated_at: new Date().toISOString(),
-        configuration_sha256: configSha,
+        configuration_sha256: runtimeConfigSha,
+        protocol_manifest_sha256: protocolManifestSha,
         model_manifest_sha256: context.models.manifest_sha256
       },
       scorer_input: predictions,
