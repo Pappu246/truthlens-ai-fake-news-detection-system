@@ -2,6 +2,15 @@
  * FEVEROUS gold evidence is a list of evidence-group objects, each containing
  * a content array of element IDs. Never treat the group object itself as an ID.
  */
+export function hasGoldEvidence(goldEvidence: unknown): boolean {
+  if (!Array.isArray(goldEvidence)) return false;
+  return goldEvidence.some((group: unknown) => {
+    if (!group || typeof group !== 'object' || Array.isArray(group)) return false;
+    const content = (group as { content?: unknown }).content;
+    return Array.isArray(content) && content.some(id => typeof id === 'string' && id.length > 0);
+  });
+}
+
 export function hasGoldCandidate(
   goldEvidence: unknown,
   candidateIds: ReadonlySet<string>,
