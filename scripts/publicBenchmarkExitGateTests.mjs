@@ -49,7 +49,7 @@ async function makeFixtures(root) {
   await Promise.all([
     write(root, 'research/manifest.json', makeManifest()),
     write(root, 'artifacts/fever-score.json', {
-      benchmark_id: 'fever', protocol_version: 'truthlens-v3-benchmark-protocol-v1', evaluation_count: 19998, generated_at: NOW, truthlens_git_sha: TEST_COMMIT_SHA,
+      benchmark_id: 'fever', gold_evidence_in_retrieval: false, protocol_version: 'truthlens-v3-benchmark-protocol-v1', evaluation_count: 19998, generated_at: NOW, truthlens_git_sha: TEST_COMMIT_SHA,
       metrics: { strict_score: 0.3, label_accuracy: 0.4, evidence_precision: 0.5, evidence_recall: 0.6, evidence_f1: 0.55 }
     }),
     write(root, 'artifacts/fever-adapter.json', {
@@ -59,7 +59,7 @@ async function makeFixtures(root) {
       provenance: { commit_sha: TEST_COMMIT_SHA, configuration_sha256: 'd'.repeat(64) }
     }),
     write(root, 'artifacts/feverous-score.json', {
-      benchmark_id: 'feverous', protocol_version: 'truthlens-v3-benchmark-protocol-v1', evaluation_count: 7890, generated_at: NOW, truthlens_git_sha: TEST_COMMIT_SHA,
+      benchmark_id: 'feverous', gold_evidence_in_retrieval: false, protocol_version: 'truthlens-v3-benchmark-protocol-v1', evaluation_count: 7890, generated_at: NOW, truthlens_git_sha: TEST_COMMIT_SHA,
       metrics: { strict_score: 0.2, label_accuracy: 0.3, evidence_precision: 0.4, evidence_recall: 0.5, evidence_f1: 0.44 }
     }),
     write(root, 'artifacts/feverous-adapter.json', {
