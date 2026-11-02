@@ -11,6 +11,7 @@ The planned minimum is **100 adjudicated claims after duplicate/syndication excl
 Each JSONL row follows `scripts/validate_open_web_holdout.py` and contains:
 
 - A unique claim ID, claim text, the date the claim was made, collection timestamp, and unique syndication-cluster ID.
+- Temporal integrity uses UTC: evidence publication dates must not be later than the claim-date cutoff; source retrieval must be at or after publication and no later than collection; annotations must follow collection; collection must finish before the holdout is sealed. Because `claim_date` is date-only (`YYYY-MM-DD`), this cannot prove intraday ordering on the claim date.
 - At least two evidence/source records from distinct publisher groups and hostnames. Each record carries the publisher group, article URL, publication/retrieval timestamps, immutable snapshot reference, SHA-256 of the captured source bytes, evidence role, and a short evidentiary excerpt.
 - Exactly two independent human annotations. Each annotator must be marked as human, be blinded to model outputs, give a rationale, and point to a separately retained signed attestation. AI-produced labels are not accepted.
 - A separate adjudicator and final label from `SUPPORTS`, `REFUTES`, `INSUFFICIENT_EVIDENCE`, or `CONFLICTED`. Disagreement must be explicitly resolved.
