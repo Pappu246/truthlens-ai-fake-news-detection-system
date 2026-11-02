@@ -164,8 +164,8 @@ for (const spec of specs) {
         if (!/^[a-f0-9]{64}$/i.test(adapter.embedding_artifact_sha256 || '')) failures.push('AVeriTeC: embedding model artifact SHA-256 missing or invalid');
         if (!/^[a-f0-9]{64}$/i.test(adapter.configuration_sha256 || '')) failures.push('AVeriTeC: runtime configuration SHA-256 missing or invalid');
         if (modelManifestSha !== expectedModels.manifest_sha256) failures.push('AVeriTeC: model manifest SHA-256 differs from protocol pin');
-        if (adapter.nli_artifact_sha256 !== expectedModels.nli?.artifact_sha256) failures.push('AVeriTeC: NLI model hash differs from protocol pin');
-        if (adapter.embedding_artifact_sha256 !== expectedModels.embedding?.artifact_sha256) failures.push('AVeriTeC: embedding model hash differs from protocol pin');
+        if (adapter.nli_model !== expectedModels.nli?.name || adapter.nli_artifact_sha256 !== expectedModels.nli?.artifact_sha256) failures.push('AVeriTeC: NLI model identity/hash differs from protocol pin');
+        if (adapter.embedding_model !== expectedModels.embedding?.name || adapter.embedding_artifact_sha256 !== expectedModels.embedding?.artifact_sha256) failures.push('AVeriTeC: embedding model identity/hash differs from protocol pin');
         if (adapter.node_major !== expectedRuntime.node_major || adapter.transformers_js !== expectedRuntime.transformers_js || adapter.onnxruntime_node !== expectedRuntime.onnxruntime_node) failures.push('AVeriTeC: inference runtime differs from protocol pin');
         item.model_manifest_sha256 = modelManifestSha || null;
         if (adapter.split !== 'dev' || adapter.claims !== 500) failures.push('AVeriTeC: reproducibility manifest must pin dev split with 500 claims');
