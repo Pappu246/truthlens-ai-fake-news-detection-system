@@ -66,7 +66,7 @@ async function makeFixtures(root) {
     }),
     write(root, 'artifacts/averitec-manifest.json', {
       benchmark: 'AVeriTeC', split: 'dev', claims: 500, claims_sha256: 'e'.repeat(64), evidence_store_sha256: 'f'.repeat(64), truthlens_git_sha: TEST_COMMIT_SHA,
-      gold_evidence_in_retrieval: false, model_manifest_sha256: MODEL_MANIFEST_SHA, nli_artifact_sha256: NLI_ARTIFACT_SHA, embedding_artifact_sha256: EMBEDDING_ARTIFACT_SHA, production_boundary: 'research_only_no_production_model_threshold_or_runtime_change'
+      gold_evidence_in_retrieval: false, model_manifest_sha256: MODEL_MANIFEST_SHA, nli_artifact_sha256: NLI_ARTIFACT_SHA, embedding_artifact_sha256: EMBEDDING_ARTIFACT_SHA, configuration_sha256: 'd'.repeat(64), production_boundary: 'research_only_no_production_model_threshold_or_runtime_change'
     })
   ]);
 }
