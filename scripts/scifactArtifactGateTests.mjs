@@ -38,12 +38,12 @@ const report = {
     ]
   }
 };
-assert.deepEqual(validateScifactArtifact(report, 'a'.repeat(40)), { complete: true, failures: [] });
-assert.equal(validateScifactArtifact(report, 'd'.repeat(40)).complete, false);
+assert.deepEqual(validateScifactArtifact(report, 'a'.repeat(40), 'c'.repeat(64)), { complete: true, failures: [] });
+assert.equal(validateScifactArtifact(report, 'd'.repeat(40), 'c'.repeat(64)).complete, false);
 const bad = structuredClone(report);
 bad.rows = bad.rows.slice(1);
-assert.ok(validateScifactArtifact(bad, 'a'.repeat(40)).failures.includes('SciFact row count must equal 300'));
+assert.ok(validateScifactArtifact(bad, 'a'.repeat(40), 'c'.repeat(64)).failures.includes('SciFact row count must equal 300'));
 const wrongHash = structuredClone(report);
 wrongHash.dataset.claims_sha256 = '0'.repeat(64);
-assert.ok(validateScifactArtifact(wrongHash, 'a'.repeat(40)).failures.includes('SciFact claims hash mismatch'));
+assert.ok(validateScifactArtifact(wrongHash, 'a'.repeat(40), 'c'.repeat(64)).failures.includes('SciFact claims hash mismatch'));
 console.log('SciFact artifact gate tests passed.');
