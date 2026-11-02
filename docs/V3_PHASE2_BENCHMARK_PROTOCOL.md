@@ -91,3 +91,19 @@ This lane still requires a human-labelled, blind external holdout with the froze
 Phase 2 exits only when every required lane has exact input hashes, fixed splits, deterministic runner configuration, a complete artifact, workflow/run provenance, a metric/limitation record, and an unchanged production model/policy.
 
 The current Phase 2 blockers are the benchmark-result artifacts for FEVER v1, FEVEROUS, and AVeriTeC, plus the future TruthLens Open-Web v1 blind human-labelled holdout. The SciFact lane already has an authoritative completed artifact.
+
+## Shared sealed model protocol (current-head recovery)
+
+All four public benchmark lanes use the same sealed local model artifacts:
+
+- NLI: `Xenova/nli-deberta-v3-xsmall`, artifact SHA-256 `3fac2500c45c75af42c7711de0d1b93d59577456100208be0dc1f9e8811946b6`.
+- Embeddings: `Xenova/all-MiniLM-L6-v2`, artifact SHA-256 `afdb6f1a0e45b715d0bb9b11772f032c399babd23bfc31fed1c170afc848bdb1`.
+- Sealed model-manifest SHA-256: `f545488704f895af94b781601c3a746b2e371e30bc8cdec7431f44917d9a1832`.
+
+Each benchmark report must bind the evaluated commit, runtime-configuration hash, model-manifest hash, and individual NLI/embedding artifact hashes. The exact-head public gate rejects model drift between FEVER, FEVEROUS, AVeriTeC, and SciFact.
+
+For FEVER and FEVEROUS, the official benchmark label is produced from the same weighted evidence-level NLI vote used by the SciFact and AVeriTeC research evaluators. Production-policy-mapped accuracy is reported separately. The LIAR prior is disabled in these benchmark runs; no benchmark result is treated as production accuracy.
+
+The official scorer remains authoritative for each benchmark's task metric. Retrieval recall, directional label accuracy, production-policy metrics, and evidence quality are separate measures and must not be substituted for one another.
+
+The public benchmark gate is intentionally not the full Phase 2 exit gate. It cannot clear the separate blind, independently human-annotated Open-Web holdout requirement.
