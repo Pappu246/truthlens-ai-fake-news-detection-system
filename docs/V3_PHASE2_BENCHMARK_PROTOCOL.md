@@ -102,7 +102,7 @@ All four public benchmark lanes use the same sealed local model artifacts:
 
 Each benchmark report must bind the evaluated commit, runtime-configuration hash, model-manifest hash, and individual NLI/embedding artifact hashes. The exact-head public gate rejects model drift between FEVER, FEVEROUS, AVeriTeC, and SciFact.
 
-For FEVER and FEVEROUS, the official benchmark label is produced from the same weighted evidence-level NLI vote used by the SciFact and AVeriTeC research evaluators. Production-policy-mapped accuracy is reported separately. The LIAR prior is disabled in these benchmark runs; no benchmark result is treated as production accuracy.
+For FEVER and FEVEROUS, the official benchmark label is produced from the same weighted evidence-level NLI vote used by the SciFact and AVeriTeC research evaluators. Production-policy-mapped accuracy is reported separately. FEVER, FEVEROUS, and AVeriTeC disable the LIAR prior; SciFact's directional benchmark label is evidence-only. No benchmark result is treated as production accuracy.
 
 The official scorer remains authoritative for each benchmark's task metric. Retrieval recall, directional label accuracy, production-policy metrics, and evidence quality are separate measures and must not be substituted for one another.
 
