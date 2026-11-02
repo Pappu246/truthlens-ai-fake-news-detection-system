@@ -189,6 +189,7 @@ def _validate_record(
         _require(annotation["label"] in ALLOWED_LABELS, f"{label}.label is invalid.")
         _require(isinstance(annotation["rationale"], str) and len(annotation["rationale"].strip()) >= 20, f"{label}.rationale is too short.")
         annotated_at = _parse_aware_datetime(annotation["annotated_at"], f"{label}.annotated_at")
+        _require(annotated_at >= collected_at, f"{label}.annotated_at cannot precede collection.")
         annotation_times.append(annotated_at)
         attestation = annotation["attestation_ref"]
         _require(isinstance(attestation, str) and attestation.strip(), f"{label}.attestation_ref must refer to a separately retained signed human attestation.")
