@@ -20,6 +20,7 @@ import { RawDocument } from '../server/v2/types.js';
 import { CorpusSource } from '../server/v2/retrieval/corpusSource.js';
 import { ALL_MODEL_MANIFESTS, getV2ModelDir, verifyModelHashes } from '../server/v2/ml/modelManifest.js';
 import { disposeMlWorker } from '../server/v2/ml/mlWorkerClient.js';
+import { modelMetadata } from './benchmarks/v3LocalNli.js';
 
 const DATA_SHA256 = '499793726b4a5406780928a3d9dedc48d6dd53de778f22437d129cacdb08e300';
 const STORE_SHA256 = '021e258cd6fb5fe6d627a4667d663e95c184c966939c15124df9206142fc2212';
@@ -429,10 +430,7 @@ async function main(): Promise<void> {
         start_claim: startClaim,
         temporal_filtering: 'ENFORCED_WHEN_RECORD_TIMESTAMP_AVAILABLE_MISSING_OR_UNPARSEABLE_TIMESTAMPS_REMAIN_ELIGIBLE'
       },
-      models: {
-        nli: { name: nliAdapter.modelName, version: nliAdapter.modelVersion },
-        embedding: { name: embeddingModel.name, version: embeddingModel.version }
-      },
+      models: modelMetadata(nliAdapter, embeddingModel),
       research_metrics: {
         benchmark_directional: benchmarkMetrics,
         production_policy_mapped: {
