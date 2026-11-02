@@ -33,7 +33,7 @@ class OpenWebHoldoutValidationTests(unittest.TestCase):
         return {
             "claim_id": f"OWH-{index:04d}",
             "claim_text": f"Distinct test claim number {index} states a separately testable public fact.",
-            "claim_date": "2026-01-01",
+            "claim_date": "2026-01-03",
             "collected_at": timestamp,
             "syndication_cluster_id": f"cluster-{index:04d}",
             "sources": [
@@ -152,6 +152,12 @@ class OpenWebHoldoutValidationTests(unittest.TestCase):
         raw = self.records_path.read_bytes()
         self.records_path.write_bytes(raw.replace(b"Distinct test claim number 0", b"Changed test claim number 0", 1))
         with self.assertRaisesRegex(HoldoutValidationError, "SHA-256"):
+            self.validate_current_candidate()
+
+    def test_evidence_published_after_claim_date_is_rejected(self):
+        self.records[0]["sources"][0]["published_at"] = "2026-01-04T00:00:00Z"
+        self.write_bundle()
+        with self.assertRaisesRegex(HoldoutValidationError, "published_at is after the claim-date cutoff"):
             self.validate_current_candidate()
 
     def test_two_sources_from_same_publisher_group_are_rejected(self):
