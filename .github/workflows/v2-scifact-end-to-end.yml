@@ -123,7 +123,7 @@ jobs:
 
       - name: Validate benchmark provenance and metric denominators
         env:
-          EXPECTED_COMMIT_SHA: ${{ github.sha }}
+          EXPECTED_COMMIT_SHA: ${{ env.TRUTHLENS_EVALUATED_COMMIT_SHA }}
         run: |
           python3 - <<'PY'
           import hashlib, json, os, re
