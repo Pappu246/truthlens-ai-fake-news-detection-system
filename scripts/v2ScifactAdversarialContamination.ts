@@ -199,7 +199,11 @@ async function main(): Promise<void> {
   const corpus = readJsonl<SciFactDocument>(corpusPath);
   if (allClaims.length !== 300 || corpus.length !== 5183) throw new Error('Unexpected SciFact frozen dataset counts.');
 
-  const maxClaims = Math.max(3, Math.min(Number(arg('max-claims') || 12), 30));
+  const requestedClaims = Number(arg('max-claims') || 12);
+  if (!Number.isSafeInteger(requestedClaims) || requestedClaims < 3 || requestedClaims > 30 || requestedClaims % 3 !== 0) {
+    throw new Error('--max-claims must be a multiple of 3 between 3 and 30 for balanced label strata.');
+  }
+  const maxClaims = requestedClaims;
   const selectedClaims = selectStratifiedClaims(allClaims, maxClaims);
   if (selectedClaims.length !== maxClaims) throw new Error(`Expected ${maxClaims} stratified claims, selected ${selectedClaims.length}.`);
 
