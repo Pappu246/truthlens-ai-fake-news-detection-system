@@ -112,7 +112,7 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Install local pretrained runtime
-        run: npm install --no-save --package-lock=false @huggingface/transformers@4.3.0 --onnxruntime-node-install=skip
+        run: npm install --no-save --package-lock=false @huggingface/transformers@3.7.6 onnxruntime-node@1.21.0
       - name: Download and verify sealed V2 models
         run: npm run download:v2-models
       - name: Install research-only fast JSON parser
@@ -198,7 +198,7 @@ jobs:
           python-version: '3.11'
       - run: npm ci
       - name: Install local pretrained runtime
-        run: npm install --no-save --package-lock=false @huggingface/transformers@4.3.0 --onnxruntime-node-install=skip
+        run: npm install --no-save --package-lock=false @huggingface/transformers@3.7.6 onnxruntime-node@1.21.0
       - name: Download and verify sealed V2 models
         run: npm run download:v2-models
       - name: Install research-only fast JSON parser
