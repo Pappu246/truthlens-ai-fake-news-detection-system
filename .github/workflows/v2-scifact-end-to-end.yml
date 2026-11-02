@@ -8,6 +8,7 @@ on:
     paths:
       - 'server/v2/**'
       - 'scripts/v2ScifactEndToEnd.ts'
+      - 'scripts/v2ScifactPassageGranularity.ts'
       - 'scripts/v2DownloadModels.ts'
       - 'data/v2/**'
       - 'package.json'
@@ -100,6 +101,17 @@ jobs:
           set -euo pipefail
           mkdir -p artifacts/v2-scifact-e2e
           npm run eval:v2-scifact-e2e --             --data-dir=/tmp/truthlens-scifact/scifact             --max-claims=300             --candidate-k=100             --dense-k=300             --final-k=8             --research-trace=true             --output=artifacts/v2-scifact-e2e/scifact-end-to-end.json             2>&1 | tee artifacts/v2-scifact-e2e/scifact-end-to-end.log
+
+      - name: Run paired SciFact passage-granularity diagnostic
+        env:
+          TRUTHLENS_V2_ML_CALL_TIMEOUT_MS: 180000
+        run: |
+          set -euo pipefail
+          npm run eval:v2-scifact-passage-granularity -- \\
+            --data-dir=/tmp/truthlens-scifact/scifact \\
+            --max-claims=300 \\
+            --output=artifacts/v2-scifact-e2e/scifact-passage-granularity.json \\
+            2>&1 | tee artifacts/v2-scifact-e2e/scifact-passage-granularity.log
 
       - name: Validate benchmark provenance and metric denominators
         env:
