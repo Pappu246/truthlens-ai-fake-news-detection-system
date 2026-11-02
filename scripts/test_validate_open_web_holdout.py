@@ -184,6 +184,12 @@ class OpenWebHoldoutValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(HoldoutValidationError, "collection must be completed before the holdout is sealed"):
             self.validate_current_candidate()
 
+    def test_annotation_cannot_precede_collection(self):
+        self.records[0]["annotations"][0]["annotated_at"] = "2026-01-03T11:59:59Z"
+        self.write_bundle()
+        with self.assertRaisesRegex(HoldoutValidationError, "annotated_at cannot precede collection"):
+            self.validate_current_candidate()
+
     def test_two_sources_from_same_publisher_group_are_rejected(self):
         self.records[0]["sources"][1]["publisher_group_id"] = self.records[0]["sources"][0]["publisher_group_id"]
         self.write_bundle()
