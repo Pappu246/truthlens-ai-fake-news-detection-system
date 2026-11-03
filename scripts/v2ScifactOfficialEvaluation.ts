@@ -18,12 +18,9 @@ import { disposeMlWorker } from '../server/v2/ml/mlWorkerClient.js';
 import { ALL_MODEL_MANIFESTS, getV2ModelDir, verifyModelHashes } from '../server/v2/ml/modelManifest.js';
 import { rankRationaleSentences } from './scifactRationaleSelector.js';
 
-interface Rationale { label: 'SUPPORT' | 'CONTRADICT'; sentences: number[]; }
 interface SciFactClaim {
   id: number;
   claim: string;
-  evidence: Record<string, Rationale[]>;
-  cited_doc_ids: number[];
 }
 interface Prediction {
   id: number;
