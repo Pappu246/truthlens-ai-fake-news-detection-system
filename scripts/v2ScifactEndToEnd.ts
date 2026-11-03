@@ -243,10 +243,15 @@ async function main(): Promise<void> {
       // separate benchmarkDirection() vote. Calibrate it only against the
       // production-mapped direction; benchmark-direction calibration is not
       // claimed until that evaluator has its own confidence definition.
-      calibrationSamples.push({
-        correct: productionPrediction === gold,
-        confidence: Math.max(0, Math.min(1, result.provenance.final_confidence))
-      });
+      // Directional confidence is meaningful only for issued directional
+      // verdicts. Abstention/conflict confidence measures evidence strength,
+      // not probability that the fallback NOT_ENOUGH_INFO mapping is correct.
+      if (result.provenance.final_verdict === 'VERIFIED' || result.provenance.final_verdict === 'REFUTED') {
+        calibrationSamples.push({
+          correct: productionPrediction === gold,
+          confidence: Math.max(0, Math.min(1, result.provenance.final_confidence))
+        });
+      }
       if (result.provenance.final_verdict === 'CONFLICTED') conflicted++;
       if (result.provenance.final_verdict !== 'INSUFFICIENT_EVIDENCE' && result.provenance.final_verdict !== 'CONFLICTED') {
         productionNonAbstain++;
@@ -358,7 +363,7 @@ async function main(): Promise<void> {
         predicted_label_counts: Object.fromEntries(metricLabels.map(label => [label, benchmarkPredictions.filter(value => value === label).length]))
       },
       calibration: {
-        target: 'production_policy_mapped_direction_correctness',
+        target: 'production_direction_correctness_on_covered_cases',
         raw_ece_10: rawCalibration.expectedCalibrationError,
         raw_brier: brierScore(calibrationSamples),
         method: 'deterministic_even_odd_split_temperature_scaling',
