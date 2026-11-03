@@ -83,7 +83,7 @@ export function buildReplicaDocuments(
   for (let sourceIndex = 0; sourceIndex < originals.length; sourceIndex++) {
     const original = originals[sourceIndex];
     for (let replicaIndex = 0; replicaIndex < replicasPerSource; replicaIndex++) {
-      const id = `00-replica-${claimId}-${sourceIndex}-${replicaIndex}`;
+      const id = `00-replica-${claimId}-${mode}-${sourceIndex}-${replicaIndex}`;
       const host = mode === 'same_domain'
         ? new URL(original.url).hostname
         : `replica-${claimId}-${sourceIndex}-${replicaIndex}.example`;
@@ -122,10 +122,20 @@ class CachedEmbeddingModel implements EmbeddingModel {
     const keys = texts.map(text => (text || '').trim());
     const missing = [...new Set(keys.filter(key => !this.cache.has(key)))];
     if (missing.length) {
-      const encoded = this.base.embedBatch
-        ? this.base.embedBatch(missing)
-        : missing.map(key => this.base.embed(key));
-      if (encoded instanceof Promise) throw new Error('CachedEmbeddingModel requires synchronous batch embeddings.');
+      let encoded: number[][];
+      if (typeof this.base.embedBatch === 'function') {
+        const batch = this.base.embedBatch(missing);
+        if (batch instanceof Promise) throw new Error('CachedEmbeddingModel requires synchronous batch embeddings.');
+        encoded = batch;
+      } else {
+        const vectors: number[][] = [];
+        for (const key of missing) {
+          const vector = this.base.embed(key);
+          if (vector instanceof Promise) throw new Error('CachedEmbeddingModel requires synchronous local embeddings.');
+          vectors.push(vector);
+        }
+        encoded = vectors;
+      }
       if (encoded.length !== missing.length) throw new Error('CachedEmbeddingModel received an unexpected vector count.');
       for (let index = 0; index < missing.length; index++) this.cache.set(missing[index], encoded[index]);
     }
