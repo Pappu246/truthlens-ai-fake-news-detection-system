@@ -137,7 +137,13 @@ async function main(): Promise<void> {
       const traceEvidence: Array<Record<string, unknown>> = [];
       if (sentenceRows.length) {
         const claimVector = embeddingModel.embed(claim.claim);
-        const sentenceVectors = embeddingModel.embedBatch(sentenceRows.map(row => row.text));
+        const sentenceVectors: number[][] = [];
+        for (let start = 0; start < sentenceRows.length; start += 32) {
+          const batch = sentenceRows.slice(start, start + 32);
+          const vectors = embeddingModel.embedBatch(batch.map(row => row.text));
+          if (vectors.length !== batch.length) throw new Error('Rationale selector embedding batch count mismatch.');
+          sentenceVectors.push(...vectors);
+        }
         if (sentenceVectors.length !== sentenceRows.length) throw new Error('Rationale selector embedding count mismatch.');
         for (const evidence of directionalEvidence) {
           const rowsForDoc = sentenceRows.map((row, index) => ({ ...row, vector: sentenceVectors[index] }))
