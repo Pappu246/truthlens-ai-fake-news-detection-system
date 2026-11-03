@@ -41,7 +41,7 @@ export function analyzeSciFactRationaleVisibility(
   maxChars = 800
 ): RationaleVisibilityResult {
   if (!Number.isInteger(maxChars) || maxChars < 1) throw new Error('maxChars must be a positive integer.');
-  const docs = new Map(corpus.map(doc => [String(doc.doc_id), doc]));
+  const docs = new Map<string, SciFactAbstractInput>(corpus.map(doc => [String(doc.doc_id), doc] as const));
   const perDocument: RationaleVisibilityResult['per_document'] = [];
   const missing: string[] = [];
   let totalSentences = 0;
@@ -65,6 +65,11 @@ export function analyzeSciFactRationaleVisibility(
     }
     const indices = rationales.flatMap(rationale => rationale.sentences);
     const uniqueIndices = Array.from(new Set(indices)).sort((a, b) => a - b);
+    for (const index of uniqueIndices) {
+      if (!Number.isInteger(index) || index < 0 || index >= offsets.length) {
+        throw new Error(`Invalid gold rationale sentence index ${index} for SciFact document ${documentId}.`);
+      }
+    }
     const visible = uniqueIndices.filter(index => Number.isInteger(index) && index >= 0 &&
       index < offsets.length && offsets[index].start < maxChars && offsets[index].end <= maxChars);
     const hidden = uniqueIndices.filter(index => Number.isInteger(index) && index >= 0 &&
