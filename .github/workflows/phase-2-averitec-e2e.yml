@@ -113,13 +113,30 @@ jobs:
           test "$(sha256sum artifacts/phase2/averitec/dev_knowledge_store.zip | cut -d' ' -f1)" = "$AV_STORE_SHA256"
       - name: Verify benchmark runner TypeScript build
         run: npx tsc --noEmit --pretty false
-      - name: Run AVeriTeC shard
+      - name: Run AVeriTeC shard in fresh OS processes
         env:
           START: ${{ matrix.start }}
           COUNT: ${{ matrix.count }}
         run: |
           set -euo pipefail
-          npx tsx scripts/v2AveritecEndToEnd.ts --start-claim="$START" --max-claims="$COUNT" --coarse-bm25-k=2000 --embedding-batch=64 --output-dir="artifacts/v2-averitec-e2e/shard-$START"
+          mkdir -p "artifacts/v2-averitec-e2e/chunks-$START"
+          for ((offset=0; offset<COUNT; offset+=10)); do
+            chunk_start=$((START + offset))
+            chunk_count=$((COUNT - offset))
+            if [ "$chunk_count" -gt 10 ]; then chunk_count=10; fi
+            echo "Evaluating isolated process chunk: start=$chunk_start count=$chunk_count"
+            npx tsx scripts/v2AveritecEndToEnd.ts \
+              --start-claim="$chunk_start" \
+              --max-claims="$chunk_count" \
+              --coarse-bm25-k=2000 \
+              --embedding-batch=64 \
+              --output-dir="artifacts/v2-averitec-e2e/chunks-$START/chunk-$chunk_start"
+          done
+          node scripts/mergeAveritecProcessChunks.mjs \
+            --input-dir="artifacts/v2-averitec-e2e/chunks-$START" \
+            --output-dir="artifacts/v2-averitec-e2e/shard-$START" \
+            --start="$START" \
+            --count="$COUNT"
       - name: Assert shard completeness
         env:
           START: ${{ matrix.start }}
