@@ -24,6 +24,7 @@ import { SciFactOpenCorpusSource, SciFactDocumentInput } from '../server/v2/retr
 import { disposeMlWorker } from '../server/v2/ml/mlWorkerClient';
 import { ALL_MODEL_MANIFESTS, getV2ModelDir, verifyModelHashes } from '../server/v2/ml/modelManifest';
 import { applyConfidenceTemperature, brierScore, expectedCalibrationError, fitConfidenceTemperature } from '../server/v2/metrics/metrics';
+import { analyzeSciFactRationaleVisibility } from './scifactRationaleVisibility';
 
 type GoldLabel = 'SUPPORT' | 'CONTRADICT' | 'NOT_ENOUGH_INFO';
 
@@ -198,6 +199,10 @@ async function main(): Promise<void> {
   let productionNonAbstain = 0;
   let conflicted = 0;
   const rows: Array<Record<string, unknown>> = [];
+  let goldRationaleDocuments = 0;
+  let goldRationaleSentences = 0;
+  let visibleGoldRationaleSentences = 0;
+  let hiddenGoldRationaleSentences = 0;
   const calibrationSamples: Array<{ correct: boolean; confidence: number }> = [];
 
   try {
@@ -205,6 +210,11 @@ async function main(): Promise<void> {
       const claim = claims[i];
       source.resetCandidateIds();
       const gold = goldLabel(claim);
+      const visibility = analyzeSciFactRationaleVisibility(claim.evidence || {}, corpus);
+      goldRationaleDocuments += visibility.gold_evidence_documents;
+      goldRationaleSentences += visibility.gold_rationale_sentences;
+      visibleGoldRationaleSentences += visibility.visible_rationale_sentences_within_limit;
+      hiddenGoldRationaleSentences += visibility.hidden_rationale_sentences_after_limit;
       goldPredictions.push(gold);
 
       const result = await verifyClaimV2(claim.claim, {
@@ -258,6 +268,7 @@ async function main(): Promise<void> {
         production_prediction: productionPrediction,
         candidate_pool_recall_hit: candidateHit,
         gold_evidence_ids: Array.from(goldEvidenceIds),
+        gold_rationale_visibility_800_chars: visibility,
         retrieved_evidence_ids_top5: topEvidenceIds,
         final_confidence: result.provenance.final_confidence,
         abstained: result.provenance.abstained,
@@ -335,6 +346,16 @@ async function main(): Promise<void> {
         model_manifest_sha256: modelManifestSha256
       },
       config: runConfig,
+      rationale_visibility_diagnostic: {
+        analysis_only: true,
+        passage_character_limit: 800,
+        gold_evidence_documents: goldRationaleDocuments,
+        gold_rationale_sentences: goldRationaleSentences,
+        visible_rationale_sentences_within_limit: visibleGoldRationaleSentences,
+        hidden_rationale_sentences_after_limit: hiddenGoldRationaleSentences,
+        hidden_rationale_sentence_rate: goldRationaleSentences ? hiddenGoldRationaleSentences / goldRationaleSentences : null,
+        note: 'Computed from frozen gold rationale indices and original abstracts after plain-text cleanup; never passed to retrieval, NLI, or verdict logic.'
+      },
       dataset: {
         name: 'SciFact',
         split: 'dev',
