@@ -159,10 +159,25 @@ jobs:
           for entry in trace_entries:
               trace = entry.get("research_trace")
               assert isinstance(trace, dict), "Every evidence entry must include research_trace"
-              assert "relatedness_cosine" in trace and "relatedness_gate_passed" in trace
+              assert isinstance(trace.get("relatedness_cosine"), (int, float))
+              assert isinstance(trace.get("relatedness_gate_passed"), bool)
               assert trace.get("selected_hypothesis_pass") in ("passA:claim-as-stated", "passB:content-proposition", "relatedness_gate")
               assert "raw_probabilities" in trace and "pass_a_probabilities" in trace
-          assert all("final_decision_rule_trace" in row for row in rows), "Every claim row must carry final decision-rule trace"
+              if trace["selected_hypothesis_pass"] == "relatedness_gate":
+                  assert trace["raw_probabilities"] is None, "Gated passages must not claim cross-encoder probabilities"
+              else:
+                  probs = trace["raw_probabilities"]
+                  assert isinstance(probs, dict) and all(isinstance(probs.get(k), (int, float)) for k in ("entailment", "contradiction", "neutral"))
+                  assert all(0 <= probs[k] <= 1 for k in ("entailment", "contradiction", "neutral"))
+                  assert abs(sum(probs[k] for k in ("entailment", "contradiction", "neutral")) - 1.0) < 1e-5
+              decision = entry.get("research_decision_trace")
+              assert isinstance(decision, dict), "Every evidence entry must include decision-weight trace"
+              expected_direction = entry["nli_label"] if entry["nli_label"] in ("SUPPORTS", "REFUTES") else "NONE"
+              assert decision.get("vote_direction") == expected_direction
+              assert decision.get("contributes_to_directional_tally") is (expected_direction != "NONE")
+              expected_weight = entry["nli_confidence"] * entry["rerank_score"] * decision["duplicate_penalty"]
+              assert abs(decision["vote_weight"] - expected_weight) < 1e-8, "Recorded vote weight must match NLI confidence × rerank score × duplicate penalty"
+          assert all(isinstance(row.get("final_decision_rule_trace"), list) for row in rows), "Every claim row must carry final decision-rule trace"
           print("NLI research trace artifact contract: PASS; entries=" + str(len(trace_entries)))
           evidence_claims = sum(bool(row["gold_evidence_ids"]) for row in rows)
           end_to_end = report["end_to_end"]
