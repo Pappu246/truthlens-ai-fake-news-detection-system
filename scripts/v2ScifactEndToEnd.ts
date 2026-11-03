@@ -372,7 +372,7 @@ async function main(): Promise<void> {
         fitted_temperature: fittedTemperature,
         raw_holdout_ece_10: rawHoldoutCalibration.expectedCalibrationError,
         calibrated_holdout_ece_10: calibratedHoldoutCalibration.expectedCalibrationError,
-        note: 'Research diagnostic for the production-policy mapped direction only. It is not benchmark-direction calibration and does not change runtime production confidence semantics.'
+        note: 'Only non-abstained VERIFIED/REFUTED predictions are included. INSUFFICIENT_EVIDENCE and CONFLICTED confidence encode evidence strength/abstention behavior, not directional correctness probability; those cases are excluded from directional ECE. This is a research diagnostic and does not change runtime confidence semantics.'
       },
       production_policy_view: {
         mapped_accuracy: productionMetrics.accuracy,
