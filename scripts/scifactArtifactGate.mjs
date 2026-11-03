@@ -17,6 +17,7 @@ export function validateScifactArtifact(report, expectedCommitSha, expectedModel
   const failures = [];
   const add = (ok, message) => { if (!ok) failures.push(message); };
   add(report?.benchmark === true, 'benchmark flag must be true');
+  add(report?.gold_evidence_in_retrieval === false, 'SciFact retrieval must not inject gold evidence');
   add(report?.protocol_version === 'truthlens-v2-scifact-end-to-end-v2', 'SciFact protocol version mismatch');
   add(report?.dataset?.claims_evaluated === 300, 'expected exactly 300 SciFact dev claims');
   add(report?.dataset?.corpus_documents === 5183, 'expected exactly 5,183 SciFact corpus documents');
