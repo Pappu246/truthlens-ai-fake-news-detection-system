@@ -10,6 +10,8 @@ on:
       - 'scripts/v2ScifactEndToEnd.ts'
       - 'scripts/analyzeScifactPassageDiagnostics.ts'
       - 'scripts/test_analyzeScifactPassageDiagnostics.ts'
+      - 'scripts/scifactRationaleVisibility.ts'
+      - 'scripts/test_scifactRationaleVisibility.ts'
       - 'scripts/v2DownloadModels.ts'
       - 'data/v2/**'
       - 'package.json'
@@ -113,6 +115,7 @@ jobs:
         run: |
           set -euo pipefail
           npm run test:v2-scifact-passages
+          npx tsx scripts/test_scifactRationaleVisibility.ts
           npm run analyze:v2-scifact-passages -- --input=artifacts/v2-scifact-e2e/scifact-end-to-end.json --output=artifacts/v2-scifact-e2e/scifact-passage-error-diagnostics.json
 
       - name: Validate benchmark provenance and metric denominators
