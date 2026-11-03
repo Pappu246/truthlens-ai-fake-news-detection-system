@@ -24,6 +24,7 @@ import { SciFactOpenCorpusSource, SciFactDocumentInput } from '../server/v2/retr
 import { disposeMlWorker } from '../server/v2/ml/mlWorkerClient';
 import { ALL_MODEL_MANIFESTS, getV2ModelDir, verifyModelHashes } from '../server/v2/ml/modelManifest';
 import { applyConfidenceTemperature, brierScore, expectedCalibrationError, fitConfidenceTemperature } from '../server/v2/metrics/metrics';
+import { analyzeSciFactRationaleVisibility } from './scifactRationaleVisibility';
 
 type GoldLabel = 'SUPPORT' | 'CONTRADICT' | 'NOT_ENOUGH_INFO';
 
@@ -172,7 +173,7 @@ async function main(): Promise<void> {
   };
   const modelManifest = sealedModelManifest();
   const modelManifestSha256 = sha256Json(modelManifest);
-  const sourceCommitSha = process.env.GITHUB_SHA || null;
+  const sourceCommitSha = process.env.TRUTHLENS_EVALUATED_COMMIT_SHA || process.env.GITHUB_SHA || null;
 
   console.log(`SciFact retrieval config: candidate-k=${topCandidates}, dense-k=${denseTopK}, final-k=${finalTopK}`);
   console.log(`SciFact provenance: commit=${sourceCommitSha ?? 'un-pinned-local-run'}, config_sha256=${sha256Json(runConfig)}, model_manifest_sha256=${modelManifestSha256}`);
@@ -198,6 +199,10 @@ async function main(): Promise<void> {
   let productionNonAbstain = 0;
   let conflicted = 0;
   const rows: Array<Record<string, unknown>> = [];
+  let goldRationaleDocuments = 0;
+  let goldRationaleSentences = 0;
+  let visibleGoldRationaleSentences = 0;
+  let hiddenGoldRationaleSentences = 0;
   const calibrationSamples: Array<{ correct: boolean; confidence: number }> = [];
 
   try {
@@ -205,6 +210,11 @@ async function main(): Promise<void> {
       const claim = claims[i];
       source.resetCandidateIds();
       const gold = goldLabel(claim);
+      const visibility = analyzeSciFactRationaleVisibility(claim.evidence || {}, corpus);
+      goldRationaleDocuments += visibility.gold_evidence_documents;
+      goldRationaleSentences += visibility.gold_rationale_sentences;
+      visibleGoldRationaleSentences += visibility.visible_rationale_sentences_within_limit;
+      hiddenGoldRationaleSentences += visibility.hidden_rationale_sentences_after_limit;
       goldPredictions.push(gold);
 
       const result = await verifyClaimV2(claim.claim, {
@@ -251,17 +261,41 @@ async function main(): Promise<void> {
 
       rows.push({
         id: claim.id,
+        claim: claim.claim,
         gold,
         benchmark_prediction: benchmarkPrediction,
         production_verdict: result.provenance.final_verdict,
         production_prediction: productionPrediction,
         candidate_pool_recall_hit: candidateHit,
         gold_evidence_ids: Array.from(goldEvidenceIds),
+        gold_rationale_visibility_800_chars: visibility,
         retrieved_evidence_ids_top5: topEvidenceIds,
         final_confidence: result.provenance.final_confidence,
         abstained: result.provenance.abstained,
         nli_model: nliAdapter.modelName,
-        embedding_model: embeddingModel.name
+        embedding_model: embeddingModel.name,
+        // Research-only forensic trace: exact passages and the weights used by
+        // benchmarkDirection(), so claim-level errors can be traced to evidence.
+        evidence_diagnostics: result.provenance.evidence.map(evidence => {
+          const duplicatePenalty = evidence.is_duplicate_cluster ? 0.35 : 1;
+          const voteWeight = evidence.nli_confidence * evidence.rerank_score * duplicatePenalty;
+          return {
+            evidence_id: evidence.evidence_id,
+            url: evidence.url,
+            title: evidence.title,
+            publisher: evidence.publisher,
+            domain: evidence.domain,
+            content_type: evidence.content_type,
+            nli_label: evidence.nli_label,
+            nli_confidence: evidence.nli_confidence,
+            rerank_score: evidence.rerank_score,
+            is_duplicate_cluster: evidence.is_duplicate_cluster,
+            source_type: evidence.source_type,
+            support_vote_weight: evidence.nli_label === 'SUPPORTS' ? voteWeight : 0,
+            refute_vote_weight: evidence.nli_label === 'REFUTES' ? voteWeight : 0,
+            exact_passage: evidence.exact_passage
+          };
+        })
       });
 
       if ((i + 1) % 10 === 0 || i + 1 === claims.length) {
@@ -312,6 +346,16 @@ async function main(): Promise<void> {
         model_manifest_sha256: modelManifestSha256
       },
       config: runConfig,
+      rationale_visibility_diagnostic: {
+        analysis_only: true,
+        passage_character_limit: 800,
+        gold_evidence_documents: goldRationaleDocuments,
+        gold_rationale_sentences: goldRationaleSentences,
+        visible_rationale_sentences_within_limit: visibleGoldRationaleSentences,
+        hidden_rationale_sentences_after_limit: hiddenGoldRationaleSentences,
+        hidden_rationale_sentence_rate: goldRationaleSentences ? hiddenGoldRationaleSentences / goldRationaleSentences : null,
+        note: 'Computed from frozen gold rationale indices and original abstracts after plain-text cleanup; never passed to retrieval, NLI, or verdict logic.'
+      },
       dataset: {
         name: 'SciFact',
         split: 'dev',
