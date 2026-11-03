@@ -24,6 +24,7 @@ import { SciFactOpenCorpusSource, SciFactDocumentInput } from '../server/v2/retr
 import { disposeMlWorker } from '../server/v2/ml/mlWorkerClient';
 import { ALL_MODEL_MANIFESTS, getV2ModelDir, verifyModelHashes } from '../server/v2/ml/modelManifest';
 import { applyConfidenceTemperature, brierScore, expectedCalibrationError, fitConfidenceTemperature } from '../server/v2/metrics/metrics';
+import { verifyRuntimeVersions } from './benchmarks/v3LocalNli.js';
 
 type GoldLabel = 'SUPPORT' | 'CONTRADICT' | 'NOT_ENOUGH_INFO';
 
@@ -125,6 +126,7 @@ function productionMappedDirection(verdict: string): GoldLabel {
 }
 
 async function main(): Promise<void> {
+  const runtime = verifyRuntimeVersions();
   const dataDir = path.resolve(arg('data-dir') || path.join('data', 'external', 'scifact'));
   const claimsPath = path.join(dataDir, 'claims_dev.jsonl');
   const corpusPath = path.join(dataDir, 'corpus.jsonl');
@@ -172,7 +174,7 @@ async function main(): Promise<void> {
   };
   const modelManifest = sealedModelManifest();
   const modelManifestSha256 = sha256Json(modelManifest);
-  const sourceCommitSha = process.env.GITHUB_SHA || null;
+  const sourceCommitSha = process.env.TRUTHLENS_EVALUATED_COMMIT_SHA || process.env.GITHUB_SHA || null;
 
   console.log(`SciFact retrieval config: candidate-k=${topCandidates}, dense-k=${denseTopK}, final-k=${finalTopK}`);
   console.log(`SciFact provenance: commit=${sourceCommitSha ?? 'un-pinned-local-run'}, config_sha256=${sha256Json(runConfig)}, model_manifest_sha256=${modelManifestSha256}`);
@@ -302,6 +304,7 @@ async function main(): Promise<void> {
       protocol_version: 'truthlens-v2-scifact-end-to-end-v2',
       generated_at: new Date().toISOString(),
       benchmark: true,
+      gold_evidence_in_retrieval: false,
       run_provenance: {
         source_commit_sha: sourceCommitSha,
         source_ref: process.env.GITHUB_REF || null,
@@ -324,6 +327,7 @@ async function main(): Promise<void> {
         final_pipeline_k: finalTopK
       },
       models: {
+        runtime,
         nli: {
           name: nliAdapter.modelName,
           version: nliAdapter.modelVersion,
