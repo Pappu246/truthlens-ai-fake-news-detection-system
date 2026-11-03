@@ -159,7 +159,13 @@ async function main(): Promise<void> {
   const enableFullTextEnrichment = false;
   const minCandidatesExpectedWarning = 0;
   const relatednessFloor = 0.15;
-  const researchTraceEnabled = arg('research-trace') === 'true';
+  const researchTraceArg = arg('research-trace');
+  const researchTraceEnabled = researchTraceArg === undefined
+    ? process.env.TRUTHLENS_V2_RESEARCH_TRACE === 'true'
+    : researchTraceArg === 'true';
+  if (process.env.TRUTHLENS_V2_REQUIRE_RESEARCH_TRACE === 'true' && !researchTraceEnabled) {
+    throw new Error('Research trace is required for this diagnostic run but was not enabled. Set --research-trace=true or TRUTHLENS_V2_RESEARCH_TRACE=true.');
+  }
   const runConfig = {
     research_trace_enabled: researchTraceEnabled,
     candidate_pool_k: topCandidates,
