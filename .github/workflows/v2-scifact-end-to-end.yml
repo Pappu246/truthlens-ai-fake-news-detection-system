@@ -113,9 +113,7 @@ jobs:
         run: |
           set -euo pipefail
           npm run test:v2-scifact-passages
-          npm run analyze:v2-scifact-passages -- \\
-            --input=artifacts/v2-scifact-e2e/scifact-end-to-end.json \\
-            --output=artifacts/v2-scifact-e2e/scifact-passage-error-diagnostics.json
+          npm run analyze:v2-scifact-passages -- --input=artifacts/v2-scifact-e2e/scifact-end-to-end.json --output=artifacts/v2-scifact-e2e/scifact-passage-error-diagnostics.json
 
       - name: Validate benchmark provenance and metric denominators
         env:
