@@ -157,6 +157,10 @@ jobs:
           assert report["benchmark"] is True
           assert report["gold_evidence_in_retrieval"] is False
           assert report["run_provenance"]["source_commit_sha"] == expected_sha
+          assert report["run_provenance"]["model_manifest_sha256"] == report["models"]["manifest_sha256"]
+          assert report["run_provenance"]["config_sha256"] == hashlib.sha256(json.dumps(report["config"], separators=(",", ":")).encode()).hexdigest()
+          assert report["models"]["manifest_sha256"] == hashlib.sha256(json.dumps(report["models"]["sealed_manifest"], separators=(",", ":")).encode()).hexdigest()
+          assert report["evaluator"]["commit"] == "66feffc5b2cc9e28e3ce3b8c9e824c3c642981eb"
           assert report["dataset"]["claims_evaluated"] == 300
           assert report["dataset"]["corpus_documents"] == 5183
           assert report["dataset"]["claims_sha256"] == hashlib.sha256(claims_path.read_bytes()).hexdigest()
@@ -164,11 +168,17 @@ jobs:
           assert report["predictions"]["rows"] == len(predictions) == len(claims) == 300
           assert [p["id"] for p in predictions] == [c["id"] for c in claims]
           assert report["predictions"]["sha256"] == hashlib.sha256(predictions_path.read_bytes()).hexdigest()
+          trace_by_id = {row["id"]: row for row in report["trace"]}
+          assert set(trace_by_id) == {row["id"] for row in predictions}
           for pred in predictions:
               assert set(pred) == {"id", "evidence"}
+              trace_evidence = {item["evidence_id"]: item for item in trace_by_id[pred["id"]]["evidence"]}
               for doc_id, evidence in pred["evidence"].items():
                   assert doc_id in docs, (pred["id"], doc_id)
+                  assert doc_id in trace_evidence, (pred["id"], doc_id, "prediction not in NLI trace")
                   assert evidence["label"] in {"SUPPORT", "CONTRADICT"}
+                  expected_label = "SUPPORT" if trace_evidence[doc_id]["nli_label"] == "SUPPORTS" else "CONTRADICT"
+                  assert evidence["label"] == expected_label
                   assert len(evidence["sentences"]) <= 3
                   assert len(evidence["sentences"]) == len(set(evidence["sentences"]))
                   assert all(isinstance(i, int) and 0 <= i < len(docs[doc_id]["abstract"]) for i in evidence["sentences"])
