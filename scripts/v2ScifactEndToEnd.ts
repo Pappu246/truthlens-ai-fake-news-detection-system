@@ -190,9 +190,13 @@ async function main(): Promise<void> {
   const goldPredictions: string[] = [];
   const benchmarkPredictions: string[] = [];
   const productionPredictions: string[] = [];
-  let candidateRecall = 0;
-  let evidenceRecallAt5 = 0;
+  let candidateRecall = 0; // claim-level hit count; retained as a legacy alias
+  let candidateGoldEvidenceHits = 0;
+  let candidateGoldEvidenceDenominator = 0;
+  let evidenceRecallAt5 = 0; // claim-level hit count; retained as a legacy alias
   let evidenceRecallDenominator = 0;
+  let evidenceDocumentHitsAt5 = 0;
+  let evidenceDocumentDenominatorAt5 = 0;
   let pipelineAbstentions = 0;
   let productionCorrectNonAbstain = 0;
   let productionNonAbstain = 0;
@@ -219,18 +223,25 @@ async function main(): Promise<void> {
 
       const candidateIds = new Set(source.getCandidateIds());
       const goldEvidenceIds = new Set(Object.keys(claim.evidence || {}));
-      const candidateHit = goldEvidenceIds.size > 0 && Array.from(goldEvidenceIds).some(id => candidateIds.has(id));
+      const candidateGoldIdsRetrieved = Array.from(goldEvidenceIds).filter(id => candidateIds.has(id));
+      const candidateGoldEvidenceHitCount = candidateGoldIdsRetrieved.length;
+      const candidateHit = goldEvidenceIds.size > 0 && candidateGoldEvidenceHitCount > 0;
       if (candidateHit) candidateRecall++;
+      candidateGoldEvidenceHits += candidateGoldEvidenceHitCount;
+      candidateGoldEvidenceDenominator += goldEvidenceIds.size;
 
       const topEvidenceIds = result.provenance.evidence
         .slice()
         .sort((a, b) => b.rerank_score - a.rerank_score)
         .slice(0, 5)
         .map(e => e.url.split('/').pop() || '');
-      const evidenceHit = goldEvidenceIds.size > 0 && Array.from(goldEvidenceIds).some(id => topEvidenceIds.includes(id));
+      const top5GoldEvidenceHitCount = Array.from(goldEvidenceIds).filter(id => topEvidenceIds.includes(id)).length;
+      const evidenceHit = goldEvidenceIds.size > 0 && top5GoldEvidenceHitCount > 0;
       if (goldEvidenceIds.size > 0) {
         evidenceRecallDenominator++;
         if (evidenceHit) evidenceRecallAt5++;
+        evidenceDocumentHitsAt5 += top5GoldEvidenceHitCount;
+        evidenceDocumentDenominatorAt5 += goldEvidenceIds.size;
       }
 
       const benchmarkPrediction = benchmarkDirection(result);
@@ -256,6 +267,10 @@ async function main(): Promise<void> {
         production_verdict: result.provenance.final_verdict,
         production_prediction: productionPrediction,
         candidate_pool_recall_hit: candidateHit,
+        candidate_gold_evidence_hits: candidateGoldEvidenceHitCount,
+        candidate_gold_evidence_total: goldEvidenceIds.size,
+        top5_gold_evidence_hits: top5GoldEvidenceHitCount,
+        top5_gold_evidence_total: goldEvidenceIds.size,
         gold_evidence_ids: Array.from(goldEvidenceIds),
         retrieved_evidence_ids_top5: topEvidenceIds,
         final_confidence: result.provenance.final_confidence,
@@ -273,6 +288,8 @@ async function main(): Promise<void> {
     const benchmarkMetrics = macroF1(benchmarkPredictions, goldPredictions, metricLabels);
     const productionMetrics = macroF1(productionPredictions, goldPredictions, metricLabels);
     const evidenceRecall = evidenceRecallDenominator ? evidenceRecallAt5 / evidenceRecallDenominator : null;
+    const candidateDocumentRecall = candidateGoldEvidenceDenominator ? candidateGoldEvidenceHits / candidateGoldEvidenceDenominator : null;
+    const evidenceDocumentRecallAt5 = evidenceDocumentDenominatorAt5 ? evidenceDocumentHitsAt5 / evidenceDocumentDenominatorAt5 : null;
     const benchmarkConfusionMatrix = metricLabels.map(gold => ({
       gold,
       predicted: Object.fromEntries(metricLabels.map(predicted => [
@@ -340,12 +357,26 @@ async function main(): Promise<void> {
       end_to_end: {
         // Recall is defined only over claims that have gold evidence. NEI claims
         // have no gold evidence IDs and must not be counted as retrieval misses.
+        // Legacy fields are claim-level "at least one gold document hit" rates,
+        // not document-level recall. Keep them for historical compatibility.
         open_candidate_recall: evidenceRecallDenominator ? candidateRecall / evidenceRecallDenominator : null,
         open_candidate_recall_hits: candidateRecall,
         open_candidate_recall_denominator: evidenceRecallDenominator,
         gold_evidence_recall_at_5: evidenceRecall,
         gold_evidence_recall_at_5_hits: evidenceRecallAt5,
         gold_evidence_recall_at_5_denominator: evidenceRecallDenominator,
+        open_candidate_claim_hit_rate: evidenceRecallDenominator ? candidateRecall / evidenceRecallDenominator : null,
+        open_candidate_claim_hit_count: candidateRecall,
+        open_candidate_claim_hit_denominator: evidenceRecallDenominator,
+        open_candidate_document_recall: candidateDocumentRecall,
+        open_candidate_document_hits: candidateGoldEvidenceHits,
+        open_candidate_document_denominator: candidateGoldEvidenceDenominator,
+        gold_evidence_claim_hit_rate_at_5: evidenceRecall,
+        gold_evidence_claim_hit_count_at_5: evidenceRecallAt5,
+        gold_evidence_claim_hit_denominator_at_5: evidenceRecallDenominator,
+        gold_evidence_document_recall_at_5: evidenceDocumentRecallAt5,
+        gold_evidence_document_hits_at_5: evidenceDocumentHitsAt5,
+        gold_evidence_document_denominator_at_5: evidenceDocumentDenominatorAt5,
         benchmark_directional_accuracy: benchmarkMetrics.accuracy,
         benchmark_directional_macro_f1: benchmarkMetrics.macroF1,
         benchmark_directional_per_class: benchmarkMetrics.perClass,
@@ -378,6 +409,7 @@ async function main(): Promise<void> {
       interpretation: [
         'This is an end-to-end retrieval + reranking + NLI benchmark over the full SciFact dev corpus, not a synthetic fixture.',
         'candidate_pool_k and dense_retrieval_k are reported separately so retrieval-ablation changes are auditable.',
+        'Legacy open_candidate_recall and gold_evidence_recall_at_5 fields are claim-level hit rates; document-level recall is reported separately using gold evidence document counts.',
         'The benchmark directional decision is a single-source-compatible research evaluator because classic SciFact provides evidence from cited papers; it does not replace the production two-independent-source policy.',
         'Production-policy metrics are reported separately to expose the cost of the policy/dataset mismatch rather than hiding it.',
         'No production thresholds, source rules, abstention rules, or production models were changed.',
