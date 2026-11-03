@@ -261,7 +261,29 @@ async function main(): Promise<void> {
         final_confidence: result.provenance.final_confidence,
         abstained: result.provenance.abstained,
         nli_model: nliAdapter.modelName,
-        embedding_model: embeddingModel.name
+        embedding_model: embeddingModel.name,
+        // Research-only forensic trace: exact passages and the weights used by
+        // benchmarkDirection(), so claim-level errors can be traced to evidence.
+        evidence_diagnostics: result.provenance.evidence.map(evidence => {
+          const duplicatePenalty = evidence.is_duplicate_cluster ? 0.35 : 1;
+          const voteWeight = evidence.nli_confidence * evidence.rerank_score * duplicatePenalty;
+          return {
+            evidence_id: evidence.evidence_id,
+            url: evidence.url,
+            title: evidence.title,
+            publisher: evidence.publisher,
+            domain: evidence.domain,
+            content_type: evidence.content_type,
+            nli_label: evidence.nli_label,
+            nli_confidence: evidence.nli_confidence,
+            rerank_score: evidence.rerank_score,
+            is_duplicate_cluster: evidence.is_duplicate_cluster,
+            source_type: evidence.source_type,
+            support_vote_weight: evidence.nli_label === 'SUPPORTS' ? voteWeight : 0,
+            refute_vote_weight: evidence.nli_label === 'REFUTES' ? voteWeight : 0,
+            exact_passage: evidence.exact_passage
+          };
+        })
       });
 
       if ((i + 1) % 10 === 0 || i + 1 === claims.length) {
