@@ -140,6 +140,20 @@ jobs:
               assert report["models"][model_key]["artifact_sha256"] == expected_weight
 
           rows = report["rows"]
+          # A successful benchmark is not sufficient unless the opt-in NLI
+          # diagnostics were actually enabled and persisted in the artifact.
+          assert report["config"].get("research_trace_enabled") is True, "NLI research trace must be enabled for this diagnostic run"
+          assert all("evidence_trace" in row for row in rows), "Every claim row must carry an evidence_trace field (possibly empty)"
+          trace_entries = [entry for row in rows for entry in row["evidence_trace"]]
+          assert trace_entries, "Expected at least one per-evidence NLI trace entry"
+          for entry in trace_entries:
+              trace = entry.get("research_trace")
+              assert isinstance(trace, dict), "Every evidence entry must include research_trace"
+              assert "relatedness_cosine" in trace and "relatedness_gate_passed" in trace
+              assert trace.get("selected_hypothesis_pass") in ("passA:claim-as-stated", "passB:content-proposition", "relatedness_gate")
+              assert "raw_probabilities" in trace and "pass_a_probabilities" in trace
+          assert all("final_decision_rule_trace" in row for row in rows), "Every claim row must carry final decision-rule trace"
+          print("NLI research trace artifact contract: PASS; entries=" + str(len(trace_entries)))
           evidence_claims = sum(bool(row["gold_evidence_ids"]) for row in rows)
           end_to_end = report["end_to_end"]
           assert evidence_claims == end_to_end["open_candidate_recall_denominator"]
