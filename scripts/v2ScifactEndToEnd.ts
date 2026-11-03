@@ -384,7 +384,7 @@ async function main(): Promise<void> {
         'candidate_pool_k and dense_retrieval_k are reported separately so retrieval-ablation changes are auditable.',
         'The benchmark directional decision is a single-source-compatible research evaluator because classic SciFact provides evidence from cited papers; it does not replace the production two-independent-source policy.',
         'Production-policy metrics are reported separately to expose the cost of the policy/dataset mismatch rather than hiding it.',
-        'Calibration uses production-policy confidence against production-mapped correctness; it is not a calibration estimate for the separate benchmark directional vote.'
+        'Calibration uses production-policy confidence against production-mapped correctness; it is not a calibration estimate for the separate benchmark directional vote.',
         'No production thresholds, source rules, abstention rules, or production models were changed.',
         'This benchmark does not by itself establish world-leading performance; it establishes a reproducible external end-to-end measurement.'
       ],
