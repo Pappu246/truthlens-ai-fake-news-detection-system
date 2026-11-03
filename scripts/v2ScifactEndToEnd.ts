@@ -251,6 +251,7 @@ async function main(): Promise<void> {
 
       rows.push({
         id: claim.id,
+        claim: claim.claim,
         gold,
         benchmark_prediction: benchmarkPrediction,
         production_verdict: result.provenance.final_verdict,
