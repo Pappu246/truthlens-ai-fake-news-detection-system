@@ -53,7 +53,7 @@ async function makeFixtures(root) {
       metrics: { strict_score: 0.3, label_accuracy: 0.4, evidence_precision: 0.5, evidence_recall: 0.6, evidence_f1: 0.55 }
     }),
     write(root, 'artifacts/fever-adapter.json', {
-      benchmark_id: 'fever', protocol_version: 'truthlens-v3-benchmark-protocol-v1',
+      benchmark_id: 'fever', gold_evidence_in_retrieval: false, protocol_version: 'truthlens-v3-benchmark-protocol-v1',
       dataset: { evaluation_count: 19998, claims_sha256: 'a'.repeat(64), corpus_sha256: 'b'.repeat(64) },
       model: { manifest_sha256: MODEL_MANIFEST_SHA, nli: { name: 'Xenova/nli-deberta-v3-xsmall', artifact_sha256: NLI_ARTIFACT_SHA }, embedding: { name: 'Xenova/all-MiniLM-L6-v2', artifact_sha256: EMBEDDING_ARTIFACT_SHA }, runtime: { node_major: 22, transformers_js: '3.7.6', onnxruntime_node: '1.21.0' } },
       provenance: { commit_sha: TEST_COMMIT_SHA, configuration_sha256: 'd'.repeat(64) }
@@ -63,7 +63,7 @@ async function makeFixtures(root) {
       metrics: { strict_score: 0.2, label_accuracy: 0.3, evidence_precision: 0.4, evidence_recall: 0.5, evidence_f1: 0.44 }
     }),
     write(root, 'artifacts/feverous-adapter.json', {
-      benchmark_id: 'feverous', protocol_version: 'truthlens-v3-benchmark-protocol-v1', dataset: { evaluation_count: 7890 }, scorer_revision: 'Raldir/FEVEROUS@32b68ce', model: { manifest_sha256: MODEL_MANIFEST_SHA, nli: { name: 'Xenova/nli-deberta-v3-xsmall', artifact_sha256: NLI_ARTIFACT_SHA }, embedding: { name: 'Xenova/all-MiniLM-L6-v2', artifact_sha256: EMBEDDING_ARTIFACT_SHA }, runtime: { node_major: 22, transformers_js: '3.7.6', onnxruntime_node: '1.21.0' } }, provenance: { commit_sha: TEST_COMMIT_SHA, configuration_sha256: 'd'.repeat(64) }
+      benchmark_id: 'feverous', gold_evidence_in_retrieval: false, protocol_version: 'truthlens-v3-benchmark-protocol-v1', dataset: { evaluation_count: 7890 }, scorer_revision: 'Raldir/FEVEROUS@32b68ce', model: { manifest_sha256: MODEL_MANIFEST_SHA, nli: { name: 'Xenova/nli-deberta-v3-xsmall', artifact_sha256: NLI_ARTIFACT_SHA }, embedding: { name: 'Xenova/all-MiniLM-L6-v2', artifact_sha256: EMBEDDING_ARTIFACT_SHA }, runtime: { node_major: 22, transformers_js: '3.7.6', onnxruntime_node: '1.21.0' } }, provenance: { commit_sha: TEST_COMMIT_SHA, configuration_sha256: 'd'.repeat(64) }
     }),
     write(root, 'artifacts/averitec-score.json', {
       benchmark_id: 'averitec', protocol_version: 'truthlens-v3-benchmark-protocol-v1', evaluation_count: 500, generated_at: NOW, truthlens_git_sha: TEST_COMMIT_SHA,
