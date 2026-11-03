@@ -239,8 +239,12 @@ async function main(): Promise<void> {
       productionPredictions.push(productionPrediction);
 
       if (result.provenance.abstained) pipelineAbstentions++;
+      // final_confidence belongs to the production decision policy, not the
+      // separate benchmarkDirection() vote. Calibrate it only against the
+      // production-mapped direction; benchmark-direction calibration is not
+      // claimed until that evaluator has its own confidence definition.
       calibrationSamples.push({
-        correct: benchmarkPrediction === gold,
+        correct: productionPrediction === gold,
         confidence: Math.max(0, Math.min(1, result.provenance.final_confidence))
       });
       if (result.provenance.final_verdict === 'CONFLICTED') conflicted++;
@@ -354,7 +358,7 @@ async function main(): Promise<void> {
         predicted_label_counts: Object.fromEntries(metricLabels.map(label => [label, benchmarkPredictions.filter(value => value === label).length]))
       },
       calibration: {
-        target: 'benchmark_direction_correctness',
+        target: 'production_policy_mapped_direction_correctness',
         raw_ece_10: rawCalibration.expectedCalibrationError,
         raw_brier: brierScore(calibrationSamples),
         method: 'deterministic_even_odd_split_temperature_scaling',
@@ -363,7 +367,7 @@ async function main(): Promise<void> {
         fitted_temperature: fittedTemperature,
         raw_holdout_ece_10: rawHoldoutCalibration.expectedCalibrationError,
         calibrated_holdout_ece_10: calibratedHoldoutCalibration.expectedCalibrationError,
-        note: 'Research diagnostic only. This does not change runtime production confidence semantics.'
+        note: 'Research diagnostic for the production-policy mapped direction only. It is not benchmark-direction calibration and does not change runtime production confidence semantics.'
       },
       production_policy_view: {
         mapped_accuracy: productionMetrics.accuracy,
@@ -380,6 +384,7 @@ async function main(): Promise<void> {
         'candidate_pool_k and dense_retrieval_k are reported separately so retrieval-ablation changes are auditable.',
         'The benchmark directional decision is a single-source-compatible research evaluator because classic SciFact provides evidence from cited papers; it does not replace the production two-independent-source policy.',
         'Production-policy metrics are reported separately to expose the cost of the policy/dataset mismatch rather than hiding it.',
+        'Calibration uses production-policy confidence against production-mapped correctness; it is not a calibration estimate for the separate benchmark directional vote.'
         'No production thresholds, source rules, abstention rules, or production models were changed.',
         'This benchmark does not by itself establish world-leading performance; it establishes a reproducible external end-to-end measurement.'
       ],
