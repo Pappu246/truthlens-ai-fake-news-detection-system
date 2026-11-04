@@ -118,10 +118,10 @@ jobs:
           TRUTHLENS_V2_ML_CALL_TIMEOUT_MS: 180000
         run: |
           set -euo pipefail
-          npm run eval:v2-scifact-passage-granularity -- \\
-            --data-dir=/tmp/truthlens-scifact/scifact \\
-            --max-claims=300 \\
-            --output=artifacts/v2-scifact-e2e/scifact-passage-granularity.json \\
+          npm run eval:v2-scifact-passage-granularity -- \
+            --data-dir=/tmp/truthlens-scifact/scifact \
+            --max-claims=300 \
+            --output=artifacts/v2-scifact-e2e/scifact-passage-granularity.json \
             2>&1 | tee artifacts/v2-scifact-e2e/scifact-passage-granularity.log
 
       - name: Validate benchmark provenance and metric denominators
