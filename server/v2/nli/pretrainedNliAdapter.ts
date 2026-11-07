@@ -66,7 +66,7 @@
  */
 import { ExtractedClaim } from '../../../src/types.js';
 import { NliAdapter } from './nliAdapter.js';
-import { NliClassification, NliLabel, NliScoreDistribution } from '../types.js';
+import { NliClassification, NliLabel, NliScoreDistribution, NliResearchTrace } from '../types.js';
 import { EmbeddingModel } from '../retrieval/embeddings.js';
 import { TransformerEmbeddingModel } from '../retrieval/transformerEmbeddingModel.js';
 import {
@@ -90,6 +90,8 @@ export interface PretrainedNliOptions {
    * supplying another identity does not alter the NliAdapter interface. */
   modelName?: string;
   modelVersion?: string;
+  /** Emit privacy-minimised, research-only per-passage diagnostics. Disabled by default. */
+  researchTrace?: boolean;
 }
 
 /**
@@ -243,6 +245,7 @@ export class PretrainedNliAdapter implements NliAdapter {
   private readonly relatednessFloor: number;
   private readonly client: MlWorkerClient;
   private readonly embeddingModel: EmbeddingModel;
+  private readonly researchTrace: boolean;
   private lastClaimText: string | null = null;
   private lastClaimVector: number[] | null = null;
 
@@ -253,6 +256,7 @@ export class PretrainedNliAdapter implements NliAdapter {
     this.relatednessFloor = options?.relatednessFloor ?? 0.15;
     this.client = options?.client ?? getMlWorkerClient();
     this.embeddingModel = options?.embeddingModel ?? new TransformerEmbeddingModel(this.client);
+    this.researchTrace = options?.researchTrace === true;
   }
 
   private embedSync(text: string): number[] {
@@ -360,9 +364,32 @@ export class PretrainedNliAdapter implements NliAdapter {
       return Math.max(-1, Math.min(1, dot));
     });
     const results: Array<NliClassification | null> = new Array(passages.length).fill(null);
+    const traceDecisions: Array<{ selectedPass: NliResearchTrace['selected_hypothesis_pass']; rawProbabilities: NliResearchTrace['raw_probabilities']; tokenization: NliResearchTrace['tokenization']; passAProbabilities: NliResearchTrace['pass_a_probabilities']; passATokenization: NliResearchTrace['pass_a_tokenization'] } | null> = new Array(passages.length).fill(null);
+    const finalize = (): NliClassification[] => {
+      const output = results as NliClassification[];
+      if (!this.researchTrace) return output;
+      for (let index = 0; index < output.length; index++) {
+        const decision = traceDecisions[index];
+        output[index].research_trace = {
+          relatedness_cosine: relatednessValues[index],
+          relatedness_floor: this.relatednessFloor,
+          relatedness_gate_passed: relatednessValues[index] >= this.relatednessFloor,
+          selected_hypothesis_pass: decision?.selectedPass ?? 'relatedness_gate',
+          hypothesis_mode: conditioning.mode,
+          premise_char_count: passageTexts[index].length,
+          hypothesis_char_count: (decision?.selectedPass === 'passB:content-proposition' ? conditioning.hypothesis : fullClaimText).length,
+          raw_probabilities: decision?.rawProbabilities ?? null,
+          pass_a_probabilities: decision?.passAProbabilities ?? null,
+          pass_a_tokenization: decision?.passATokenization ?? null,
+          tokenization: decision?.tokenization ?? null
+        };
+      }
+      return output;
+    };
     const directionalInputs: Array<{ index: number; premise: string; hypothesis: string }> = [];
     for (let i = 0; i < passages.length; i++) {
       if (relatednessValues[i] < this.relatednessFloor) {
+        traceDecisions[i] = { selectedPass: 'relatedness_gate', rawProbabilities: null, tokenization: null, passAProbabilities: null, passATokenization: null };
         results[i] = {
           label: 'NEUTRAL',
           scores: { supports: 0.005, refutes: 0.005, neutral: 0.98, unclear: 0.01 },
@@ -377,13 +404,13 @@ export class PretrainedNliAdapter implements NliAdapter {
         directionalInputs.push({ index: i, premise: (passages[i] || '').trim(), hypothesis: fullClaimText });
       }
     }
-    if (!directionalInputs.length) return results as NliClassification[];
+    if (!directionalInputs.length) return finalize();
     const passA = this.client.classifyBatch(directionalInputs.map(item => ({
       premise: item.premise,
       hypothesis: item.hypothesis,
       maxTokens: this.maxPairTokens
-    })));
-    const fallbackInputs: Array<{ index: number; premise: string; hypothesis: string; passA: { probs: Record<string, number>; scores: NliScoreDistribution; maxModelProb: number } }> = [];
+    })), this.researchTrace);
+    const fallbackInputs: Array<{ index: number; premise: string; hypothesis: string; passA: { probs: Record<string, number>; scores: NliScoreDistribution; maxModelProb: number; diagnostics?: { tokenCountAfterTruncation: number | null; atMaxLength: boolean | null } } }> = [];
     for (let i = 0; i < directionalInputs.length; i++) {
       const item = directionalInputs[i];
       const raw = passA[i];
@@ -395,19 +422,21 @@ export class PretrainedNliAdapter implements NliAdapter {
         if (label) {
           const basis = `passA (hypothesis=claim-as-stated) directional (${label})`;
           results[item.index] = this.classifyOneResult({ probs: raw.probs, scores: mapped.scores, maxModelProb: mapped.maxModelProb }, basis, 'passA:claim-as-stated');
+          traceDecisions[item.index] = { selectedPass: 'passA:claim-as-stated', rawProbabilities: { entailment: raw.probs.entailment, contradiction: raw.probs.contradiction, neutral: raw.probs.neutral }, tokenization: raw.diagnostics ? { max_tokens: this.maxPairTokens, token_count_after_truncation: raw.diagnostics.tokenCountAfterTruncation, at_max_length: raw.diagnostics.atMaxLength, truncation_enabled: true } : null, passAProbabilities: { entailment: raw.probs.entailment, contradiction: raw.probs.contradiction, neutral: raw.probs.neutral }, passATokenization: raw.diagnostics ? { max_tokens: this.maxPairTokens, token_count_after_truncation: raw.diagnostics.tokenCountAfterTruncation, at_max_length: raw.diagnostics.atMaxLength, truncation_enabled: true } : null };
         } else {
           results[item.index] = this.classifyOneResult(
             { probs: raw.probs, scores: mapped.scores, maxModelProb: mapped.maxModelProb },
             `passA (hypothesis=claim-as-stated) produced NO DIRECTIONAL MAJORITY (entailment=${raw.probs.entailment.toFixed(3)}, contradiction=${raw.probs.contradiction.toFixed(3)}, both <0.5); claim carries no attribution clause, so no second pass is applicable`,
             'passA:claim-as-stated'
           );
+          traceDecisions[item.index] = { selectedPass: 'passA:claim-as-stated', rawProbabilities: { entailment: raw.probs.entailment, contradiction: raw.probs.contradiction, neutral: raw.probs.neutral }, tokenization: raw.diagnostics ? { max_tokens: this.maxPairTokens, token_count_after_truncation: raw.diagnostics.tokenCountAfterTruncation, at_max_length: raw.diagnostics.atMaxLength, truncation_enabled: true } : null, passAProbabilities: { entailment: raw.probs.entailment, contradiction: raw.probs.contradiction, neutral: raw.probs.neutral }, passATokenization: raw.diagnostics ? { max_tokens: this.maxPairTokens, token_count_after_truncation: raw.diagnostics.tokenCountAfterTruncation, at_max_length: raw.diagnostics.atMaxLength, truncation_enabled: true } : null };
         }
       } else {
-        fallbackInputs.push({ index: item.index, premise: item.premise, hypothesis: conditioning.hypothesis, passA: { probs: raw.probs, scores: mapped.scores, maxModelProb: mapped.maxModelProb } });
+        fallbackInputs.push({ index: item.index, premise: item.premise, hypothesis: conditioning.hypothesis, passA: { probs: raw.probs, scores: mapped.scores, maxModelProb: mapped.maxModelProb, diagnostics: raw.diagnostics } });
       }
     }
     if (fallbackInputs.length) {
-      const passB = this.client.classifyBatch(fallbackInputs.map(item => ({ premise: item.premise, hypothesis: item.hypothesis, maxTokens: this.maxPairTokens })));
+      const passB = this.client.classifyBatch(fallbackInputs.map(item => ({ premise: item.premise, hypothesis: item.hypothesis, maxTokens: this.maxPairTokens })), this.researchTrace);
       for (let i = 0; i < fallbackInputs.length; i++) {
         const item = fallbackInputs[i];
         const raw = passB[i];
@@ -415,20 +444,22 @@ export class PretrainedNliAdapter implements NliAdapter {
         const basis =
           `passA (hypothesis=claim-as-stated) produced NO DIRECTIONAL MAJORITY (entailment=${item.passA.probs.entailment.toFixed(3)}, contradiction=${item.passA.probs.contradiction.toFixed(3)}, both <0.5); fall through to passB (hypothesis=content proposition, attribution stripped)`;
         results[item.index] = this.classifyOneResult({ probs: raw.probs, scores: mapped.scores, maxModelProb: mapped.maxModelProb }, basis, 'passB:content-proposition');
+        traceDecisions[item.index] = { selectedPass: 'passB:content-proposition', rawProbabilities: { entailment: raw.probs.entailment, contradiction: raw.probs.contradiction, neutral: raw.probs.neutral }, tokenization: raw.diagnostics ? { max_tokens: this.maxPairTokens, token_count_after_truncation: raw.diagnostics.tokenCountAfterTruncation, at_max_length: raw.diagnostics.atMaxLength, truncation_enabled: true } : null, passAProbabilities: { entailment: item.passA.probs.entailment, contradiction: item.passA.probs.contradiction, neutral: item.passA.probs.neutral }, passATokenization: item.passA.diagnostics ? { max_tokens: this.maxPairTokens, token_count_after_truncation: item.passA.diagnostics.tokenCountAfterTruncation, at_max_length: item.passA.diagnostics.atMaxLength, truncation_enabled: true } : null };
       }
     }
-    return results as NliClassification[];
+    return finalize();
   }
 
   /** Single cross-encoder run over one hypothesis framing. */
-  private runOnce(premise: string, hypothesis: string): { probs: Record<string, number>; scores: NliScoreDistribution; maxModelProb: number } {
-    const { probs } = this.client.call<{ probs: Record<string, number> }>('classify', {
+  private runOnce(premise: string, hypothesis: string): { probs: Record<string, number>; scores: NliScoreDistribution; maxModelProb: number; diagnostics?: { tokenCountAfterTruncation: number | null; atMaxLength: boolean | null } } {
+    const output = this.client.call<{ probs: Record<string, number>; diagnostics?: { tokenCountAfterTruncation: number | null; atMaxLength: boolean | null } }>('classify', {
       premise,
       hypothesis,
-      maxTokens: this.maxPairTokens
+      maxTokens: this.maxPairTokens,
+      includeDiagnostics: this.researchTrace
     });
-    const { scores, maxModelProb } = mapModelProbsToNliScores(probs);
-    return { probs, scores, maxModelProb };
+    const { scores, maxModelProb } = mapModelProbsToNliScores(output.probs);
+    return { probs: output.probs, scores, maxModelProb, diagnostics: output.diagnostics };
   }
 
   public classify(claim: ExtractedClaim, passage: string, _publishedAt?: string | null): NliClassification {
@@ -441,7 +472,7 @@ export class PretrainedNliAdapter implements NliAdapter {
     // off-distribution and predictably pathological (spurious contradiction).
     const rel = this.relatedness(fullClaimText, premise);
     if (rel < this.relatednessFloor) {
-      return {
+      const gated: NliClassification = {
         label: 'NEUTRAL',
         scores: { supports: 0.005, refutes: 0.005, neutral: 0.98, unclear: 0.01 },
         confidence: 0.98,
@@ -452,6 +483,13 @@ export class PretrainedNliAdapter implements NliAdapter {
           '-> passage is off-topic for this claim; cross-encoder NLI not consulted (MNLI models are only ' +
           'valid on topically related pairs). Label=NEUTRAL indicates irrelevance, not a fact-check outcome.'
       };
+      if (this.researchTrace) gated.research_trace = {
+        relatedness_cosine: rel, relatedness_floor: this.relatednessFloor, relatedness_gate_passed: false,
+        selected_hypothesis_pass: 'relatedness_gate', hypothesis_mode: mode,
+        premise_char_count: premise.length, hypothesis_char_count: fullClaimText.length,
+        raw_probabilities: null, pass_a_probabilities: null, pass_a_tokenization: null, tokenization: null
+      };
+      return gated;
     }
 
     // -- Pass A: the claim exactly as stated -------------------------------
@@ -517,7 +555,7 @@ export class PretrainedNliAdapter implements NliAdapter {
       'after largest-remainder rounding to three decimals; ' +
       'decision by argmax of model probabilities only — no lexical rules involved.';
 
-    return {
+    const result: NliClassification = {
       label,
       scores,
       confidence,
@@ -525,5 +563,19 @@ export class PretrainedNliAdapter implements NliAdapter {
       modelVersion: this.modelVersion,
       basis
     };
+    if (this.researchTrace) result.research_trace = {
+      relatedness_cosine: rel, relatedness_floor: this.relatednessFloor, relatedness_gate_passed: true,
+      selected_hypothesis_pass: decidedBy as NliResearchTrace['selected_hypothesis_pass'],
+      hypothesis_mode: mode, premise_char_count: premise.length,
+      hypothesis_char_count: (decidedBy === 'passB:content-proposition' ? conditioned : fullClaimText).length,
+      raw_probabilities: { entailment: winner.probs.entailment, contradiction: winner.probs.contradiction, neutral: winner.probs.neutral },
+      pass_a_probabilities: { entailment: passA.probs.entailment, contradiction: passA.probs.contradiction, neutral: passA.probs.neutral },
+      pass_a_tokenization: passA.diagnostics ? { max_tokens: this.maxPairTokens, token_count_after_truncation: passA.diagnostics.tokenCountAfterTruncation, at_max_length: passA.diagnostics.atMaxLength, truncation_enabled: true } : null,
+      tokenization: winner.diagnostics ? {
+        max_tokens: this.maxPairTokens, token_count_after_truncation: winner.diagnostics.tokenCountAfterTruncation,
+        at_max_length: winner.diagnostics.atMaxLength, truncation_enabled: true
+      } : null
+    };
+    return result;
   }
 }

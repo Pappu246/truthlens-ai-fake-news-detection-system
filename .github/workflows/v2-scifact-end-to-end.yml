@@ -8,6 +8,7 @@ on:
     paths:
       - 'server/v2/**'
       - 'scripts/v2ScifactEndToEnd.ts'
+      - 'scripts/v2ScifactPassageGranularity.ts'
       - 'scripts/v2DownloadModels.ts'
       - 'data/v2/**'
       - 'package.json'
@@ -22,9 +23,11 @@ on:
     paths:
       - 'server/v2/**'
       - 'scripts/v2ScifactEndToEnd.ts'
+      - 'scripts/v2ScifactPassageGranularity.ts'
       - 'scripts/v2DownloadModels.ts'
       - 'data/v2/**'
       - 'package-lock.json'
+      - '.github/workflows/v2-scifact-end-to-end.yml'
   workflow_dispatch:
 
 concurrency:
@@ -40,10 +43,10 @@ jobs:
     timeout-minutes: 240
     steps:
       - name: Checkout research branch
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Node 22
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
           cache: npm
@@ -95,10 +98,31 @@ jobs:
       - name: Run end-to-end SciFact benchmark
         env:
           TRUTHLENS_V2_ML_CALL_TIMEOUT_MS: 180000
+          TRUTHLENS_V2_RESEARCH_TRACE: 'true'
+          TRUTHLENS_V2_REQUIRE_RESEARCH_TRACE: 'true'
         run: |
           set -euo pipefail
           mkdir -p artifacts/v2-scifact-e2e
-          npm run eval:v2-scifact-e2e --             --data-dir=/tmp/truthlens-scifact/scifact             --max-claims=300             --candidate-k=100             --dense-k=300             --final-k=8             --output=artifacts/v2-scifact-e2e/scifact-end-to-end.json             2>&1 | tee artifacts/v2-scifact-e2e/scifact-end-to-end.log
+          npm run eval:v2-scifact-e2e -- \
+            --data-dir=/tmp/truthlens-scifact/scifact \
+            --max-claims=300 \
+            --candidate-k=100 \
+            --dense-k=300 \
+            --final-k=8 \
+            --research-trace=true \
+            --output=artifacts/v2-scifact-e2e/scifact-end-to-end.json \
+            2>&1 | tee artifacts/v2-scifact-e2e/scifact-end-to-end.log
+
+      - name: Run paired SciFact passage-granularity diagnostic
+        env:
+          TRUTHLENS_V2_ML_CALL_TIMEOUT_MS: 180000
+        run: |
+          set -euo pipefail
+          npm run eval:v2-scifact-passage-granularity -- \
+            --data-dir=/tmp/truthlens-scifact/scifact \
+            --max-claims=300 \
+            --output=artifacts/v2-scifact-e2e/scifact-passage-granularity.json \
+            2>&1 | tee artifacts/v2-scifact-e2e/scifact-passage-granularity.log
 
       - name: Validate benchmark provenance and metric denominators
         env:
@@ -126,6 +150,35 @@ jobs:
               assert report["models"][model_key]["artifact_sha256"] == expected_weight
 
           rows = report["rows"]
+          # A successful benchmark is not sufficient unless the opt-in NLI
+          # diagnostics were actually enabled and persisted in the artifact.
+          assert report["config"].get("research_trace_enabled") is True, "NLI research trace must be enabled for this diagnostic run"
+          assert all("evidence_trace" in row for row in rows), "Every claim row must carry an evidence_trace field (possibly empty)"
+          trace_entries = [entry for row in rows for entry in row["evidence_trace"]]
+          assert trace_entries, "Expected at least one per-evidence NLI trace entry"
+          for entry in trace_entries:
+              trace = entry.get("research_trace")
+              assert isinstance(trace, dict), "Every evidence entry must include research_trace"
+              assert isinstance(trace.get("relatedness_cosine"), (int, float))
+              assert isinstance(trace.get("relatedness_gate_passed"), bool)
+              assert trace.get("selected_hypothesis_pass") in ("passA:claim-as-stated", "passB:content-proposition", "relatedness_gate")
+              assert "raw_probabilities" in trace and "pass_a_probabilities" in trace
+              if trace["selected_hypothesis_pass"] == "relatedness_gate":
+                  assert trace["raw_probabilities"] is None, "Gated passages must not claim cross-encoder probabilities"
+              else:
+                  probs = trace["raw_probabilities"]
+                  assert isinstance(probs, dict) and all(isinstance(probs.get(k), (int, float)) for k in ("entailment", "contradiction", "neutral"))
+                  assert all(0 <= probs[k] <= 1 for k in ("entailment", "contradiction", "neutral"))
+                  assert abs(sum(probs[k] for k in ("entailment", "contradiction", "neutral")) - 1.0) < 1e-5
+              decision = entry.get("research_decision_trace")
+              assert isinstance(decision, dict), "Every evidence entry must include decision-weight trace"
+              expected_direction = entry["nli_label"] if entry["nli_label"] in ("SUPPORTS", "REFUTES") else "NONE"
+              assert decision.get("vote_direction") == expected_direction
+              assert decision.get("contributes_to_directional_tally") is (expected_direction != "NONE")
+              expected_weight = entry["nli_confidence"] * entry["rerank_score"] * decision["duplicate_penalty"]
+              assert abs(decision["vote_weight"] - expected_weight) < 1e-8, "Recorded vote weight must match NLI confidence × rerank score × duplicate penalty"
+          assert all(isinstance(row.get("final_decision_rule_trace"), list) for row in rows), "Every claim row must carry final decision-rule trace"
+          print("NLI research trace artifact contract: PASS; entries=" + str(len(trace_entries)))
           evidence_claims = sum(bool(row["gold_evidence_ids"]) for row in rows)
           end_to_end = report["end_to_end"]
           assert evidence_claims == end_to_end["open_candidate_recall_denominator"]
@@ -147,7 +200,7 @@ jobs:
           PY
 
       - name: Upload benchmark artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: truthlens-v2-scifact-end-to-end
           path: artifacts/v2-scifact-e2e
