@@ -20,6 +20,7 @@ on:
   pull_request:
     branches:
       - main
+      - research/scifact-passage-error-diagnostics-2026-11-03
     # Run the expensive full SciFact pass only when evaluation inputs/runtime
     # change. Do not launch it for unrelated model-quality workflow edits or
     # package.json script registrations; CI still type-checks those changes.
@@ -109,7 +110,15 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p artifacts/v2-scifact-e2e
-          npm run eval:v2-scifact-e2e --             --data-dir=/tmp/truthlens-scifact/scifact             --max-claims=300             --candidate-k=100             --dense-k=300             --final-k=8             --output=artifacts/v2-scifact-e2e/scifact-end-to-end.json             2>&1 | tee artifacts/v2-scifact-e2e/scifact-end-to-end.log
+          npm run eval:v2-scifact-e2e -- \
+            --data-dir=/tmp/truthlens-scifact/scifact \
+            --max-claims=300 \
+            --candidate-k=100 \
+            --dense-k=300 \
+            --final-k=8 \
+            --passage-max-chars=1600 \
+            --output=artifacts/v2-scifact-e2e/scifact-end-to-end.json \
+            2>&1 | tee artifacts/v2-scifact-e2e/scifact-end-to-end.log
 
       - name: Run passage-level SciFact error diagnostics
         run: |
