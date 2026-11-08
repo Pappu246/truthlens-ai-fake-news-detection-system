@@ -138,6 +138,11 @@ jobs:
           path = Path("artifacts/v2-scifact-e2e/scifact-end-to-end.json")
           report = json.loads(path.read_text(encoding="utf-8"))
           assert report.get("benchmark") is True
+          assert report["config"]["passage_max_chars"] == 1600
+          assert report["rationale_visibility_diagnostic"]["passage_character_limit"] == 1600
+          for row in report["rows"]:
+              for evidence in row["evidence_diagnostics"]:
+                  assert len(evidence["exact_passage"]) <= 1600
           provenance = report["run_provenance"]
           assert provenance["source_commit_sha"] == os.environ["EXPECTED_COMMIT_SHA"]
           assert re.fullmatch(r"[0-9a-f]{40}", provenance["source_commit_sha"])
