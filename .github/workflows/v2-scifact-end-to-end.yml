@@ -20,6 +20,7 @@ on:
   pull_request:
     branches:
       - main
+      - research/scifact-passage-window-ablation-2026-11-08
     # Run the expensive full SciFact pass only when evaluation inputs/runtime
     # change. Do not launch it for unrelated model-quality workflow edits or
     # package.json script registrations; CI still type-checks those changes.
