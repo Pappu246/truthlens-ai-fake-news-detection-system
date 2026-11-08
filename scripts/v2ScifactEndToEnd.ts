@@ -431,7 +431,7 @@ async function main(): Promise<void> {
         'The benchmark directional decision is a single-source-compatible research evaluator because classic SciFact provides evidence from cited papers; it does not replace the production two-independent-source policy.',
         'Production-policy metrics are reported separately to expose the cost of the policy/dataset mismatch rather than hiding it.',
         'No production thresholds, source rules, abstention rules, or production models were changed.',
-        `NLI passage character limit was explicitly configured to ${passageMaxChars}; the default remains 800 for other V2 callers.`
+        `NLI passage character limit was explicitly configured to ${passageMaxChars}; the default remains 800 for other V2 callers.`,
         'This benchmark does not by itself establish world-leading performance; it establishes a reproducible external end-to-end measurement.'
       ],
       rows
