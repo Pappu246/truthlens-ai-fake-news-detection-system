@@ -141,7 +141,9 @@ jobs:
           assert report["rationale_visibility_diagnostic"]["passage_character_limit"] == 1600
           for row in report["rows"]:
               for evidence in row["evidence_diagnostics"]:
-                  assert len(evidence["exact_passage"]) <= 1600
+                  assert len(evidence["exact_passage"]) <= 1603
+                  if len(evidence["exact_passage"]) > 1600:
+                      assert evidence["exact_passage"].endswith("...")
           provenance = report["run_provenance"]
           assert provenance["source_commit_sha"] == os.environ["EXPECTED_COMMIT_SHA"]
           assert re.fullmatch(r"[0-9a-f]{40}", provenance["source_commit_sha"])

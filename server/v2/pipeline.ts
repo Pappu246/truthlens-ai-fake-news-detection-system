@@ -34,7 +34,7 @@ export interface V2PipelineOptions {
   enableFullTextEnrichment?: boolean;
   priorOverride?: RawPriorInput;
   minCandidatesExpectedWarning?: number;
-  /** Maximum sanitized characters passed to NLI; defaults to 800. Research benchmarks may vary this explicitly. */
+  /** Maximum source characters retained before the sanitizer's optional 3-character truncation marker; defaults to 800. */
   passageMaxChars?: number;
   /** Optional publication-date cutoff for research evidence integrity. */
   claimDate?: string | null;

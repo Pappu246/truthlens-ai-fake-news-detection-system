@@ -17,12 +17,12 @@ The earlier paired diagnostic compared full-abstract predictions (subject to the
 This branch adds a bounded, opt-in `passageMaxChars` option to the V2 research pipeline:
 
 - Default remains 800 characters for every existing caller.
-- Valid range is 1–8,000 characters; invalid values fail closed.
-- The exact sanitized passage supplied to NLI is the passage recorded in provenance.
+- Valid source-text cap is 1–8,000 characters; invalid values fail closed. When sanitization truncates, its existing three-character `...` marker is appended, so the final NLI passage can be up to cap + 3 characters.
+- The exact sanitized passage supplied to NLI is the passage recorded in provenance; truncation-marker length is accounted for separately.
 - The SciFact benchmark includes `passage_max_chars` in the sealed run config and in its config SHA-256.
 - The 800-character baseline is PR #169's exact-head artifact; this branch runs the same frozen SciFact dev inputs, sealed model manifest, retrieval settings, NLI model, and decision thresholds with a 1,600-character passage window.
 
-The 1,600-character value is an experimental condition, not a recommended production setting or a tuned threshold.
+The 1,600-character source-text cap is an experimental condition, not a recommended production setting or a tuned threshold. The final passage may include the sanitizer's three-character truncation marker.
 
 ## Required interpretation
 

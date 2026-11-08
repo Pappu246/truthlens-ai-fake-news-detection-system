@@ -407,16 +407,16 @@ async function main(): Promise<void> {
       passageMaxChars: 1200,
       minCandidatesExpectedWarning: 0
     });
-    check('explicit 1200-character window reaches NLI', seenPassage.length === 1200, String(seenPassage.length));
+    check('explicit 1200-character window reaches NLI', seenPassage.length === 1203 && seenPassage.endsWith('...'), String(seenPassage.length));
     check('provenance stores the exact same 1200-character NLI passage',
-      extended.provenance.evidence[0]?.exact_passage === seenPassage && extended.provenance.evidence[0]?.exact_passage.length === 1200);
+      extended.provenance.evidence[0]?.exact_passage === seenPassage && extended.provenance.evidence[0]?.exact_passage.length === 1203);
 
     await verifyClaimV2(CLAIM, {
       corpus: makeLongCorpus(),
       nliAdapter: captureAdapter,
       minCandidatesExpectedWarning: 0
     });
-    check('omitting passageMaxChars preserves the historical 800-character default', seenPassage.length === 800, String(seenPassage.length));
+    check('omitting passageMaxChars preserves the historical 800-character default', seenPassage.length === 803 && seenPassage.endsWith('...'), String(seenPassage.length));
 
     let invalidRejected = false;
     try {
