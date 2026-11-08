@@ -34,15 +34,17 @@ export interface V2PipelineOptions {
   enableFullTextEnrichment?: boolean;
   priorOverride?: RawPriorInput;
   minCandidatesExpectedWarning?: number;
+  /** Maximum source characters retained before the sanitizer's optional 3-character truncation marker; defaults to 800. */
+  passageMaxChars?: number;
   /** Optional publication-date cutoff for research evidence integrity. */
   claimDate?: string | null;
   /** Exclude evidence published after claimDate when true (default when valid date supplied). */
   enforceTemporalEvidence?: boolean;
 }
 
-function passageFor(candidate: RetrievedCandidate): string {
+function passageFor(candidate: RetrievedCandidate, maxChars: number): string {
   const raw = candidate.contentType === 'FULL_ARTICLE' && candidate.body ? candidate.body : candidate.snippet;
-  return sanitiseUntrustedEvidence(raw || candidate.title || '', 800).text;
+  return sanitiseUntrustedEvidence(raw || candidate.title || '', maxChars).text;
 }
 
 function lookupPrior(claimText: string): RawPriorInput {
@@ -91,6 +93,10 @@ export async function verifyClaimV2(claimText: string, options?: V2PipelineOptio
   const corpus = options?.corpus ?? new LiveEvidenceProviderCorpusSource();
   const nliAdapter = resolveNliAdapter(options?.nliAdapter);
   const thresholds = options?.thresholds ?? DEFAULT_DECISION_THRESHOLDS;
+  const passageMaxChars = options?.passageMaxChars ?? 800;
+  if (!Number.isInteger(passageMaxChars) || passageMaxChars < 1 || passageMaxChars > 8000) {
+    throw new Error('passageMaxChars must be an integer between 1 and 8000.');
+  }
 
   const usingRemoteNli = nliAdapter.modelName !== defaultNliAdapter.modelName;
   const limitations: string[] = [
@@ -182,7 +188,7 @@ export async function verifyClaimV2(claimText: string, options?: V2PipelineOptio
     const classifiedChunks: ClassifiedEvidence[][] = [];
     for (let start = 0; start < reranked.length; start += batchSize) {
       const chunk = reranked.slice(start, start + batchSize);
-      const passages = chunk.map(passageFor);
+      const passages = chunk.map(candidate => passageFor(candidate, passageMaxChars));
       const nliResults = await batchCapableNli.classifyBatch(claim, passages);
       classifiedChunks.push(chunk.map((r, index) => {
         const passage = passages[index];
@@ -198,7 +204,7 @@ export async function verifyClaimV2(claimText: string, options?: V2PipelineOptio
       reranked,
       options?.nliConcurrency ?? (nliAdapter.modelName === defaultNliAdapter.modelName ? reranked.length : 4),
       async r => {
-        const passage = passageFor(r);
+        const passage = passageFor(r, passageMaxChars);
         const nli = await nliAdapter.classify(claim, passage, r.publishedAt || undefined);
         const safeTitle = sanitiseUntrustedEvidence(r.title || '', 240).text;
         const safePublisher = sanitiseUntrustedEvidence(r.publisher || 'Unknown source', 120).text;
