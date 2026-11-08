@@ -159,7 +159,15 @@ async function main(): Promise<void> {
   const enableFullTextEnrichment = false;
   const minCandidatesExpectedWarning = 0;
   const relatednessFloor = 0.15;
+  const researchTraceArg = arg('research-trace');
+  const researchTraceEnabled = researchTraceArg === undefined
+    ? process.env.TRUTHLENS_V2_RESEARCH_TRACE === 'true'
+    : researchTraceArg === 'true';
+  if (process.env.TRUTHLENS_V2_REQUIRE_RESEARCH_TRACE === 'true' && !researchTraceEnabled) {
+    throw new Error('Research trace is required for this diagnostic run but was not enabled. Set --research-trace=true or TRUTHLENS_V2_RESEARCH_TRACE=true.');
+  }
   const runConfig = {
+    research_trace_enabled: researchTraceEnabled,
     candidate_pool_k: topCandidates,
     dense_retrieval_k: denseTopK,
     final_pipeline_k: finalTopK,
@@ -172,13 +180,14 @@ async function main(): Promise<void> {
   };
   const modelManifest = sealedModelManifest();
   const modelManifestSha256 = sha256Json(modelManifest);
-  const sourceCommitSha = process.env.GITHUB_SHA || null;
+  const sourceCommitSha = process.env.TRUTHLENS_EVALUATED_COMMIT_SHA || process.env.GITHUB_SHA || null;
 
   console.log(`SciFact retrieval config: candidate-k=${topCandidates}, dense-k=${denseTopK}, final-k=${finalTopK}`);
   console.log(`SciFact provenance: commit=${sourceCommitSha ?? 'un-pinned-local-run'}, config_sha256=${sha256Json(runConfig)}, model_manifest_sha256=${modelManifestSha256}`);
+  console.log(`SciFact per-evidence NLI research trace: ${researchTraceEnabled ? 'ENABLED' : 'disabled'}`);
 
   const embeddingModel = new TransformerEmbeddingModel();
-  const nliAdapter = new PretrainedNliAdapter({ embeddingModel, relatednessFloor });
+  const nliAdapter = new PretrainedNliAdapter({ embeddingModel, relatednessFloor, researchTrace: researchTraceEnabled });
   const source = new SciFactOpenCorpusSource(corpus, {
     topK: topCandidates,
     denseEmbeddingModel: embeddingModel,
@@ -261,7 +270,20 @@ async function main(): Promise<void> {
         final_confidence: result.provenance.final_confidence,
         abstained: result.provenance.abstained,
         nli_model: nliAdapter.modelName,
-        embedding_model: embeddingModel.name
+        embedding_model: embeddingModel.name,
+        ...(researchTraceEnabled ? {
+          evidence_trace: result.provenance.evidence.map(e => ({
+            evidence_id: e.evidence_id,
+            content_type: e.content_type,
+            nli_label: e.nli_label,
+            nli_confidence: e.nli_confidence,
+            research_trace: e.research_trace ?? null,
+            rerank_score: e.rerank_score,
+            rerank_signals: e.rerank_signals,
+            research_decision_trace: e.research_decision_trace ?? null
+          })),
+          final_decision_rule_trace: result.provenance.decision_rule_trace
+        } : {})
       });
 
       if ((i + 1) % 10 === 0 || i + 1 === claims.length) {
