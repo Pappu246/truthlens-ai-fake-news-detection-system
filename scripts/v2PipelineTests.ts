@@ -411,7 +411,7 @@ async function main(): Promise<void> {
     check('provenance stores the exact same 1200-character NLI passage',
       extended.provenance.evidence[0]?.exact_passage === seenPassage && extended.provenance.evidence[0]?.exact_passage.length === 1200);
 
-    const defaulted = await verifyClaimV2(CLAIM, {
+    await verifyClaimV2(CLAIM, {
       corpus: makeLongCorpus(),
       nliAdapter: captureAdapter,
       minCandidatesExpectedWarning: 0
