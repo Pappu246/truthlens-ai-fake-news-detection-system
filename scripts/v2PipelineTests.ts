@@ -372,6 +372,61 @@ async function main(): Promise<void> {
     check('agreeing prior is recorded as agreeing', agreeing.provenance.prior_signal.weightApplied > 0);
   }
 
+  // ------------------------------------------------------ 18. PASSAGE WINDOW ABLATION
+  section('18. Configurable NLI passage window preserves the 800-character default');
+  {
+    const longSnippet = 'Officials confirmed unemployment fell to 4.1 percent in March 2024, according to official data. ' +
+      'Additional context about the same statistical release. '.repeat(80);
+    let seenPassage = '';
+    const captureAdapter = {
+      modelName: 'fixture-capture-nli',
+      modelVersion: 'fixture-1',
+      classify: (_claim: any, passage: string) => {
+        seenPassage = passage;
+        return {
+          label: 'SUPPORTS',
+          scores: { supports: 0.9, refutes: 0.02, neutral: 0.07, unclear: 0.01 },
+          confidence: 0.9,
+          modelName: 'fixture-capture-nli',
+          modelVersion: 'fixture-1',
+          basis: 'deterministic passage-window fixture'
+        };
+      }
+    } as any;
+    const makeLongCorpus = () => new FixtureCorpusSource([
+      d({
+        id: 'passage-window-fixture',
+        url: 'https://www.reuters.com/passage-window-fixture',
+        publisher: 'Reuters',
+        snippet: longSnippet
+      })
+    ]);
+    const extended = await verifyClaimV2(CLAIM, {
+      corpus: makeLongCorpus(),
+      nliAdapter: captureAdapter,
+      passageMaxChars: 1200,
+      minCandidatesExpectedWarning: 0
+    });
+    check('explicit 1200-character window reaches NLI', seenPassage.length === 1200, String(seenPassage.length));
+    check('provenance stores the exact same 1200-character NLI passage',
+      extended.provenance.evidence[0]?.exact_passage === seenPassage && extended.provenance.evidence[0]?.exact_passage.length === 1200);
+
+    const defaulted = await verifyClaimV2(CLAIM, {
+      corpus: makeLongCorpus(),
+      nliAdapter: captureAdapter,
+      minCandidatesExpectedWarning: 0
+    });
+    check('omitting passageMaxChars preserves the historical 800-character default', seenPassage.length === 800, String(seenPassage.length));
+
+    let invalidRejected = false;
+    try {
+      await verifyClaimV2(CLAIM, { corpus: makeLongCorpus(), passageMaxChars: 0 });
+    } catch (error) {
+      invalidRejected = error instanceof Error && /passageMaxChars/.test(error.message);
+    }
+    check('invalid passage windows fail closed before inference', invalidRejected);
+  }
+
   console.log(`\n${'='.repeat(72)}`);
   console.log(`V2 PIPELINE TESTS: ${passed} passed, ${failed} failed (${passed + failed} total)`);
   if (failed > 0) {
