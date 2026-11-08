@@ -160,6 +160,10 @@ async function main(): Promise<void> {
   const enableFullTextEnrichment = false;
   const minCandidatesExpectedWarning = 0;
   const relatednessFloor = 0.15;
+  const passageMaxChars = Number(arg('passage-max-chars') ?? 800);
+  if (!Number.isInteger(passageMaxChars) || passageMaxChars < 1 || passageMaxChars > 8000) {
+    throw new Error('--passage-max-chars must be an integer between 1 and 8000.');
+  }
   const runConfig = {
     candidate_pool_k: topCandidates,
     dense_retrieval_k: denseTopK,
@@ -169,6 +173,7 @@ async function main(): Promise<void> {
     enable_full_text_enrichment: enableFullTextEnrichment,
     min_candidates_expected_warning: minCandidatesExpectedWarning,
     relatedness_floor: relatednessFloor,
+    passage_max_chars: passageMaxChars,
     decision_thresholds: DEFAULT_DECISION_THRESHOLDS
   };
   const modelManifest = sealedModelManifest();
@@ -210,7 +215,7 @@ async function main(): Promise<void> {
       const claim = claims[i];
       source.resetCandidateIds();
       const gold = goldLabel(claim);
-      const visibility = analyzeSciFactRationaleVisibility(claim.evidence || {}, corpus);
+      const visibility = analyzeSciFactRationaleVisibility(claim.evidence || {}, corpus, passageMaxChars);
       goldRationaleDocuments += visibility.gold_evidence_documents;
       goldRationaleSentences += visibility.gold_rationale_sentences;
       visibleGoldRationaleSentences += visibility.visible_rationale_sentences_within_limit;
@@ -224,7 +229,8 @@ async function main(): Promise<void> {
         retrieval: { embeddingModel, perQueryTopK, finalTopK },
         thresholds: DEFAULT_DECISION_THRESHOLDS,
         enableFullTextEnrichment,
-        minCandidatesExpectedWarning
+        minCandidatesExpectedWarning,
+        passageMaxChars
       });
 
       const candidateIds = new Set(source.getCandidateIds());
@@ -268,7 +274,7 @@ async function main(): Promise<void> {
         production_prediction: productionPrediction,
         candidate_pool_recall_hit: candidateHit,
         gold_evidence_ids: Array.from(goldEvidenceIds),
-        gold_rationale_visibility_800_chars: visibility,
+        gold_rationale_visibility: visibility,
         retrieved_evidence_ids_top5: topEvidenceIds,
         final_confidence: result.provenance.final_confidence,
         abstained: result.provenance.abstained,
@@ -348,7 +354,7 @@ async function main(): Promise<void> {
       config: runConfig,
       rationale_visibility_diagnostic: {
         analysis_only: true,
-        passage_character_limit: 800,
+        passage_character_limit: passageMaxChars,
         gold_evidence_documents: goldRationaleDocuments,
         gold_rationale_sentences: goldRationaleSentences,
         visible_rationale_sentences_within_limit: visibleGoldRationaleSentences,
@@ -425,6 +431,7 @@ async function main(): Promise<void> {
         'The benchmark directional decision is a single-source-compatible research evaluator because classic SciFact provides evidence from cited papers; it does not replace the production two-independent-source policy.',
         'Production-policy metrics are reported separately to expose the cost of the policy/dataset mismatch rather than hiding it.',
         'No production thresholds, source rules, abstention rules, or production models were changed.',
+        `NLI passage character limit was explicitly configured to ${passageMaxChars}; the default remains 800 for other V2 callers.`
         'This benchmark does not by itself establish world-leading performance; it establishes a reproducible external end-to-end measurement.'
       ],
       rows
