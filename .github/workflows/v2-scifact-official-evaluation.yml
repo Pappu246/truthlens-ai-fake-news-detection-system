@@ -27,7 +27,8 @@ concurrency:
 jobs:
   scifact-official:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    # The previous exact-head run reached 270/300 claims at 180 minutes; allow measured runtime plus buffer.
+    timeout-minutes: 240
     env:
       TRUTHLENS_V2_ML_CALL_TIMEOUT_MS: 180000
     steps:
