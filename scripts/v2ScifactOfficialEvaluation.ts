@@ -159,6 +159,7 @@ async function main(): Promise<void> {
             evidence_id: evidence.evidence_id,
             nli_label: evidence.nli_label,
             nli_confidence: evidence.nli_confidence,
+            raw_nli_probabilities: evidence.nli_raw_probabilities ?? null,
             rerank_score: evidence.rerank_score,
             selected_sentences: selected
           });
