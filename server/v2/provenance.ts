@@ -34,6 +34,7 @@ function toEvidenceRecord(e: ClassifiedEvidence): ProvenanceEvidenceRecord {
     exact_passage: e.passage,
     nli_label: e.nli.label,
     nli_confidence: e.nli.confidence,
+    nli_raw_probabilities: e.nli.rawProbabilities ?? null,
     nli_model: { name: e.nli.modelName, version: e.nli.modelVersion },
     rerank_score: e.rerankScore,
     rerank_signals: e.rerankSignals,
