@@ -28,6 +28,8 @@ import { ModelUnavailableError, getV2ModelDir, EMBEDDING_MODEL_MANIFEST, NLI_MOD
 const CTRL_INT32 = 8;
 const REQ_SAB_BYTES = 1 << 20; // 1 MiB request payloads (premise+hypothesis, corpus doc text)
 const RESP_SAB_BYTES = 1 << 22; // 4 MiB response payloads
+// Bound both serialized request size and response vector volume for dense retrieval.
+const MAX_EMBED_BATCH_ITEMS = 128;
 const CTRL_REQ_SEQ = 0;
 const CTRL_RESP_SEQ = 1;
 const CTRL_LEN = 2;
@@ -195,13 +197,56 @@ export class MlWorkerClient {
    */
   public embedBatch(texts: string[]): number[][] {
     if (texts.length === 0) return [];
-    const result = this.call<{ vectors: number[][] }>('embedBatch', { texts });
-    if (!Array.isArray(result.vectors) || result.vectors.length !== texts.length) {
-      throw new ModelInferenceError(
-        `ML worker embedBatch returned ${Array.isArray(result.vectors) ? result.vectors.length : 'non-array'} vectors for ${texts.length} inputs.`
-      );
+
+    // A whole corpus batch can exceed the 1 MiB SharedArrayBuffer request
+    // limit even though each document is individually valid. Split by the
+    // exact UTF-8 JSON payload size (not character count), and cap item count
+    // so the resulting 384-dim vectors stay comfortably below the 4 MiB reply
+    // buffer. Preserve input order across chunks.
+    const maxPayloadBytes = REQ_SAB_BYTES - 8;
+    const prefixBytes = Buffer.byteLength('{"op":"embedBatch","texts":[', 'utf-8');
+    const suffixBytes = Buffer.byteLength(']}', 'utf-8');
+    const batches: string[][] = [];
+    let current: string[] = [];
+    let currentBytes = prefixBytes + suffixBytes;
+
+    for (const rawText of texts) {
+      const text = String(rawText ?? '');
+      const encodedBytes = Buffer.byteLength(JSON.stringify(text), 'utf-8');
+      const separatorBytes = current.length > 0 ? 1 : 0;
+      const nextBytes = currentBytes + separatorBytes + encodedBytes;
+
+      if (current.length > 0 && (
+        current.length >= MAX_EMBED_BATCH_ITEMS ||
+        nextBytes > maxPayloadBytes
+      )) {
+        batches.push(current);
+        current = [];
+        currentBytes = prefixBytes + suffixBytes;
+      }
+
+      const singleOrNextBytes = currentBytes + (current.length > 0 ? 1 : 0) + encodedBytes;
+      if (singleOrNextBytes > maxPayloadBytes) {
+        throw new ModelInferenceError(
+          `ML worker embedBatch item is too large for the request buffer (${singleOrNextBytes} bytes, max ${maxPayloadBytes}).`
+        );
+      }
+      current.push(text);
+      currentBytes = singleOrNextBytes;
     }
-    return result.vectors;
+    if (current.length > 0) batches.push(current);
+
+    const vectors: number[][] = [];
+    for (const batch of batches) {
+      const result = this.call<{ vectors: number[][] }>('embedBatch', { texts: batch });
+      if (!Array.isArray(result.vectors) || result.vectors.length !== batch.length) {
+        throw new ModelInferenceError(
+          `ML worker embedBatch returned ${Array.isArray(result.vectors) ? result.vectors.length : 'non-array'} vectors for ${batch.length} inputs.`
+        );
+      }
+      vectors.push(...result.vectors);
+    }
+    return vectors;
   }
 
   /**
