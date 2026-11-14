@@ -24,14 +24,47 @@ def main():
     if not args.yes or not args.approve:
         raise SystemExit("Promotion is intentionally blocked: explicit confirmation is required. Review the candidate first, then re-run with both --approve and --yes.")
     d=CANDIDATES/args.model_version
-    artifact=d/"model_artifact.json"; manifest=d/"manifest.json"; liar=d/"external_validation.json"
-    for p in (artifact,manifest,liar):
-        if not p.exists(): raise SystemExit(f"Promotion blocked: missing {p}")
-    m=json.loads(manifest.read_text()); ext=json.loads(liar.read_text())
+    artifact=d/"model_artifact.json"; manifest=d/"manifest.json"
+    liar=d/"external_validation.json"
+    article_ood=d/"article_heldout_validation.json"
+    external_article=d/"external_article_validation.json"
+    runtime_safety=d/"runtime_safety_validation.json"
+    for p in (artifact,manifest,liar,article_ood,external_article,runtime_safety):
+        if not p.exists():
+            raise SystemExit(
+                f"Promotion blocked: missing {p}. A same-corpus WELFake holdout and a model manifest "
+                "are not substitutes for source-independent article validation and passing runtime safety evidence."
+            )
+    m=json.loads(manifest.read_text())
+    ext=json.loads(liar.read_text())
+    article_report=json.loads(article_ood.read_text())
+    external_article_report=json.loads(external_article.read_text())
+    safety_report=json.loads(runtime_safety.read_text())
     if m.get("model_version")!=args.model_version: raise SystemExit("Promotion blocked: manifest/model version mismatch.")
     if not m.get("dataset_fingerprint"): raise SystemExit("Promotion blocked: missing dataset fingerprint.")
+    if m.get("production_eligible") is not True: raise SystemExit("Promotion blocked: manifest does not mark candidate production_eligible after all automated gates.")
+    if m.get("article_validation", {}).get("release_gate_passed") is not True: raise SystemExit("Promotion blocked: full-article held-out quality gate did not pass.")
 
     candidate = json.loads(artifact.read_text())
+    # The candidate must use the exact thresholds frozen in the active production
+    # policy. Training/evaluation may not lower thresholds to make the gate green.
+    thresholds = candidate.get("thresholds", {})
+    if thresholds.get("fake_threshold") != 0.98 or thresholds.get("real_threshold") != 0.35:
+        raise SystemExit(
+            "Promotion blocked: candidate thresholds do not match production policy (fake 0.98 / real 0.35)."
+        )
+    runtime_policy = m.get("training_contract", {}).get("runtime_policy", {})
+    expected_runtime_policy = {
+        "fake_threshold": 0.98,
+        "real_threshold": 0.35,
+        "low_vocabulary_coverage_threshold": 0.10,
+        "ood_short_word_count": 100,
+        "ood_coverage_threshold": 0.35,
+    }
+    if runtime_policy != expected_runtime_policy:
+        raise SystemExit(
+            "Promotion blocked: model-version fingerprint does not bind the complete frozen production decision/OOD policy."
+        )
     selected = candidate.get("selected_model", {})
     inference_mode = selected.get("inference_mode")
     if inference_mode not in ("single_calibrated_svm", "calibrated_ensemble"):
@@ -45,23 +78,146 @@ def main():
     candidate_metrics = candidate.get("metrics", {})
     if not candidate_metrics.get("test") or not candidate_metrics.get("temporal_test"):
         raise SystemExit("Promotion blocked: untouched test and temporal-test metrics are required.")
+    # Primary gate is task-matched full-article external validation.
+    article_metrics = article_report.get("metrics", {})
+    expected_md5 = "73c9675a4b3d09f86a6933d0b8d7d908"
+    if article_report.get("status") != "COMPLETED":
+        raise SystemExit("Promotion blocked: WELFake held-out full-article validation is not COMPLETED.")
+    partition_scope = article_report.get("partition_scope", {})
+    if partition_scope.get("is_source_independent_external_test") is not False:
+        raise SystemExit("Promotion blocked: held-out report must accurately identify its same-corpus scope.")
+    if partition_scope.get("holdout_is_never_fit_calibrated_or_selected") is not True:
+        raise SystemExit("Promotion blocked: holdout partition usage is not verified.")
+    if partition_scope.get("holdout_overlaps_train") is not False or partition_scope.get("holdout_overlaps_validation") is not False:
+        raise SystemExit("Promotion blocked: holdout hash sets overlap train or validation.")
+    if article_report.get("dataset_md5") != expected_md5:
+        raise SystemExit("Promotion blocked: WELFake dataset checksum does not match the approved evaluation corpus.")
+    if article_report.get("candidate_artifact_sha256") != sha256(artifact):
+        raise SystemExit("Promotion blocked: WELFake report is not bound to this exact candidate artifact.")
+    if article_report.get("eligible_samples", 0) < 10000:
+        raise SystemExit("Promotion blocked: fewer than 10,000 eligible non-overlap full articles were evaluated.")
+    article_balanced = article_metrics.get("balanced_accuracy")
+    fake_recall = article_metrics.get("fake_recall")
+    real_recall = article_metrics.get("real_recall")
+    if not isinstance(article_balanced, (int, float)) or article_balanced < 0.70:
+        raise SystemExit("Promotion blocked: WELFake full-article balanced accuracy must be at least 0.70.")
+    if not isinstance(fake_recall, (int, float)) or fake_recall < 0.70:
+        raise SystemExit("Promotion blocked: WELFake full-article fake recall must be at least 0.70.")
+    if not isinstance(real_recall, (int, float)) or real_recall < 0.70:
+        raise SystemExit("Promotion blocked: WELFake full-article real recall must be at least 0.70.")
+    if article_report.get("release_gate", {}).get("passed") is not True:
+        raise SystemExit("Promotion blocked: WELFake release-gate decision is not PASS.")
+
+    # A WELFake holdout from the same training corpus is necessary but not an
+    # independent-domain generalization test. Promotion therefore requires a
+    # separate, artifact-bound evaluation on full articles from source/domain
+    # data that was not used for fit, calibration, feature selection, thresholds,
+    # or candidate selection. Missing or ambiguously scoped evidence fails closed.
+    external_scope = external_article_report.get("partition_scope", {})
+    if external_article_report.get("status") != "COMPLETED":
+        raise SystemExit("Promotion blocked: source-independent full-article validation is not COMPLETED.")
+    if external_article_report.get("candidate_artifact_sha256") != sha256(artifact):
+        raise SystemExit("Promotion blocked: independent article report is not bound to this exact candidate artifact.")
+    if external_article_report.get("dataset_sha256") in (None, ""):
+        raise SystemExit("Promotion blocked: independent article dataset checksum is missing.")
+    if external_article_report.get("eligible_samples", 0) < 10000:
+        raise SystemExit("Promotion blocked: fewer than 10,000 eligible source-independent full articles were evaluated.")
+    if external_scope.get("is_source_independent_external_test") is not True:
+        raise SystemExit("Promotion blocked: article benchmark is not source-independent.")
+    if external_scope.get("overlaps_training") is not False or external_scope.get("overlaps_validation") is not False:
+        raise SystemExit("Promotion blocked: independent article benchmark has missing or overlapping train/validation scope.")
+    if external_scope.get("used_for_fit_calibration_or_selection") is not False:
+        raise SystemExit("Promotion blocked: external article benchmark was used for fitting, calibration or model selection.")
+    if external_article_report.get("release_gate", {}).get("passed") is not True:
+        raise SystemExit("Promotion blocked: source-independent full-article quality gate did not pass.")
+    independent_metrics = external_article_report.get("metrics", {})
+    if not isinstance(independent_metrics.get("balanced_accuracy"), (int, float)) or independent_metrics["balanced_accuracy"] < 0.70:
+        raise SystemExit("Promotion blocked: independent article balanced accuracy must be at least 0.70.")
+    if not isinstance(independent_metrics.get("fake_recall"), (int, float)) or independent_metrics["fake_recall"] < 0.70:
+        raise SystemExit("Promotion blocked: independent article fake recall must be at least 0.70.")
+    if not isinstance(independent_metrics.get("real_recall"), (int, float)) or independent_metrics["real_recall"] < 0.70:
+        raise SystemExit("Promotion blocked: independent article real recall must be at least 0.70.")
+
+    # This marker is created by the candidate-specific runtime safety test only
+    # after every assertion passes. It is cryptographically bound to this model
+    # artifact; a stale marker or a failed/cancelled test cannot authorize deploy.
+    if safety_report.get("status") != "COMPLETED" or safety_report.get("passed") is not True:
+        raise SystemExit("Promotion blocked: runtime model safety regression has not passed.")
+    if safety_report.get("candidate_model_version") != args.model_version:
+        raise SystemExit("Promotion blocked: runtime safety report model version does not match.")
+    if safety_report.get("candidate_artifact_sha256") != sha256(artifact):
+        raise SystemExit("Promotion blocked: runtime safety report is not bound to this exact candidate artifact.")
+    if safety_report.get("assertions_failed") != 0 or safety_report.get("assertions_passed", 0) < 1:
+        raise SystemExit("Promotion blocked: runtime safety report is incomplete or contains failed assertions.")
+    runtime_policy = article_report.get("runtime_decision_policy", {})
+    runtime_metrics = runtime_policy.get("metrics", {})
+    if runtime_policy.get("passed") is not True:
+        raise SystemExit("Promotion blocked: actual runtime decision/abstention policy did not pass.")
+    if runtime_metrics.get("coverage", 0) < 0.50:
+        raise SystemExit("Promotion blocked: actual runtime policy coverage must be at least 0.50.")
+    if runtime_metrics.get("operational_balanced_accuracy_abstentions_count_as_not_correct", 0) < 0.70:
+        raise SystemExit("Promotion blocked: actual runtime policy operational balanced accuracy must be at least 0.70.")
+    if runtime_metrics.get("fake_recall_all_fake_samples", 0) < 0.70:
+        raise SystemExit("Promotion blocked: runtime policy fake recall must be at least 0.70.")
+    if runtime_metrics.get("real_recall_all_real_samples", 0) < 0.70:
+        raise SystemExit("Promotion blocked: runtime policy real recall must be at least 0.70.")
+    ablation = article_report.get("source_attribution_ablation", {})
+    ablation_metrics = ablation.get("metrics", {})
+    if ablation.get("passed") is not True:
+        raise SystemExit("Promotion blocked: publisher-byline ablation did not pass.")
+    if ablation_metrics.get("balanced_accuracy", 0) < 0.65:
+        raise SystemExit("Promotion blocked: byline-ablation balanced accuracy must be at least 0.65.")
+    if ablation_metrics.get("fake_recall", 0) < 0.65:
+        raise SystemExit("Promotion blocked: byline-ablation fake recall must be at least 0.65.")
+    if ablation_metrics.get("real_recall", 0) < 0.65:
+        raise SystemExit("Promotion blocked: byline-ablation real recall must be at least 0.65.")
+    ablation_runtime_policy = ablation.get("runtime_decision_policy", {})
+    ablation_runtime_metrics = ablation_runtime_policy.get("metrics", {})
+    if ablation_runtime_policy.get("passed") is not True:
+        raise SystemExit("Promotion blocked: runtime decision policy failed the publisher-byline ablation.")
+    if ablation_runtime_metrics.get("coverage", 0) < 0.50:
+        raise SystemExit("Promotion blocked: byline-ablation runtime-policy coverage must be at least 0.50.")
+    if ablation_runtime_metrics.get("operational_balanced_accuracy_abstentions_count_as_not_correct", 0) < 0.65:
+        raise SystemExit("Promotion blocked: byline-ablation runtime-policy balanced accuracy must be at least 0.65.")
+    if ablation_runtime_metrics.get("fake_recall_all_fake_samples", 0) < 0.65:
+        raise SystemExit("Promotion blocked: byline-ablation runtime-policy fake recall must be at least 0.65.")
+    if ablation_runtime_metrics.get("real_recall_all_real_samples", 0) < 0.65:
+        raise SystemExit("Promotion blocked: byline-ablation runtime-policy real recall must be at least 0.65.")
+
+    # LIAR is a sentence/claim benchmark, not a full-article benchmark. Keep
+    # its result mandatory and auditable, but do not use it as the primary
+    # metric gate for the different article-classification task.
+    if ext.get("status") != "COMPLETED":
+        raise SystemExit("Promotion blocked: LIAR claim-level diagnostic is not COMPLETED.")
+    if ext.get("eligible_binary_samples", 0) <= 0:
+        raise SystemExit("Promotion blocked: no LIAR claim samples were evaluated.")
     ext_metrics = ext.get("metrics", {})
-    balanced = ext_metrics.get("balanced_accuracy")
-    if not isinstance(balanced, (int, float)):
-        raise SystemExit("Promotion blocked: LIAR balanced accuracy is required.")
-    if balanced <= 0.50:
-        raise SystemExit(
-            f"Promotion blocked: out-of-domain LIAR balanced accuracy {balanced:.4f} is not above chance."
-        )
-    # NOTE: the unconditional gate above already guarantees args.approve is
-    # True by this point (execution cannot reach here otherwise), which
-    # makes this specific check currently unreachable. Kept intentionally
-    # as defense-in-depth in case the gate above is ever relaxed to accept
-    # --yes alone -- do not delete this without re-verifying the gate above
-    # still enforces both --approve and --yes unconditionally.
-    if not args.approve and m.get("production_eligible") is not True: raise SystemExit("Promotion blocked: explicit human approval is required.")
-    if ext.get("status")!="COMPLETED": raise SystemExit("Promotion blocked: LIAR validation is not COMPLETED.")
-    if ext.get("eligible_binary_samples",0)<=0: raise SystemExit("Promotion blocked: no LIAR samples were evaluated.")
+    print(json.dumps({
+        "candidate_model_version": args.model_version,
+        "article_heldout_validation": {
+            "dataset": article_report.get("dataset"),
+            "eligible_samples": article_report.get("eligible_samples"),
+            "balanced_accuracy": article_balanced,
+            "fake_recall": fake_recall,
+            "real_recall": real_recall,
+            "runtime_policy_coverage": runtime_metrics.get("coverage"),
+            "runtime_policy_operational_balanced_accuracy": runtime_metrics.get("operational_balanced_accuracy_abstentions_count_as_not_correct"),
+            "runtime_policy_fake_recall": runtime_metrics.get("fake_recall_all_fake_samples"),
+            "runtime_policy_real_recall": runtime_metrics.get("real_recall_all_real_samples"),
+            "byline_ablation_balanced_accuracy": ablation_metrics.get("balanced_accuracy"),
+            "byline_ablation_fake_recall": ablation_metrics.get("fake_recall"),
+            "byline_ablation_real_recall": ablation_metrics.get("real_recall"),
+            "byline_ablation_runtime_policy_coverage": ablation_runtime_metrics.get("coverage"),
+            "byline_ablation_runtime_policy_operational_balanced_accuracy": ablation_runtime_metrics.get("operational_balanced_accuracy_abstentions_count_as_not_correct")
+        },
+        "liar_claim_diagnostic": {
+            "eligible_binary_samples": ext.get("eligible_binary_samples"),
+            "accuracy": ext_metrics.get("accuracy"),
+            "balanced_accuracy": ext_metrics.get("balanced_accuracy"),
+            "macro_f1": ext_metrics.get("macro_f1")
+        },
+        "explicit_human_approval": True
+    }, indent=2))
     if sha256(artifact)!=m.get("artifact_sha256"): raise SystemExit("Promotion blocked: candidate artifact hash mismatch.")
     BACKUPS.mkdir(parents=True,exist_ok=True)
     stamp=datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")

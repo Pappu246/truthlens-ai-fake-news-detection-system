@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Train an exact, compact production-runtime ISOT candidate.
+"""Train an exact compact production-runtime calibrated candidate.
 
-This pipeline is deliberately separate from scripts/train_isot.py:
-- uses the verified Phase 2 group-aware splits;
-- reproduces the Node tokenizer/TF-IDF term construction exactly;
-- trains LinearSVC on train, fits Platt calibration only on disjoint validation;
-- evaluates untouched test + temporal test;
-- evaluates the exact same runtime scorer on LIAR OOD;
-- writes a compact candidate artifact with one SVM + one Platt calibrator.
-It NEVER modifies data/saved_model_artifacts.json.
+Without --welfake, this reproduces an ISOT-only research candidate. With the
+verified WELFake CSV, it trains on ISOT's leak-aware train split plus WELFake's
+40% train partition, fits calibration/model selection on the combined ISOT and
+WELFake validation partitions, and reserves a disjoint 50% WELFake hash holdout
+that is never used for fitting/calibration/selection. Exact normalized-text
+overlaps with the complete ISOT corpus and duplicate/conflicting WELFake groups
+are removed first. The artifact format remains the exact runtime SVM + Platt
+calibrator contract. This script NEVER modifies production model artifacts.
 """
 import argparse
 import csv
@@ -29,6 +29,7 @@ from sklearn.metrics import (
     accuracy_score, average_precision_score, balanced_accuracy_score, brier_score_loss,
     confusion_matrix, f1_score, precision_score, recall_score, roc_auc_score,
 )
+from sklearn.model_selection import train_test_split
 from sklearn.svm import LinearSVC
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -36,6 +37,23 @@ DATA = ROOT / "data"
 PREP = DATA / "isot_prepared"
 DEFAULT_OUT = ROOT / "artifacts" / "models"
 SEED = 42
+# Match the frozen production runtime policy exactly. Policy changes are versioned
+# into the candidate fingerprint and never alter the deployed artifact.
+FAKE_THRESHOLD = 0.98
+REAL_THRESHOLD = 0.35
+LOW_VOCABULARY_COVERAGE_THRESHOLD = 0.10
+OOD_SHORT_WORD_COUNT = 100
+OOD_COVERAGE_THRESHOLD = 0.35
+SENSATIONAL_CONFLICT_TERMS = [
+    "shocking", "unbelievable", "secret", "exposed", "censored", "miracle", "bombshell",
+    "banned", "terrifying", "mind control", "clones", "whistleblower", "alien", "suppressed",
+    "hidden truth", "deep state", "globalist", "poisons", "furious", "wake up", "conspiracy",
+    "mutant", "occult", "chemtrails", "nano-circuits", "brainwash",
+]
+CERTAINTY_CONFLICT_TERMS = [
+    "guaranteed", "100%", "never before", "undeniable", "proven fact", "absolute proof",
+    "every single", "cure all", "miracle cure", "completely destroys", "cures all",
+]
 
 STOPWORDS = {
     'a', 'about', 'above', 'after', 'again', 'against', 'all', 'am', 'an', 'and', 'any', 'are',
@@ -59,11 +77,38 @@ STOPWORDS = {
 PUNCT_RE = re.compile(r'[.,/#!$%\^&\*;:{}=\-_\`~()?"\'\[\]]')
 URL_RE = re.compile(r'https?://\S+|www\.\S+')
 HTML_RE = re.compile(r'<.*?>')
+WIRE_DATELINE_RE = re.compile(
+    r"(?:\b[A-Z][A-Z0-9 .,'’/-]{2,60}\s+)?\(\s*(?:Reuters|Associated Press|AP News|AP|AFP|Agence France-Presse|Bloomberg News)\s*\)\s*[-—:]\s*",
+)
+WIRE_PREFIX_RE = re.compile(
+    r"\b(?:Reuters|Associated Press|AP News|AP|AFP|Bloomberg News)\s*[-—:]\s*",
+    re.IGNORECASE,
+)
+WIRE_BYLINE_SUFFIX_RE = re.compile(
+    r"\s*[-|–—]\s*(?:Reuters|Associated Press|AP News|AFP|Agence France-Presse|Bloomberg News)(?=\s|$)",
+    re.IGNORECASE,
+)
+SOCIAL_CTA_RE = re.compile(
+    r"\b(?:please\s+)?share\s+(?:this|the\s+(?:story|article|post|news))\s+before\b[^.!?\n]*(?:[.!?]|$)"
+    r"|\b(?:like\s+and\s+share|subscribe\s+to\s+(?:our|the)\s+newsletter|click\s+here\s+to\s+read\s+more)\b[^.!?\n]*(?:[.!?]|$)",
+    re.IGNORECASE,
+)
+
+
+def normalize_editorial_boilerplate(text: str) -> str:
+    """Remove narrow wire-service byline and explicit social CTA boilerplate."""
+    normalized = text or ""
+    normalized = WIRE_DATELINE_RE.sub(" ", normalized)
+    normalized = WIRE_PREFIX_RE.sub(" ", normalized)
+    normalized = WIRE_BYLINE_SUFFIX_RE.sub(" ", normalized)
+    normalized = SOCIAL_CTA_RE.sub(" ", normalized)
+    return re.sub(r'\s+', ' ', normalized).strip()
+
 
 def clean_text(text: str) -> str:
     if not text:
         return ""
-    cleaned = text.lower()
+    cleaned = normalize_editorial_boilerplate(text).lower()
     cleaned = URL_RE.sub(" ", cleaned)
     cleaned = HTML_RE.sub(" ", cleaned)
     cleaned = PUNCT_RE.sub(" ", cleaned)
@@ -139,6 +184,147 @@ def sha256(path):
             h.update(chunk)
     return h.hexdigest()
 
+
+
+def file_md5(path: Path) -> str:
+    digest = hashlib.md5()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def normalized_text_hash(text: str) -> str | None:
+    normalized = clean_text(text)
+    if not normalized:
+        return None
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def prepare_welfake_partitions(welfake_path: Path, isot_articles: dict) -> dict:
+    """Create deterministic source-overlap-free WELFake train/val/holdout partitions.
+
+    WELFake labels: 0=FAKE, 1=REAL. Runtime labels: 1=FAKE, 0=REAL.
+    All normalized exact-text overlaps with the complete ISOT corpus are removed
+    before any split. Duplicate groups are deduplicated; conflicting-label groups
+    are excluded. Only train and validation are returned for model fitting;
+    holdout texts and labels are never used by fitting/calibration/model selection.
+    """
+    if not welfake_path.is_file():
+        raise SystemExit(f"WELFake CSV is required but missing: {welfake_path}")
+    dataset_md5 = file_md5(welfake_path)
+    expected_md5 = "73c9675a4b3d09f86a6933d0b8d7d908"
+    if dataset_md5.lower() != expected_md5:
+        raise SystemExit(f"WELFake checksum mismatch: expected {expected_md5}, got {dataset_md5}")
+
+    isot_hashes = {
+        digest for digest in (
+            normalized_text_hash(article_text(article)) for article in isot_articles.values()
+        ) if digest
+    }
+    frame = pd.read_csv(welfake_path, dtype=str, keep_default_na=False, low_memory=False)
+    frame.columns = [str(column).strip().lower() for column in frame.columns]
+    required = {"title", "text", "label"}
+    if not required.issubset(frame.columns):
+        raise SystemExit(f"WELFake schema mismatch; expected {sorted(required)}, got {list(frame.columns)}")
+
+    counters = {
+        "rows_read": int(len(frame)),
+        "invalid_label_rows": 0,
+        "short_or_empty_rows": 0,
+        "isot_exact_overlap_rows_removed": 0,
+        "same_label_duplicate_rows_removed": 0,
+        "conflicting_duplicate_group_rows_removed": 0,
+    }
+    grouped: dict[str, list[dict]] = {}
+    for row in frame[["title", "text", "label"]].to_dict("records"):
+        try:
+            label = int(str(row["label"]).strip())
+        except (TypeError, ValueError):
+            counters["invalid_label_rows"] += 1
+            continue
+        if label not in (0, 1):
+            counters["invalid_label_rows"] += 1
+            continue
+        title = str(row["title"]).strip()
+        body = str(row["text"]).strip()
+        article = (title + " " + body).strip()
+        if len(article) < 300 or len(article.split()) < 50:
+            counters["short_or_empty_rows"] += 1
+            continue
+        digest = normalized_text_hash(article)
+        if not digest:
+            counters["short_or_empty_rows"] += 1
+            continue
+        if digest in isot_hashes:
+            counters["isot_exact_overlap_rows_removed"] += 1
+            continue
+        grouped.setdefault(digest, []).append({
+            "hash": digest,
+            "text": article,
+            "label": 1 if label == 0 else 0,
+        })
+
+    records = []
+    for digest, duplicates in sorted(grouped.items()):
+        labels = {item["label"] for item in duplicates}
+        if len(labels) != 1:
+            counters["conflicting_duplicate_group_rows_removed"] += len(duplicates)
+            continue
+        counters["same_label_duplicate_rows_removed"] += max(0, len(duplicates) - 1)
+        records.append(duplicates[0])
+
+    if len(records) < 12_000:
+        raise SystemExit(f"WELFake overlap/quality filtering left only {len(records)} unique rows; refusing a weak split.")
+
+    labels = np.asarray([item["label"] for item in records], dtype=int)
+    all_indices = np.arange(len(records))
+    # Reserve 50% as a never-touched holdout so it remains >=10k after filtering.
+    trainval_indices, holdout_indices = train_test_split(
+        all_indices, test_size=0.50, random_state=SEED, stratify=labels
+    )
+    train_indices, val_indices = train_test_split(
+        trainval_indices, test_size=0.20, random_state=SEED + 1,
+        stratify=labels[trainval_indices]
+    )
+
+    partitions = {
+        "train": [records[int(i)] for i in train_indices],
+        "validation": [records[int(i)] for i in val_indices],
+        "holdout": [records[int(i)] for i in holdout_indices],
+    }
+    hash_sets = {name: sorted(item["hash"] for item in values) for name, values in partitions.items()}
+    if (set(hash_sets["train"]) & set(hash_sets["validation"]) or
+            set(hash_sets["train"]) & set(hash_sets["holdout"]) or
+            set(hash_sets["validation"]) & set(hash_sets["holdout"])):
+        raise SystemExit("WELFake split integrity failure: normalized article hashes overlap between partitions.")
+
+    split_manifest = {
+        "schema_version": 1,
+        "dataset": "WELFake (Zenodo record 4561253)",
+        "dataset_md5": dataset_md5,
+        "label_mapping": {"source_0": "FAKE", "source_1": "REAL", "runtime_fake_positive": 1},
+        "is_source_independent_external_test": False,
+        "split_method": "deterministic stratified hash-group split; 40% train, 10% validation/calibration, 50% untouched holdout; seed=42",
+        "purpose": "WELFake train partition augments the ISOT training partition; validation is used for calibration/model selection; holdout is never passed to training, calibration, or model selection.",
+        "normalized_exact_text_hashes_only": True,
+        "isot_exact_overlap_hash_count": len(isot_hashes),
+        "eligible_unique_articles_after_filtering": len(records),
+        "split_counts": {name: len(values) for name, values in partitions.items()},
+        "label_counts": {
+            name: {
+                "fake": sum(item["label"] == 1 for item in values),
+                "real": sum(item["label"] == 0 for item in values),
+            } for name, values in partitions.items()
+        },
+        "deduplication": counters,
+        "train_hashes": hash_sets["train"],
+        "validation_hashes": hash_sets["validation"],
+        "holdout_hashes": hash_sets["holdout"],
+        "note": "Hash identifiers only; no article text is stored in this manifest. This is a same-corpus held-out partition, not independent source-domain validation.",
+    }
+    return {"partitions": partitions, "manifest": split_manifest}
+
 def score_runtime(text, artifact):
     cleaned = clean_text(text)
     words = cleaned.split()
@@ -170,8 +356,18 @@ def score_runtime(text, artifact):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-dir", default=str(DEFAULT_OUT))
-    parser.add_argument("--max-features", type=int, default=8000)
+    parser.add_argument(
+        "--max-features",
+        type=int,
+        default=16000,
+        help="candidate-only vocabulary cap; production artifact is unchanged",
+    )
+    parser.add_argument("--min-df", type=int, default=2,
+                        help="candidate-only minimum document frequency for vocabulary terms")
+    parser.add_argument("--welfake", default=None, help="optional verified WELFake CSV for multi-source candidate training")
     args = parser.parse_args()
+    if args.max_features < 1000 or args.min_df < 1:
+        raise SystemExit("--max-features must be >=1000 and --min-df must be >=1.")
 
     fake = DATA / "Fake.csv"
     true = DATA / "True.csv"
@@ -182,6 +378,7 @@ def main():
 
     articles = read_isot()
     split = {name: load_ids(name) for name in ["train", "val", "test", "temporal_test"]}
+    welfake = prepare_welfake_partitions(Path(args.welfake), articles) if args.welfake else None
 
     train_x = [clean_text(article_text(articles[i])) for i in split["train"]]
     val_x = [clean_text(article_text(articles[i])) for i in split["val"]]
@@ -193,12 +390,25 @@ def main():
     test_y = np.array([articles[i]["label"] for i in split["test"]])
     temp_y = np.array([articles[i]["label"] for i in split["temporal_test"]])
 
+    if welfake:
+        wf_train = welfake["partitions"]["train"]
+        wf_val = welfake["partitions"]["validation"]
+        train_x.extend(clean_text(item["text"]) for item in wf_train)
+        val_x.extend(clean_text(item["text"]) for item in wf_val)
+        train_y = np.concatenate([train_y, np.asarray([item["label"] for item in wf_train], dtype=int)])
+        val_y = np.concatenate([val_y, np.asarray([item["label"] for item in wf_val], dtype=int)])
+
+    # Expand lexical coverage for the research candidate without changing the
+    # deployed runtime policy. Rare-but-repeated fake-news cues were being
+    # pruned at min_df=3 / 8k features; the prior candidate's best fake recall
+    # was 66.90%, below the frozen 70% gate. The exact runtime parity suite
+    # verifies that the expanded vocabulary is still scored identically.
     vec = TfidfVectorizer(
         analyzer=runtime_analyzer,
         lowercase=False,
         token_pattern=None,
         max_features=args.max_features,
-        min_df=3,
+        min_df=args.min_df,
         sublinear_tf=True,
         norm="l2",
     )
@@ -207,46 +417,219 @@ def main():
     Xt = vec.transform(test_x)
     Xtemp = vec.transform(temp_x)
 
+    # Select model strength for the frozen deployed decision policy, not just
+    # an unrelated 0.50 F1 cut-off. The validation data is split into separate
+    # calibration and policy-selection partitions so the same rows are not used
+    # both to fit the sigmoid and to pick C. The WELFake holdout remains untouched.
+    calibration_indices, policy_indices = train_test_split(
+        np.arange(len(val_y)),
+        test_size=0.5,
+        random_state=SEED,
+        stratify=val_y,
+    )
+    Xcal = Xv[calibration_indices]
+    y_cal = val_y[calibration_indices]
+    Xpolicy = Xv[policy_indices]
+    y_policy = val_y[policy_indices]
+    policy_texts = [val_x[int(i)] for i in policy_indices]
+
+    def runtime_term_stats(text: str) -> tuple[int, int]:
+        words = text.split()
+        terms = set(words)
+        terms.update(
+            f"{words[i]} {words[i + 1]}"
+            for i in range(len(words) - 1)
+            if len(words[i]) >= 3 and len(words[i + 1]) >= 3
+        )
+        return len(terms), sum(term in vec.vocabulary_ for term in terms)
+
+    all_policy_term_stats = [runtime_term_stats(text) for text in policy_texts]
+    policy_candidate_terms = np.asarray([item[0] for item in all_policy_term_stats], dtype=int)
+    policy_matched_terms = np.asarray([item[1] for item in all_policy_term_stats], dtype=int)
+    policy_coverage = np.divide(
+        policy_matched_terms,
+        policy_candidate_terms,
+        out=np.zeros(len(policy_candidate_terms), dtype=float),
+        where=policy_candidate_terms > 0,
+    )
+
+    def frozen_policy_metrics(y_true, p_fake, coverage_ratio, candidate_term_count, texts):
+        low_vocabulary = coverage_ratio < LOW_VOCABULARY_COVERAGE_THRESHOLD
+        short_low_coverage = (
+            (candidate_term_count < OOD_SHORT_WORD_COUNT) &
+            (coverage_ratio < OOD_COVERAGE_THRESHOLD)
+        )
+        raw_style_conflict = []
+        for text in texts:
+            lowered = text.lower() if text else ""
+            sensational_count = sum(term in lowered for term in SENSATIONAL_CONFLICT_TERMS)
+            certainty_count = sum(term in lowered for term in CERTAINTY_CONFLICT_TERMS)
+            raw_style_conflict.append(
+                sensational_count >= 3 or
+                (sensational_count >= 2 and certainty_count >= 1)
+            )
+        style_conflict = (
+            (p_fake <= REAL_THRESHOLD) &
+            np.asarray(raw_style_conflict, dtype=bool) &
+            ~low_vocabulary &
+            ~short_low_coverage
+        )
+        abstain = low_vocabulary | short_low_coverage | style_conflict
+        decision = np.full(len(y_true), -1, dtype=int)
+        can_decide = ~abstain
+        decision[can_decide & (p_fake <= REAL_THRESHOLD)] = 0
+        decision[can_decide & (p_fake >= FAKE_THRESHOLD)] = 1
+        real_mask = y_true == 0
+        fake_mask = y_true == 1
+        real_total = max(1, int(real_mask.sum()))
+        fake_total = max(1, int(fake_mask.sum()))
+        fake_recall = float(np.sum(fake_mask & (decision == 1)) / fake_total)
+        real_recall = float(np.sum(real_mask & (decision == 0)) / real_total)
+        coverage = float(np.mean(decision >= 0)) if len(decision) else 0.0
+        operational_balanced_accuracy = (fake_recall + real_recall) / 2.0
+        return {
+            "sample_count": int(len(y_true)),
+            "coverage": coverage,
+            "abstention_rate": float(1.0 - coverage),
+            "sensational_conflict_abstentions": int(style_conflict.sum()),
+            "operational_balanced_accuracy_abstentions_count_as_not_correct": operational_balanced_accuracy,
+            "fake_recall_all_fake_samples": fake_recall,
+            "real_recall_all_real_samples": real_recall,
+            "passed": (
+                coverage >= 0.50 and operational_balanced_accuracy >= 0.70 and
+                fake_recall >= 0.70 and real_recall >= 0.70
+            ),
+        }
+
+    candidate_sweeps = []
+    class_weight_options = [
+        (None, "unweighted"),
+        ("balanced", "balanced"),
+        ({0: 1.0, 1: 1.15}, "fake_weight_1.15"),
+        ({0: 1.0, 1: 1.30}, "fake_weight_1.30"),
+        # Extend the candidate-only search in the direction indicated by the
+        # prior frozen-policy validation sweep. Selection still requires all
+        # four gates and is performed only on the dedicated policy split;
+        # neither thresholds nor the untouched holdout are changed.
+        ({0: 1.0, 1: 1.50}, "fake_weight_1.50"),
+        ({0: 1.0, 1: 1.75}, "fake_weight_1.75"),
+        ({0: 1.0, 1: 2.00}, "fake_weight_2.00"),
+        ({0: 1.0, 1: 2.50}, "fake_weight_2.50"),
+    ]
+    # Search is intentionally restricted to the fit/training split and the
+    # held-out validation policy split. It never observes WELFake holdout.
+    for class_weight, class_weight_label in class_weight_options:
+        for svm_c in [0.10, 0.25, 0.5, 1.0, 2.0]:
+            candidate_svm = LinearSVC(
+                C=svm_c,
+                class_weight=class_weight,
+                max_iter=5000,
+                random_state=SEED,
+            )
+            candidate_svm.fit(Xtr, train_y)
+            calibration_margins = candidate_svm.decision_function(Xcal)
+            candidate_calibrator = LogisticRegression(
+                C=1e6, max_iter=2000, solver="lbfgs", random_state=SEED
+            )
+            candidate_calibrator.fit(calibration_margins.reshape(-1, 1), y_cal)
+            select_margins = candidate_svm.decision_function(Xpolicy)
+            candidate_policy_p = candidate_calibrator.predict_proba(
+                select_margins.reshape(-1, 1)
+            )[:, 1]
+            policy_quality = frozen_policy_metrics(
+                y_policy, candidate_policy_p, policy_coverage, policy_candidate_terms, policy_texts
+            )
+            candidate_sweeps.append({
+                "C": svm_c,
+                "class_weight": class_weight,
+                "class_weight_label": class_weight_label,
+                "model": candidate_svm,
+                "calibrator": candidate_calibrator,
+                "policy_probabilities": candidate_policy_p,
+                "policy_quality": policy_quality,
+            })
+
+    # Prefer a candidate meeting every frozen-policy gate; otherwise retain the
+    # best measured operational balanced accuracy for diagnosis, never promotion.
+    chosen = max(
+        candidate_sweeps,
+        key=lambda item: (
+            bool(item["policy_quality"]["passed"]),
+            float(item["policy_quality"]["operational_balanced_accuracy_abstentions_count_as_not_correct"]),
+            min(float(item["policy_quality"]["fake_recall_all_fake_samples"]),
+                float(item["policy_quality"]["real_recall_all_real_samples"])),
+            float(item["policy_quality"]["coverage"]),
+        ),
+    )
+    svm = chosen["model"]
+    calibrator = chosen["calibrator"]
+    selected_svm_c = float(chosen["C"])
+    selected_svm_class_weight = chosen["class_weight"]
+    selected_svm_class_weight_label = chosen["class_weight_label"]
+    selection_policy_metrics = chosen["policy_quality"]
+    selection_y = y_policy
+    selection_p = chosen["policy_probabilities"]
     lr = LogisticRegression(C=1.0, max_iter=1500, solver="liblinear", random_state=SEED)
-    svm = LinearSVC(C=1.0, max_iter=3000, random_state=SEED)
     lr.fit(Xtr, train_y)
-    svm.fit(Xtr, train_y)
+    lr_policy = lr.predict_proba(Xpolicy)[:, 1]
+    lr_val_f1 = f1_score(y_policy, lr_policy >= 0.5, zero_division=0)
 
-    lr_val = lr.predict_proba(Xv)[:, 1]
-    svm_val_margin = svm.decision_function(Xv)
-
-    calibrator = LogisticRegression(C=1e6, max_iter=2000, solver="lbfgs", random_state=SEED)
-    calibrator.fit(svm_val_margin.reshape(-1, 1), val_y)
-    cal_p_val = calibrator.predict_proba(svm_val_margin.reshape(-1, 1))[:, 1]
+    cal_p_val = calibrator.predict_proba(
+        svm.decision_function(Xv).reshape(-1, 1)
+    )[:, 1]
     svm_test_p = calibrator.predict_proba(svm.decision_function(Xt).reshape(-1, 1))[:, 1]
     svm_temp_p = calibrator.predict_proba(svm.decision_function(Xtemp).reshape(-1, 1))[:, 1]
     lr_test_p = lr.predict_proba(Xt)[:, 1]
-
-    svm_val_f1 = f1_score(val_y, cal_p_val >= 0.5, zero_division=0)
-    lr_val_f1 = f1_score(val_y, lr_val >= 0.5, zero_division=0)
-    if svm_val_f1 < lr_val_f1:
-        raise SystemExit(
-            f"Linear SVM calibration lost validation F1 ({svm_val_f1:.6f} < {lr_val_f1:.6f}); "
-            "refusing to produce a calibrated-SVM runtime candidate."
-        )
+    svm_val_f1 = f1_score(y_policy, selection_p >= 0.5, zero_division=0)
 
     version_payload = {
         "source_fake_sha256": sha256(fake),
         "source_true_sha256": sha256(true),
         "prep_stats_sha256": sha256(PREP / "stats.json"),
+        "welfake_source_md5": welfake["manifest"]["dataset_md5"] if welfake else None,
+        "welfake_split_method": welfake["manifest"]["split_method"] if welfake else None,
         "seed": SEED,
         "max_features": args.max_features,
+        "tfidf_min_df": args.min_df,
+        "tfidf_analyzer": "TruthLens runtime unigram/bigram analyzer",
+        "tfidf_sublinear_tf": True,
+        "selected_svm_c": selected_svm_c,
+        "selected_svm_class_weight": selected_svm_class_weight,
+        "selected_svm_class_weight_label": selected_svm_class_weight_label,
+        "model_selection": "SVM C/class-weight grid selected on a held-out validation policy split using frozen 0.98/0.35 thresholds and abstention; sigmoid calibration fitted on a separate validation half",
         "tokenizer": "TruthLens Node cleanText + unigram/bigram analyzer",
+        "text_normalizer": "wire-byline-and-explicit-social-CTA-removal-v1",
+        "candidate_safety_policy": {
+            "id": "sensational-conflict-abstention-v1",
+            "action": "abstain_and_withhold_probabilities",
+            "applies_only_when_model_probability_leans_real": True,
+            "minimum_sensational_terms": 3,
+            "minimum_sensational_terms_with_certainty": 2,
+            "minimum_certainty_terms": 1,
+            "production_status": "RESEARCH_ONLY_NOT_DEPLOYED",
+        },
+        "runtime_policy": {
+            "fake_threshold": FAKE_THRESHOLD,
+            "real_threshold": REAL_THRESHOLD,
+            "low_vocabulary_coverage_threshold": LOW_VOCABULARY_COVERAGE_THRESHOLD,
+            "ood_short_word_count": OOD_SHORT_WORD_COUNT,
+            "ood_coverage_threshold": OOD_COVERAGE_THRESHOLD,
+        },
     }
-    version = "isot-runtime-svm-" + hashlib.sha256(
+    version_prefix = "multisource-runtime-svm-" if welfake else "isot-runtime-svm-"
+    version = version_prefix + hashlib.sha256(
         json.dumps(version_payload, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()[:12]
     out = Path(args.output_dir) / version
     out.mkdir(parents=True, exist_ok=False)
+    if welfake:
+        (out / "welfake_split_manifest.json").write_text(
+            json.dumps(welfake["manifest"], separators=(",", ":")), encoding="utf-8"
+        )
 
     selected_test = metrics(test_y, svm_test_p)
     selected_temp = metrics(temp_y, svm_temp_p)
-    selected_val = metrics(val_y, cal_p_val)
+    selected_val = metrics(selection_y, selection_p)
 
     vocab = {term: int(idx) for term, idx in vec.vocabulary_.items()}
     model = {
@@ -264,19 +647,21 @@ def main():
         "model_version": version,
         "trained_at": datetime.now(timezone.utc).isoformat(),
         "is_demo": False,
-        "dataset_status": "ISOT CANDIDATE",
+        "dataset_status": "MULTI-SOURCE CANDIDATE" if welfake else "ISOT CANDIDATE",
         "dataset_info": {
-            "name": "ISOT Fake News Dataset",
-            "source_path": "data/True.csv & data/Fake.csv",
-            "total_samples": len(articles),
+            "name": "ISOT + WELFake" if welfake else "ISOT Fake News Dataset",
+            "source_path": "data/True.csv & data/Fake.csv plus WELFake train/validation partitions" if welfake else "data/True.csv & data/Fake.csv",
+            "total_samples": len(articles) + welfake["manifest"]["eligible_unique_articles_after_filtering"] if welfake else len(articles),
             "train_samples": len(train_x),
+            "validation_samples": len(val_x),
             "test_samples": len(test_x),
-            "real_samples": sum(a["label"] == 0 for a in articles.values()),
-            "fake_samples": sum(a["label"] == 1 for a in articles.values()),
+            "holdout_samples": len(welfake["partitions"]["holdout"]) if welfake else 0,
+            "real_samples": int(np.sum(train_y == 0) + np.sum(val_y == 0)),
+            "fake_samples": int(np.sum(train_y == 1) + np.sum(val_y == 1)),
             "vocabulary_size": len(vocab),
             "is_demo": False,
-            "dataset_status": "ISOT CANDIDATE",
-            "evaluation_status": "Group-aware Phase 2 split; candidate only",
+            "dataset_status": "MULTI-SOURCE CANDIDATE" if welfake else "ISOT CANDIDATE",
+            "evaluation_status": "ISOT leak-aware splits plus WELFake hash-group train/validation/untouched holdout; holdout is not source-independent external validation" if welfake else "Group-aware Phase 2 split; candidate only",
         },
         "preprocessing": {
             "lowercase": True,
@@ -306,13 +691,26 @@ def main():
                 "ece_10_temporal": ece(temp_y, svm_temp_p),
             },
             "candidates": {
-                "logistic_regression_validation": metrics(val_y, lr_val),
-                "linear_svm_calibrated_validation": selected_val,
+                "logistic_regression_policy_selection": metrics(selection_y, lr_policy),
+                "linear_svm_calibrated_policy_selection": selected_val,
+            },
+            "frozen_runtime_policy_model_selection": {
+                "selected_C": selected_svm_c,
+                "selection_metrics": selection_policy_metrics,
+                "sweep": [
+                    {
+                        "C": item["C"],
+                        "class_weight": item["class_weight_label"],
+                        **item["policy_quality"],
+                    }
+                    for item in candidate_sweeps
+                ],
+                "note": "Validation-only hyperparameter selection; WELFake holdout never consulted during model choice.",
             },
         },
         "thresholds": {
-            "fake_threshold": 0.65,
-            "real_threshold": 0.35,
+            "fake_threshold": FAKE_THRESHOLD,
+            "real_threshold": REAL_THRESHOLD,
             "min_text_length": 60,
             "min_word_count": 20,
         },
@@ -384,11 +782,15 @@ def main():
         "model_version": version,
         "created_at": artifact["trained_at"],
         "git_commit": "runtime-candidate-pipeline",
-        "dataset_name": "ISOT Fake News Dataset",
+        "dataset_name": "ISOT + WELFake" if welfake else "ISOT Fake News Dataset",
         "dataset_fingerprint": version_payload,
+        # Explicit field consumed by the promotion gate; it includes thresholds
+        # and OOD constants and is bound into the candidate version hash.
+        "training_contract": version_payload,
         "preparation_config": {
             "phase2_splits": "group-aware near-duplicate split + temporal split",
             "seed": SEED,
+            "welfake_partitioning": welfake["manifest"]["split_method"] if welfake else None,
         },
         "software": {
             "python": platform.python_version(),
@@ -401,13 +803,21 @@ def main():
             "calibration": "Platt sigmoid on disjoint validation split",
             "tfidf": {
                 "max_features": args.max_features,
-                "min_df": 3,
+                "min_df": args.min_df,
                 "sublinear_tf": True,
                 "norm": "l2",
                 "analyzer": "TruthLens runtime analyzer",
             },
         },
         "split_counts": {k: len(v) for k, v in split.items()},
+        "welfake_data": ({
+            "source_md5": welfake["manifest"]["dataset_md5"],
+            "deduplication": welfake["manifest"]["deduplication"],
+            "split_counts": welfake["manifest"]["split_counts"],
+            "label_counts": welfake["manifest"]["label_counts"],
+            "holdout_is_source_independent": False,
+            "split_manifest": "welfake_split_manifest.json",
+        } if welfake else None),
         "metrics": artifact["metrics"],
         "external_validation": {
             "status": "COMPLETED",
@@ -427,6 +837,10 @@ def main():
     print(json.dumps({
         "model_version": version,
         "candidate": str(out),
+        "training_sources": ["ISOT", "WELFake train partition"] if welfake else ["ISOT"],
+        "validation_sources": ["ISOT validation", "WELFake validation partition"] if welfake else ["ISOT validation"],
+        "welfake_partitions": welfake["manifest"]["split_counts"] if welfake else None,
+        "welfake_holdout_is_source_independent": False if welfake else None,
         "test": selected_test,
         "temporal_test": selected_temp,
         "ood_liar": ood,

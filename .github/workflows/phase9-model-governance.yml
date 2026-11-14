@@ -6,6 +6,10 @@ on:
       - "scripts/train_isot_canonical.py"
       - "scripts/evaluate_liar_candidate.py"
       - "scripts/promote_model.py"
+      - "scripts/audit_finefake_archive.py"
+      - "scripts/evaluate_finefake_candidate.py"
+      - "scripts/test_evaluate_finefake_candidate.py"
+      - "docs/FINEFAKE_EXTERNAL_EVALUATION.md"
       - "backend/tests/test_phase9_model_governance.py"
       - "docs/ML_UPGRADE_PROGRESS.md"
       - "docs/ml_upgrade_status.json"
@@ -22,5 +26,5 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install -r requirements.txt datasketch pytest
-      - run: python -m pytest backend/tests/test_phase9_model_governance.py -q
-      - run: python -m py_compile scripts/train_isot_canonical.py scripts/evaluate_liar_candidate.py scripts/promote_model.py
+      - run: python -m pytest backend/tests/test_phase9_model_governance.py scripts/test_evaluate_finefake_candidate.py -q
+      - run: python -m py_compile scripts/train_isot_canonical.py scripts/evaluate_liar_candidate.py scripts/promote_model.py scripts/audit_finefake_archive.py scripts/evaluate_finefake_candidate.py
