@@ -166,6 +166,9 @@ jobs:
       - name: SSRF tests
         run: npm run test:ssrf
 
+      - name: ML worker embedding batch payload tests
+        run: npm run test:ml-worker-batches
+
       - name: V2 pipeline tests
         run: npm run test:v2
 
