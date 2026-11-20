@@ -141,3 +141,7 @@ The production evidence path now adds the following release controls:
 - Article-level support/contradiction requires important claims to clear the evidence confidence calibration floor; lower-confidence evidence causes abstention.
 - Evidence-specific evaluation is tracked separately from production model accuracy: the Gate-14 benchmark reports SUPPORT / CONTRADICT / UNCLEAR precision, recall, F1, confusion, coverage and abstention.
 - Production-safe telemetry reports only aggregate verification health signals and never logs raw claim text, article content, URLs, headers, prompts, tokens or secrets.
+
+## Research model citation boundary
+
+The DeBERTa V3 NLI adapter described in the V2 research documentation is experimental and is not a production model or a substitute for the production evidence policy. Its model-family paper and the exact Transformers.js-compatible checkpoint are documented in [V2 known limitations](V2_KNOWN_LIMITATIONS.md#references).
