@@ -10,7 +10,7 @@ The research branch also supports pretrained dense embeddings through the sealed
 
 ## 2. Pretrained NLI is available and benchmarked, but end-to-end quality is still the gate
 
-The research branch has a real pretrained pairwise NLI path using `Xenova/nli-deberta-v3-xsmall`. A completed component evaluation over SciFact reported:
+The research branch has a real pretrained pairwise NLI path using `Xenova/nli-deberta-v3-xsmall` ([1], [2]). The Xenova checkpoint is an ONNX-compatible distribution of the cross-encoder NLI model for Transformers.js; the underlying model family is DeBERTa V3. A completed component evaluation over SciFact reported:
 
 - NLI accuracy: **0.524520** vs **0.311301** heuristic
 - NLI macro-F1: **0.536812** vs **0.211342** heuristic
@@ -74,3 +74,8 @@ Long-running 300-claim GitHub Actions jobs have experienced cancellations before
 4. Evaluate broader external datasets appropriate to TruthLens' actual production use case.
 5. Preserve the two-independent-source production rule unless independently justified by new evidence.
 6. Keep research metrics isolated from production article/claim accuracy and require reproducible artifacts for every reported result.
+
+## References
+
+1. P. He, J. Gao, and W. Chen, “DeBERTaV3: Improving DeBERTa using ELECTRA-Style Pre-Training with Gradient-Disentangled Embedding Sharing,” arXiv:2111.09543, 2021. https://arxiv.org/abs/2111.09543
+2. Xenova, “nli-deberta-v3-xsmall,” Hugging Face model card. https://huggingface.co/Xenova/nli-deberta-v3-xsmall
