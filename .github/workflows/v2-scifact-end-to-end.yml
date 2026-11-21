@@ -6,6 +6,7 @@ on:
     branches:
       - main
     paths:
+      - '.github/workflows/v2-scifact-end-to-end.yml'
       - 'server/v2/**'
       - 'scripts/v2ScifactEndToEnd.ts'
       - 'scripts/v2ScifactAdversarialContamination.ts'
