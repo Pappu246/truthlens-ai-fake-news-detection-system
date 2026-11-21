@@ -91,7 +91,7 @@ export class SqliteHistoryManager {
         ];
         const foundWasm = wasmCandidates.find((f) => fs.existsSync(f));
         this.SQL = foundWasm
-          ? await initSqlJs({ locateFile: (file: string) => path.join(path.dirname(foundWasm), file), useOldExtensionFunctions: false })
+          ? await initSqlJs({ locateFile: (file: string) => path.join(path.dirname(foundWasm), file) })
           : await initSqlJs();
 
         const dir = path.dirname(this.dbPath);
