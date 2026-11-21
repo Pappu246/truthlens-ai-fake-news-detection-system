@@ -14,7 +14,7 @@ function check(name: string, ok: boolean): void {
 const claimText = 'The national statistics office confirmed unemployment fell to 4.1 percent in March 2024.';
 const passages = ['The statistics office confirmed the unemployment rate was 4.1 percent in March 2024.'];
 
-function makeAdapter(researchTrace = false, exerciseFallback = false): PretrainedNliAdapter {
+function makeAdapter(researchTrace = false, exerciseFallback = false, exerciseCounterfactual = false): PretrainedNliAdapter {
   const embeddingModel = {
     name: 'fixture-embedding',
     version: 'fixture-1',
@@ -31,6 +31,12 @@ function makeAdapter(researchTrace = false, exerciseFallback = false): Pretraine
     classifyBatch: (pairs: Array<{ premise: string; hypothesis: string }>, includeDiagnostics = false) => {
       const callIndex = batchCall++;
       return pairs.map(() => {
+        if (exerciseCounterfactual && callIndex === 0) {
+          return { ...makeOutput(includeDiagnostics), probs: { entailment: 0.1, contradiction: 0.8, neutral: 0.1 } };
+        }
+        if (exerciseCounterfactual && callIndex === 1) {
+          return { ...makeOutput(includeDiagnostics), probs: { entailment: 0.8, contradiction: 0.1, neutral: 0.1 } };
+        }
         if (exerciseFallback && callIndex === 0) {
           return { ...makeOutput(includeDiagnostics), probs: { entailment: 0.2, contradiction: 0.2, neutral: 0.6 } };
         }
@@ -68,6 +74,11 @@ async function main(): Promise<void> {
     trace?.tokenization?.token_count_after_truncation === 42 && trace?.tokenization?.at_max_length === false &&
     trace?.tokenization?.truncation_enabled === true);
 
+  check('counterfactual pass B is recorded when pass A is directional and claim has attribution',
+    trace?.counterfactual_pass_b?.directional_label === 'SUPPORTS' &&
+    trace?.counterfactual_pass_b?.raw_probabilities?.entailment === 0.8 &&
+    trace?.counterfactual_pass_b?.tokenization?.token_count_after_truncation === 42);
+
   const singleBaseline = makeAdapter(false).classify(claim, passages[0]);
   const singleTraced = makeAdapter(true).classify(claim, passages[0]);
   const { research_trace: _singleTrace, ...singlePrediction } = singleTraced;
@@ -77,6 +88,13 @@ async function main(): Promise<void> {
     singleTraced.research_trace?.raw_probabilities?.entailment === 0.8 &&
     singleTraced.research_trace?.pass_a_probabilities?.entailment === 0.8 &&
     singleTraced.research_trace?.tokenization?.token_count_after_truncation === 42);
+
+  const counterfactual = makeAdapter(true, false, true).classifyBatch(claim, passages)[0];
+  check('counterfactual pass B never changes a directional pass-A prediction',
+    counterfactual.label === 'REFUTES' &&
+    counterfactual.research_trace?.selected_hypothesis_pass === 'passA:claim-as-stated' &&
+    counterfactual.research_trace?.raw_probabilities?.contradiction === 0.8 &&
+    counterfactual.research_trace?.counterfactual_pass_b?.directional_label === 'SUPPORTS');
 
   const fallback = makeAdapter(true, true).classifyBatch(claim, passages)[0];
   check('attribution fallback trace retains pass A and pass B probabilities',
