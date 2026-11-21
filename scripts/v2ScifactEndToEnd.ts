@@ -24,6 +24,7 @@ import { SciFactOpenCorpusSource, SciFactDocumentInput } from '../server/v2/retr
 import { disposeMlWorker } from '../server/v2/ml/mlWorkerClient';
 import { ALL_MODEL_MANIFESTS, getV2ModelDir, verifyModelHashes } from '../server/v2/ml/modelManifest';
 import { applyConfidenceTemperature, brierScore, expectedCalibrationError, fitConfidenceTemperature } from '../server/v2/metrics/metrics';
+import { analyzeSciFactRationaleVisibility } from './scifactRationaleVisibility';
 
 type GoldLabel = 'SUPPORT' | 'CONTRADICT' | 'NOT_ENOUGH_INFO';
 
@@ -159,6 +160,10 @@ async function main(): Promise<void> {
   const enableFullTextEnrichment = false;
   const minCandidatesExpectedWarning = 0;
   const relatednessFloor = 0.15;
+  const passageMaxChars = Number(arg('passage-max-chars') ?? 800);
+  if (!Number.isInteger(passageMaxChars) || passageMaxChars < 1 || passageMaxChars > 8000) {
+    throw new Error('--passage-max-chars must be an integer between 1 and 8000.');
+  }
   const runConfig = {
     candidate_pool_k: topCandidates,
     dense_retrieval_k: denseTopK,
@@ -168,11 +173,12 @@ async function main(): Promise<void> {
     enable_full_text_enrichment: enableFullTextEnrichment,
     min_candidates_expected_warning: minCandidatesExpectedWarning,
     relatedness_floor: relatednessFloor,
+    passage_max_chars: passageMaxChars,
     decision_thresholds: DEFAULT_DECISION_THRESHOLDS
   };
   const modelManifest = sealedModelManifest();
   const modelManifestSha256 = sha256Json(modelManifest);
-  const sourceCommitSha = process.env.GITHUB_SHA || null;
+  const sourceCommitSha = process.env.TRUTHLENS_EVALUATED_COMMIT_SHA || process.env.GITHUB_SHA || null;
 
   console.log(`SciFact retrieval config: candidate-k=${topCandidates}, dense-k=${denseTopK}, final-k=${finalTopK}`);
   console.log(`SciFact provenance: commit=${sourceCommitSha ?? 'un-pinned-local-run'}, config_sha256=${sha256Json(runConfig)}, model_manifest_sha256=${modelManifestSha256}`);
@@ -198,6 +204,10 @@ async function main(): Promise<void> {
   let productionNonAbstain = 0;
   let conflicted = 0;
   const rows: Array<Record<string, unknown>> = [];
+  let goldRationaleDocuments = 0;
+  let goldRationaleSentences = 0;
+  let visibleGoldRationaleSentences = 0;
+  let hiddenGoldRationaleSentences = 0;
   const calibrationSamples: Array<{ correct: boolean; confidence: number }> = [];
 
   try {
@@ -205,6 +215,11 @@ async function main(): Promise<void> {
       const claim = claims[i];
       source.resetCandidateIds();
       const gold = goldLabel(claim);
+      const visibility = analyzeSciFactRationaleVisibility(claim.evidence || {}, corpus, passageMaxChars);
+      goldRationaleDocuments += visibility.gold_evidence_documents;
+      goldRationaleSentences += visibility.gold_rationale_sentences;
+      visibleGoldRationaleSentences += visibility.visible_rationale_sentences_within_limit;
+      hiddenGoldRationaleSentences += visibility.hidden_rationale_sentences_after_limit;
       goldPredictions.push(gold);
 
       const result = await verifyClaimV2(claim.claim, {
@@ -214,7 +229,8 @@ async function main(): Promise<void> {
         retrieval: { embeddingModel, perQueryTopK, finalTopK },
         thresholds: DEFAULT_DECISION_THRESHOLDS,
         enableFullTextEnrichment,
-        minCandidatesExpectedWarning
+        minCandidatesExpectedWarning,
+        passageMaxChars
       });
 
       const candidateIds = new Set(source.getCandidateIds());
@@ -251,17 +267,41 @@ async function main(): Promise<void> {
 
       rows.push({
         id: claim.id,
+        claim: claim.claim,
         gold,
         benchmark_prediction: benchmarkPrediction,
         production_verdict: result.provenance.final_verdict,
         production_prediction: productionPrediction,
         candidate_pool_recall_hit: candidateHit,
         gold_evidence_ids: Array.from(goldEvidenceIds),
+        gold_rationale_visibility: visibility,
         retrieved_evidence_ids_top5: topEvidenceIds,
         final_confidence: result.provenance.final_confidence,
         abstained: result.provenance.abstained,
         nli_model: nliAdapter.modelName,
-        embedding_model: embeddingModel.name
+        embedding_model: embeddingModel.name,
+        // Research-only forensic trace: exact passages and the weights used by
+        // benchmarkDirection(), so claim-level errors can be traced to evidence.
+        evidence_diagnostics: result.provenance.evidence.map(evidence => {
+          const duplicatePenalty = evidence.is_duplicate_cluster ? 0.35 : 1;
+          const voteWeight = evidence.nli_confidence * evidence.rerank_score * duplicatePenalty;
+          return {
+            evidence_id: evidence.evidence_id,
+            url: evidence.url,
+            title: evidence.title,
+            publisher: evidence.publisher,
+            domain: evidence.domain,
+            content_type: evidence.content_type,
+            nli_label: evidence.nli_label,
+            nli_confidence: evidence.nli_confidence,
+            rerank_score: evidence.rerank_score,
+            is_duplicate_cluster: evidence.is_duplicate_cluster,
+            source_type: evidence.source_type,
+            support_vote_weight: evidence.nli_label === 'SUPPORTS' ? voteWeight : 0,
+            refute_vote_weight: evidence.nli_label === 'REFUTES' ? voteWeight : 0,
+            exact_passage: evidence.exact_passage
+          };
+        })
       });
 
       if ((i + 1) % 10 === 0 || i + 1 === claims.length) {
@@ -312,6 +352,16 @@ async function main(): Promise<void> {
         model_manifest_sha256: modelManifestSha256
       },
       config: runConfig,
+      rationale_visibility_diagnostic: {
+        analysis_only: true,
+        passage_character_limit: passageMaxChars,
+        gold_evidence_documents: goldRationaleDocuments,
+        gold_rationale_sentences: goldRationaleSentences,
+        visible_rationale_sentences_within_limit: visibleGoldRationaleSentences,
+        hidden_rationale_sentences_after_limit: hiddenGoldRationaleSentences,
+        hidden_rationale_sentence_rate: goldRationaleSentences ? hiddenGoldRationaleSentences / goldRationaleSentences : null,
+        note: 'Computed from frozen gold rationale indices and original abstracts after plain-text cleanup; never passed to retrieval, NLI, or verdict logic.'
+      },
       dataset: {
         name: 'SciFact',
         split: 'dev',
@@ -381,6 +431,7 @@ async function main(): Promise<void> {
         'The benchmark directional decision is a single-source-compatible research evaluator because classic SciFact provides evidence from cited papers; it does not replace the production two-independent-source policy.',
         'Production-policy metrics are reported separately to expose the cost of the policy/dataset mismatch rather than hiding it.',
         'No production thresholds, source rules, abstention rules, or production models were changed.',
+        `NLI passage character limit was explicitly configured to ${passageMaxChars}; the default remains 800 for other V2 callers.`,
         'This benchmark does not by itself establish world-leading performance; it establishes a reproducible external end-to-end measurement.'
       ],
       rows
