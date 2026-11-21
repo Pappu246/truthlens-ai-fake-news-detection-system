@@ -364,7 +364,7 @@ export class PretrainedNliAdapter implements NliAdapter {
       return Math.max(-1, Math.min(1, dot));
     });
     const results: Array<NliClassification | null> = new Array(passages.length).fill(null);
-    const traceDecisions: Array<{ selectedPass: NliResearchTrace['selected_hypothesis_pass']; rawProbabilities: NliResearchTrace['raw_probabilities']; tokenization: NliResearchTrace['tokenization']; passAProbabilities: NliResearchTrace['pass_a_probabilities']; passATokenization: NliResearchTrace['pass_a_tokenization'] } | null> = new Array(passages.length).fill(null);
+    const traceDecisions: Array<{ selectedPass: NliResearchTrace['selected_hypothesis_pass']; rawProbabilities: NliResearchTrace['raw_probabilities']; tokenization: NliResearchTrace['tokenization']; passAProbabilities: NliResearchTrace['pass_a_probabilities']; passATokenization: NliResearchTrace['pass_a_tokenization']; counterfactualPassB?: NliResearchTrace['counterfactual_pass_b'] } | null> = new Array(passages.length).fill(null);
     const finalize = (): NliClassification[] => {
       const output = results as NliClassification[];
       if (!this.researchTrace) return output;
@@ -381,7 +381,8 @@ export class PretrainedNliAdapter implements NliAdapter {
           raw_probabilities: decision?.rawProbabilities ?? null,
           pass_a_probabilities: decision?.passAProbabilities ?? null,
           pass_a_tokenization: decision?.passATokenization ?? null,
-          tokenization: decision?.tokenization ?? null
+          tokenization: decision?.tokenization ?? null,
+          counterfactual_pass_b: decision?.counterfactualPassB ?? null
         };
       }
       return output;
@@ -411,6 +412,7 @@ export class PretrainedNliAdapter implements NliAdapter {
       maxTokens: this.maxPairTokens
     })), this.researchTrace);
     const fallbackInputs: Array<{ index: number; premise: string; hypothesis: string; passA: { probs: Record<string, number>; scores: NliScoreDistribution; maxModelProb: number; diagnostics?: { tokenCountAfterTruncation: number | null; atMaxLength: boolean | null } } }> = [];
+    const counterfactualInputs: Array<{ index: number; premise: string }> = [];
     for (let i = 0; i < directionalInputs.length; i++) {
       const item = directionalInputs[i];
       const raw = passA[i];
@@ -423,6 +425,10 @@ export class PretrainedNliAdapter implements NliAdapter {
           const basis = `passA (hypothesis=claim-as-stated) directional (${label})`;
           results[item.index] = this.classifyOneResult({ probs: raw.probs, scores: mapped.scores, maxModelProb: mapped.maxModelProb }, basis, 'passA:claim-as-stated');
           traceDecisions[item.index] = { selectedPass: 'passA:claim-as-stated', rawProbabilities: { entailment: raw.probs.entailment, contradiction: raw.probs.contradiction, neutral: raw.probs.neutral }, tokenization: raw.diagnostics ? { max_tokens: this.maxPairTokens, token_count_after_truncation: raw.diagnostics.tokenCountAfterTruncation, at_max_length: raw.diagnostics.atMaxLength, truncation_enabled: true } : null, passAProbabilities: { entailment: raw.probs.entailment, contradiction: raw.probs.contradiction, neutral: raw.probs.neutral }, passATokenization: raw.diagnostics ? { max_tokens: this.maxPairTokens, token_count_after_truncation: raw.diagnostics.tokenCountAfterTruncation, at_max_length: raw.diagnostics.atMaxLength, truncation_enabled: true } : null };
+          if (this.researchTrace && mode === 'attribution_stripped') {
+            // Record the content-proposition pass as a counterfactual only; do not alter the selected pass-A result.
+            counterfactualInputs.push({ index: item.index, premise: item.premise });
+          }
         } else {
           results[item.index] = this.classifyOneResult(
             { probs: raw.probs, scores: mapped.scores, maxModelProb: mapped.maxModelProb },
@@ -445,6 +451,34 @@ export class PretrainedNliAdapter implements NliAdapter {
           `passA (hypothesis=claim-as-stated) produced NO DIRECTIONAL MAJORITY (entailment=${item.passA.probs.entailment.toFixed(3)}, contradiction=${item.passA.probs.contradiction.toFixed(3)}, both <0.5); fall through to passB (hypothesis=content proposition, attribution stripped)`;
         results[item.index] = this.classifyOneResult({ probs: raw.probs, scores: mapped.scores, maxModelProb: mapped.maxModelProb }, basis, 'passB:content-proposition');
         traceDecisions[item.index] = { selectedPass: 'passB:content-proposition', rawProbabilities: { entailment: raw.probs.entailment, contradiction: raw.probs.contradiction, neutral: raw.probs.neutral }, tokenization: raw.diagnostics ? { max_tokens: this.maxPairTokens, token_count_after_truncation: raw.diagnostics.tokenCountAfterTruncation, at_max_length: raw.diagnostics.atMaxLength, truncation_enabled: true } : null, passAProbabilities: { entailment: item.passA.probs.entailment, contradiction: item.passA.probs.contradiction, neutral: item.passA.probs.neutral }, passATokenization: item.passA.diagnostics ? { max_tokens: this.maxPairTokens, token_count_after_truncation: item.passA.diagnostics.tokenCountAfterTruncation, at_max_length: item.passA.diagnostics.atMaxLength, truncation_enabled: true } : null };
+      }
+    }
+    if (counterfactualInputs.length) {
+      const counterfactualPassB = this.client.classifyBatch(counterfactualInputs.map(item => ({
+        premise: item.premise,
+        hypothesis: conditioning.hypothesis,
+        maxTokens: this.maxPairTokens
+      })), true);
+      for (let i = 0; i < counterfactualInputs.length; i++) {
+        const item = counterfactualInputs[i];
+        const raw = counterfactualPassB[i];
+        const decision = traceDecisions[item.index];
+        if (!decision) continue;
+        decision.counterfactualPassB = {
+          raw_probabilities: {
+            entailment: raw.probs.entailment,
+            contradiction: raw.probs.contradiction,
+            neutral: raw.probs.neutral
+          },
+          directional_label: raw.probs.entailment >= 0.5 ? 'SUPPORTS'
+            : raw.probs.contradiction >= 0.5 ? 'REFUTES' : null,
+          tokenization: raw.diagnostics ? {
+            max_tokens: this.maxPairTokens,
+            token_count_after_truncation: raw.diagnostics.tokenCountAfterTruncation,
+            at_max_length: raw.diagnostics.atMaxLength,
+            truncation_enabled: true
+          } : null
+        };
       }
     }
     return finalize();
@@ -510,6 +544,27 @@ export class PretrainedNliAdapter implements NliAdapter {
       passA.probs.entailment >= 0.5 ? 'SUPPORTS'
       : passA.probs.contradiction >= 0.5 ? 'REFUTES'
       : null;
+    // Opt-in diagnostic only: measure pass B even when pass A already decided.
+    // The returned classification continues to use pass A exactly as before.
+    let counterfactualPassB: NliResearchTrace['counterfactual_pass_b'] = null;
+    if (this.researchTrace && mode === 'attribution_stripped' && aDirectionalLabel !== null) {
+      const counterfactual = this.runOnce(premise, conditioned);
+      counterfactualPassB = {
+        raw_probabilities: {
+          entailment: counterfactual.probs.entailment,
+          contradiction: counterfactual.probs.contradiction,
+          neutral: counterfactual.probs.neutral
+        },
+        directional_label: counterfactual.probs.entailment >= 0.5 ? 'SUPPORTS'
+          : counterfactual.probs.contradiction >= 0.5 ? 'REFUTES' : null,
+        tokenization: counterfactual.diagnostics ? {
+          max_tokens: this.maxPairTokens,
+          token_count_after_truncation: counterfactual.diagnostics.tokenCountAfterTruncation,
+          at_max_length: counterfactual.diagnostics.atMaxLength,
+          truncation_enabled: true
+        } : null
+      };
+    }
     if (aDirectionalLabel !== null) {
       basisPasses = `passA (hypothesis=claim-as-stated) directional (${aDirectionalLabel})`;
     } else if (mode === 'attribution_stripped') {
@@ -574,7 +629,8 @@ export class PretrainedNliAdapter implements NliAdapter {
       tokenization: winner.diagnostics ? {
         max_tokens: this.maxPairTokens, token_count_after_truncation: winner.diagnostics.tokenCountAfterTruncation,
         at_max_length: winner.diagnostics.atMaxLength, truncation_enabled: true
-      } : null
+      } : null,
+      counterfactual_pass_b: counterfactualPassB
     };
     return result;
   }
