@@ -113,7 +113,10 @@ jobs:
           curl --fail --retry 4 --retry-all-errors --location --connect-timeout 30 --max-time 10800 "$AV_STORE_URL" -o artifacts/phase2/averitec/dev_knowledge_store.zip
           test "$(sha256sum artifacts/phase2/averitec/dev_knowledge_store.zip | cut -d' ' -f1)" = "$AV_STORE_SHA256"
       - name: Verify benchmark runner TypeScript build
-        run: npx tsc --noEmit --pretty false
+        run: >-
+          npx tsc --noEmit --pretty false --target ES2022 --module ESNext
+          --moduleResolution bundler --skipLibCheck --isolatedModules
+          --allowImportingTsExtensions scripts/v2AveritecEndToEnd.ts
       - name: Run AVeriTeC shard in fresh OS processes
         env:
           START: ${{ matrix.start }}
@@ -281,4 +284,4 @@ jobs:
           node --check scripts/mergeAveritecShards.mjs
           node --check scripts/mergeAveritecShardsTests.mjs
           node scripts/mergeAveritecShardsTests.mjs
-          npx tsc --noEmit
+          npx tsc --noEmit --pretty false --target ES2022 --module ESNext --moduleResolution bundler --skipLibCheck --isolatedModules --allowImportingTsExtensions scripts/v2AveritecEndToEnd.ts
