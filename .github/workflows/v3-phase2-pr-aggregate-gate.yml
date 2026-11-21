@@ -1,0 +1,157 @@
+# PR-event gate: workflow_run in the default-branch gate is branch-name pinned; this validates arbitrary research PR heads.
+name: TruthLens Phase 2 PR Aggregate Gate
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/v3-phase2-pr-aggregate-gate.yml'
+      - '.github/workflows/v3-phase2-public-benchmark-gate.yml'
+      - 'scripts/publicBenchmarkExitGate.mjs'
+      - 'scripts/scifactArtifactGate.mjs'
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: truthlens-phase2-pr-aggregate-gate-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+  cancel-in-progress: false
+
+jobs:
+  exact-head-gate:
+    name: Wait for and validate exact-head public benchmark artifacts
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Check out exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Resolve completed exact-head benchmark runs
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs"
+          required=("V3 Phase 2 Scoring Recovery" "Phase 2 AVeriTeC End-to-End Benchmark" "V2 SciFact End-to-End Benchmark")
+          for attempt in $(seq 1 350); do
+            runs="$(curl --fail --silent --show-error -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "${api}?head_sha=${TARGET_SHA}&per_page=100")"
+            all_done=true
+            ids=()
+            for name in "${required[@]}"; do
+              item="$(jq -c --arg sha "$TARGET_SHA" --arg name "$name" '[.workflow_runs[] | select(.head_sha==$sha and .name==$name and .event=="pull_request")] | sort_by(.run_number) | last // empty' <<<"$runs")"
+              if [ -z "$item" ] || [ "$item" = "null" ]; then
+                echo "Waiting for exact-head workflow to appear: $name"
+                all_done=false
+                break
+              fi
+              status="$(jq -r '.status' <<<"$item")"
+              conclusion="$(jq -r '.conclusion // empty' <<<"$item")"
+              run_id="$(jq -r '.id' <<<"$item")"
+              if [ "$status" = "completed" ] && [ "$conclusion" != "success" ]; then
+                echo "::error::$name failed for exact head $TARGET_SHA (conclusion=$conclusion, run=$run_id)"
+                exit 1
+              fi
+              if [ "$status" != "completed" ]; then
+                echo "Waiting: $name status=$status run=$run_id"
+                all_done=false
+                break
+              fi
+              ids+=("$run_id")
+            done
+            if [ "$all_done" = true ]; then
+              echo "recovery_id=${ids[0]}" >> "$GITHUB_OUTPUT"
+              echo "averitec_id=${ids[1]}" >> "$GITHUB_OUTPUT"
+              echo "scifact_id=${ids[2]}" >> "$GITHUB_OUTPUT"
+              echo "target_sha=$TARGET_SHA" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            sleep 60
+          done
+          echo "::error::Timed out waiting for exact-head benchmark workflows."
+          exit 1
+
+      - name: Download full FEVER scoring artifact
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.resolve.outputs.recovery_id }}
+          pattern: truthlens-v3-fever-full-*
+          path: artifacts/v3/fever
+          merge-multiple: true
+
+      - name: Download full FEVEROUS scoring artifact
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.resolve.outputs.recovery_id }}
+          pattern: truthlens-v3-feverous-full-*
+          path: artifacts/v3/feverous
+          merge-multiple: true
+
+      - name: Download full AVeriTeC artifact
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.resolve.outputs.averitec_id }}
+          name: truthlens-phase2-averitec-e2e-final
+          path: artifacts/v2-averitec-e2e
+
+      - name: Download exact-head SciFact artifact
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.resolve.outputs.scifact_id }}
+          name: truthlens-v2-scifact-end-to-end
+          path: artifacts/v2-scifact-e2e
+
+      - name: Validate contamination diagnostic completion
+        env:
+          TARGET_SHA: ${{ steps.resolve.outputs.target_sha }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path("artifacts/v2-scifact-e2e/scifact-real-text-contamination.json")
+          assert p.is_file(), "real-text contamination artifact missing"
+          d = json.loads(p.read_text())
+          assert d.get("status") == "COMPLETED", f"diagnostic status={d.get('status')}"
+          assert d.get("dataset", {}).get("claims_evaluated") == d.get("summary", {}).get("claims_completed"), "claim completion count mismatch"
+          assert d.get("summary", {}).get("claims_skipped") == 0, "diagnostic skipped claims"
+          assert d.get("run_provenance", {}).get("source_commit_sha") == __import__("os").environ["TARGET_SHA"], "diagnostic exact-head SHA mismatch"
+          print("Real-text SciFact contamination diagnostic: COMPLETED with exact-head provenance")
+          PY
+
+      - name: Validate official public benchmark artifacts
+        env:
+          TRUTHLENS_EXPECTED_COMMIT_SHA: ${{ steps.resolve.outputs.target_sha }}
+        run: |
+          set -euo pipefail
+          node scripts/publicBenchmarkExitGate.mjs --output=artifacts/v3/public-benchmark-gate.json
+          model_manifest_sha256="$(jq -r '.model_manifest_sha256' artifacts/v3/public-benchmark-gate.json)"
+          test "${#model_manifest_sha256}" = "64"
+          echo "TRUTHLENS_EXPECTED_MODEL_MANIFEST_SHA256=$model_manifest_sha256" >> "$GITHUB_ENV"
+
+      - name: Validate exact-head SciFact artifact
+        env:
+          TRUTHLENS_EXPECTED_COMMIT_SHA: ${{ steps.resolve.outputs.target_sha }}
+        run: node scripts/scifactArtifactGate.mjs --output=artifacts/v3/scifact-artifact-gate.json
+
+      - name: Upload aggregate gate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: truthlens-phase2-pr-aggregate-gate
+          path: |
+            artifacts/v3/public-benchmark-gate.json
+            artifacts/v3/scifact-artifact-gate.json
+            artifacts/v2-scifact-e2e/scifact-real-text-contamination.json
+          if-no-files-found: warn
+          retention-days: 90
