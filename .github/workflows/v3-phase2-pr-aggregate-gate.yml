@@ -1,3 +1,4 @@
+# PR-event gate: workflow_run in the default-branch gate is branch-name pinned; this validates arbitrary research PR heads.
 name: TruthLens Phase 2 PR Aggregate Gate
 
 on:
