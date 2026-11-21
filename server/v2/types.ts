@@ -116,6 +116,17 @@ export interface NliResearchTrace {
     at_max_length: boolean | null;
     truncation_enabled: true;
   } | null;
+  /** Counterfactual content-proposition pass, recorded only when researchTrace is enabled. */
+  counterfactual_pass_b?: {
+    raw_probabilities: { entailment: number; contradiction: number; neutral: number };
+    directional_label: 'SUPPORTS' | 'REFUTES' | null;
+    tokenization: {
+      max_tokens: number;
+      token_count_after_truncation: number | null;
+      at_max_length: boolean | null;
+      truncation_enabled: true;
+    } | null;
+  } | null;
 }
 
 export interface NliClassification {
