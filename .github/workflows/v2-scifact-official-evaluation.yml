@@ -1,0 +1,225 @@
+name: V2 SciFact Official Evaluation
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'server/v2/**'
+      - 'scripts/v2ScifactOfficialEvaluation.ts'
+      - 'scripts/scifactRationaleSelector.ts'
+      - 'scripts/test_scifactRationaleSelector.ts'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/v2-scifact-official-evaluation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  TRUTHLENS_EVALUATED_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
+concurrency:
+  group: truthlens-scifact-official-${{ github.event.pull_request.number || github.ref_name }}-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  scifact-official:
+    runs-on: ubuntu-latest
+    # The previous exact-head run reached 270/300 claims at 180 minutes; allow measured runtime plus buffer.
+    timeout-minutes: 240
+    env:
+      TRUTHLENS_V2_ML_CALL_TIMEOUT_MS: 180000
+    steps:
+      - name: Checkout exact evaluated head
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Setup Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Download exact frozen SciFact inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/truthlens-scifact-official/scifact
+          BASE="https://raw.githubusercontent.com/vidi-deshp12/scifact-claim-verification/051b5245aa9d4b98c1302920cc5e4958b9e30ef9/data"
+          curl --fail --retry 4 --retry-all-errors -L "$BASE/claims_dev.jsonl" -o /tmp/truthlens-scifact-official/scifact/claims_dev.jsonl
+          curl --fail --retry 4 --retry-all-errors -L "$BASE/corpus.jsonl" -o /tmp/truthlens-scifact-official/scifact/corpus.jsonl
+
+      - name: Verify frozen dataset hashes and counts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          base = Path("/tmp/truthlens-scifact-official/scifact")
+          expected = {
+              "claims_dev.jsonl": "86f0435d08fdb65d1aa41d1472684f57e6e71930626497bdf4d7a9ec1a632217",
+              "corpus.jsonl": "b8d6c89624cb2ed74dee8938effc4f5d8bd2086887880af8110d64be4ceade62",
+          }
+          for name, digest in expected.items():
+              actual = hashlib.sha256((base / name).read_bytes()).hexdigest()
+              assert actual == digest, (name, actual, digest)
+          claims = [json.loads(line) for line in (base / "claims_dev.jsonl").read_text().splitlines() if line.strip()]
+          corpus = [json.loads(line) for line in (base / "corpus.jsonl").read_text().splitlines() if line.strip()]
+          assert len(claims) == 300
+          assert len(corpus) == 5183
+          print("Frozen SciFact dataset hashes/counts: PASS")
+          PY
+
+      - name: Install project dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Install pinned local pretrained runtime
+        run: npm install --no-save @huggingface/transformers@3.7.6 onnxruntime-node@1.21.0
+
+      - name: Download and verify sealed V2 models
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run download:v2-models
+
+      - name: Test rationale sentence selector
+        run: npm run test:v2-scifact-rationale-selector
+
+      - name: Generate full-split open-retrieval SciFact predictions
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/v2-scifact-official
+          npm run eval:v2-scifact-official -- --data-dir=/tmp/truthlens-scifact-official/scifact --output-dir=artifacts/v2-scifact-official 2>&1 | tee artifacts/v2-scifact-official/evaluation.log
+
+      - name: Fetch pinned official SciFact evaluator and fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/scifact-evaluator/fixture
+          BASE="https://raw.githubusercontent.com/allenai/scifact-evaluator/66feffc5b2cc9e28e3ce3b8c9e824c3c642981eb"
+          curl --fail --retry 4 --retry-all-errors -L "$BASE/evaluator/eval.py" -o /tmp/scifact-evaluator/eval.py
+          curl --fail --retry 4 --retry-all-errors -L "$BASE/fixture/gold_small.jsonl" -o /tmp/scifact-evaluator/fixture/gold_small.jsonl
+          curl --fail --retry 4 --retry-all-errors -L "$BASE/fixture/predictions_small.jsonl" -o /tmp/scifact-evaluator/fixture/predictions_small.jsonl
+          curl --fail --retry 4 --retry-all-errors -L "$BASE/fixture/expected_metrics_small.json" -o /tmp/scifact-evaluator/fixture/expected_metrics_small.json
+          sha256sum /tmp/scifact-evaluator/eval.py | tee artifacts/v2-scifact-official/scifact-evaluator-script.sha256
+
+      - name: Verify upstream evaluator fixture against pinned expected metrics
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 /tmp/scifact-evaluator/eval.py \
+            --labels_file /tmp/scifact-evaluator/fixture/gold_small.jsonl \
+            --preds_file /tmp/scifact-evaluator/fixture/predictions_small.jsonl \
+            --metrics_output_file /tmp/scifact-evaluator/fixture/actual_metrics.json \
+            --verbose
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path("/tmp/scifact-evaluator/fixture")
+          actual = json.loads((root / "actual_metrics.json").read_text())
+          expected = json.loads((root / "expected_metrics_small.json").read_text())
+          assert actual == expected, (actual, expected)
+          print("Pinned upstream SciFact evaluator fixture: PASS")
+          PY
+
+      - name: Run official SciFact dev evaluator
+        run: |
+          set -euo pipefail
+          python3 /tmp/scifact-evaluator/eval.py \
+            --labels_file /tmp/truthlens-scifact-official/scifact/claims_dev.jsonl \
+            --preds_file artifacts/v2-scifact-official/scifact-official-predictions.jsonl \
+            --metrics_output_file artifacts/v2-scifact-official/scifact-official-metrics.json \
+            --verbose
+
+      - name: Validate and seal official SciFact artifact
+        shell: bash
+        env:
+          EXPECTED_COMMIT_SHA: ${{ env.TRUTHLENS_EVALUATED_COMMIT_SHA }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, math, os
+          from pathlib import Path
+          out = Path("artifacts/v2-scifact-official")
+          report = json.loads((out / "scifact-official-provenance.json").read_text())
+          metrics = json.loads((out / "scifact-official-metrics.json").read_text())
+          predictions_path = out / "scifact-official-predictions.jsonl"
+          predictions = [json.loads(x) for x in predictions_path.read_text().splitlines() if x.strip()]
+          claims_path = Path("/tmp/truthlens-scifact-official/scifact/claims_dev.jsonl")
+          corpus_path = Path("/tmp/truthlens-scifact-official/scifact/corpus.jsonl")
+          claims = [json.loads(x) for x in claims_path.read_text().splitlines() if x.strip()]
+          corpus = [json.loads(x) for x in corpus_path.read_text().splitlines() if x.strip()]
+          docs = {str(row["doc_id"]): row for row in corpus}
+          expected_sha = os.environ["EXPECTED_COMMIT_SHA"]
+          assert report["benchmark"] is True
+          assert report["gold_evidence_in_retrieval"] is False
+          assert report["run_provenance"]["source_commit_sha"] == expected_sha
+          assert report["run_provenance"]["model_manifest_sha256"] == report["models"]["manifest_sha256"]
+          assert report["run_provenance"]["config_sha256"] == hashlib.sha256(json.dumps(report["config"], separators=(",", ":")).encode()).hexdigest()
+          assert report["models"]["manifest_sha256"] == hashlib.sha256(json.dumps(report["models"]["sealed_manifest"], separators=(",", ":")).encode()).hexdigest()
+          assert report["evaluator"]["commit"] == "66feffc5b2cc9e28e3ce3b8c9e824c3c642981eb"
+          assert report["dataset"]["claims_evaluated"] == 300
+          assert report["dataset"]["corpus_documents"] == 5183
+          assert report["dataset"]["claims_sha256"] == hashlib.sha256(claims_path.read_bytes()).hexdigest()
+          assert report["dataset"]["corpus_sha256"] == hashlib.sha256(corpus_path.read_bytes()).hexdigest()
+          assert report["predictions"]["rows"] == len(predictions) == len(claims) == 300
+          assert [p["id"] for p in predictions] == [c["id"] for c in claims]
+          assert report["predictions"]["sha256"] == hashlib.sha256(predictions_path.read_bytes()).hexdigest()
+          trace_by_id = {row["id"]: row for row in report["trace"]}
+          assert set(trace_by_id) == {row["id"] for row in predictions}
+          for pred in predictions:
+              assert set(pred) == {"id", "evidence"}
+              trace_evidence = {item["evidence_id"]: item for item in trace_by_id[pred["id"]]["evidence"]}
+              for doc_id, evidence in pred["evidence"].items():
+                  assert doc_id in docs, (pred["id"], doc_id)
+                  assert doc_id in trace_evidence, (pred["id"], doc_id, "prediction not in NLI trace")
+                  assert evidence["label"] in {"SUPPORT", "CONTRADICT"}
+                  expected_label = "SUPPORT" if trace_evidence[doc_id]["nli_label"] == "SUPPORTS" else "CONTRADICT"
+                  assert evidence["label"] == expected_label
+                  assert len(evidence["sentences"]) <= 3
+                  assert len(evidence["sentences"]) == len(set(evidence["sentences"]))
+                  assert all(isinstance(i, int) and 0 <= i < len(docs[doc_id]["abstract"]) for i in evidence["sentences"])
+          required = [
+              "abstract_label_only_precision", "abstract_label_only_recall", "abstract_label_only_f1",
+              "abstract_rationalized_precision", "abstract_rationalized_recall", "abstract_rationalized_f1",
+              "sentence_selection_precision", "sentence_selection_recall", "sentence_selection_f1",
+              "sentence_label_precision", "sentence_label_recall", "sentence_label_f1"
+          ]
+          for key in required:
+              assert key in metrics and isinstance(metrics[key], (int, float)) and math.isfinite(metrics[key]) and 0 <= metrics[key] <= 1, (key, metrics.get(key))
+          evaluator_sha = hashlib.sha256(Path("/tmp/scifact-evaluator/eval.py").read_bytes()).hexdigest()
+          final = {
+              "schema_version": 1,
+              "status": "PASS",
+              "benchmark_id": "scifact",
+              "run_provenance": report["run_provenance"],
+              "dataset": report["dataset"],
+              "models": report["models"],
+              "config": report["config"],
+              "evaluator": {**report["evaluator"], "script_sha256": evaluator_sha, "license": "Apache-2.0"},
+              "predictions": report["predictions"],
+              "metrics": metrics,
+              "production_promotion_allowed": False,
+              "human_holdout_satisfied": False,
+              "interpretation": [
+                  "Metrics are produced by the pinned official SciFact evaluator on the full dev split.",
+                  "Predicted rationales are the top three original abstract sentences ranked by claim/sentence embedding similarity.",
+                  "No gold rationale labels or sentence indices are used by retrieval, NLI, or rationale selection.",
+                  "This is a public benchmark artifact, not evidence of global real-world accuracy or production promotion."
+              ]
+          }
+          (out / "scifact-official-evaluation.json").write_text(json.dumps(final, indent=2) + "\n")
+          print(json.dumps({"status": final["status"], "metrics": metrics, "source_commit_sha": expected_sha, "evaluator_commit": report["evaluator"]["commit"]}, indent=2))
+          PY
+
+      - name: Upload official SciFact evaluation artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: truthlens-v2-scifact-official-evaluation
+          path: artifacts/v2-scifact-official
+          if-no-files-found: error
+          retention-days: 30

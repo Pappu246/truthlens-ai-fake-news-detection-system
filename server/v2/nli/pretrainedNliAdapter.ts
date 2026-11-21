@@ -307,6 +307,11 @@ export class PretrainedNliAdapter implements NliAdapter {
     return {
       label,
       scores,
+      rawProbabilities: {
+        entailment: winner.probs.entailment,
+        contradiction: winner.probs.contradiction,
+        neutral: winner.probs.neutral
+      },
       confidence,
       modelName: this.modelName,
       modelVersion: this.modelVersion,
@@ -520,6 +525,11 @@ export class PretrainedNliAdapter implements NliAdapter {
     return {
       label,
       scores,
+      rawProbabilities: {
+        entailment: winner.probs.entailment,
+        contradiction: winner.probs.contradiction,
+        neutral: winner.probs.neutral
+      },
       confidence,
       modelName: this.modelName,
       modelVersion: this.modelVersion,

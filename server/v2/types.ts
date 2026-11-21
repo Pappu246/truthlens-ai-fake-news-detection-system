@@ -97,6 +97,8 @@ export interface NliScoreDistribution {
 export interface NliClassification {
   label: NliLabel;
   scores: NliScoreDistribution;
+  /** Raw pretrained-model probabilities, retained for research calibration audits. */
+  rawProbabilities?: { entailment: number; contradiction: number; neutral: number };
   confidence: number;
   modelName: string;
   modelVersion: string;
@@ -157,6 +159,8 @@ export interface ProvenanceEvidenceRecord {
   exact_passage: string;
   nli_label: NliLabel;
   nli_confidence: number;
+  /** Raw pretrained NLI probabilities; null for non-model/gated classifications. */
+  nli_raw_probabilities?: { entailment: number; contradiction: number; neutral: number } | null;
   nli_model: { name: string; version: string };
   rerank_score: number;
   rerank_signals: RerankSignals;
