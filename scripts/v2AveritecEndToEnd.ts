@@ -63,8 +63,8 @@ function textOf(value: unknown): string {
 function normalizeClaimDate(value: unknown): string | null {
   const raw = textOf(value);
   if (!raw) return null;
-  const iso = /^(\\d{4})-(\\d{1,2})-(\\d{1,2})$/.exec(raw);
-  const dmy = /^(\\d{1,2})-(\\d{1,2})-(\\d{4})$/.exec(raw);
+  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(raw);
+  const dmy = /^(\d{1,2})-(\d{1,2})-(\d{4})$/.exec(raw);
   const year = Number(iso?.[1] ?? dmy?.[3]);
   const month = Number(iso?.[2] ?? dmy?.[2]);
   const day = Number(iso?.[3] ?? dmy?.[1]);
