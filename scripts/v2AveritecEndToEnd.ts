@@ -59,6 +59,23 @@ function textOf(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+/** AVeriTeC dates are D-M-YYYY (not JavaScript's reliably parseable ISO format). */
+function normalizeClaimDate(value: unknown): string | null {
+  const raw = textOf(value);
+  if (!raw) return null;
+  const iso = /^(\\d{4})-(\\d{1,2})-(\\d{1,2})$/.exec(raw);
+  const dmy = /^(\\d{1,2})-(\\d{1,2})-(\\d{4})$/.exec(raw);
+  const year = Number(iso?.[1] ?? dmy?.[3]);
+  const month = Number(iso?.[2] ?? dmy?.[2]);
+  const day = Number(iso?.[3] ?? dmy?.[1]);
+  if (!year || !month || !day) throw new Error(`Unsupported AVeriTeC claim date: ${raw}`);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  if (parsed.getUTCFullYear() !== year || parsed.getUTCMonth() !== month - 1 || parsed.getUTCDate() !== day) {
+    throw new Error(`Invalid AVeriTeC claim date: ${raw}`);
+  }
+  return parsed.toISOString().slice(0, 10);
+}
+
 function domainOf(url: string): string {
   try {
     return new URL(url).hostname.replace(/^www\./, '').toLowerCase();
@@ -344,6 +361,8 @@ async function main(): Promise<void> {
     for (let offset = 0; offset < maxClaims; offset++) {
       const id = startClaim + offset;
       const claim = claims[id];
+      const normalizedClaimDate = normalizeClaimDate(claim.claim_date);
+      if (claim.claim_date && !normalizedClaimDate) throw new Error(`Claim ${id} has an unparseable date: ${claim.claim_date}`);
 
       if (offset > 0 && offset % workerRecycleEvery === 0) {
         await disposeMlWorker();
@@ -360,7 +379,7 @@ async function main(): Promise<void> {
         retrieval: { embeddingModel, perQueryTopK: 15, finalTopK },
         enableFullTextEnrichment: false,
         minCandidatesExpectedWarning: 0,
-        claimDate: claim.claim_date || null,
+        claimDate: normalizedClaimDate,
         enforceTemporalEvidence: true
       });
       const evidence = evidenceFor(result);
@@ -375,7 +394,7 @@ async function main(): Promise<void> {
         gold_label: claim.label,
         prediction_label: label,
         production_prediction_label: production,
-        claim_date: claim.claim_date || null,
+        claim_date: normalizedClaimDate,
         truthlens_verdict: result.provenance.final_verdict,
         confidence: result.provenance.final_confidence,
         abstained: result.provenance.abstained,
