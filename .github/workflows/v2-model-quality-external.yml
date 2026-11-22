@@ -170,7 +170,7 @@ jobs:
         run: npm ci --ignore-scripts
 
       - name: Install local pretrained runtime
-        run: npm install --no-save @huggingface/transformers@3.7.6 onnxruntime-node@1.21.0
+        run: npm install --no-save --onnxruntime-node-install-cuda=skip @huggingface/transformers@3.7.6 onnxruntime-node@1.21.0
 
       - name: Download and seal-verify local pretrained models
         env:
