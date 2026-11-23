@@ -172,7 +172,7 @@ async function main(): Promise<void> {
   };
   const modelManifest = sealedModelManifest();
   const modelManifestSha256 = sha256Json(modelManifest);
-  const sourceCommitSha = process.env.GITHUB_SHA || null;
+  const sourceCommitSha = process.env.TRUTHLENS_EVALUATED_COMMIT_SHA || process.env.GITHUB_SHA || null;
 
   console.log(`SciFact retrieval config: candidate-k=${topCandidates}, dense-k=${denseTopK}, final-k=${finalTopK}`);
   console.log(`SciFact provenance: commit=${sourceCommitSha ?? 'un-pinned-local-run'}, config_sha256=${sha256Json(runConfig)}, model_manifest_sha256=${modelManifestSha256}`);
