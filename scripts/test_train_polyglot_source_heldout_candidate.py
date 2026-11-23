@@ -7,6 +7,8 @@ from train_polyglot_source_heldout_candidate import (
     publisher_split,
     source_domain,
     publisher_domain_fingerprints,
+    exclude_external_publishers,
+    load_external_publisher_exclusions,
 )
 
 
@@ -100,3 +102,35 @@ def test_publisher_domain_fingerprints_are_canonical_stable_and_non_raw():
     assert all(len(value) == 64 for value in values)
     assert "example.co.uk" not in repr(values)
     assert "example.com" not in repr(values)
+
+
+def test_external_publisher_exclusion_filters_canonical_registrable_domains():
+    from hashlib import sha256
+
+    external = {sha256(b"example.com").hexdigest()}
+    rows = [record(1, 0, "example.com"), record(2, 1, "example.net")]
+    kept, report = exclude_external_publishers(rows, external)
+    assert [item["id"] for item in kept] == ["r2"]
+    assert report["candidate_rows_excluded_for_external_publisher_overlap"] == 1
+    assert report["candidate_rows_after_source_exclusion"] == 1
+
+
+def test_external_publisher_exclusion_file_is_hash_verified(tmp_path):
+    import json
+    from hashlib import sha256
+
+    values = sorted([sha256(b"example.com").hexdigest(), sha256(b"example.org").hexdigest()])
+    set_sha = sha256(json.dumps(values, separators=(",", ":")).encode()).hexdigest()
+    payload = {
+        "schema_version": 1,
+        "source_archive_sha256": "a" * 64,
+        "publisher_fingerprint_count": len(values),
+        "publisher_fingerprint_set_sha256": set_sha,
+        "publisher_domain_fingerprints": values,
+    }
+    path = tmp_path / "exclusions.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    loaded, metadata = load_external_publisher_exclusions(path)
+    assert loaded == set(values)
+    assert metadata["source_archive_sha256"] == "a" * 64
+    assert metadata["exclusion_input_sha256"] == sha256(path.read_bytes()).hexdigest()
