@@ -1,0 +1,64 @@
+name: V2 Adversarial Evidence Contamination Diagnostic
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/v2AdversarialEvidenceContamination.ts'
+      - '.github/workflows/v2-adversarial-evidence-contamination.yml'
+      - 'server/v2/pipeline.ts'
+      - 'server/v2/retrieval/**'
+      - 'server/v2/rerank/**'
+      - 'server/v2/nli/**'
+      - 'server/v2/decision/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-diagnostic:
+    name: Run controlled clean-vs-contaminated evidence diagnostic
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Type-check repository
+        run: npx tsc --noEmit --pretty false
+      - name: Run synthetic contamination diagnostic
+        run: npx tsx scripts/v2AdversarialEvidenceContamination.ts
+      - name: Validate diagnostic contract
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path("artifacts/v2/adversarial-evidence-contamination/summary.json")
+          d=json.loads(p.read_text())
+          assert d["status"] == "COMPLETED_SYNTHETIC_DIAGNOSTIC"
+          assert d["benchmark_id"] == "truthlens_v2_adversarial_evidence_contamination_synthetic_v1"
+          assert d["metrics"]["scenario_count"] == 16
+          assert d["metrics"]["attacked_scenario_count"] == 15
+          assert sorted({x["injected_attack_count"] for x in d["scenarios"] if x["injected_attack_count"]}) == [4,5,8]
+          assert d["production_changed"] is False
+          assert d["eligible_for_model_promotion"] is False
+          assert all(x["verification"]["nli_model"] == d["nli_adapter"]["name"] for x in d["scenarios"])
+          assert d["interpretation_limits"]
+          print(json.dumps({"status":d["status"],"metrics":d["metrics"],"production_changed":False},indent=2))
+          PY
+      - name: Upload sanitized synthetic diagnostic
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: truthlens-v2-adversarial-contamination-synthetic
+          path: |
+            artifacts/v2/adversarial-evidence-contamination/summary.json
+            artifacts/v2/adversarial-evidence-contamination/summary.md
+          if-no-files-found: error
+          retention-days: 30
