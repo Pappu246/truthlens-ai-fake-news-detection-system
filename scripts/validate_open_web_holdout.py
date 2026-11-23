@@ -13,7 +13,7 @@ import json
 import re
 import sys
 import unicodedata
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -134,7 +134,13 @@ def _validate_record(
     _require(record["split"] == "holdout", f"{prefix}: every record must be assigned to the sealed holdout split.")
     claim_day = _parse_date(record["claim_date"], f"{prefix}.claim_date")
     collected_at = _parse_aware_datetime(record["collected_at"], f"{prefix}.collected_at")
-    _require(claim_day <= collected_at.date(), f"{prefix}: claim_date cannot be after collected_at.")
+    collected_at_utc = collected_at.astimezone(timezone.utc)
+    _require(
+        claim_day <= collected_at_utc.date(),
+        f"{prefix}: claim_date cannot be after collected_at (UTC date).",
+    )
+    if sealed_at is not None:
+        _require(collected_at <= sealed_at, f"{prefix}: collection must be completed before the holdout is sealed.")
 
     sources = record["sources"]
     _require(isinstance(sources, list) and len(sources) >= 2, f"{prefix}: at least two evidence sources are required.")
@@ -153,8 +159,14 @@ def _validate_record(
         _require(domain not in domains, f"{prefix}: evidence sources must use different hostnames.")
         publisher_groups.add(group)
         domains.add(domain)
-        _parse_aware_datetime(source["published_at"], f"{label}.published_at")
-        _parse_aware_datetime(source["retrieved_at"], f"{label}.retrieved_at")
+        published_at = _parse_aware_datetime(source["published_at"], f"{label}.published_at")
+        _require(
+            published_at.astimezone(timezone.utc).date() <= claim_day,
+            f"{label}.published_at is after the claim-date cutoff.",
+        )
+        retrieved_at = _parse_aware_datetime(source["retrieved_at"], f"{label}.retrieved_at")
+        _require(retrieved_at >= published_at, f"{label}.retrieved_at cannot precede published_at.")
+        _require(retrieved_at <= collected_at, f"{label}.retrieved_at cannot be after collected_at.")
         _require(bool(HEX_256.fullmatch(str(source["content_sha256"]).lower())), f"{label}.content_sha256 must be a SHA-256 digest.")
         _require(source["evidence_role"] in ALLOWED_EVIDENCE_ROLES, f"{label}.evidence_role is invalid.")
         excerpt = source["evidence_excerpt"]
@@ -177,6 +189,7 @@ def _validate_record(
         _require(annotation["label"] in ALLOWED_LABELS, f"{label}.label is invalid.")
         _require(isinstance(annotation["rationale"], str) and len(annotation["rationale"].strip()) >= 20, f"{label}.rationale is too short.")
         annotated_at = _parse_aware_datetime(annotation["annotated_at"], f"{label}.annotated_at")
+        _require(annotated_at >= collected_at, f"{label}.annotated_at cannot precede collection.")
         annotation_times.append(annotated_at)
         attestation = annotation["attestation_ref"]
         _require(isinstance(attestation, str) and attestation.strip(), f"{label}.attestation_ref must refer to a separately retained signed human attestation.")

@@ -33,7 +33,7 @@ class OpenWebHoldoutValidationTests(unittest.TestCase):
         return {
             "claim_id": f"OWH-{index:04d}",
             "claim_text": f"Distinct test claim number {index} states a separately testable public fact.",
-            "claim_date": "2026-01-01",
+            "claim_date": "2026-01-03",
             "collected_at": timestamp,
             "syndication_cluster_id": f"cluster-{index:04d}",
             "sources": [
@@ -152,6 +152,42 @@ class OpenWebHoldoutValidationTests(unittest.TestCase):
         raw = self.records_path.read_bytes()
         self.records_path.write_bytes(raw.replace(b"Distinct test claim number 0", b"Changed test claim number 0", 1))
         with self.assertRaisesRegex(HoldoutValidationError, "SHA-256"):
+            self.validate_current_candidate()
+
+    def test_evidence_published_after_claim_date_is_rejected(self):
+        self.records[0]["sources"][0]["published_at"] = "2026-01-04T00:00:00Z"
+        self.write_bundle()
+        with self.assertRaisesRegex(HoldoutValidationError, "published_at is after the claim-date cutoff"):
+            self.validate_current_candidate()
+
+    def test_collection_uses_utc_date_for_claim_date_cutoff(self):
+        self.records[0]["collected_at"] = "2026-01-03T00:30:00+02:00"
+        self.write_bundle()
+        with self.assertRaisesRegex(HoldoutValidationError, "claim_date cannot be after collected_at"):
+            self.validate_current_candidate()
+
+    def test_source_retrieval_cannot_precede_publication(self):
+        self.records[0]["sources"][0]["retrieved_at"] = "2026-01-02T11:59:59Z"
+        self.write_bundle()
+        with self.assertRaisesRegex(HoldoutValidationError, "retrieved_at cannot precede published_at"):
+            self.validate_current_candidate()
+
+    def test_source_retrieval_cannot_follow_collection(self):
+        self.records[0]["sources"][0]["retrieved_at"] = "2026-01-03T12:00:01Z"
+        self.write_bundle()
+        with self.assertRaisesRegex(HoldoutValidationError, "retrieved_at cannot be after collected_at"):
+            self.validate_current_candidate()
+
+    def test_collection_after_seal_is_rejected(self):
+        self.records[0]["collected_at"] = "2026-01-07T00:00:00Z"
+        self.write_bundle()
+        with self.assertRaisesRegex(HoldoutValidationError, "collection must be completed before the holdout is sealed"):
+            self.validate_current_candidate()
+
+    def test_annotation_cannot_precede_collection(self):
+        self.records[0]["annotations"][0]["annotated_at"] = "2026-01-03T11:59:59Z"
+        self.write_bundle()
+        with self.assertRaisesRegex(HoldoutValidationError, "annotated_at cannot precede collection"):
             self.validate_current_candidate()
 
     def test_two_sources_from_same_publisher_group_are_rejected(self):
