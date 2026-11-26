@@ -1,0 +1,84 @@
+name: FEVEROUS Candidate Budget Audit
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'research/feverous-candidate-sample.py'
+      - 'research/feverous-candidate-budget-audit.py'
+      - '.github/workflows/feverous-candidate-budget-audit.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: truthlens-feverous-budget-audit-pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  candidate-budget-audit:
+    name: Compare FEVEROUS candidate budgets on 200 spaced claims
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Materialize pinned FEVEROUS inputs
+        run: node scripts/benchmarks/v3MaterializeScoringAssets.mjs --benchmark=feverous
+      - name: Extract pinned FEVEROUS database
+        run: unzip -q artifacts/v3/benchmark-assets/feverous/feverous-wiki-pages-db.zip -d artifacts/v3/benchmark-assets/feverous/wiki-db
+      - name: Locate FEVEROUS database
+        id: locate
+        run: |
+          db_path="$(find artifacts/v3/benchmark-assets/feverous/wiki-db -name '*.db' -print -quit)"
+          test -n "$db_path"
+          echo "db_path=$db_path" >> "$GITHUB_OUTPUT"
+      - name: Create deterministic evenly spaced 200-claim sample
+        run: |
+          python3 research/feverous-candidate-sample.py \
+            --input=artifacts/v3/benchmark-assets/feverous/dev.jsonl \
+            --output=artifacts/v3/feverous-budget-audit/sample.jsonl \
+            --sample-size=200
+      - name: Build existing baseline candidate set (25 pages x 50 elements)
+        run: |
+          python3 scripts/benchmarks/v3FeverousPrepareCandidates.py \
+            --db="${{ steps.locate.outputs.db_path }}" \
+            --claims=artifacts/v3/feverous-budget-audit/sample.jsonl \
+            --output=artifacts/v3/feverous-budget-audit/baseline-25x50.jsonl \
+            --top-pages=25 --elements-per-page=50
+      - name: Build medium candidate set (10 pages x 20 elements)
+        run: |
+          python3 scripts/benchmarks/v3FeverousPrepareCandidates.py \
+            --db="${{ steps.locate.outputs.db_path }}" \
+            --claims=artifacts/v3/feverous-budget-audit/sample.jsonl \
+            --output=artifacts/v3/feverous-budget-audit/medium-10x20.jsonl \
+            --top-pages=10 --elements-per-page=20
+      - name: Build small candidate set (5 pages x 10 elements)
+        run: |
+          python3 scripts/benchmarks/v3FeverousPrepareCandidates.py \
+            --db="${{ steps.locate.outputs.db_path }}" \
+            --claims=artifacts/v3/feverous-budget-audit/sample.jsonl \
+            --output=artifacts/v3/feverous-budget-audit/small-5x10.jsonl \
+            --top-pages=5 --elements-per-page=10
+      - name: Score recall retention and candidate-count reduction
+        run: |
+          python3 research/feverous-candidate-budget-audit.py \
+            --baseline=artifacts/v3/feverous-budget-audit/baseline-25x50.jsonl \
+            --medium=artifacts/v3/feverous-budget-audit/medium-10x20.jsonl \
+            --small=artifacts/v3/feverous-budget-audit/small-5x10.jsonl \
+            --output=artifacts/v3/feverous-budget-audit/report.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: truthlens-feverous-candidate-budget-audit-${{ github.run_number }}
+          path: artifacts/v3/feverous-budget-audit/
+          if-no-files-found: error
+          retention-days: 90
