@@ -1,6 +1,13 @@
 name: FEVEROUS Candidate Budget Audit
 
 on:
+  push:
+    branches:
+      - research/phase2-validation-final-2026-11-21
+    paths:
+      - 'research/feverous-candidate-sample.py'
+      - 'research/feverous-candidate-budget-audit.py'
+      - '.github/workflows/feverous-candidate-budget-audit.yml'
   pull_request:
     branches:
       - main
