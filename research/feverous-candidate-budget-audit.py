@@ -108,10 +108,12 @@ def main() -> None:
                 for key in ("claim_any_gold_element_recall", "complete_gold_group_recall", "gold_element_recall")
             }
         }
-    eligible = []
+    eligible_smaller = []
     for name, result in comparisons.items():
+        if name == "baseline_25x50":
+            continue
         retention = result["retention_vs_baseline"]
-        if name == "baseline_25x50" or all(
+        if all(
             retention[key] is not None and retention[key] >= threshold
             for key, threshold in (
                 ("claim_any_gold_element_recall", 0.97),
@@ -119,8 +121,8 @@ def main() -> None:
                 ("gold_element_recall", 0.90)
             )
         ):
-            eligible.append((result["candidate_count"]["mean"], name))
-    recommended = min(eligible)[1] if eligible else None
+            eligible_smaller.append((result["candidate_count"]["mean"], name))
+    recommended = min(eligible_smaller)[1] if eligible_smaller else None
     report = {
         "protocol": "feverous-candidate-budget-audit-v1",
         "sample_method": "deterministic evenly spaced across full FEVEROUS dev split",
