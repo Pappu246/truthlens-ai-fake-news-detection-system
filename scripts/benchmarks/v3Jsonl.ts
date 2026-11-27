@@ -3,22 +3,30 @@ import readline from 'node:readline';
 
 /**
  * Stream JSONL records without materializing the whole file as one JavaScript
- * string. maxRows bounds parsed records; blank lines are ignored.
+ * string. startIndex skips non-empty records; maxRows bounds yielded records.
  */
-export async function* readJsonl<T>(filePath: string, maxRows?: number): AsyncGenerator<T> {
+export async function* readJsonl<T>(filePath: string, maxRows?: number, startIndex = 0): AsyncGenerator<T> {
   if (maxRows !== undefined && (!Number.isSafeInteger(maxRows) || maxRows < 0)) {
     throw new RangeError('maxRows must be a non-negative safe integer');
+  }
+  if (!Number.isSafeInteger(startIndex) || startIndex < 0) {
+    throw new RangeError('startIndex must be a non-negative safe integer');
   }
 
   const stream = fs.createReadStream(filePath, { encoding: 'utf8' });
   const lines = readline.createInterface({ input: stream, crlfDelay: Infinity });
   let physicalLine = 0;
   let rowsRead = 0;
+  let rowsSkipped = 0;
 
   try {
     for await (const line of lines) {
       physicalLine += 1;
       if (!line.trim()) continue;
+      if (rowsSkipped < startIndex) {
+        rowsSkipped += 1;
+        continue;
+      }
       if (maxRows !== undefined && rowsRead >= maxRows) break;
 
       let value: T;
