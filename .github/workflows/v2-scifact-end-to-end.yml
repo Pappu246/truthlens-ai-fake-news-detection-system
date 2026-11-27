@@ -99,7 +99,7 @@ jobs:
         run: npm run test:v2-scifact-matched-context
 
       - name: Install local pretrained runtime
-        run: npm install --verbose --no-audit --no-fund --no-save @huggingface/transformers@3.7.6 onnxruntime-node@1.21.0
+        run: npm install --verbose --no-audit --no-fund --no-save --onnxruntime-node-install-cuda=skip @huggingface/transformers@3.7.6 onnxruntime-node@1.21.0
 
       - name: Download and verify sealed research models
         env:
