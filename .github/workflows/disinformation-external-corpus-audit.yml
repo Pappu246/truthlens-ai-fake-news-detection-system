@@ -85,7 +85,8 @@ jobs:
           set -euo pipefail
           mkdir -p artifacts/external-corpus-audit
           python - <<'PY'
-          import csv, hashlib, io, json, re, zipfile
+          import csv, hashlib, io, json, re, sys, zipfile
+          csv.field_size_limit(sys.maxsize)
           from collections import Counter
           from pathlib import Path
           from urllib.parse import urlsplit
