@@ -45,12 +45,12 @@ const benchmarkLabels=claims.map(c=>c.prediction_label);
 const productionLabels=claims.map(c=>c.production_prediction_label);
 for(let i=0;i<500;i++){
   if(!AVERITEC_LABELS.includes(goldLabels[i])||!AVERITEC_LABELS.includes(benchmarkLabels[i])||!AVERITEC_LABELS.includes(productionLabels[i])) throw new Error('Invalid metric label at claim '+i);
-  if(predictions[i]?.label!==benchmarkLabels[i]) throw new Error('Prediction/provenance label mismatch at claim '+i);
+  if(predictions[i]?.label!==productionLabels[i]) throw new Error('Official prediction/production-policy label mismatch at claim '+i);
 }
 const benchmarkMetrics=macroF1(goldLabels,benchmarkLabels,AVERITEC_LABELS);
 const productionMetrics=macroF1(goldLabels,productionLabels,AVERITEC_LABELS);
 productionMetrics.abstention_or_conflict_rate=productionLabels.filter(label=>label==='Not Enough Evidence'||label==='Conflicting Evidence/Cherrypicking').length/productionLabels.length;
-const provenance={...shards[0].provenance,evaluation_scope:'full_500_claim_dev',evaluation_count:500,claim_range:{start_claim:0,claim_count:500,end_exclusive:500},shard_count:4,shard_size:125,claims,research_metrics:{benchmark_directional:benchmarkMetrics,production_policy_mapped:productionMetrics},shards:shards.map(s=>({start_claim:s.start,claim_count:s.count,evaluation_scope:s.provenance.evaluation_scope,bundle_sha256:fs.readFileSync(path.join(s.dir,'bundle-sha256.txt'),'utf8').trim()}))};
+const provenance={...shards[0].provenance,protocol_version:'truthlens-v2-averitec-e2e-v2',official_prediction_policy:'production_policy_mapped_including_conflicted',evaluation_scope:'full_500_claim_dev',evaluation_count:500,claim_range:{start_claim:0,claim_count:500,end_exclusive:500},shard_count:4,shard_size:125,claims,research_metrics:{benchmark_directional:benchmarkMetrics,production_policy_mapped:productionMetrics},shards:shards.map(s=>({start_claim:s.start,claim_count:s.count,evaluation_scope:s.provenance.evaluation_scope,bundle_sha256:fs.readFileSync(path.join(s.dir,'bundle-sha256.txt'),'utf8').trim()}))};
 if(provenance.runner) delete provenance.runner.start_claim;
 fs.writeFileSync(path.join(outputDir,'predictions.json'),JSON.stringify(predictions,null,2)+'\n');
 fs.writeFileSync(path.join(outputDir,'provenance.json'),JSON.stringify(provenance,null,2)+'\n');
