@@ -92,12 +92,12 @@ def main() -> None:
         ]
         claims_with_preamble = root / "claims-with-preamble.jsonl"
         preamble = {"id": "", "claim": "", "label": "", "evidence": []}
-        claims_with_preamble.write_text(json.dumps(preamble) + "\\n" + "".join(json.dumps(row) + "\\n" for row in claims), encoding="utf-8")
+        claims_with_preamble.write_text(json.dumps(preamble) + "\n" + "".join(json.dumps(row) + "\n" for row in claims), encoding="utf-8")
         assert MODULE.load_claims(claims_with_preamble, None) == claims
         sampled_rows = SAMPLE_MODULE.load_claim_rows(claims_with_preamble)
         assert [row["id"] for _, row in sampled_rows] == ["claim-1", "claim-2"]
         malformed = root / "malformed-claims.jsonl"
-        malformed.write_text(json.dumps(claims[0]) + "\\n" + json.dumps({"id": "", "claim": "missing id", "label": "SUPPORTS"}) + "\\n", encoding="utf-8")
+        malformed.write_text(json.dumps(claims[0]) + "\n" + json.dumps({"id": "", "claim": "missing id", "label": "SUPPORTS"}) + "\n", encoding="utf-8")
         try:
             MODULE.load_claims(malformed, None)
             raise AssertionError("Expected malformed non-preamble claim to fail closed")
