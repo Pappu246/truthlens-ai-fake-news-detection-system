@@ -233,8 +233,6 @@ export const TruthLensVerificationSection: React.FC<TruthLensVerificationSection
             <h3 className="text-base font-black uppercase tracking-tight text-slate-900">
               Independent fact-check
             </h3>
-            <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-indigo-100 text-indigo-800 font-mono">
-            </span>
           </div>
           <p className="text-xs text-slate-500 leading-relaxed max-w-xl">
             Checks the article's key claims against available reporting and other sources. You can open the sources to review the evidence yourself.
