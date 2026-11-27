@@ -38,7 +38,8 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install fast JSON parser for full-corpus indexing
-        run: python3 -m pip install --disable-pip-version-check --no-input --only-binary=:all: orjson==3.10.18
+        run: |
+          python3 -m pip install --disable-pip-version-check --no-input --only-binary=:all: orjson==3.10.18
       - name: Test FEVEROUS index builder before downloading the full corpus
         run: python3 scripts/benchmarks/v3FeverousPrepareCandidatesTests.py
       - name: Materialize pinned FEVEROUS inputs
