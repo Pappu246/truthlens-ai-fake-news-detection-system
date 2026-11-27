@@ -215,7 +215,7 @@ jobs:
           echo "db_path=$db_path" >> "$GITHUB_OUTPUT"
       - name: Prepare full FEVEROUS candidates
         run: |
-          python3 scripts/benchmarks/v3FeverousPrepareCandidates.py             --db="${{ steps.locate.outputs.db_path }}"             --claims=artifacts/v3/benchmark-assets/feverous/dev.jsonl             --output=artifacts/v3/feverous/candidates.jsonl             --max-claims=7890
+          python3 scripts/benchmarks/v3FeverousPrepareCandidates.py             --db="${{ steps.locate.outputs.db_path }}"             --claims=artifacts/v3/benchmark-assets/feverous/dev.jsonl             --output=artifacts/v3/feverous/candidates.jsonl             --max-claims=7890             --expected-claims=7890
       - name: Assert full FEVEROUS candidate count
         run: test "$(wc -l < artifacts/v3/feverous/candidates.jsonl)" -eq 7890
       - name: Run TruthLens FEVEROUS full evaluation
