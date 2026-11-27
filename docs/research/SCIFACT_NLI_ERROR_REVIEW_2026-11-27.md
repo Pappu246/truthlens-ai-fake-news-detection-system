@@ -52,6 +52,38 @@ Representative high-weight disagreements include:
 
 These are benchmark-label disagreements and diagnostic examples, not automatic proof that each retrieved paper is invalid or that SciFact's NOT_ENOUGH_INFO label means the opposite claim is true. The examples require claim-passage adjudication.
 
+
+## Per-evidence trace audit — separate 800-character run
+
+A second, distinct artifact from PR #164 supplies the missing per-passage model traces:
+
+- Workflow run **#514**, artifact ID `13634084786`, artifact SHA-256 `466992d6ce3099a3b2791522b4eaad7abd5d2f19fd1d3a562b703a0adc486945`.
+- Evaluated source commit: `72ef852e7e296bf39bf4534301af85ace0de1bdb`.
+- Trace was explicitly enabled and the artifact records `research_trace_enabled=true`.
+- 300 claims / 2,400 evidence passages; 2,270 passages reached NLI and 130 were stopped by the relatedness gate.
+- Passage labels: 402 REFUTES, 29 SUPPORTS, 1,958 NEUTRAL, 11 UNCLEAR.
+- None of the 2,270 NLI inputs reached the 384-token maximum; the largest post-tokenization sequence was 331 tokens.
+
+For false-refutation passages in this trace, mean relatedness cosine was 0.490 on SUPPORT claims and 0.455 on NOT_ENOUGH_INFO claims, versus 0.505 on CONTRADICT claims. This is substantial overlap: the current bi-encoder similarity score does not reliably separate evidential relevance from topical similarity.
+
+### Post-hoc relatedness-floor sensitivity (not a deployable result)
+
+The saved traces permit a deterministic counterfactual re-tally without rerunning retrieval or NLI:
+
+| Relatedness floor | Accuracy | Macro-F1 | SUPPORT recall | NOT_ENOUGH_INFO recall | Predicted CONTRADICT |
+|---:|---:|---:|---:|---:|---:|
+| 0.15 | 36.67% | 35.42% | 15.32% | 41.07% | 169 |
+| 0.25 | 38.00% | 36.57% | 15.32% | 44.64% | 164 |
+| 0.35 | 40.33% | 38.63% | 16.13% | 51.79% | 150 |
+| 0.45 | 44.33% | 41.75% | 16.94% | 65.18% | 119 |
+| 0.50 | 45.67% | 42.02% | 15.32% | 74.11% | 98 |
+| 0.55 | 45.00% | 39.73% | 11.29% | 82.14% | 80 |
+| 0.60 | 42.67% | 35.66% | 9.68% | 87.50% | 56 |
+
+At 0.50, 94/149 (63.1%) of REFUTES passage votes on NOT_ENOUGH_INFO claims are filtered. However, only 112/127 (88.2%) of the retrieved gold SUPPORT evidence IDs and 50/55 (90.9%) of retrieved gold CONTRADICT evidence IDs remain. The metric peak at 0.50 is a same-dev-set counterfactual and is therefore vulnerable to selection bias. It is **not** a recommendation to change the 0.15 gate.
+
+This trace also shows why the 384-token limit is not the leading explanation for this run: no input reached it. The separate character-window visibility issue is real, but it cannot explain the whole directionality failure.
+
 ## Interpretation: what is and is not established
 
 1. **Retrieval is not the dominant measured bottleneck on this split.** Candidate recall is 99.47%, while directional accuracy is 39.33%. Better retrieval alone is unlikely to repair this gap.
