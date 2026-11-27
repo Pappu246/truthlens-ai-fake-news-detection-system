@@ -72,6 +72,7 @@ def main() -> None:
             },
         }
         all_elements = MODULE.extract_elements(element_page)
+        assert list(MODULE.iter_elements(element_page)) == all_elements
         assert len(all_elements) >= 6
         assert MODULE.extract_elements_limited(element_page, 0) == []
         for limit in (1, 2, 4, len(all_elements), len(all_elements) + 2):
