@@ -56,7 +56,7 @@ export const Header: React.FC<HeaderProps> = ({
           aria-label="TruthLens AI home"
           className="shrink-0 font-black text-lg sm:text-xl tracking-tighter uppercase text-slate-900 hover:opacity-90 transition-opacity flex items-center text-left"
         >
-          TruthLens<span className="text-red-600">AI</span>
+          TruthLens{' '}<span className="text-red-600">AI</span>
         </button>
         <nav
           aria-label="Main navigation"
@@ -84,7 +84,7 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
       <div className="flex shrink-0 items-center gap-2 sm:gap-4">
         <div className="flex flex-col items-end">
-          <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase leading-none mb-1">
+          <span className="text-[9px] sm:text-[10px] font-bold text-slate-600 uppercase leading-none mb-1">
             API Status
           </span>
           <div
