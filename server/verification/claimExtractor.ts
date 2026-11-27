@@ -418,6 +418,30 @@ function resolveLeadingItReference(sentence: string, previousSentence: string): 
 }
 
 /**
+ * Resolve an LLM-extracted sentence-initial "It" against its exact source
+ * sentence. We require an exact source sentence match and a clear preceding
+ * singular subject; otherwise the original claim text is preserved.
+ */
+export function resolvePronounContextFromSource(
+  claimText: string,
+  originalText: string,
+  sourceBody: string
+): string {
+  if (!/^It\b/i.test(claimText) || !originalText.trim() || !sourceBody.trim()) return claimText;
+  const clean = (value: string) => value.replace(/[“”"']/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const sentences = sourceBody
+    .replace(/\r\n/g, '\n')
+    .split(/(?<=[.!?])\s+/)
+    .map(sentence => sentence.trim())
+    .filter(Boolean);
+  const target = clean(originalText);
+  const index = sentences.findIndex(sentence => clean(sentence) === target);
+  if (index <= 0) return claimText;
+  return resolveLeadingItReference(claimText, sentences[index - 1]);
+}
+
+
+/**
  * Deterministic rule-based claim extraction from title, body, and description.
  */
 export function extractClaimsHeuristic(
@@ -823,26 +847,52 @@ VALIDATION REQUIREMENTS:
               return true;
             })
             .slice(0, 4) // Enforce max 4 claims
-            .map((item: any, idx: number) => ({
-              claimId: item.claimId || `claim-${idx + 1}`,
-              originalText: String(item.originalText || safeTitle || '').slice(0, 500),
-              normalizedText: String(item.normalizedText || item.originalText || '').slice(0, 500),
-              claimType: item.claimType || 'Other',
-              importance: item.importance || (idx === 0 ? 'HIGH' : 'MEDIUM'),
-              entities: Array.isArray(item.entities) ? item.entities.slice(0, 10).map((e: any) => String(e).slice(0, 100)) : [],
-              dates: Array.isArray(item.dates) ? item.dates.slice(0, 5).map((d: any) => String(d).slice(0, 100)) : [],
-              locations: Array.isArray(item.locations) ? item.locations.slice(0, 5).map((l: any) => String(l).slice(0, 100)) : [],
-              numbers: Array.isArray(item.numbers) ? item.numbers.slice(0, 5).map((n: any) => String(n).slice(0, 100)) : [],
-              keywords: Array.isArray(item.keywords) ? item.keywords.slice(0, 8).map((k: any) => String(k).slice(0, 50)) : [],
-              searchQueries: Array.isArray(item.searchQueries) ? item.searchQueries.slice(0, 3).map((q: any) => String(q).slice(0, 150)) : generateSearchQueries({
-                normalizedText: item.normalizedText || '',
-                entities: item.entities || [],
-                dates: item.dates || [],
-                locations: item.locations || [],
-                numbers: item.numbers || [],
-                keywords: item.keywords || []
-              })
-            }));
+            .map((item: any, idx: number) => {
+              const originalText = String(item.originalText || safeTitle || '').slice(0, 500);
+              const rawNormalizedText = String(item.normalizedText || item.originalText || '').slice(0, 500);
+              const normalizedText = resolvePronounContextFromSource(rawNormalizedText, originalText, safeBody).slice(0, 500);
+              const context = extractClaimComponents(normalizedText);
+              const entities = Array.from(new Set([
+                ...(Array.isArray(item.entities) ? item.entities.map((value: any) => String(value).slice(0, 100)) : []),
+                ...context.entities
+              ])).slice(0, 10);
+              const dates = Array.from(new Set([
+                ...(Array.isArray(item.dates) ? item.dates.map((value: any) => String(value).slice(0, 100)) : []),
+                ...context.dates
+              ])).slice(0, 5);
+              const locations = Array.from(new Set([
+                ...(Array.isArray(item.locations) ? item.locations.map((value: any) => String(value).slice(0, 100)) : []),
+                ...context.locations
+              ])).slice(0, 5);
+              const numbers = Array.from(new Set([
+                ...(Array.isArray(item.numbers) ? item.numbers.map((value: any) => String(value).slice(0, 100)) : []),
+                ...context.numbers
+              ])).slice(0, 5);
+              const keywords = Array.from(new Set([
+                ...(Array.isArray(item.keywords) ? item.keywords.map((value: any) => String(value).slice(0, 50)) : []),
+                ...context.keywords
+              ])).slice(0, 8);
+              const generatedQueries = generateSearchQueries({ normalizedText, entities, dates, locations, numbers, keywords });
+              const suppliedQueries = Array.isArray(item.searchQueries)
+                ? item.searchQueries.slice(0, 3).map((value: any) => String(value).slice(0, 150))
+                : [];
+              const searchQueries = normalizedText !== rawNormalizedText
+                ? Array.from(new Set([...suppliedQueries.slice(0, 2), ...generatedQueries])).slice(0, 3)
+                : (suppliedQueries.length ? suppliedQueries : generatedQueries);
+              return {
+                claimId: item.claimId || 'claim-' + (idx + 1),
+                originalText,
+                normalizedText,
+                claimType: item.claimType || 'Other',
+                importance: item.importance || (idx === 0 ? 'HIGH' : 'MEDIUM'),
+                entities,
+                dates,
+                locations,
+                numbers,
+                keywords,
+                searchQueries
+              };
+            })
 
           if (validated.length > 0) {
             return validated;
