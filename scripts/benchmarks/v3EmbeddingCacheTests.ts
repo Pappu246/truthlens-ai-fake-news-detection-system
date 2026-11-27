@@ -64,7 +64,7 @@ async function main() {
     ...model,
     embedBatch: () => [[1, 2]]
   }, 2);
-  await assert.rejects(() => bad.embedBatch(['bad']), /invalid vector/);
+  assert.throws(() => bad.embedBatch(['bad']), /invalid vector/);
 
   assert.throws(() => new LruEmbeddingModel(model, 0), /positive safe integer/);
   console.log('Bounded embedding-cache regression tests: PASS');
