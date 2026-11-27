@@ -26,6 +26,7 @@ export default function App() {
   const [metrics, setMetrics] = useState<ModelComparisonData>(INITIAL_METRICS_DATA);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<number[]>([]);
+  const [favoritesLoaded, setFavoritesLoaded] = useState<boolean>(false);
   const [historyRetestId, setHistoryRetestId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -43,6 +44,8 @@ export default function App() {
       }
     } catch (error) {
       console.warn('Could not restore saved favorites', error);
+    } finally {
+      setFavoritesLoaded(true);
     }
 
     // Check backend health endpoint
@@ -119,12 +122,13 @@ export default function App() {
   };
 
   useEffect(() => {
+    if (!favoritesLoaded) return;
     try {
       localStorage.setItem('truthlens_favorite_history_ids', JSON.stringify(favoriteIds));
     } catch (error) {
       console.warn('Could not persist favorites in this browser', error);
     }
-  }, [favoriteIds]);
+  }, [favoriteIds, favoritesLoaded]);
 
   const handleToggleFavorite = (id: number) => {
     setFavoriteIds((current) => current.includes(id)
