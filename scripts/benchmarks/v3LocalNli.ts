@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { PretrainedNliAdapter } from '../../server/v2/nli/pretrainedNliAdapter.js';
 import { TransformerEmbeddingModel } from '../../server/v2/retrieval/transformerEmbeddingModel.js';
+import { LruEmbeddingModel } from './v3EmbeddingCache.js';
 import type { EmbeddingModel } from '../../server/v2/retrieval/embeddings.js';
 import type { NliAdapter } from '../../server/v2/nli/nliAdapter.js';
 import type { V2VerificationResult } from '../../server/v2/types.js';
@@ -100,10 +101,12 @@ export function modelMetadata(
 
 export async function createLocalNliContext(relatednessFloor = 0.15) {
   await verifySealedModels();
-  const embeddingModel = new TransformerEmbeddingModel();
+  const baseEmbeddingModel = new TransformerEmbeddingModel();
+  const embeddingModel = new LruEmbeddingModel(baseEmbeddingModel, 25_000);
   const nliAdapter = new PretrainedNliAdapter({ embeddingModel, relatednessFloor });
   return {
     embeddingModel,
+    embeddingCache: embeddingModel,
     nliAdapter,
     models: modelMetadata(nliAdapter, embeddingModel)
   };
