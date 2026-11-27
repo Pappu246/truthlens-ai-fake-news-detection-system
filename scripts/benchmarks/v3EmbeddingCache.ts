@@ -69,7 +69,7 @@ export class LruEmbeddingModel implements EmbeddingModel {
     return result;
   }
 
-  public async embedBatch(texts: string[]): Promise<number[][]> {
+  public embedBatch(texts: string[]): number[][] | Promise<number[][]> {
     if (texts.length === 0) return [];
     const keys = texts.map(text => (text || '').trim());
     const result = new Array<Vector>(keys.length);
@@ -91,13 +91,11 @@ export class LruEmbeddingModel implements EmbeddingModel {
       }
     }
 
-    if (missing.size > 0) {
-      const uniqueKeys = [...missing.keys()];
-      this.misses += uniqueKeys.length;
-      const batchEmbedder = this.underlying.embedBatch;
-      const vectors = batchEmbedder
-        ? await batchEmbedder.call(this.underlying, uniqueKeys)
-        : await Promise.all(uniqueKeys.map(key => this.underlying.embed(key)));
+    if (missing.size === 0) return result;
+
+    const uniqueKeys = [...missing.keys()];
+    this.misses += uniqueKeys.length;
+    const complete = (vectors: number[][]): number[][] => {
       if (!Array.isArray(vectors) || vectors.length !== uniqueKeys.length) {
         throw new Error('Underlying embedding batch returned an unexpected vector count');
       }
@@ -107,9 +105,20 @@ export class LruEmbeddingModel implements EmbeddingModel {
         this.setCached(key, vector);
         for (const position of missing.get(key) || []) result[position] = vector;
       }
+      return result;
+    };
+
+    const batchEmbedder = this.underlying.embedBatch;
+    if (batchEmbedder) {
+      const vectors = batchEmbedder.call(this.underlying, uniqueKeys);
+      return vectors instanceof Promise ? vectors.then(complete) : complete(vectors);
     }
 
-    return result;
+    const individual = uniqueKeys.map(key => this.underlying.embed(key));
+    if (individual.some(value => value instanceof Promise)) {
+      return Promise.all(individual).then(complete);
+    }
+    return complete(individual as number[][]);
   }
 
   public stats() {
