@@ -393,13 +393,27 @@ export const InputSection: React.FC<InputSectionProps> = ({
 
   return (
     <section className="w-full md:w-[420px] lg:w-[450px] bg-white border-r border-slate-200 p-6 lg:p-7 flex flex-col shrink-0 overflow-y-auto">
-      <div className="mb-4">
-        <h1 className="text-3xl lg:text-4xl font-black leading-tight tracking-tighter mb-1.5 uppercase text-slate-900">
+      <div className="mb-5">
+        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-indigo-600 mb-1">
+          Understand the story. Check the evidence.
+        </p>
+        <h1 className="text-3xl lg:text-4xl font-black leading-tight tracking-tighter mb-2 uppercase text-slate-900">
           TruthLens AI
         </h1>
-        <p className="text-slate-500 text-xs leading-relaxed">
-          Production-safe Linear SVM verification engine with URL extraction, live RSS feeds, and evidence-aware abstention.
+        <p className="text-sm text-slate-600 leading-relaxed">
+          Check whether a news story is supported by evidence, contradicted by evidence, or still uncertain.
         </p>
+        <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <p className="text-[11px] font-bold text-slate-800 mb-2">How to check a news story</p>
+          <ol className="space-y-1.5 text-[11px] text-slate-600">
+            <li className="flex gap-2"><span className="font-bold text-indigo-600">1.</span><span>Paste the full story, add its link, or choose Live News.</span></li>
+            <li className="flex gap-2"><span className="font-bold text-indigo-600">2.</span><span>Choose <strong>Check This News</strong> to start the analysis.</span></li>
+            <li className="flex gap-2"><span className="font-bold text-indigo-600">3.</span><span>Read the claims, evidence and sources before deciding what to trust.</span></li>
+          </ol>
+          <p className="mt-2 border-t border-slate-200 pt-2 text-[10px] leading-relaxed text-slate-500">
+            Important: a headline or AI score alone cannot prove that a story is true or false.
+          </p>
+        </div>
       </div>
 
       {/* Input Mode Switcher */}
@@ -414,7 +428,7 @@ export const InputSection: React.FC<InputSectionProps> = ({
           }`}
         >
           <FileText className="w-3.5 h-3.5" />
-          <span>Text</span>
+          <span>Paste Text</span>
         </button>
         <button
           type="button"
@@ -426,7 +440,7 @@ export const InputSection: React.FC<InputSectionProps> = ({
           }`}
         >
           <Globe className="w-3.5 h-3.5" />
-          <span>URL</span>
+          <span>Article Link</span>
         </button>
         <button
           type="button"
@@ -461,7 +475,7 @@ export const InputSection: React.FC<InputSectionProps> = ({
             <div className="flex items-center gap-1.5 mb-2">
               <Sparkles className="w-3.5 h-3.5 text-slate-400" />
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                Quick Test Samples
+                Try an Example
               </span>
             </div>
             <div className="flex flex-wrap gap-1.5">
@@ -484,7 +498,7 @@ export const InputSection: React.FC<InputSectionProps> = ({
           <div className="flex flex-col gap-1">
             <div className="flex justify-between items-center">
               <label htmlFor="article-text-input" className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                News Article Text
+                Paste the Full News Story
               </label>
               <span className="text-[10px] font-mono text-slate-400">
                 {text.length} chars
@@ -495,13 +509,13 @@ export const InputSection: React.FC<InputSectionProps> = ({
               value={text}
               onChange={(e) => onTextChange(e.target.value)}
               className="w-full h-44 p-4 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900 resize-none font-sans"
-              placeholder="Paste news article headline and body text here..."
+              placeholder="Paste the full article text here. A headline alone is not enough for a reliable check."
             />
           </div>
 
           <div className="flex flex-col gap-1">
             <label htmlFor="source-url-input" className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-              Source URL (Optional Metadata)
+              Original Article Link (Optional)
             </label>
             <input
               id="source-url-input"
@@ -523,10 +537,10 @@ export const InputSection: React.FC<InputSectionProps> = ({
             {isLoading ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin text-white" />
-                <span>Running Inference...</span>
+                <span>Checking the Story...</span>
               </>
             ) : (
-              'Analyze News Text'
+              'Check This News'
             )}
           </button>
 
@@ -547,10 +561,10 @@ export const InputSection: React.FC<InputSectionProps> = ({
           <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs text-slate-600">
             <div className="flex items-center gap-1.5 font-bold text-slate-800 mb-1">
               <ShieldCheck className="w-4 h-4 text-emerald-600" />
-              <span>SSRF-Protected Article Extraction</span>
+              <span>We will try to open the article safely</span>
             </div>
             <p className="text-[11px] text-slate-500 leading-relaxed">
-              Fetches live HTML, checks against internal/loopback IP blocks, strips boilerplate DOM elements, and extracts article body for ML evaluation.
+              TruthLens tries to retrieve the article text from its link. Some publishers block automatic access; if that happens, paste the full story instead.
             </p>
           </div>
 
@@ -667,7 +681,7 @@ export const InputSection: React.FC<InputSectionProps> = ({
                   <span>Extracting...</span>
                 </>
               ) : (
-                'Extract Article'
+                'Preview Article'
               )}
             </button>
             <button
@@ -682,7 +696,7 @@ export const InputSection: React.FC<InputSectionProps> = ({
                   <span>Analyzing...</span>
                 </>
               ) : (
-                'Analyze URL'
+                'Check This News'
               )}
             </button>
           </div>
