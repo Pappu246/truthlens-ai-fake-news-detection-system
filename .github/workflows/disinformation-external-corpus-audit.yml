@@ -76,6 +76,9 @@ jobs:
             "$FILE_URL" -o /tmp/zenodo-datasets.zip
           printf "%s  %s\n" "64b4e8888f95ec104611de9d01ffe903" /tmp/zenodo-datasets.zip | md5sum --check -
 
+      - name: Install pinned public-suffix parser
+        run: python -m pip install --disable-pip-version-check --no-input 'publicsuffix2==2.20191221'
+
       - name: Stream-audit external article schema and eligible source-labelled text
         shell: bash
         run: |
