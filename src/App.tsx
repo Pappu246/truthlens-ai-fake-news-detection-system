@@ -30,30 +30,50 @@ export default function App() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [systemStatus, setSystemStatus] = useState<string>('CONNECTING...');
 
-  // Load history and metrics on startup from real backend API
+  // Keep the API indicator truthful after startup: a one-time health check
+  // left stale "offline" or "connected" states visible for the whole session.
   useEffect(() => {
-    // Check backend health endpoint
-    fetch('/api/health', { signal: AbortSignal.timeout(3000) })
-      .then((res) => {
-        if (res.ok) {
-          setSystemStatus('ACTIVE // API CONNECTED');
-        } else {
-          setSystemStatus('ACTIVE // INITIALIZING');
-        }
-      })
-      .catch(() => {
+    let disposed = false;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const checkHealth = async () => {
+      try {
+        const response = await fetch('/api/health', {
+          signal: AbortSignal.timeout(3000),
+          cache: 'no-store'
+        });
+        if (disposed) return;
+        setSystemStatus(
+          response.ok
+            ? 'ACTIVE // API CONNECTED'
+            : `DEGRADED // HTTP ${response.status}`
+        );
+      } catch {
+        if (disposed) return;
         setSystemStatus('OFFLINE // RETRYING');
-      });
+      } finally {
+        if (!disposed) {
+          retryTimer = setTimeout(checkHealth, 15000);
+        }
+      }
+    };
+
+    void checkHealth();
 
     // Fetch real metrics
     fetchModelMetrics().then((data) => {
-      setMetrics(data);
+      if (!disposed) setMetrics(data);
     });
 
     // Fetch history from SQLite backend
     fetchHistory().then((items) => {
-      setHistory(items);
+      if (!disposed) setHistory(items);
     });
+
+    return () => {
+      disposed = true;
+      if (retryTimer) clearTimeout(retryTimer);
+    };
   }, []);
 
   const handleAnalyze = async (options?: {
@@ -268,7 +288,7 @@ export default function App() {
       )}
 
       {/* Main Container */}
-      <main className="flex-1 flex flex-col md:flex-row overflow-hidden">
+      <main className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden">
         {/* Left Side: Input Sidebar */}
         <InputSection
           text={articleText}

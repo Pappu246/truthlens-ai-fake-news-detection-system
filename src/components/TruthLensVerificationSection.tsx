@@ -231,14 +231,11 @@ export const TruthLensVerificationSection: React.FC<TruthLensVerificationSection
               <FileCheck className="w-4 h-4" />
             </div>
             <h3 className="text-base font-black uppercase tracking-tight text-slate-900">
-              TruthLens Fact-Checking & Evidence Engine
+              Independent fact-check
             </h3>
-            <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-indigo-100 text-indigo-800 font-mono">
-              Phase 4
-            </span>
           </div>
           <p className="text-xs text-slate-500 leading-relaxed max-w-xl">
-            Extracts factual claims, queries authentic news and encyclopedic indexes, tests numerical consistency, and evaluates source diversity.
+            Checks the article's key claims against available reporting and other sources. You can open the sources to review the evidence yourself.
           </p>
         </div>
 
@@ -255,7 +252,7 @@ export const TruthLensVerificationSection: React.FC<TruthLensVerificationSection
           ) : (
             <>
               <Search className="w-3.5 h-3.5" />
-              <span>{activeVerification ? 'Re-verify with Evidence' : autoVerify && isLoading ? 'Checking Claims Automatically…' : 'Verify Article Claims'}</span>
+              <span>{activeVerification ? 'Check sources again' : autoVerify && isLoading ? 'Checking Claims Automatically…' : 'Check claims against sources'}</span>
             </>
           )}
         </button>
@@ -275,9 +272,9 @@ export const TruthLensVerificationSection: React.FC<TruthLensVerificationSection
             <RefreshCw className="w-5 h-5 animate-spin" />
           </div>
           <div className="space-y-1">
-            <h4 className="text-sm font-bold text-slate-800">Searching Real-World Sources...</h4>
+            <h4 className="text-sm font-bold text-slate-800">Checking the story against sources...</h4>
             <p className="text-xs text-slate-500 max-w-md mx-auto">
-              Extracting factual entities and dates → Querying live news outlets and knowledge indexes → Evaluating numerical consistency.
+              Finding key claims → Looking for relevant sources → Comparing what the sources say.
             </p>
           </div>
         </div>
@@ -292,10 +289,10 @@ export const TruthLensVerificationSection: React.FC<TruthLensVerificationSection
             </div>
             <div className="space-y-1">
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                Independent Factual Verification
+                Check the facts against sources
               </h4>
               <p className="text-xs text-slate-600 max-w-lg leading-relaxed">
-                The machine learning model on the left detects stylistic linguistic patterns. Click <strong>Verify Article Claims</strong> to corroborate core factual assertions against real external reporting.
+                The first AI check looks at writing patterns. This check looks for outside evidence about the story's claims. It is a stronger way to assess factual accuracy, but it may still find too little evidence.
               </p>
             </div>
           </div>
@@ -303,7 +300,7 @@ export const TruthLensVerificationSection: React.FC<TruthLensVerificationSection
             onClick={handleVerifyArticle}
             className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs shrink-0"
           >
-            Start Verification
+            Check claims against sources
           </button>
         </div>
       )}
@@ -316,10 +313,10 @@ export const TruthLensVerificationSection: React.FC<TruthLensVerificationSection
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-700/60 pb-3">
               <div className="flex items-center gap-2">
                 <span className="text-[10px] font-black uppercase tracking-widest text-indigo-300">
-                  Dual-Signal Evaluation
+                  Two types of checks
                 </span>
                 <span className="text-slate-500">•</span>
-                <span className="text-xs text-slate-300">ML Risk vs Factual Evidence</span>
+                <span className="text-xs text-slate-300">Writing patterns vs outside evidence</span>
               </div>
               <div>{getFinalVerdictBadge(activeVerification.finalAssessment)}</div>
             </div>
@@ -327,7 +324,7 @@ export const TruthLensVerificationSection: React.FC<TruthLensVerificationSection
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               <div className="p-3.5 bg-slate-800/80 rounded-xl border border-slate-700/80 space-y-1">
                 <span className="text-[10px] font-bold uppercase text-slate-400 block font-mono">
-                  Signal 1: ML Linguistic Risk
+                  Check 1: AI writing-pattern signal
                 </span>
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-black text-white">
@@ -344,7 +341,7 @@ export const TruthLensVerificationSection: React.FC<TruthLensVerificationSection
 
               <div className="p-3.5 bg-slate-800/80 rounded-xl border border-slate-700/80 space-y-1">
                 <span className="text-[10px] font-bold uppercase text-slate-400 block font-mono">
-                  Signal 2: External Evidence
+                  Check 2: Evidence from sources
                 </span>
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-black text-white">
@@ -364,7 +361,7 @@ export const TruthLensVerificationSection: React.FC<TruthLensVerificationSection
             <div className="p-3 bg-indigo-950/60 rounded-xl border border-indigo-900/60 text-xs text-indigo-200 leading-relaxed flex items-start gap-2.5">
               <Info className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
               <div>
-                <strong className="text-white block mb-0.5">Synthesis Reasoning:</strong>
+                <strong className="text-white block mb-0.5">Why this result:</strong>
                 <span>{activeVerification.mlEvidenceSynthesis}</span>
               </div>
             </div>
