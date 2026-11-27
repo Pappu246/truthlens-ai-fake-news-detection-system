@@ -84,6 +84,17 @@ At 0.50, 94/149 (63.1%) of REFUTES passage votes on NOT_ENOUGH_INFO claims are f
 
 This trace also shows why the 384-token limit is not the leading explanation for this run: no input reached it. The separate character-window visibility issue is real, but it cannot explain the whole directionality failure.
 
+
+### Critical check: how NLI labels the annotated gold evidence itself
+
+I joined the 1,600-character run's retrieved evidence diagnostics against each claim's annotated gold evidence document IDs. This avoids confusing arbitrary retrieved passages with the evidence SciFact actually annotated.
+
+- Among **127 retrieved gold SUPPORT documents**, NLI labelled only 14 SUPPORTS (11.0%), 16 REFUTES (12.6%), 94 NEUTRAL (74.0%), and 3 UNCLEAR.
+- Among **55 retrieved gold CONTRADICT documents**, NLI labelled 22 REFUTES (40.0%), 32 NEUTRAL (58.2%), and 1 UNCLEAR.
+- Most importantly, among **90 gold SUPPORT documents for which every annotated rationale sentence was visible inside the 1,600-character passage**, only 13 were labelled SUPPORTS; 66 were NEUTRAL and 9 REFUTES.
+
+This rules out a simplistic explanation that the system only misses support because retrieval never finds the gold paper or because every rationale is truncated. Even when the annotated rationale is visible in a retrieved gold document, the current NLI model often fails to emit SUPPORTS. It does not prove that every such passage should be labelled SUPPORTS without reading the exact claim/rationale pair, but it makes NLI task-fit and biomedical entailment the primary next research target.
+
 ## Interpretation: what is and is not established
 
 1. **Retrieval is not the dominant measured bottleneck on this split.** Candidate recall is 99.47%, while directional accuracy is 39.33%. Better retrieval alone is unlikely to repair this gap.
