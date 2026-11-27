@@ -64,9 +64,9 @@ export const IndependentSignalsPanel: React.FC<IndependentSignalsPanelProps> = (
           <ShieldCheck className="w-5 h-5" />
         </div>
         <div>
-          <h3 className="text-sm font-black uppercase tracking-wide text-slate-900">Separate Claim & Evidence Signals</h3>
+          <h3 className="text-sm font-black uppercase tracking-wide text-slate-900">Independent checks</h3>
           <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-            These are separate outputs. They are not averaged into the article model's fake/real percentage and are not proof by themselves.
+            The extra model score is not a verdict. The evidence check below looks for outside sources about the claim.
           </p>
         </div>
       </div>
@@ -76,7 +76,7 @@ export const IndependentSignalsPanel: React.FC<IndependentSignalsPanelProps> = (
           <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
             <div className="flex items-center gap-2">
               <FileSearch className="w-4 h-4 text-indigo-700" />
-              <h4 className="text-xs font-black uppercase tracking-wide text-slate-800">LIAR Specialist Claim Model</h4>
+              <h4 className="text-xs font-black uppercase tracking-wide text-slate-800">Extra claim signal</h4>
             </div>
             <span className={`px-2.5 py-1 rounded-full border text-[10px] font-black uppercase tracking-wide ${claimModelAvailable ? claimLabelPresentation(claimModel.label) : 'bg-slate-50 text-slate-700 border-slate-200'}`}>
               {claimModelAvailable ? (claimModel.label || 'CLAIM SIGNAL AVAILABLE') : claimModel.status.replace(/_/g, ' ')}
@@ -90,14 +90,14 @@ export const IndependentSignalsPanel: React.FC<IndependentSignalsPanelProps> = (
           {claimModelAvailable && pTrue !== null && pFalse !== null ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-3">
-                <span className="text-[10px] uppercase tracking-wider text-emerald-800 font-bold">Claim-model P(TRUE)</span>
+                <span className="text-[10px] uppercase tracking-wider text-emerald-800 font-bold">True-side model score</span>
                 <strong className="block text-2xl font-black text-emerald-700 font-mono mt-1">{(pTrue * 100).toFixed(1)}%</strong>
                 <div className="h-1.5 bg-emerald-100 rounded-full mt-2 overflow-hidden">
                   <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${Math.max(0, Math.min(100, pTrue * 100))}%` }} />
                 </div>
               </div>
               <div className="rounded-xl border border-rose-100 bg-rose-50/50 p-3">
-                <span className="text-[10px] uppercase tracking-wider text-rose-800 font-bold">Claim-model P(FALSE)</span>
+                <span className="text-[10px] uppercase tracking-wider text-rose-800 font-bold">False-side model score</span>
                 <strong className="block text-2xl font-black text-rose-700 font-mono mt-1">{(pFalse * 100).toFixed(1)}%</strong>
                 <div className="h-1.5 bg-rose-100 rounded-full mt-2 overflow-hidden">
                   <div className="h-full bg-rose-500 rounded-full" style={{ width: `${Math.max(0, Math.min(100, pFalse * 100))}%` }} />
@@ -105,18 +105,22 @@ export const IndependentSignalsPanel: React.FC<IndependentSignalsPanelProps> = (
               </div>
             </div>
           ) : (
-            <p className="text-xs text-slate-600">{claimModel.reason || 'A separate claim-model score was not available for this input.'}</p>
+            <p className="text-xs text-slate-600">A separate model score was not available for this claim.</p>
           )}
 
           <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950 leading-relaxed">
-            <strong>Scope limitation:</strong> this model was trained on short political claims from the LIAR benchmark. It can generalize poorly to science, space, health, or other domains. Treat its score as a weak statistical signal, not as an article truth probability or independent fact-check.
-            {claimModel.benchmark && (
-              <span> Its held-out LIAR benchmark accuracy is {(claimModel.benchmark.accuracy * 100).toFixed(2)}% (n={claimModel.benchmark.n}); this is not a guarantee for the current claim.</span>
-            )}
+            <strong>Important:</strong> this extra model was trained on short political claims. It may not work well for science, space, health, or other topics. Its score is only a weak signal — it is not proof that the story is true or false.
           </div>
-          {(claimModel.limitations || []).slice(0, 2).map((limitation, i) => (
-            <p key={i} className="text-[11px] text-slate-500 mt-2 leading-relaxed">{limitation}</p>
-          ))}
+          {(claimModel.reason || claimModel.benchmark || (claimModel.limitations || []).length > 0) && (
+            <details className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <summary className="cursor-pointer text-xs font-semibold text-slate-700">Technical model details</summary>
+              <div className="mt-2 space-y-2 text-[11px] text-slate-600 leading-relaxed">
+                {claimModel.reason && <p>{claimModel.reason}</p>}
+                {claimModel.benchmark && <p>Held-out LIAR benchmark accuracy: {(claimModel.benchmark.accuracy * 100).toFixed(2)}% (n={claimModel.benchmark.n}). This benchmark result is not a guarantee for the current claim.</p>}
+                {(claimModel.limitations || []).slice(0, 2).map((limitation, i) => <p key={i}>{limitation}</p>)}
+              </div>
+            </details>
+          )}
         </div>
       )}
 
