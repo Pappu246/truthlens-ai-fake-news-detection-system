@@ -258,8 +258,10 @@ def build_index(db_path, index_path, batch_size=250):
     for page_id, raw in cursor:
         try:
             page = JSON_LOADS(raw)
-            pieces = [text for _, text, _ in extract_elements(page)]
-            page_text = "\n".join(pieces)
+            # Stream page elements directly into the page text. Avoid
+            # allocating a second list of every sentence/table cell for large
+            # FEVEROUS pages while the parsed JSON object is still resident.
+            page_text = "\n".join(text for _, text, _ in iter_elements(page))
         except Exception:
             continue
         if not page_text.strip():
