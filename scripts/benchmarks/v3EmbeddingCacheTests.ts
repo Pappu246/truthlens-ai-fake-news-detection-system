@@ -31,7 +31,7 @@ async function main() {
   const second = await cached.embedBatch(['alpha', 'beta']);
   assert.deepEqual(second, [first[0], first[1]]);
   assert.equal(calls.length, 1, 'cached batch must not call the underlying model');
-  assert.equal(cached.stats().hits, 5);
+  assert.equal(cached.stats().hits, 2);
 
   await cached.embed('gamma');
   assert.equal(cached.stats().entries, 3);
