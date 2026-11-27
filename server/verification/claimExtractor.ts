@@ -401,6 +401,47 @@ export function withArticleContextSearchQuery<T extends ExtractedClaim>(
 }
 
 /**
+ * Resolve a sentence-initial "It" only when the immediately preceding sentence
+ * has one clear, explicit grammatical subject. This preserves the claim's
+ * factual content while preventing evidence retrieval from searching for an
+ * orphaned pronoun (for example, "It opened in 1889" instead of "The Eiffel
+ * Tower opened in 1889"). Ambiguous or plural antecedents are left unchanged.
+ */
+function resolveLeadingItReference(sentence: string, previousSentence: string): string {
+  if (!/^It\b/i.test(sentence)) return sentence;
+  const subjectMatch = previousSentence.trim().match(
+    /^((?:(?:The|A|An)\s+)?[A-Z][A-Za-z0-9'’.-]*(?:\s+[A-Z][A-Za-z0-9'’.-]*){0,3})\s+(?:is|was|has|had|remains|stands|lies|sits|became|opened|launched|announced|confirmed|reported|published|discovered|measured|recorded|approved|completed)\b/i
+  );
+  const subject = subjectMatch?.[1]?.trim();
+  if (!subject || /^(?:it|this|that|he|she|they)\b/i.test(subject)) return sentence;
+  return sentence.replace(/^It\b/i, subject);
+}
+
+/**
+ * Resolve an LLM-extracted sentence-initial "It" against its exact source
+ * sentence. We require an exact source sentence match and a clear preceding
+ * singular subject; otherwise the original claim text is preserved.
+ */
+export function resolvePronounContextFromSource(
+  claimText: string,
+  originalText: string,
+  sourceBody: string
+): string {
+  if (!/^It\b/i.test(claimText) || !originalText.trim() || !sourceBody.trim()) return claimText;
+  const clean = (value: string) => value.replace(/[“”"']/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const sentences = sourceBody
+    .replace(/\r\n/g, '\n')
+    .split(/(?<=[.!?])\s+/)
+    .map(sentence => sentence.trim())
+    .filter(Boolean);
+  const target = clean(originalText);
+  const index = sentences.findIndex(sentence => clean(sentence) === target);
+  if (index <= 0) return claimText;
+  return resolveLeadingItReference(claimText, sentences[index - 1]);
+}
+
+
+/**
  * Deterministic rule-based claim extraction from title, body, and description.
  */
 export function extractClaimsHeuristic(
@@ -452,6 +493,8 @@ export function extractClaimsHeuristic(
 
   for (let i = 0; i < rawSentences.length; i++) {
     const sentence = rawSentences[i];
+    const previousSentence = i > 0 ? rawSentences[i - 1] : titleClean;
+    const contextualSentence = resolveLeadingItReference(sentence, previousSentence);
 
     // Filter out boilerplate, pure opinion, or prompt-injection control text.
     if (NON_CLAIM_PATTERNS.some(p => p.test(sentence))) continue;
@@ -459,7 +502,7 @@ export function extractClaimsHeuristic(
     if (/^(?:share|comment|advertisement|copyright|all rights reserved|source:)/i.test(sentence)) continue;
 
     // Check if sentence makes a verifiable factual assertion
-    const comp = extractClaimComponents(sentence);
+    const comp = extractClaimComponents(contextualSentence);
     const hasNumbers = comp.numbers.length > 0;
     const hasEntities = comp.entities.length > 0;
     const hasDates = comp.dates.length > 0;
@@ -474,7 +517,7 @@ export function extractClaimsHeuristic(
         (hasDates && hasAssertionVerb) ||
         hasConcretePassiveFinding) {
       // Avoid duplicate claims
-      const norm = normalizeClaimText(sentence);
+      const norm = normalizeClaimText(contextualSentence);
       if (claims.some(c => c.normalizedText.toLowerCase() === norm.toLowerCase())) continue;
 
       let importance: ClaimImportance = 'MEDIUM';
@@ -484,7 +527,7 @@ export function extractClaimsHeuristic(
         importance = 'LOW';
       }
 
-      const cType = classifyClaimType(sentence);
+      const cType = classifyClaimType(contextualSentence);
       const searchQueries = generateSearchQueries({
         normalizedText: norm,
         ...comp
@@ -804,26 +847,52 @@ VALIDATION REQUIREMENTS:
               return true;
             })
             .slice(0, 4) // Enforce max 4 claims
-            .map((item: any, idx: number) => ({
-              claimId: item.claimId || `claim-${idx + 1}`,
-              originalText: String(item.originalText || safeTitle || '').slice(0, 500),
-              normalizedText: String(item.normalizedText || item.originalText || '').slice(0, 500),
-              claimType: item.claimType || 'Other',
-              importance: item.importance || (idx === 0 ? 'HIGH' : 'MEDIUM'),
-              entities: Array.isArray(item.entities) ? item.entities.slice(0, 10).map((e: any) => String(e).slice(0, 100)) : [],
-              dates: Array.isArray(item.dates) ? item.dates.slice(0, 5).map((d: any) => String(d).slice(0, 100)) : [],
-              locations: Array.isArray(item.locations) ? item.locations.slice(0, 5).map((l: any) => String(l).slice(0, 100)) : [],
-              numbers: Array.isArray(item.numbers) ? item.numbers.slice(0, 5).map((n: any) => String(n).slice(0, 100)) : [],
-              keywords: Array.isArray(item.keywords) ? item.keywords.slice(0, 8).map((k: any) => String(k).slice(0, 50)) : [],
-              searchQueries: Array.isArray(item.searchQueries) ? item.searchQueries.slice(0, 3).map((q: any) => String(q).slice(0, 150)) : generateSearchQueries({
-                normalizedText: item.normalizedText || '',
-                entities: item.entities || [],
-                dates: item.dates || [],
-                locations: item.locations || [],
-                numbers: item.numbers || [],
-                keywords: item.keywords || []
-              })
-            }));
+            .map((item: any, idx: number) => {
+              const originalText = String(item.originalText || safeTitle || '').slice(0, 500);
+              const rawNormalizedText = String(item.normalizedText || item.originalText || '').slice(0, 500);
+              const normalizedText = resolvePronounContextFromSource(rawNormalizedText, originalText, safeBody).slice(0, 500);
+              const context = extractClaimComponents(normalizedText);
+              const entities = Array.from(new Set([
+                ...(Array.isArray(item.entities) ? item.entities.map((value: any) => String(value).slice(0, 100)) : []),
+                ...context.entities
+              ])).slice(0, 10);
+              const dates = Array.from(new Set([
+                ...(Array.isArray(item.dates) ? item.dates.map((value: any) => String(value).slice(0, 100)) : []),
+                ...context.dates
+              ])).slice(0, 5);
+              const locations = Array.from(new Set([
+                ...(Array.isArray(item.locations) ? item.locations.map((value: any) => String(value).slice(0, 100)) : []),
+                ...context.locations
+              ])).slice(0, 5);
+              const numbers = Array.from(new Set([
+                ...(Array.isArray(item.numbers) ? item.numbers.map((value: any) => String(value).slice(0, 100)) : []),
+                ...context.numbers
+              ])).slice(0, 5);
+              const keywords = Array.from(new Set([
+                ...(Array.isArray(item.keywords) ? item.keywords.map((value: any) => String(value).slice(0, 50)) : []),
+                ...context.keywords
+              ])).slice(0, 8);
+              const generatedQueries = generateSearchQueries({ normalizedText, entities, dates, locations, numbers, keywords });
+              const suppliedQueries = Array.isArray(item.searchQueries)
+                ? item.searchQueries.slice(0, 3).map((value: any) => String(value).slice(0, 150))
+                : [];
+              const searchQueries = normalizedText !== rawNormalizedText
+                ? Array.from(new Set([...suppliedQueries.slice(0, 2), ...generatedQueries])).slice(0, 3)
+                : (suppliedQueries.length ? suppliedQueries : generatedQueries);
+              return {
+                claimId: item.claimId || 'claim-' + (idx + 1),
+                originalText,
+                normalizedText,
+                claimType: item.claimType || 'Other',
+                importance: item.importance || (idx === 0 ? 'HIGH' : 'MEDIUM'),
+                entities,
+                dates,
+                locations,
+                numbers,
+                keywords,
+                searchQueries
+              };
+            })
 
           if (validated.length > 0) {
             return validated;
