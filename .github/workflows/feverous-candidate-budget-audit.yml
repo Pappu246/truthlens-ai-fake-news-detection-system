@@ -1,6 +1,9 @@
 name: FEVEROUS Candidate Budget Audit
 
 on:
+  push:
+    branches:
+      - 'research/feverous-index-build-optimization-2026-11-27'
   pull_request:
     branches:
       - main
@@ -15,7 +18,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: truthlens-feverous-budget-audit-pr-${{ github.event.pull_request.number }}
+  group: truthlens-feverous-budget-audit-${{ github.event.pull_request.number || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -26,7 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
