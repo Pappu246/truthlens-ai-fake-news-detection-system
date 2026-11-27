@@ -37,13 +37,18 @@ async function main() {
   const input = path.resolve(arg('input') || 'artifacts/v3/fever/candidates.jsonl');
   const maxClaimsArg = arg('max-claims');
   const maxClaims = maxClaimsArg === undefined ? undefined : Number(maxClaimsArg);
-  if (maxClaims !== undefined && (!Number.isSafeInteger(maxClaims) || maxClaims < 0)) {
+  const startIndexArg = arg('start-index');
+  const startIndex = startIndexArg === undefined ? 0 : Number(startIndexArg);
+  if (maxClaims !== undefined && (!Number.isSafeInteger(maxClaims) || maxClaims < 1)) {
     throw new Error(`Invalid --max-claims value: ${maxClaimsArg}`);
+  }
+  if (!Number.isSafeInteger(startIndex) || startIndex < 0) {
+    throw new Error(`Invalid --start-index value: ${startIndexArg}`);
   }
   const commitSha = arg('commit-sha') || process.env.TRUTHLENS_EVALUATED_COMMIT_SHA || process.env.GITHUB_SHA || '';
   if (!/^[a-f0-9]{40}$/i.test(commitSha)) throw new Error('An exact evaluated commit SHA is required.');
   const protocolManifestSha = arg('config-sha256') || 'PIN_REQUIRED';
-  const runtimeConfig = { per_query_top_k: 20, final_pipeline_k: 8, nli_concurrency: 8, relatedness_floor: 0.15, max_pair_tokens: 384, full_text_enrichment: false, prior_override: 'disabled' };
+  const runtimeConfig = { per_query_top_k: 20, final_pipeline_k: 8, nli_concurrency: 8, relatedness_floor: 0.15, max_pair_tokens: 384, full_text_enrichment: false, prior_override: 'disabled', embedding_cache_capacity: 25000 };
   const runtimeConfigSha = sha256Json(runtimeConfig);
   const context = await createLocalNliContext();
   const predictions: unknown[] = [];
@@ -53,7 +58,7 @@ async function main() {
   let productionLabelCorrect = 0;
 
   try {
-    for await (const row of readJsonl<Row>(input, maxClaims)) {
+    for await (const row of readJsonl<Row>(input, maxClaims, startIndex)) {
       const corpus = new FixtureCorpusSource(row.candidates.map(c => ({
         id: c.id, url: c.url, title: c.title, snippet: c.snippet, body: c.body,
         contentType: c.contentType, publisher: c.publisher, publishedAt: c.publishedAt ?? null,
@@ -101,6 +106,7 @@ async function main() {
           evidence_nli_labels: result.provenance.evidence.map(e => e.nli_label)
         }
       });
+      if (predictions.length % 25 === 0) console.log(`Evaluated ${startIndex + predictions.length}${maxClaims !== undefined ? '/' + (startIndex + maxClaims) : ''} FEVER claims`);
     }
 
     if (maxClaims !== undefined && predictions.length !== maxClaims) {
@@ -115,10 +121,13 @@ async function main() {
         claims_sha256: arg('claims-sha256') || 'PIN_REQUIRED',
         corpus_sha256: arg('corpus-sha256') || 'PIN_REQUIRED',
         evaluation_count: predictions.length,
+        evaluation_start_index: startIndex,
+        evaluation_end_index: startIndex + predictions.length,
         candidate_recall_denominator: candidateRecallDenominator
       },
       model: context.models,
       runtime_config: runtimeConfig,
+      performance: { embedding_cache: context.embeddingCache.stats() },
       metrics: {
         label_accuracy: predictions.length ? labelCorrect / predictions.length : 0,
         production_policy_mapped_accuracy: predictions.length ? productionLabelCorrect / predictions.length : 0,
