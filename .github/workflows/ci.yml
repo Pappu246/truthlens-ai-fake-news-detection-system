@@ -192,6 +192,9 @@ jobs:
       - name: Phase 2 benchmark adapter contracts
         run: npm run test:phase2-adapters
 
+      - name: Synchronous/asynchronous embedding cache regression
+        run: npm run test:embedding-cache
+
       - name: Phase 2 materialization guard
         run: npm run test:phase2-materialization
 
