@@ -9,6 +9,10 @@ on:
       - 'server/v2/**'
       - 'scripts/v2ScifactEndToEnd.ts'
       - 'scripts/v2ScifactPassageGranularity.ts'
+      - 'scripts/v2ScifactMatchedContext.ts'
+      - 'scripts/v2ScifactMatchedContextTests.ts'
+      - 'scripts/v2ScifactMatchedContext.ts'
+      - 'scripts/v2ScifactMatchedContextTests.ts'
       - 'scripts/v2DownloadModels.ts'
       - 'data/v2/**'
       - 'package.json'
@@ -91,6 +95,8 @@ jobs:
 
       - name: Install project dependencies
         run: npm ci --ignore-scripts
+      - name: Test deterministic matched-context construction
+        run: npm run test:v2-scifact-matched-context
 
       - name: Install local pretrained runtime
         run: npm install --verbose --no-audit --no-fund --no-save @huggingface/transformers@3.7.6 onnxruntime-node@1.21.0
@@ -128,6 +134,18 @@ jobs:
             --max-claims=300 \
             --output=artifacts/v2-scifact-e2e/scifact-passage-granularity.json \
             2>&1 | tee artifacts/v2-scifact-e2e/scifact-passage-granularity.log
+
+      - name: Run matched-context SciFact diagnostic
+        env:
+          TRUTHLENS_V2_ML_CALL_TIMEOUT_MS: 180000
+        run: |
+          set -euo pipefail
+          npm run eval:v2-scifact-matched-context -- \
+            --data-dir=/tmp/truthlens-scifact/scifact \
+            --max-claims=300 \
+            --max-context-chars=800 \
+            --output=artifacts/v2-scifact-e2e/scifact-matched-context.json \
+            2>&1 | tee artifacts/v2-scifact-e2e/scifact-matched-context.log
 
       - name: Validate benchmark provenance and metric denominators
         env:
