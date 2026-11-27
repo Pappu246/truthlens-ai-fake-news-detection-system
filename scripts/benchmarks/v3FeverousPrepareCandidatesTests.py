@@ -17,6 +17,11 @@ SPEC = importlib.util.spec_from_file_location("v3_feverous_prepare_candidates", 
 assert SPEC and SPEC.loader
 MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
+SAMPLE_SCRIPT = Path(__file__).parents[2] / "research" / "feverous-candidate-sample.py"
+SAMPLE_SPEC = importlib.util.spec_from_file_location("feverous_candidate_sample", SAMPLE_SCRIPT)
+assert SAMPLE_SPEC and SAMPLE_SPEC.loader
+SAMPLE_MODULE = importlib.util.module_from_spec(SAMPLE_SPEC)
+SAMPLE_SPEC.loader.exec_module(SAMPLE_MODULE)
 
 
 def main() -> None:
@@ -85,6 +90,19 @@ def main() -> None:
             {"id": "claim-1", "claim": "Apollo 11 landed on the Moon", "label": "SUPPORTS", "evidence": []},
             {"id": "claim-2", "claim": "Apollo 12 was a later lunar mission", "label": "SUPPORTS", "evidence": []}
         ]
+        claims_with_preamble = root / "claims-with-preamble.jsonl"
+        preamble = {"id": "", "claim": "", "label": "", "evidence": []}
+        claims_with_preamble.write_text(json.dumps(preamble) + "\\n" + "".join(json.dumps(row) + "\\n" for row in claims), encoding="utf-8")
+        assert MODULE.load_claims(claims_with_preamble, None) == claims
+        sampled_rows = SAMPLE_MODULE.load_claim_rows(claims_with_preamble)
+        assert [row["id"] for _, row in sampled_rows] == ["claim-1", "claim-2"]
+        malformed = root / "malformed-claims.jsonl"
+        malformed.write_text(json.dumps(claims[0]) + "\\n" + json.dumps({"id": "", "claim": "missing id", "label": "SUPPORTS"}) + "\\n", encoding="utf-8")
+        try:
+            MODULE.load_claims(malformed, None)
+            raise AssertionError("Expected malformed non-preamble claim to fail closed")
+        except RuntimeError as error:
+            assert "Malformed FEVEROUS claim row" in str(error)
         claims_path.write_text("".join(json.dumps(row) + "\n" for row in claims), encoding="utf-8")
 
         first_run = subprocess.run(
