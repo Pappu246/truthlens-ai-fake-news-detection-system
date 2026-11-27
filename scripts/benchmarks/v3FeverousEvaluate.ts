@@ -31,13 +31,16 @@ async function main() {
   const input = path.resolve(arg('input', 'artifacts/v3/feverous/candidates.jsonl')!);
   const output = path.resolve(arg('output', 'artifacts/v3/feverous/truthlens-predictions.jsonl')!);
   const maxClaims = Number(arg('max-claims', '0'));
+  const startIndex = Number(arg('start-index', '0'));
   if (!Number.isSafeInteger(maxClaims) || maxClaims < 0) throw new Error('Invalid --max-claims value: ' + String(maxClaims));
+  if (!Number.isSafeInteger(startIndex) || startIndex < 0) throw new Error('Invalid --start-index value: ' + String(startIndex));
+  if (startIndex > 0 && maxClaims < 1) throw new Error('--start-index requires a positive --max-claims');
   const limit = maxClaims > 0 ? maxClaims : undefined;
   const evaluatedCommitSha = arg('commit-sha') || process.env.TRUTHLENS_EVALUATED_COMMIT_SHA || process.env.GITHUB_SHA || '';
   if (!/^[a-f0-9]{40}$/i.test(evaluatedCommitSha)) throw new Error('An exact evaluated commit SHA is required.');
   const protocolManifestPath = path.resolve('research/multibenchmark-manifest.json');
   const protocolManifestSha256 = crypto.createHash('sha256').update(fs.readFileSync(protocolManifestPath)).digest('hex');
-  const runtimeConfig = { per_query_top_k: 20, final_pipeline_k: 8, nli_concurrency: Number(process.env.TRUTHLENS_NLI_CONCURRENCY || 8), relatedness_floor: 0.15, max_pair_tokens: 384, full_text_enrichment: false, prior_override: 'disabled' };
+  const runtimeConfig = { per_query_top_k: 20, final_pipeline_k: 8, nli_concurrency: Number(process.env.TRUTHLENS_NLI_CONCURRENCY || 8), relatedness_floor: 0.15, max_pair_tokens: 384, full_text_enrichment: false, prior_override: 'disabled', embedding_cache_capacity: 25000 };
   const runtimeConfigSha256 = sha256Json(runtimeConfig);
   const context = await createLocalNliContext();
   const predictions: unknown[] = [];
@@ -47,7 +50,7 @@ async function main() {
   let productionLabelCorrect = 0;
 
   try {
-    for await (const row of readJsonl<Row>(input, limit)) {
+    for await (const row of readJsonl<Row>(input, limit, startIndex)) {
       const corpus = new FixtureCorpusSource(row.candidates.map(c => ({
         id: c.id, url: c.url, title: c.title, snippet: c.snippet, body: c.body,
         contentType: c.contentType, publisher: c.publisher, publishedAt: c.publishedAt ?? null,
@@ -87,7 +90,7 @@ async function main() {
           evidence_urls: result.provenance.evidence.map(e => e.url)
         }
       });
-      if (predictions.length % 25 === 0) console.log('Evaluated ' + predictions.length + (limit !== undefined ? '/' + limit : ' claims'));
+      if (predictions.length % 25 === 0) console.log('Evaluated ' + (startIndex + predictions.length) + (limit !== undefined ? '/' + (startIndex + limit) : ' FEVEROUS claims'));
     }
     if (limit !== undefined && predictions.length !== limit) {
       throw new Error('Expected ' + limit + ' FEVEROUS claims, read ' + predictions.length);
@@ -100,10 +103,13 @@ async function main() {
       protocol_version: 'truthlens-v3-benchmark-protocol-v1',
       dataset: {
         name: 'FEVEROUS', version_or_split: 'dev', evaluation_count: predictions.length,
+        evaluation_start_index: startIndex,
+        evaluation_end_index: startIndex + predictions.length,
         candidate_recall_denominator: candidateRecallDenominator
       },
       model: context.models,
       runtime_config: runtimeConfig,
+      performance: { embedding_cache: context.embeddingCache.stats() },
       metrics: {
         label_accuracy: predictions.length ? labelCorrect / predictions.length : 0,
         production_policy_mapped_accuracy: predictions.length ? productionLabelCorrect / predictions.length : 0,
