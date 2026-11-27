@@ -28,6 +28,9 @@ on:
       - 'scripts/analysisSignalsSurfaceTests.ts'
       - 'scripts/benchmarks/v3EmbeddingCache.ts'
       - 'scripts/benchmarks/v3EmbeddingCacheTests.ts'
+      - 'scripts/benchmarks/v3FeverousPrepareCandidates.py'
+      - 'scripts/benchmarks/v3FeverousPrepareCandidatesTests.py'
+      - 'research/feverous-candidate-sample.py'
       - 'data/test.tsv'
       - 'data/saved_model_artifacts.json'
       - 'data/external_validation.json'
@@ -196,6 +199,9 @@ jobs:
 
       - name: Synchronous/asynchronous embedding cache regression
         run: npm run test:embedding-cache
+
+      - name: FEVEROUS claim-row and retrieval preparation regression
+        run: python3 scripts/benchmarks/v3FeverousPrepareCandidatesTests.py
 
       - name: Phase 2 materialization guard
         run: npm run test:phase2-materialization
