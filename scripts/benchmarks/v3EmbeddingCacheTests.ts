@@ -3,11 +3,13 @@ import { LruEmbeddingModel } from './v3EmbeddingCache';
 
 function mockModel() {
   const calls: string[][] = [];
+  let embedCalls = 0;
   const model = {
     name: 'mock-embedding',
     version: 'test-v1',
     dimensions: 3,
     embed(text: string) {
+      embedCalls += 1;
       return [text.length, 1, 0];
     },
     embedBatch(texts: string[]) {
@@ -15,11 +17,11 @@ function mockModel() {
       return texts.map(text => [text.length, 1, 0]);
     }
   };
-  return { model, calls };
+  return { model, calls, getEmbedCalls: () => embedCalls };
 }
 
 async function main() {
-  const { model, calls } = mockModel();
+  const { model, calls, getEmbedCalls } = mockModel();
   const cached = new LruEmbeddingModel(model, 3);
   const first = await cached.embedBatch(['alpha', 'beta', 'alpha']);
   assert.deepEqual(first[0], first[2], 'duplicate inputs must share the same deterministic vector');
@@ -38,9 +40,9 @@ async function main() {
   assert.equal(cached.stats().evictions, 1);
 
   await cached.embed('beta');
-  assert.equal(calls.length, 1, 'LRU cache must retain recently used beta');
+  assert.equal(getEmbedCalls(), 1, 'evicted beta must be recomputed');
   await cached.embed('alpha');
-  assert.equal(calls.length, 1, 'LRU cache must retain alpha after beta access');
+  assert.equal(getEmbedCalls(), 2, 'evicted alpha must be recomputed');
 
   assert.equal(cached.name, model.name);
   assert.equal(cached.version, model.version);
