@@ -385,7 +385,10 @@ async function main(): Promise<void> {
       const evidence = evidenceFor(result);
       const label = benchmarkLabel(result);
       const production = productionLabel(result.provenance.final_verdict);
-      predictions.push({ label, string_evidence: evidence, justification: evidence.join(' ') });
+      // The official AVeriTeC scorer has a fourth conflicting-evidence class. Use the
+      // production evidence-policy mapping for its official prediction, while keeping
+      // the single-direction weighted vote as a separately reported research metric.
+      predictions.push({ label: production, string_evidence: evidence, justification: evidence.join(' ') });
       goldLabels.push(claim.label);
       benchmarkLabels.push(label);
       productionLabels.push(production);
@@ -424,7 +427,8 @@ async function main(): Promise<void> {
       ? productionLabels.filter(label => label === 'Not Enough Evidence' || label === 'Conflicting Evidence/Cherrypicking').length / productionLabels.length
       : 0;
     const metadata = {
-      protocol_version: 'truthlens-v2-averitec-e2e-v1',
+      protocol_version: 'truthlens-v2-averitec-e2e-v2',
+      official_prediction_policy: 'production_policy_mapped_including_conflicted',
       generated_at: new Date().toISOString(),
       benchmark: 'AVeriTeC',
       split: 'dev',
@@ -473,7 +477,7 @@ async function main(): Promise<void> {
       claims: rows
     };
 
-    const allowedLabels = new Set(['Supported', 'Refuted', 'Not Enough Evidence']);
+    const allowedLabels = new Set(['Supported', 'Refuted', 'Not Enough Evidence', 'Conflicting Evidence/Cherrypicking']);
     if (predictions.length !== maxClaims) {
       throw new Error(`Prediction count mismatch: ${predictions.length}; expected ${maxClaims}.`);
     }
