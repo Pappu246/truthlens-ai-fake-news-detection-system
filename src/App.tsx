@@ -25,6 +25,8 @@ export default function App() {
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [metrics, setMetrics] = useState<ModelComparisonData>(INITIAL_METRICS_DATA);
   const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [favoriteIds, setFavoriteIds] = useState<number[]>([]);
+  const [favoritesLoaded, setFavoritesLoaded] = useState<boolean>(false);
   const [historyRetestId, setHistoryRetestId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -32,6 +34,20 @@ export default function App() {
 
   // Load history and metrics on startup from real backend API
   useEffect(() => {
+    try {
+      const savedFavorites = localStorage.getItem('truthlens_favorite_history_ids');
+      if (savedFavorites) {
+        const parsed: unknown = JSON.parse(savedFavorites);
+        if (Array.isArray(parsed)) {
+          setFavoriteIds(parsed.filter((id): id is number => typeof id === 'number' && Number.isSafeInteger(id) && id > 0));
+        }
+      }
+    } catch (error) {
+      console.warn('Could not restore saved favorites', error);
+    } finally {
+      setFavoritesLoaded(true);
+    }
+
     // Check backend health endpoint
     fetch('/api/health', { signal: AbortSignal.timeout(3000) })
       .then((res) => {
@@ -105,7 +121,23 @@ export default function App() {
     setErrorMessage(null);
   };
 
+  useEffect(() => {
+    if (!favoritesLoaded) return;
+    try {
+      localStorage.setItem('truthlens_favorite_history_ids', JSON.stringify(favoriteIds));
+    } catch (error) {
+      console.warn('Could not persist favorites in this browser', error);
+    }
+  }, [favoriteIds, favoritesLoaded]);
+
+  const handleToggleFavorite = (id: number) => {
+    setFavoriteIds((current) => current.includes(id)
+      ? current.filter((favoriteId) => favoriteId !== id)
+      : [...current, id]);
+  };
+
   const handleDeleteHistoryItem = async (id: number) => {
+    setFavoriteIds((current) => current.filter((favoriteId) => favoriteId !== id));
     const updated = await deleteHistoryItemApi(id);
     setHistory(updated);
   };
@@ -113,6 +145,7 @@ export default function App() {
   const handleClearAllHistory = async () => {
     await clearAllHistoryApi();
     setHistory([]);
+    setFavoriteIds([]);
   };
 
   // Re-test must perform a fresh analysis, not just switch tabs with an old preview.
@@ -291,6 +324,8 @@ export default function App() {
         {activeTab === 'history' && (
           <HistoryView
             history={history}
+            favoriteIds={favoriteIds}
+            onToggleFavorite={handleToggleFavorite}
             onRetest={handleRetestHistoryItem}
             retestingId={historyRetestId}
             onDeleteItem={handleDeleteHistoryItem}

@@ -1,9 +1,11 @@
 import React from 'react';
 import { HistoryItem } from '../types';
-import { Trash2, ExternalLink, ArrowRight } from 'lucide-react';
+import { Trash2, ExternalLink, ArrowRight, Star } from 'lucide-react';
 
 interface HistoryViewProps {
   history: HistoryItem[];
+  favoriteIds: number[];
+  onToggleFavorite: (id: number) => void;
   onRetest: (item: HistoryItem) => void;
   retestingId: number | null;
   onDeleteItem: (id: number) => void;
@@ -12,11 +14,16 @@ interface HistoryViewProps {
 
 export const HistoryView: React.FC<HistoryViewProps> = ({
   history,
+  favoriteIds,
+  onToggleFavorite,
   onRetest,
   retestingId,
   onDeleteItem,
   onClearAll
 }) => {
+  const [showFavoritesOnly, setShowFavoritesOnly] = React.useState(false);
+  const visibleHistory = showFavoritesOnly ? history.filter((item) => favoriteIds.includes(item.id)) : history;
+
   return (
     <section className="flex-1 p-6 lg:p-10 bg-slate-50 overflow-y-auto flex flex-col justify-between">
       <div>
@@ -43,24 +50,35 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           )}
         </div>
 
+        <div className="flex items-center gap-2 mb-5" role="group" aria-label="Filter analysis history">
+          <button type="button" onClick={() => setShowFavoritesOnly(false)} aria-pressed={!showFavoritesOnly}
+            className={`px-4 py-2 rounded-lg text-xs font-bold transition-colors ${!showFavoritesOnly ? 'bg-slate-900 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:border-slate-400'}`}>
+            All records ({history.length})
+          </button>
+          <button type="button" onClick={() => setShowFavoritesOnly(true)} aria-pressed={showFavoritesOnly}
+            className={`px-4 py-2 rounded-lg text-xs font-bold transition-colors flex items-center gap-2 ${showFavoritesOnly ? 'bg-amber-100 text-amber-900 border border-amber-200' : 'bg-white border border-slate-200 text-slate-600 hover:border-slate-400'}`}>
+            <Star className="w-3.5 h-3.5" /> Favorites ({favoriteIds.length})
+          </button>
+        </div>
+
         {history.length > 0 && (
           <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-950 leading-relaxed">
             <strong className="font-black uppercase tracking-wide">Historical record notice:</strong> older entries may contain confidence values written before the production probability safety lock. Those values are audit history, not a guarantee of the current runtime. Use <strong>Re-test</strong> to run the article through the current safety policy.
           </div>
         )}
 
-        {history.length === 0 ? (
+        {visibleHistory.length === 0 ? (
           <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center max-w-md mx-auto my-12">
             <h3 className="text-xl font-black uppercase tracking-tight text-slate-900 mb-2">
-              No Analysis Records Yet
+              {showFavoritesOnly ? 'No Favorites Yet' : 'No Analysis Records Yet'}
             </h3>
             <p className="text-sm text-slate-500 mb-6 leading-relaxed">
-              Analyze your first news article on the Analyze tab to generate an audit log entry.
+              {showFavoritesOnly ? 'Star an analysis record to keep it in Favorites for quick access.' : 'Analyze your first news article on the Analyze tab to generate an audit log entry.'}
             </p>
           </div>
         ) : (
           <div className="flex flex-col gap-4">
-            {history.map((item) => {
+            {visibleHistory.map((item) => {
               const isFake = item.prediction.includes('FAKE');
               const isReal = item.prediction.includes('REAL');
               const hasSavedFullText = typeof item.full_text === 'string' &&
@@ -139,6 +157,13 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                     </div>
 
                     <div className="flex items-center gap-2">
+                      <button type="button" onClick={() => onToggleFavorite(item.id)}
+                        aria-label={favoriteIds.includes(item.id) ? 'Remove from favorites' : 'Add to favorites'}
+                        aria-pressed={favoriteIds.includes(item.id)}
+                        title={favoriteIds.includes(item.id) ? 'Remove from favorites' : 'Add to favorites'}
+                        className={`p-2 rounded-lg transition-colors cursor-pointer ${favoriteIds.includes(item.id) ? 'text-amber-600 bg-amber-50 hover:bg-amber-100' : 'text-slate-400 hover:text-amber-600 hover:bg-amber-50'}`}>
+                        <Star className="w-4 h-4" fill={favoriteIds.includes(item.id) ? 'currentColor' : 'none'} />
+                      </button>
                       <button
                         onClick={() => onRetest(item)}
                         disabled={retestingId === item.id}
