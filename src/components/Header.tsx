@@ -25,7 +25,7 @@ export const Header: React.FC<HeaderProps> = ({
   const normalizedStatus = systemStatus.toLowerCase();
   const statusTone = /offline|disconnected|error|failed|unavailable/.test(normalizedStatus)
     ? 'offline'
-    : /connecting|initializing|retry|unknown/.test(normalizedStatus)
+    : /connecting|initializing|retry|unknown|degraded/.test(normalizedStatus)
       ? 'pending'
       : 'online';
 
