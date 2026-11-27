@@ -106,6 +106,29 @@ The trace-enabled PR #164 artifact also includes 338 paired claim/document ratio
 
 This is consistent with the model benefiting from focused evidence, but the rationale condition is an oracle input and is not length-matched to the abstract condition. It therefore does **not** isolate context dilution, and it is not an attainable open-retrieval score. The next clean experiment should compare length-matched context windows around the annotated rationale against the rationale-only passage, while retaining a separate untouched evaluation set.
 
+
+### Sealed DistilBERT candidate comparison — existing run #683
+
+I retrieved and inspected the full local-pretrained evaluation artifact from V2 Model Quality External Evaluation run **#683** (run ID `46014924334`, artifact ID `15218891711`, SHA-256 `b1f64be08dd5b988baf5eb45053398749a0ff52b42307d45af17e2af13a36f40`). The artifact is tied to merge commit `913499bb89609cf23f71b07bc1e4c75ae809d778` (`refs/pull/176/merge`), not the PR head; preserve that provenance distinction.
+
+On the same 469 frozen SciFact gold evidence/cited-neutral passages, with the same MiniLM relatedness gate and 384-token limit:
+
+| Metric | DeBERTa-v3-xsmall baseline | DistilBERT-MNLI candidate |
+|---|---:|---:|
+| Accuracy | 52.67% | 34.12% |
+| Macro-F1 | 53.86% | 35.95% |
+| SUPPORT recall | 28.70% | 22.22% |
+| REFUTE recall | 59.84% | 40.98% |
+| NEUTRAL recall | 85.50% | 47.33% |
+| Coverage (not UNCLEAR) | 97.65% | 97.44% |
+| Selective accuracy | 53.93% | 35.01% |
+
+The candidate is **18.55 percentage points worse** in accuracy and 17.91 points worse in macro-F1. It is not a viable replacement based on this diagnostic. Its mean reported confidence is higher (0.894 vs 0.831) despite substantially lower accuracy. A ten-bin top-label confidence calibration audit computed from the per-row artifact gives ECE 0.552 for DistilBERT versus 0.304 for DeBERTa; this is an auxiliary diagnostic, not a substitute for a held-out calibration study. Of the candidate's 309 incorrect predictions, 228 carry reported confidence >=0.90. These are strong warning signs against interpreting its raw confidence as trustworthy.
+
+The main candidate failure pattern is an overuse of NEUTRAL: it predicts NEUTRAL 265 times, including 139/216 gold SUPPORT and 64/122 gold REFUTE passages. This is not merely a SUPPORT-vs-REFUTE direction swap. On this exact SciFact component test, keep DeBERTa-v3-xsmall as the research baseline and do not promote DistilBERT. This conclusion is limited to the same 469 dev passages; it does not prove superiority on live news, FEVER, AVeriTeC, or unseen domains.
+
+The separately registered DeBERTa-v3-base MNLI+FEVER+ANLI candidate remains **unsealed** in the manifest. Do not fabricate hashes or treat it as evaluated. Its provisioning requires access to the actual ONNX bytes and independent SHA-256 seals.
+
 ## Interpretation: what is and is not established
 
 1. **Retrieval is not the dominant measured bottleneck on this split.** Candidate recall is 99.47%, while directional accuracy is 39.33%. Better retrieval alone is unlikely to repair this gap.
