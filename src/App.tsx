@@ -288,7 +288,7 @@ export default function App() {
       )}
 
       {/* Main Container */}
-      <main className="flex-1 flex flex-col md:flex-row overflow-hidden">
+      <main className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden">
         {/* Left Side: Input Sidebar */}
         <InputSection
           text={articleText}
