@@ -113,7 +113,7 @@ export const IndependentSignalsPanel: React.FC<IndependentSignalsPanelProps> = (
           </div>
           {(claimModel.reason || claimModel.benchmark || (claimModel.limitations || []).length > 0) && (
             <details className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <summary className="cursor-pointer text-xs font-semibold text-slate-700">Technical model details</summary>
+              <summary className="cursor-pointer text-xs font-semibold text-slate-700">Extra claim model details</summary>
               <div className="mt-2 space-y-2 text-[11px] text-slate-600 leading-relaxed">
                 {claimModel.reason && <p>{claimModel.reason}</p>}
                 {claimModel.benchmark && <p>Held-out LIAR benchmark accuracy: {(claimModel.benchmark.accuracy * 100).toFixed(2)}% (n={claimModel.benchmark.n}). This benchmark result is not a guarantee for the current claim.</p>}
