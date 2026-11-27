@@ -91,3 +91,33 @@ This lane still requires a human-labelled, blind external holdout with the froze
 Phase 2 exits only when every required lane has exact input hashes, fixed splits, deterministic runner configuration, a complete artifact, workflow/run provenance, a metric/limitation record, and an unchanged production model/policy.
 
 The current Phase 2 blockers are the benchmark-result artifacts for FEVER v1, FEVEROUS, and AVeriTeC, plus the future TruthLens Open-Web v1 blind human-labelled holdout. The SciFact lane already has an authoritative completed artifact.
+
+## Shared sealed model protocol (current-head recovery)
+
+All four public benchmark lanes use the same sealed local model artifacts:
+
+- NLI: `Xenova/nli-deberta-v3-xsmall`, artifact SHA-256 `3fac2500c45c75af42c7711de0d1b93d59577456100208be0dc1f9e8811946b6`.
+- Embeddings: `Xenova/all-MiniLM-L6-v2`, artifact SHA-256 `afdb6f1a0e45b715d0bb9b11772f032c399babd23bfc31fed1c170afc848bdb1`.
+- Sealed model-manifest SHA-256: `f545488704f895af94b781601c3a746b2e371e30bc8cdec7431f44917d9a1832`.
+- Runtime: Node.js 22, `@huggingface/transformers` 3.7.6, `onnxruntime-node` 1.21.0. The runners verify installed package versions and include them in provenance.
+
+Each benchmark report must bind the evaluated commit, runtime-configuration hash, model-manifest hash, and individual NLI/embedding artifact hashes. The exact-head public gate rejects model drift between FEVER, FEVEROUS, AVeriTeC, and SciFact.
+
+For FEVER and FEVEROUS, the official benchmark label is produced from the same weighted evidence-level NLI vote used by the SciFact and AVeriTeC research evaluators. Production-policy-mapped accuracy is reported separately. FEVER, FEVEROUS, and AVeriTeC disable the LIAR prior; SciFact's directional benchmark label is evidence-only. No benchmark result is treated as production accuracy.
+
+The official scorer remains authoritative for each benchmark's task metric. Retrieval recall, directional label accuracy, production-policy metrics, and evidence quality are separate measures and must not be substituted for one another.
+
+All benchmark reports explicitly set `gold_evidence_in_retrieval: false`, and the public/SciFact gates fail closed if that declaration is absent or true. FEVER and FEVEROUS candidate-preparation regression tests include gold-only pages that do not match the claim query and assert that those pages are not injected into retrieval.
+
+The public benchmark gate is intentionally not the full Phase 2 exit gate. It cannot clear the separate blind, independently human-annotated Open-Web holdout requirement.
+
+## Known NLI quality limitation (research diagnostic; not a release pass)
+
+The current sealed DeBERTa NLI model is not yet strong enough to support broad accuracy claims:
+
+- A paired component run over 469 frozen SciFact evidence/cited-neutral passages reported 52.45% accuracy and 53.68% macro-F1; class recall was SUPPORTS 30.09%, REFUTES 60.66%, and NEUTRAL 81.68%. This is a component diagnostic from PR #164, not an end-to-end score.
+- The exact-main full SciFact end-to-end run (300 claims) reported 37.33% directional accuracy and 13.71% SUPPORT recall. Candidate recall was 99.47%, and gold-evidence Recall@5 was 86.17%; retrieval therefore does not explain the full SUPPORT failure.
+- A separate source-text audit found at least one gold SUPPORT passage classified REFUTES with 0.991 contradiction probability. The paired abstract-vs-rationale experiment measures additional context effects but cannot erase this direct polarity failure.
+- A DistilBERT MNLI candidate was worse (34.33% accuracy / 36.10% macro-F1) and remains rejected.
+
+Interpretation: the current NLI model has a substantial SUPPORTS-to-NEUTRAL bias and occasional polarity errors; end-to-end evidence aggregation/context further reduces SUPPORT recall. No threshold tuning or production model change is authorized by these diagnostics. The next model-quality step is a separately sealed alternative NLI candidate evaluated on the same frozen pairs and exact-head end-to-end protocol.

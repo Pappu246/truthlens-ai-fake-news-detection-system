@@ -26,6 +26,11 @@ on:
       - 'scripts/evidenceBenchmark.ts'
       - 'scripts/evaluate_liar.py'
       - 'scripts/analysisSignalsSurfaceTests.ts'
+      - 'scripts/benchmarks/v3EmbeddingCache.ts'
+      - 'scripts/benchmarks/v3EmbeddingCacheTests.ts'
+      - 'scripts/benchmarks/v3FeverousPrepareCandidates.py'
+      - 'scripts/benchmarks/v3FeverousPrepareCandidatesTests.py'
+      - 'research/feverous-candidate-sample.py'
       - 'data/test.tsv'
       - 'data/saved_model_artifacts.json'
       - 'data/external_validation.json'
@@ -166,6 +171,9 @@ jobs:
       - name: SSRF tests
         run: npm run test:ssrf
 
+      - name: ML worker embedding batch payload tests
+        run: npm run test:ml-worker-batches
+
       - name: V2 pipeline tests
         run: npm run test:v2
 
@@ -188,6 +196,12 @@ jobs:
 
       - name: Phase 2 benchmark adapter contracts
         run: npm run test:phase2-adapters
+
+      - name: Synchronous/asynchronous embedding cache regression
+        run: npm run test:embedding-cache
+
+      - name: FEVEROUS claim-row and retrieval preparation regression
+        run: python3 scripts/benchmarks/v3FeverousPrepareCandidatesTests.py
 
       - name: Phase 2 materialization guard
         run: npm run test:phase2-materialization

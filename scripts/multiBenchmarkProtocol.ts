@@ -16,6 +16,8 @@ type Protocol = {
   phase: number;
   production_accuracy_claim: boolean;
   rules: Record<string, boolean>;
+  models?: { manifest_sha256?: string; nli?: { name?: string; artifact_sha256?: string }; embedding?: { name?: string; artifact_sha256?: string } };
+  runtime?: { node_major?: number; transformers_js?: string; onnxruntime_node?: string };
   benchmarks: Benchmark[];
 };
 
@@ -25,6 +27,10 @@ const protocol = JSON.parse(readFileSync('research/multibenchmark-manifest.json'
 if (protocol.schema_version !== 1) fail('unsupported schema_version');
 if (protocol.phase !== 2) fail('manifest must belong to Phase 2');
 if (protocol.production_accuracy_claim !== false) fail('production_accuracy_claim must remain false');
+if (!/^[a-f0-9]{64}$/i.test(protocol.models?.manifest_sha256 || '')) fail('shared model manifest SHA-256 must be pinned');
+if (protocol.models?.nli?.name !== 'Xenova/nli-deberta-v3-xsmall' || !/^[a-f0-9]{64}$/i.test(protocol.models?.nli?.artifact_sha256 || '')) fail('sealed NLI model identity/hash must be pinned');
+if (protocol.models?.embedding?.name !== 'Xenova/all-MiniLM-L6-v2' || !/^[a-f0-9]{64}$/i.test(protocol.models?.embedding?.artifact_sha256 || '')) fail('sealed embedding model identity/hash must be pinned');
+if (protocol.runtime?.node_major !== 22 || protocol.runtime?.transformers_js !== '3.7.6' || protocol.runtime?.onnxruntime_node !== '1.21.0') fail('shared Node/Transformers.js/ONNX Runtime must be pinned');
 for (const [key, value] of Object.entries(protocol.rules)) { if (value !== true) fail('required safety rule ' + key + ' is not enabled'); }
 
 const required = new Set(['scifact', 'fever_v1', 'feverous', 'averitec', 'truthlens_open_web_v1']);
