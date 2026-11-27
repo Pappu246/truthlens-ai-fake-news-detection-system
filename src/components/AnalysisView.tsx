@@ -121,8 +121,23 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
                 result.reason || result.message ||
                 'The backend could not reach a reliable verdict for this input. More context is required.'}
             </p>
+            {currentEvidenceReport && (
+              <p className="text-sm text-slate-600 mb-5 leading-relaxed">
+                The article screening could not make a reliable call. This can happen when the text is too short, incomplete,
+                or outside the model's training range. The independent source check below is separate and may still find
+                supporting, contradicting, conflicting, or insufficient evidence.
+              </p>
+            )}
+            {!currentEvidenceReport && hasSubstantialClaimText && (
+              <p className="text-sm text-blue-700 mb-5 leading-relaxed">
+                The independent source check is running below. It will show the evidence it found, or explain when there is not enough to decide.
+              </p>
+            )}
+            <details className="mb-6 rounded-xl border border-slate-200 bg-white p-4 text-left">
+              <summary className="cursor-pointer text-sm font-semibold text-slate-700">Technical model details</summary>
+              <div className="mt-4">
             {result.model_directional_signal && result.model_directional_signal !== 'UNAVAILABLE' && (
-              <div className="mb-6 rounded-xl border border-indigo-200 bg-indigo-50 p-4 text-left">
+              <div className="mb-4 rounded-xl border border-indigo-200 bg-indigo-50 p-4 text-left">
                 <div className="text-[10px] font-black uppercase tracking-wider text-indigo-700 mb-2">
                   ML Directional Signal — Uncalibrated
                 </div>
@@ -146,21 +161,6 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
                 </p>
               </div>
             )}
-            {currentEvidenceReport && (
-              <p className="text-xs text-slate-500 mb-5">
-                The statistical article classifier withheld its verdict — typically because the submitted text is too short,
-                is a headline-only or RSS-summary extract, or falls below the vocabulary coverage threshold for a calibrated ML
-                evaluation. The assessment shown above comes from the independent evidence engine and is the authoritative result
-                for this input.
-              </p>
-            )}
-            {!currentEvidenceReport && hasSubstantialClaimText && (
-              <p className="text-xs text-blue-700 mb-5">
-                Independent claim verification is running below. Its evidence result will appear here; it may report
-                insufficient or conflicting evidence instead of guessing.
-              </p>
-            )}
-
             <div className="bg-slate-50 rounded-xl p-4 text-left border border-slate-200 mb-6 text-xs text-slate-600 space-y-2 font-mono">
               {typeof result.input_length === 'number' && (
                 <div className="flex justify-between">
@@ -216,6 +216,8 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
                 <span className="font-bold text-slate-900">N/A (verdict withheld)</span>
               </div>
             </div>
+              </div>
+            </details>
 
             <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
               The legacy article classifier is not calibrated. A weak margin is not proof that the
