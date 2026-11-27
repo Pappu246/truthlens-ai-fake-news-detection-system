@@ -58,24 +58,27 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
           <div className="w-16 h-16 bg-slate-900 text-white rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-sm">
             <Info className="w-8 h-8" />
           </div>
-          <h2 className="text-4xl font-black uppercase tracking-tight text-slate-900 mb-3">
-            Ready for Calibrated ML Inference
+          <h2 className="text-3xl sm:text-4xl font-black tracking-tight text-slate-900 mb-3">
+            Ready to check a news story?
           </h2>
-          <p className="text-slate-600 text-base max-w-lg mx-auto mb-8 leading-relaxed">
-            Select a quick test sample or paste a news article, then click <strong>Analyze Article</strong> to run it through the production runtime safety and calibration policy.
+          <p className="text-slate-600 text-sm sm:text-base max-w-lg mx-auto mb-8 leading-relaxed">
+            Add a full article using the panel on the left. TruthLens will screen the story, identify checkable claims and look for evidence. You will see what it found and where the information came from.
           </p>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-xl mx-auto text-left">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl mx-auto text-left">
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-              <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block mb-1">Active Model</span>
-              <span className="text-sm font-bold text-slate-900">Linear SVM (Calibrated) — ISOT dataset</span>
+              <span className="text-[10px] font-black uppercase text-indigo-600 tracking-wider block mb-1">Step 1</span>
+              <span className="text-sm font-bold text-slate-900 block">Add the story</span>
+              <span className="text-xs text-slate-500 mt-1 block">Paste the text, add a link, or choose Live News.</span>
             </div>
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-              <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block mb-1">Calibration</span>
-              <span className="text-sm font-bold text-slate-900">Platt Sigmoid (CalibratedClassifierCV ensemble)</span>
+              <span className="text-[10px] font-black uppercase text-indigo-600 tracking-wider block mb-1">Step 2</span>
+              <span className="text-sm font-bold text-slate-900 block">Check the claims</span>
+              <span className="text-xs text-slate-500 mt-1 block">See which claims have supporting or contradicting evidence.</span>
             </div>
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-              <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block mb-1">Verdict Contract</span>
-              <span className="text-sm font-bold text-slate-900">Real / Fake / Needs More Context</span>
+              <span className="text-[10px] font-black uppercase text-indigo-600 tracking-wider block mb-1">Step 3</span>
+              <span className="text-sm font-bold text-slate-900 block">Review the sources</span>
+              <span className="text-xs text-slate-500 mt-1 block">Open the original sources and decide what the evidence supports.</span>
             </div>
           </div>
         </div>
