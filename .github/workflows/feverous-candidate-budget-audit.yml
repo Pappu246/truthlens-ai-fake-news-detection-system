@@ -47,14 +47,15 @@ jobs:
           python3 research/feverous-candidate-sample.py \
             --input=artifacts/v3/benchmark-assets/feverous/dev.jsonl \
             --output=artifacts/v3/feverous-budget-audit/sample.jsonl \
-            --sample-size=200
+            --sample-size=200 \\
+            --expected-claims=7890
       - name: Build existing baseline candidate set (25 pages x 50 elements)
         run: |
           python3 scripts/benchmarks/v3FeverousPrepareCandidates.py \
             --db="${{ steps.locate.outputs.db_path }}" \
             --claims=artifacts/v3/feverous-budget-audit/sample.jsonl \
             --output=artifacts/v3/feverous-budget-audit/baseline-25x50.jsonl \
-            --top-pages=25 --elements-per-page=50
+            --top-pages=25 --elements-per-page=50 --expected-claims=7890
       - name: Build medium candidate set (10 pages x 20 elements)
         run: |
           python3 scripts/benchmarks/v3FeverousPrepareCandidates.py \
