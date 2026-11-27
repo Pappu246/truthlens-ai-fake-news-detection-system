@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { LruEmbeddingModel } from './v3EmbeddingCache';
+import { PretrainedNliAdapter } from '../../server/v2/nli/pretrainedNliAdapter';
+import type { MlWorkerClient } from '../../server/v2/ml/mlWorkerClient';
 
 function mockModel() {
   const calls: string[][] = [];
@@ -59,6 +61,23 @@ async function main() {
   const asyncBatch = asyncCached.embedBatch(['async', 'model']);
   assert.ok(asyncBatch instanceof Promise, 'async underlying models must remain supported');
   assert.deepEqual(await asyncBatch, [[5, 1, 0], [5, 1, 0]]);
+
+  const fakeClient = {
+    classifyBatch: (pairs: Array<{ premise: string; hypothesis: string }>) => pairs.map(() => ({
+      probs: { entailment: 0.9, contradiction: 0.05, neutral: 0.05 },
+      id2label: { 0: 'contradiction', 1: 'entailment', 2: 'neutral' }
+    }))
+  } as unknown as MlWorkerClient;
+  const adapter = new PretrainedNliAdapter({
+    client: fakeClient,
+    embeddingModel: new LruEmbeddingModel(model, 3),
+    relatednessFloor: 0
+  });
+  const adapterResults = adapter.classifyBatch(
+    { normalizedText: 'The sky is blue today.' } as never,
+    ['The sky is blue today.']
+  );
+  assert.equal(adapterResults[0].label, 'SUPPORTS', 'the pretrained NLI adapter must accept the synchronous cached batch embedder');
 
   const bad = new LruEmbeddingModel({
     ...model,
