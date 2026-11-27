@@ -53,7 +53,7 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
 
   if (!result) {
     return (
-      <section className="flex-1 p-6 lg:p-10 bg-slate-50 overflow-y-auto flex flex-col justify-between">
+      <section className="flex-1 min-h-0 p-4 sm:p-6 lg:p-10 bg-slate-50 overflow-y-auto flex flex-col justify-between">
         <div className="max-w-3xl mx-auto my-auto py-12 text-center">
           <div className="w-16 h-16 bg-slate-900 text-white rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-sm">
             <Info className="w-8 h-8" />
@@ -100,7 +100,7 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
       isNeedsMoreContextLabel(result.verdict) ||
       isNeedsMoreContextLabel(result.prediction)) {
     return (
-      <section className="flex-1 p-6 lg:p-10 bg-slate-50 overflow-y-auto flex flex-col justify-between">
+      <section className="flex-1 min-h-0 p-4 sm:p-6 lg:p-10 bg-slate-50 overflow-y-auto flex flex-col justify-between">
         <div className="max-w-2xl mx-auto my-auto py-10">
           <div className="bg-white rounded-2xl p-8 border border-amber-200 shadow-sm text-center">
             <div className="w-14 h-14 bg-amber-100 text-amber-700 rounded-2xl flex items-center justify-center mx-auto mb-5">
@@ -280,7 +280,7 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
     || result.model_inference_mode === 'legacy_single_svm';
 
   return (
-    <section className="flex-1 p-6 lg:p-10 bg-slate-50 overflow-y-auto space-y-8">
+    <section className="flex-1 min-h-0 p-4 sm:p-6 lg:p-10 bg-slate-50 overflow-y-auto space-y-8">
       {/* SECTION 1: OVERALL ASSESSMENT */}
       <div className="bg-white p-6 lg:p-8 rounded-2xl shadow-sm border border-slate-200">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4 pb-4 border-b border-slate-100">
