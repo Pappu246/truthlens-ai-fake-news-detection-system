@@ -79,7 +79,7 @@ export const IndependentSignalsPanel: React.FC<IndependentSignalsPanelProps> = (
               <h4 className="text-xs font-black uppercase tracking-wide text-slate-800">Extra claim signal</h4>
             </div>
             <span className={`px-2.5 py-1 rounded-full border text-[10px] font-black uppercase tracking-wide ${claimModelAvailable ? claimLabelPresentation(claimModel.label) : 'bg-slate-50 text-slate-700 border-slate-200'}`}>
-              {claimModelAvailable ? (claimModel.label || 'CLAIM SIGNAL AVAILABLE') : claimModel.status.replace(/_/g, ' ')}
+              {claimModelAvailable ? `MODEL SIGNAL: ${claimModel.label || 'AVAILABLE'}` : claimModel.status.replace(/_/g, ' ')}
             </span>
           </div>
 
