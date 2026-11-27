@@ -38,7 +38,7 @@ export default function App() {
       if (savedFavorites) {
         const parsed: unknown = JSON.parse(savedFavorites);
         if (Array.isArray(parsed)) {
-          setFavoriteIds(parsed.filter((id): id is number => Number.isSafeInteger(id) && id > 0));
+          setFavoriteIds(parsed.filter((id): id is number => typeof id === 'number' && Number.isSafeInteger(id) && id > 0));
         }
       }
     } catch (error) {
@@ -118,22 +118,22 @@ export default function App() {
     setErrorMessage(null);
   };
 
+  useEffect(() => {
+    try {
+      localStorage.setItem('truthlens_favorite_history_ids', JSON.stringify(favoriteIds));
+    } catch (error) {
+      console.warn('Could not persist favorites in this browser', error);
+    }
+  }, [favoriteIds]);
+
   const handleToggleFavorite = (id: number) => {
-    setFavoriteIds((current) => {
-      const next = current.includes(id) ? current.filter((favoriteId) => favoriteId !== id) : [...current, id];
-      try { localStorage.setItem('truthlens_favorite_history_ids', JSON.stringify(next)); }
-      catch (error) { console.warn('Could not persist favorites in this browser', error); }
-      return next;
-    });
+    setFavoriteIds((current) => current.includes(id)
+      ? current.filter((favoriteId) => favoriteId !== id)
+      : [...current, id]);
   };
 
   const handleDeleteHistoryItem = async (id: number) => {
-    setFavoriteIds((current) => {
-      const next = current.filter((favoriteId) => favoriteId !== id);
-      try { localStorage.setItem('truthlens_favorite_history_ids', JSON.stringify(next)); }
-      catch (error) { console.warn('Could not update saved favorites', error); }
-      return next;
-    });
+    setFavoriteIds((current) => current.filter((favoriteId) => favoriteId !== id));
     const updated = await deleteHistoryItemApi(id);
     setHistory(updated);
   };
