@@ -68,6 +68,7 @@ jobs:
           node --check scripts/benchmarks/v3FeverousOfficialEvaluate.mjs
           npx tsc --noEmit
           npx tsx scripts/benchmarks/v3JsonlTests.ts
+          npx tsx scripts/benchmarks/v3EmbeddingCacheTests.ts
           npx tsx scripts/benchmarks/v3FeverousEvidenceRecallTests.ts
           python3 -m py_compile scripts/benchmarks/v3FeverPrepareCandidates.py scripts/benchmarks/v3FeverousPrepareCandidates.py
           python3 -m py_compile scripts/benchmarks/v3FeverPrepareCandidatesTests.py scripts/benchmarks/v3FeverousPrepareCandidatesTests.py
