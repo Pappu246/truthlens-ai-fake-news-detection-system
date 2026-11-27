@@ -134,7 +134,7 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
               </p>
             )}
             <details className="mb-6 rounded-xl border border-slate-200 bg-white p-4 text-left">
-              <summary className="cursor-pointer text-sm font-semibold text-slate-700">Technical model details</summary>
+              <summary className="cursor-pointer text-sm font-semibold text-slate-700">Article screening details</summary>
               <div className="mt-4">
             {result.model_directional_signal && result.model_directional_signal !== 'UNAVAILABLE' && (
               <div className="mb-4 rounded-xl border border-indigo-200 bg-indigo-50 p-4 text-left">
