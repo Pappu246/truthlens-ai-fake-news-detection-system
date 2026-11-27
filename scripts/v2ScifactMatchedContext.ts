@@ -83,44 +83,20 @@ export function buildRationaleContextWindow(
   if (indices.some(index => !Number.isInteger(index) || index < 0 || index >= sentences.length)) {
     throw new Error('Rationale sentence index is outside the abstract.');
   }
-  const first = indices[0];
-  const last = indices[indices.length - 1];
-  let start = first;
-  let end = last;
+  let start = indices[0];
+  let end = indices[indices.length - 1];
   const textFor = (left: number, right: number) => sentences.slice(left, right + 1).join(' ').trim();
   let current = textFor(start, end);
-  let takeLeft = true;
-  while (start > 0 || end < sentences.length - 1) {
-    const nextStart = takeLeft && start > 0 ? start - 1 : start;
-    const nextEnd = !takeLeft && end < sentences.length - 1 ? end + 1 : end;
-    takeLeft = !takeLeft;
-    if (nextStart === start && nextEnd === end) {
-      if (start > 0) start--;
-      else if (end < sentences.length - 1) end++;
-      else break;
-    } else {
-      const candidate = textFor(nextStart, nextEnd);
-      if (candidate.length <= maxChars || current.length > maxChars) {
-        start = nextStart;
-        end = nextEnd;
-        current = candidate;
-      } else {
-        // Try the other side on the next iteration; don't skip a side forever.
-        if (nextStart !== start && end < sentences.length - 1) {
-          const rightCandidate = textFor(start, end + 1);
-          if (rightCandidate.length <= maxChars || current.length > maxChars) {
-            end++;
-            current = rightCandidate;
-          }
-        } else if (nextEnd !== end && start > 0) {
-          const leftCandidate = textFor(start - 1, end);
-          if (leftCandidate.length <= maxChars || current.length > maxChars) {
-            start--;
-            current = leftCandidate;
-          }
-        }
-      }
-    }
+  while (current.length <= maxChars) {
+    const options: Array<{ side: 'left' | 'right'; text: string; length: number }> = [];
+    if (start > 0) options.push({ side: 'left', text: textFor(start - 1, end), length: String(sentences[start - 1] || '').length });
+    if (end < sentences.length - 1) options.push({ side: 'right', text: textFor(start, end + 1), length: String(sentences[end + 1] || '').length });
+    options.sort((a, b) => a.length - b.length || (a.side === 'left' ? -1 : 1));
+    const next = options.find(option => option.text.length <= maxChars);
+    if (!next) break;
+    if (next.side === 'left') start--;
+    else end++;
+    current = next.text;
     if (start === 0 && end === sentences.length - 1) break;
   }
   return current;
@@ -252,7 +228,7 @@ async function main(): Promise<void> {
   const controlPredictions: NliLabel[] = [];
   const rationaleGold: GoldLabel[] = [];
   const contextGold: GoldLabel[] = [];
-  const controlGold: GoldLabel[] = [];
+  const controlConfidences: number[] = [];
   const rows: Array<Record<string, unknown>> = [];
   try {
     const byClaim = new Map<number, Pair[]>();
@@ -286,8 +262,8 @@ async function main(): Promise<void> {
         rationalePredictions.push(rationaleResult.label);
         contextPredictions.push(contextResult.label);
         if (controlResult) {
-          controlGold.push(pair.gold);
           controlPredictions.push(controlResult.label);
+          controlConfidences.push(controlResult.confidence);
         }
         rows.push({
           claim_id: pair.claim_id,
@@ -317,7 +293,11 @@ async function main(): Promise<void> {
 
     const rationaleMetrics = calculateMetrics(rationalePredictions, rationaleGold);
     const contextMetrics = calculateMetrics(contextPredictions, contextGold);
-    const controlMetrics = controlPredictions.length ? calculateMetrics(controlPredictions, controlGold) : null;
+    const controlSummary = controlPredictions.length ? {
+      passages: controlPredictions.length,
+      predicted_label_counts: Object.fromEntries(OUTPUT_LABELS.map(label => [label, controlPredictions.filter(value => value === label).length])),
+      mean_confidence: controlConfidences.reduce((sum, value) => sum + value, 0) / controlConfidences.length
+    } : null;
     const transitions = {
       context_correct_rationale_wrong: rows.filter(row => row.context_window_prediction === row.gold && row.rationale_prediction !== row.gold).length,
       rationale_correct_context_wrong: rows.filter(row => row.rationale_prediction === row.gold && row.context_window_prediction !== row.gold).length,
@@ -368,7 +348,7 @@ async function main(): Promise<void> {
       paired_metrics: {
         rationale_only: rationaleMetrics,
         rationale_centered_context: contextMetrics,
-        matched_length_context_only_control: controlMetrics,
+        matched_length_context_only_control: controlSummary,
         delta_accuracy_context_minus_rationale: contextMetrics.accuracy - rationaleMetrics.accuracy,
         delta_macro_f1_context_minus_rationale: contextMetrics.macro_f1 - rationaleMetrics.macro_f1,
         context_vs_rationale_transitions: transitions
@@ -377,7 +357,7 @@ async function main(): Promise<void> {
         'Rationale text is gold-annotated oracle evidence; all conditions are component diagnostics, not open-retrieval results.',
         'The rationale-centered context condition preserves all annotated rationale sentences and adds nearest abstract context up to the configured character budget where possible.',
         'The context-only control is drawn from non-rationale sentences in the same abstract and exactly matches the rationale-centered window character count; pairs without enough control text are excluded from that control metric.',
-        'The context-only control is not a gold NEUTRAL label; it inherits the document-level rationale label only for paired context-sensitivity analysis and must not be interpreted as a passage-level ground-truth label.',
+        'The context-only control has no gold label; report only its prediction distribution and confidence, never accuracy or F1.',
         'Character lengths are recorded, but tokenizer truncation and token-count behavior remain governed by the fixed 384-token model input limit.',
         'No retrieval, production pipeline, model, threshold, decision policy, or source rule is changed.'
       ],
@@ -392,7 +372,7 @@ async function main(): Promise<void> {
       matched_context_controls: controlPredictions.length,
       rationale_only: { accuracy: rationaleMetrics.accuracy, macro_f1: rationaleMetrics.macro_f1 },
       rationale_centered_context: { accuracy: contextMetrics.accuracy, macro_f1: contextMetrics.macro_f1 },
-      context_only_control: controlMetrics ? { accuracy: controlMetrics.accuracy, macro_f1: controlMetrics.macro_f1 } : null,
+      context_only_control: controlSummary,
       artifact: output
     }, null, 2));
   } finally {
