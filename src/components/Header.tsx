@@ -87,10 +87,15 @@ export const Header: React.FC<HeaderProps> = ({
           <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase leading-none mb-1">
             API Status
           </span>
-          <div className="flex items-center gap-1.5" role="status" aria-live="polite">
+          <div
+            className="flex items-center gap-1.5"
+            role="status"
+            aria-live="polite"
+            aria-label={`API status: ${statusStyles.label}. Detail: ${systemStatus}`}
+          >
             <span className={`h-2 w-2 rounded-full ${statusStyles.dot}`} aria-hidden="true" />
-            <span className={`text-[10px] sm:text-xs font-mono font-bold ${statusStyles.text}`}>
-              {systemStatus}
+            <span className={`text-[10px] sm:text-xs font-semibold ${statusStyles.text}`}>
+              {statusStyles.label}
             </span>
           </div>
         </div>
