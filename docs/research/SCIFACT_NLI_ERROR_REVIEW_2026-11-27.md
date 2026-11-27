@@ -150,3 +150,24 @@ The separately registered DeBERTa-v3-base MNLI+FEVER+ANLI candidate remains **un
 ## Safety boundary
 
 Analysis and benchmark diagnostics only. No production model, model weights, thresholds, retrieval configuration, source-independence rule, abstention policy, or deployment behavior is changed by this document. No SciFact-dev-derived setting is approved for production.
+
+
+### Independent exact-head rerun: sealed DistilBERT comparison — run #690
+
+A second completed local-pretrained evaluation is available from V2 Model Quality External Evaluation run **#690** (run ID `46046378971`, artifact ID `15223227924`, artifact SHA-256 `2eeba061079e486412edaa7ab3e3ce788889358c7a8cedcdb94f70a6737813b0`). Its candidate comparison file records source commit `f733b248934dac39d16f7d8824cd6dec67daac86` on `refs/pull/176/merge`; it is not PR #176's head commit. The dataset and 469 matched evidence/cited-neutral pairs are the same frozen SciFact dev inputs. This is an independent rerun, not a replacement of run #683's recorded result.
+
+| Metric | DeBERTa-v3-xsmall baseline | DistilBERT-MNLI candidate |
+|---|---:|---:|
+| Accuracy | 51.81% | 34.33% |
+| Macro-F1 | 53.05% | 36.10% |
+| SUPPORT recall | 29.17% | 22.69% |
+| REFUTE recall | 59.84% | 40.98% |
+| NEUTRAL recall | 81.68% | 47.33% |
+| Coverage | 98.08% | 98.08% |
+| Selective accuracy | 52.83% | 35.00% |
+
+DistilBERT is 17.48 percentage points lower in accuracy and 16.95 points lower in macro-F1. On this second run, a ten-bin top-label ECE calculation from the per-row artifact is 0.550 for DistilBERT and 0.314 for DeBERTa; mean reported confidence is 0.894 vs 0.832. Of 308 candidate errors, 226 have confidence >=0.90. DistilBERT predicts NEUTRAL 265 times, including 139/216 gold SUPPORT and 64/122 gold REFUTE passages. This independently reinforces the decision not to promote DistilBERT on this component diagnostic.
+
+The exact numbers differ modestly from run #683 (for example, DeBERTa accuracy 51.81% here vs 52.67% there). Preserve both artifacts and their distinct source commits/config provenance; do not average or silently overwrite them. Both runs reject this DistilBERT candidate. These are dev-set component diagnostics, not production or world-level accuracy.
+
+The same run #690's separate heuristic-vs-pretrained component report gives 469 passages: heuristic NLI accuracy 30.92% / macro-F1 20.60%, versus sealed DeBERTa-v3-xsmall 52.45% / 53.68%. The pretrained embedding diagnostic has 188 comparisons and mean gold-vs-negative cosine margin 0.552 versus 0.040 for the hashing-ngram heuristic. These support using the sealed pretrained components as research baselines, but do not establish end-to-end retrieval or verdict performance.
