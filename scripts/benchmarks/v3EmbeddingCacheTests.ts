@@ -1,0 +1,62 @@
+import assert from 'node:assert/strict';
+import { LruEmbeddingModel } from './v3EmbeddingCache';
+
+function mockModel() {
+  const calls: string[][] = [];
+  const model = {
+    name: 'mock-embedding',
+    version: 'test-v1',
+    dimensions: 3,
+    embed(text: string) {
+      return [text.length, 1, 0];
+    },
+    embedBatch(texts: string[]) {
+      calls.push([...texts]);
+      return texts.map(text => [text.length, 1, 0]);
+    }
+  };
+  return { model, calls };
+}
+
+async function main() {
+  const { model, calls } = mockModel();
+  const cached = new LruEmbeddingModel(model, 3);
+  const first = await cached.embedBatch(['alpha', 'beta', 'alpha']);
+  assert.deepEqual(first[0], first[2], 'duplicate inputs must share the same deterministic vector');
+  assert.deepEqual(calls, [['alpha', 'beta']], 'batch duplicates must be computed only once');
+  assert.equal(cached.stats().batch_dedup_hits, 1);
+
+  const second = await cached.embedBatch(['alpha', 'beta']);
+  assert.deepEqual(second, [first[0], first[1]]);
+  assert.equal(calls.length, 1, 'cached batch must not call the underlying model');
+  assert.equal(cached.stats().hits, 5);
+
+  await cached.embed('gamma');
+  assert.equal(cached.stats().entries, 3);
+  await cached.embed('delta');
+  assert.equal(cached.stats().entries, 3, 'cache must remain bounded');
+  assert.equal(cached.stats().evictions, 1);
+
+  await cached.embed('beta');
+  assert.equal(calls.length, 1, 'LRU cache must retain recently used beta');
+  await cached.embed('alpha');
+  assert.equal(calls.length, 1, 'LRU cache must retain alpha after beta access');
+
+  assert.equal(cached.name, model.name);
+  assert.equal(cached.version, model.version);
+  assert.equal(cached.dimensions, model.dimensions);
+
+  const bad = new LruEmbeddingModel({
+    ...model,
+    embedBatch: () => [[1, 2]]
+  }, 2);
+  await assert.rejects(() => bad.embedBatch(['bad']), /invalid vector/);
+
+  assert.throws(() => new LruEmbeddingModel(model, 0), /positive safe integer/);
+  console.log('Bounded embedding-cache regression tests: PASS');
+}
+
+main().catch(error => {
+  console.error(error instanceof Error ? error.stack || error.message : error);
+  process.exitCode = 1;
+});
