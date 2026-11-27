@@ -122,14 +122,8 @@ export function buildMatchedLocalContextControl(
       const db = Math.min(...[...excluded].map(index => Math.abs(index - b.index)));
       return da - db || a.index - b.index;
     });
-  let control = '';
-  for (const item of ordered) {
-    const remaining = targetChars - control.length;
-    if (remaining <= 0) break;
-    const piece = (control ? ' ' : '') + item.text;
-    control += piece.slice(0, remaining);
-  }
-  return control.length === targetChars ? control : null;
+  const available = ordered.map(item => item.text).join(' ');
+  return available.length >= targetChars ? available.slice(0, targetChars) : null;
 }
 
 export function calculateMetrics(predictions: NliLabel[], gold: GoldLabel[]) {
