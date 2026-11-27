@@ -4,9 +4,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { readJsonl } from './v3Jsonl';
 
-async function collect<T>(filePath: string, maxRows?: number): Promise<T[]> {
+async function collect<T>(filePath: string, maxRows?: number, startIndex = 0): Promise<T[]> {
   const rows: T[] = [];
-  for await (const row of readJsonl<T>(filePath, maxRows)) rows.push(row);
+  for await (const row of readJsonl<T>(filePath, maxRows, startIndex)) rows.push(row);
   return rows;
 }
 
@@ -19,6 +19,10 @@ async function main() {
       'bounded reads must stop before parsing records beyond the requested limit');
     assert.deepEqual(await collect<{id:number}>(boundedPath, 0), [],
       'zero-row reads must not parse the input');
+    assert.deepEqual(await collect<{id:number}>(boundedPath, 1, 1), [{id:2}],
+      'startIndex must skip non-empty records before yielding a bounded slice');
+    assert.deepEqual(await collect<{id:number}>(boundedPath, 1, 2), [],
+      'startIndex beyond the available records must return an empty slice');
 
     const validPath = path.join(root, 'valid.jsonl');
     await fs.writeFile(validPath, '{"id":1}\n\n{"id":2}\n');
@@ -37,8 +41,13 @@ async function main() {
       /maxRows must be a non-negative safe integer/,
       'negative row limits must fail closed'
     );
+    await assert.rejects(
+      () => collect(validPath, 1, -1),
+      /startIndex must be a non-negative safe integer/,
+      'negative start indices must fail closed'
+    );
 
-    console.log('Streaming JSONL regression tests: PASS (bounded lazy reads, blank lines, malformed-row diagnostics, invalid limits)');
+    console.log('Streaming JSONL regression tests: PASS (bounded lazy reads, deterministic slices, blank lines, malformed-row diagnostics, invalid limits)');
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }
