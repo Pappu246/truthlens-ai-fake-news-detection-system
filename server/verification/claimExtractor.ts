@@ -408,13 +408,13 @@ export function withArticleContextSearchQuery<T extends ExtractedClaim>(
  * Tower opened in 1889"). Ambiguous or plural antecedents are left unchanged.
  */
 function resolveLeadingItReference(sentence: string, previousSentence: string): string {
-  if (!/^It\\b/i.test(sentence)) return sentence;
+  if (!/^It\b/i.test(sentence)) return sentence;
   const subjectMatch = previousSentence.trim().match(
-    /^((?:(?:The|A|An)\\s+)?[A-Z][A-Za-z0-9'’.-]*(?:\\s+[A-Z][A-Za-z0-9'’.-]*){0,3})\\s+(?:is|was|has|had|remains|stands|lies|sits|became|opened|launched|announced|confirmed|reported|published|discovered|measured|recorded|approved|completed)\\b/i
+    /^((?:(?:The|A|An)\s+)?[A-Z][A-Za-z0-9'’.-]*(?:\s+[A-Z][A-Za-z0-9'’.-]*){0,3})\s+(?:is|was|has|had|remains|stands|lies|sits|became|opened|launched|announced|confirmed|reported|published|discovered|measured|recorded|approved|completed)\b/i
   );
   const subject = subjectMatch?.[1]?.trim();
-  if (!subject || /^(?:it|this|that|he|she|they)\\b/i.test(subject)) return sentence;
-  return sentence.replace(/^It\\b/i, subject);
+  if (!subject || /^(?:it|this|that|he|she|they)\b/i.test(subject)) return sentence;
+  return sentence.replace(/^It\b/i, subject);
 }
 
 /**
