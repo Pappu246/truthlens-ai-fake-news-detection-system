@@ -21,11 +21,10 @@ async function main() {
       'zero-row reads must not parse the input');
     assert.deepEqual(await collect<{id:number}>(boundedPath, 1, 1), [{id:2}],
       'startIndex must skip non-empty records before yielding a bounded slice');
-    assert.deepEqual(await collect<{id:number}>(validPath, 1, 3), [],
-      'startIndex beyond the available records must return an empty slice');
-
     const validPath = path.join(root, 'valid.jsonl');
     await fs.writeFile(validPath, '{"id":1}\n\n{"id":2}\n');
+    assert.deepEqual(await collect<{id:number}>(validPath, 1, 3), [],
+      'startIndex beyond the available records must return an empty slice');
     assert.deepEqual(await collect<{id:number}>(validPath), [{id:1},{id:2}],
       'unbounded reads must stream all non-empty JSONL records');
 
