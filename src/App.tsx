@@ -145,6 +145,7 @@ export default function App() {
   const handleClearAllHistory = async () => {
     await clearAllHistoryApi();
     setHistory([]);
+    setFavoriteIds([]);
   };
 
   // Re-test must perform a fresh analysis, not just switch tabs with an old preview.
