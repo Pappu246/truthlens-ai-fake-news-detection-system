@@ -18,7 +18,7 @@ import {
 import { EvidenceItem } from '../src/types';
 import { buildArticleVerification } from '../server/verification/assessmentEngine';
 import { ClaimVerificationResult } from '../src/types';
-import { extractClaimsHeuristic, generateSearchQueries, buildArticleContextSearchQuery, withArticleContextSearchQuery } from '../server/verification/claimExtractor';
+import { extractClaimsHeuristic, resolvePronounContextFromSource, generateSearchQueries, buildArticleContextSearchQuery, withArticleContextSearchQuery } from '../server/verification/claimExtractor';
 import { extractReadableArticleText, shouldSearchWikipediaForEvidence, parsePublicationDate, parseBingNewsRss, parseGdeltArticleList, buildGdeltArticleSearchUrl, GDELT_SEARCH_TIMEOUT_MS, GDELT_RESULT_JOIN_GRACE_MS, GDELT_EMPTY_RESULT_JOIN_GRACE_MS, getGdeltJoinGraceMs, settleWithinGrace, GOOGLE_NEWS_WRAPPER_FETCH_TIMEOUT_MS, MAX_PUBLISHER_FETCH_CANDIDATES_PER_PROVIDER, selectPublisherFetchCandidates, MAX_GOOGLE_NEWS_WRAPPER_CANDIDATES_PER_PROVIDER, selectGoogleNewsHydrationCandidates, countAdmissiblePublisherEvidence, getGoogleNewsArticleId, buildGoogleNewsDecodeRequest, buildGoogleNewsDecodeBatchRequest, parseGoogleNewsDecodedUrlResponse, parseGoogleNewsDecodedUrlBatchResponse, isAdmissibleEvidence, preferPublisherEvidence, verifyEvidenceProvenance, excludeOriginalPublisherEvidence, isSamePublisherOrigin } from '../server/verification/evidenceProvider';
 import { checkNumericalConsistency, classifyEvidenceRelation } from '../server/verification/evidenceAnalyzer';
 import { summarizeProviderDiagnostics } from '../server/verification/observability';
@@ -574,6 +574,22 @@ async function main(): Promise<void> {
     'It was constructed for the 1889 Exposition Universelle and officially opened on 31 March 1889.'
   ].join(' ');
   const contextualPronounClaims = extractClaimsHeuristic('', contextualPronounArticle);
+  const llmContextualClaim = resolvePronounContextFromSource(
+    'It was constructed for the 1889 Exposition Universelle and officially opened on 31 March 1889.',
+    'It was constructed for the 1889 Exposition Universelle and officially opened on 31 March 1889.',
+    contextualPronounArticle
+  );
+  check('LLM claim normalization restores an unambiguous source antecedent',
+    llmContextualClaim.startsWith('The Eiffel Tower'),
+    llmContextualClaim);
+  const unmatchedLlmClaim = resolvePronounContextFromSource(
+    'It was constructed for the 1889 Exposition Universelle.',
+    'A different sentence not present in the article.',
+    contextualPronounArticle
+  );
+  check('LLM claim normalization leaves unmatched source text unchanged',
+    unmatchedLlmClaim.startsWith('It was constructed'),
+    unmatchedLlmClaim);
   const contextualPronounClaim = contextualPronounClaims.find(claim => /1889 Exposition Universelle/i.test(claim.normalizedText));
   check('sentence-initial It inherits one unambiguous prior named subject for verification',
     Boolean(contextualPronounClaim && contextualPronounClaim.normalizedText.startsWith('The Eiffel Tower') && contextualPronounClaim.originalText.startsWith('It was')),
