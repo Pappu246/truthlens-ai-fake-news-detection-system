@@ -283,7 +283,7 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4 pb-4 border-b border-slate-100">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
-              1. Overall Assessment
+              1. Initial AI Screening
             </span>
             <span className={`px-2.5 py-0.5 rounded text-[11px] font-black uppercase tracking-wider ${verdictBadgeClass}`}>
               Risk: {result.risk_level}
@@ -327,6 +327,14 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
           </div>
         </div>
 
+        <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50/70 px-4 py-3">
+          <p className="text-xs font-bold text-blue-900">What does this result mean?</p>
+          <p className="mt-1 text-xs leading-relaxed text-blue-800">
+            This is an initial AI screening of language patterns—not proof that the news is true or false.
+            Check the independent claim evidence and original sources below before drawing a conclusion.
+          </p>
+        </div>
+
         <div className="flex flex-col md:flex-row justify-between items-start md:items-baseline gap-4">
           <div>
             <h2 className={`text-5xl sm:text-6xl lg:text-7xl font-black tracking-tight ${verdictTextClass} uppercase leading-none mb-3`}>
@@ -344,7 +352,10 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
               {confidenceDisplay}
             </span>
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mt-1">
-{legacySafetyMode ? 'Confidence Withheld' : 'Model Confidence Score'}
+{legacySafetyMode ? 'Confidence Withheld' : 'AI Screening Score'}
+            </span>
+            <span className="mt-1 block max-w-40 text-[10px] leading-relaxed text-slate-500">
+              Not the probability that the story is factually true.
             </span>
           </div>
         </div>
