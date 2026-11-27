@@ -44,7 +44,7 @@ try {
         : BENCHMARK_LABELS[(id*2+1)%BENCHMARK_LABELS.length];
       const production = id<125 ? gold : LABELS[(id+1)%LABELS.length];
       claims.push({id,gold_label:gold,prediction_label:benchmark,production_prediction_label:production});
-      predictions.push({label:benchmark,string_evidence:[],justification:''});
+      predictions.push({label:production,string_evidence:[],justification:''});
     }
     const provenance={
       evaluation_count:125,
@@ -64,6 +64,8 @@ try {
   const predictions=JSON.parse(fs.readFileSync(path.join(output,'predictions.json'),'utf8'));
   if(predictions.length!==500||provenance.claims.length!==500||provenance.evaluation_count!==500) throw new Error('full-split denominator is not 500');
   if(provenance.runner?.start_claim!==undefined) throw new Error('shard-specific runner metadata leaked into full-split provenance');
+  if(predictions.some((prediction,index)=>prediction.label!==provenance.claims[index].production_prediction_label)) throw new Error('official predictions must preserve the production-policy four-class label mapping');
+  if(provenance.official_prediction_policy!=='production_policy_mapped_including_conflicted') throw new Error('official prediction policy metadata missing');
   const gold=provenance.claims.map(c=>c.gold_label);
   const benchmark=provenance.claims.map(c=>c.prediction_label);
   const production=provenance.claims.map(c=>c.production_prediction_label);
