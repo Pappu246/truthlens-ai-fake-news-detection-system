@@ -401,6 +401,23 @@ export function withArticleContextSearchQuery<T extends ExtractedClaim>(
 }
 
 /**
+ * Resolve a sentence-initial "It" only when the immediately preceding sentence
+ * has one clear, explicit grammatical subject. This preserves the claim's
+ * factual content while preventing evidence retrieval from searching for an
+ * orphaned pronoun (for example, "It opened in 1889" instead of "The Eiffel
+ * Tower opened in 1889"). Ambiguous or plural antecedents are left unchanged.
+ */
+function resolveLeadingItReference(sentence: string, previousSentence: string): string {
+  if (!/^It\\b/i.test(sentence)) return sentence;
+  const subjectMatch = previousSentence.trim().match(
+    /^((?:(?:The|A|An)\\s+)?[A-Z][A-Za-z0-9'’.-]*(?:\\s+[A-Z][A-Za-z0-9'’.-]*){0,3})\\s+(?:is|was|has|had|remains|stands|lies|sits|became|opened|launched|announced|confirmed|reported|published|discovered|measured|recorded|approved|completed)\\b/i
+  );
+  const subject = subjectMatch?.[1]?.trim();
+  if (!subject || /^(?:it|this|that|he|she|they)\\b/i.test(subject)) return sentence;
+  return sentence.replace(/^It\\b/i, subject);
+}
+
+/**
  * Deterministic rule-based claim extraction from title, body, and description.
  */
 export function extractClaimsHeuristic(
@@ -452,6 +469,8 @@ export function extractClaimsHeuristic(
 
   for (let i = 0; i < rawSentences.length; i++) {
     const sentence = rawSentences[i];
+    const previousSentence = i > 0 ? rawSentences[i - 1] : titleClean;
+    const contextualSentence = resolveLeadingItReference(sentence, previousSentence);
 
     // Filter out boilerplate, pure opinion, or prompt-injection control text.
     if (NON_CLAIM_PATTERNS.some(p => p.test(sentence))) continue;
@@ -459,7 +478,7 @@ export function extractClaimsHeuristic(
     if (/^(?:share|comment|advertisement|copyright|all rights reserved|source:)/i.test(sentence)) continue;
 
     // Check if sentence makes a verifiable factual assertion
-    const comp = extractClaimComponents(sentence);
+    const comp = extractClaimComponents(contextualSentence);
     const hasNumbers = comp.numbers.length > 0;
     const hasEntities = comp.entities.length > 0;
     const hasDates = comp.dates.length > 0;
@@ -474,7 +493,7 @@ export function extractClaimsHeuristic(
         (hasDates && hasAssertionVerb) ||
         hasConcretePassiveFinding) {
       // Avoid duplicate claims
-      const norm = normalizeClaimText(sentence);
+      const norm = normalizeClaimText(contextualSentence);
       if (claims.some(c => c.normalizedText.toLowerCase() === norm.toLowerCase())) continue;
 
       let importance: ClaimImportance = 'MEDIUM';
@@ -484,7 +503,7 @@ export function extractClaimsHeuristic(
         importance = 'LOW';
       }
 
-      const cType = classifyClaimType(sentence);
+      const cType = classifyClaimType(contextualSentence);
       const searchQueries = generateSearchQueries({
         normalizedText: norm,
         ...comp
