@@ -291,25 +291,36 @@ def build_index(db_path, index_path, batch_size=250):
     print("FEVEROUS source database connection closed", flush=True)
     print(f"FEVEROUS page index built: pages={count}, batch_size={batch_size}", flush=True)
 
+VALID_CLAIM_LABELS = {"SUPPORTS", "REFUTES", "NOT ENOUGH INFO"}
+
+def is_valid_claim_row(row):
+    if not isinstance(row, dict):
+        return False
+    claim_id = row.get("id") or row.get("annotation_id") or row.get("claim_id")
+    claim = row.get("claim")
+    label = row.get("label")
+    return bool(str(claim_id or "").strip()) and isinstance(claim, str) and bool(claim.strip()) and label in VALID_CLAIM_LABELS
+
 def load_claims(path, limit):
     rows = []
     with open(path, encoding="utf-8") as fh:
-        for i, line in enumerate(fh):
+        for line_number, line in enumerate(fh, 1):
             if not line.strip():
                 continue
-            if i == 0:
-                try:
-                    header = JSON_LOADS(line)
-                    if "claim" not in header and "label" not in header:
-                        continue
-                except Exception:
-                    pass
-            rows.append(JSON_LOADS(line))
-            if limit and len(rows) >= limit:
-                break
-    return rows
+            try:
+                row = JSON_LOADS(line)
+            except Exception as error:
+                raise RuntimeError(f"Invalid FEVEROUS JSON at line {line_number}: {error}") from error
+            if is_valid_claim_row(row):
+                rows.append(row)
+            elif line_number == 1 and not is_valid_claim_row(row):
+                # The pinned dev JSONL starts with a non-claim preamble.
+                continue
+            else:
+                raise RuntimeError(f"Malformed FEVEROUS claim row at line {line_number}")
+    return rows[:limit] if limit else rows
 
-def make_candidates(claims_path, db_path, output, top_pages, per_page_elements, limit, index_batch_size):
+def make_candidates(claims_path, db_path, output, top_pages, per_page_elements, limit, index_batch_size, expected_claims=None):
     index_path = Path(str(db_path) + ".fts.sqlite")
     if not index_is_complete(index_path, db_path):
         # A previous forced termination may leave an index file in place but
@@ -323,7 +334,11 @@ def make_candidates(claims_path, db_path, output, top_pages, per_page_elements, 
     db = sqlite3.connect(db_path)
     idx = sqlite3.connect(index_path)
     output.parent.mkdir(parents=True, exist_ok=True)
-    claims = load_claims(claims_path, limit)
+    claims = load_claims(claims_path, None)
+    if expected_claims is not None and len(claims) != expected_claims:
+        raise RuntimeError(f"Expected {expected_claims} valid FEVEROUS claims, found {len(claims)}")
+    if limit:
+        claims = claims[:limit]
     print(f"FEVEROUS candidate retrieval started: claims_total={len(claims)}", flush=True)
 
     with output.open("w", encoding="utf-8") as out:
@@ -394,6 +409,7 @@ def main():
     p.add_argument("--top-pages", type=int, default=25)
     p.add_argument("--elements-per-page", type=int, default=50)
     p.add_argument("--max-claims", type=int, default=0)
+    p.add_argument("--expected-claims", type=int, default=None)
     p.add_argument("--index-batch-size", type=int, default=250)
     args = p.parse_args()
     if args.index_batch_size < 1:
@@ -401,7 +417,7 @@ def main():
     make_candidates(
         args.claims, args.db, args.output,
         args.top_pages, args.elements_per_page, args.max_claims,
-        args.index_batch_size
+        args.index_batch_size, args.expected_claims
     )
 
 if __name__ == "__main__":
