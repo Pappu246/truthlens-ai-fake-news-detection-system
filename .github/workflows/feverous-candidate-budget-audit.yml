@@ -7,6 +7,8 @@ on:
     paths:
       - 'research/feverous-candidate-sample.py'
       - 'research/feverous-candidate-budget-audit.py'
+      - 'scripts/benchmarks/v3FeverousPrepareCandidates.py'
+      - 'scripts/benchmarks/v3FeverousPrepareCandidatesTests.py'
       - '.github/workflows/feverous-candidate-budget-audit.yml'
 
 permissions:
@@ -32,10 +34,22 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Install fast JSON parser for full-corpus indexing
+        run: python3 -m pip install --disable-pip-version-check --no-input --only-binary=:all: orjson==3.10.18
+      - name: Test FEVEROUS index builder before downloading the full corpus
+        run: python3 scripts/benchmarks/v3FeverousPrepareCandidatesTests.py
       - name: Materialize pinned FEVEROUS inputs
         run: node scripts/benchmarks/v3MaterializeScoringAssets.mjs --benchmark=feverous
       - name: Extract pinned FEVEROUS database
         run: unzip -q artifacts/v3/benchmark-assets/feverous/feverous-wiki-pages-db.zip -d artifacts/v3/benchmark-assets/feverous/wiki-db
+      - name: Reclaim archive space and report available disk
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f artifacts/v3/benchmark-assets/feverous/feverous-wiki-pages-db.zip
+          echo "Disk after extraction and archive cleanup:"
+          df -h .
+          du -sh artifacts/v3/benchmark-assets/feverous/wiki-db
       - name: Locate FEVEROUS database
         id: locate
         run: |
