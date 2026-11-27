@@ -40,9 +40,9 @@ async function main() {
   assert.equal(cached.stats().evictions, 1);
 
   await cached.embed('beta');
-  assert.equal(getEmbedCalls(), 1, 'evicted beta must be recomputed');
+  assert.equal(getEmbedCalls(), 0, 'recently used beta must remain in the LRU cache');
   await cached.embed('alpha');
-  assert.equal(getEmbedCalls(), 2, 'evicted alpha must be recomputed');
+  assert.equal(getEmbedCalls(), 1, 'least-recently-used alpha must be recomputed after eviction');
 
   assert.equal(cached.name, model.name);
   assert.equal(cached.version, model.version);
