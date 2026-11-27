@@ -392,7 +392,7 @@ export const InputSection: React.FC<InputSectionProps> = ({
   };
 
   return (
-    <section className="w-full md:w-[420px] lg:w-[450px] bg-white border-r border-slate-200 p-6 lg:p-7 flex flex-col shrink-0 overflow-y-auto">
+    <section className="w-full md:w-[420px] lg:w-[450px] max-h-[48vh] md:max-h-none min-h-0 bg-white border-b md:border-b-0 md:border-r border-slate-200 p-4 sm:p-6 lg:p-7 flex flex-col shrink-0 overflow-y-auto">
       <div className="mb-5">
         <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-indigo-600 mb-1">
           Understand the story. Check the evidence.
