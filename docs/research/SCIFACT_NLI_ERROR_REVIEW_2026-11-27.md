@@ -95,6 +95,17 @@ I joined the 1,600-character run's retrieved evidence diagnostics against each c
 
 This rules out a simplistic explanation that the system only misses support because retrieval never finds the gold paper or because every rationale is truncated. Even when the annotated rationale is visible in a retrieved gold document, the current NLI model often fails to emit SUPPORTS. It does not prove that every such passage should be labelled SUPPORTS without reading the exact claim/rationale pair, but it makes NLI task-fit and biomedical entailment the primary next research target.
 
+
+### Paired rationale-vs-abstract diagnostic
+
+The trace-enabled PR #164 artifact also includes 338 paired claim/document rationale examples, using the same frozen model and claim:
+
+- Full-abstract condition: 21.60% accuracy, macro-F1 0.2311.
+- Gold-rationale-sentence condition: 39.94% accuracy, macro-F1 0.3740.
+- Rationale condition correct while full abstract was wrong: 80 pairs; reverse transition: 18; both correct: 55; both wrong: 185.
+
+This is consistent with the model benefiting from focused evidence, but the rationale condition is an oracle input and is not length-matched to the abstract condition. It therefore does **not** isolate context dilution, and it is not an attainable open-retrieval score. The next clean experiment should compare length-matched context windows around the annotated rationale against the rationale-only passage, while retaining a separate untouched evaluation set.
+
 ## Interpretation: what is and is not established
 
 1. **Retrieval is not the dominant measured bottleneck on this split.** Candidate recall is 99.47%, while directional accuracy is 39.33%. Better retrieval alone is unlikely to repair this gap.
