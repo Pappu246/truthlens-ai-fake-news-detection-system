@@ -53,7 +53,7 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
 
   if (!result) {
     return (
-      <section className="flex-1 min-h-0 p-4 sm:p-6 lg:p-10 bg-slate-50 overflow-y-auto flex flex-col justify-between">
+      <section tabIndex={0} aria-label="Analysis results panel" className="flex-1 min-h-0 p-4 sm:p-6 lg:p-10 bg-slate-50 overflow-y-auto flex flex-col justify-between">
         <div className="max-w-3xl mx-auto my-auto py-12 text-center">
           <div className="w-16 h-16 bg-slate-900 text-white rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-sm">
             <Info className="w-8 h-8" />
@@ -100,7 +100,7 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
       isNeedsMoreContextLabel(result.verdict) ||
       isNeedsMoreContextLabel(result.prediction)) {
     return (
-      <section className="flex-1 min-h-0 p-4 sm:p-6 lg:p-10 bg-slate-50 overflow-y-auto flex flex-col justify-between">
+      <section tabIndex={0} aria-label="Analysis results panel" className="flex-1 min-h-0 p-4 sm:p-6 lg:p-10 bg-slate-50 overflow-y-auto flex flex-col justify-between">
         <div className="max-w-2xl mx-auto my-auto py-10">
           <div className="bg-white rounded-2xl p-8 border border-amber-200 shadow-sm text-center">
             <div className="w-14 h-14 bg-amber-100 text-amber-700 rounded-2xl flex items-center justify-center mx-auto mb-5">
@@ -285,7 +285,7 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
       <div className="bg-white p-6 lg:p-8 rounded-2xl shadow-sm border border-slate-200">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4 pb-4 border-b border-slate-100">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+            <span className="text-[10px] font-black uppercase text-slate-600 tracking-wider">
               1. Initial AI Screening
             </span>
             <span className={`px-2.5 py-0.5 rounded text-[11px] font-black uppercase tracking-wider ${verdictBadgeClass}`}>
@@ -314,12 +314,12 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
                 </span>
               );
             })()}
-            <span className="text-slate-400 text-[10px] font-mono">
+            <span className="text-slate-600 text-[10px] font-mono">
               ID: {result.id} • {new Date(result.timestamp).toLocaleTimeString()}
             </span>
           </div>
           <div className="text-left md:text-right">
-            <span className="text-[10px] font-mono text-slate-400">
+            <span className="text-[10px] font-mono text-slate-600">
               Model: {result.model_used}
               {legacySafetyMode && (
                 <span className="block text-amber-600 font-semibold mt-1">
@@ -351,10 +351,10 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
           </div>
 
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 shrink-0 text-left md:text-right">
-            <span className={`text-3xl sm:text-4xl font-black leading-none block ${result.confidence_score === null || result.confidence_score === undefined ? 'text-slate-400' : 'text-slate-900'}`}>
+            <span className={`text-3xl sm:text-4xl font-black leading-none block ${result.confidence_score === null || result.confidence_score === undefined ? 'text-slate-600' : 'text-slate-900'}`}>
               {confidenceDisplay}
             </span>
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mt-1">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 block mt-1">
 {legacySafetyMode ? 'Confidence Withheld' : 'AI Screening Score'}
             </span>
             <span className="mt-1 block max-w-40 text-[10px] leading-relaxed text-slate-500">
@@ -405,7 +405,7 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
       {/* SECTION 2: MODEL SCORE / CALIBRATED PROBABILITY */}
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
         <div className="flex items-center justify-between mb-4">
-          <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+          <span className="text-[10px] font-black uppercase text-slate-600 tracking-wider">
             2. Model Score & {legacySafetyMode ? 'Decision Strength' : 'Calibrated Probability'}
           </span>
           <span className="text-[11px] font-mono text-slate-500">
@@ -415,21 +415,21 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
           <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
-            <span className="text-[10px] font-black uppercase text-slate-400 block mb-1">Fake Probability</span>
+            <span className="text-[10px] font-black uppercase text-slate-600 block mb-1">Fake Probability</span>
             <span className="text-2xl font-black text-red-600 font-mono">{fakePercentage === null ? 'N/A' : `${fakePercentage}%`}</span>
-            <span className="text-[10px] text-slate-400 block mt-1 font-mono">
+            <span className="text-[10px] text-slate-600 block mt-1 font-mono">
               P(FAKE) = {result.fake_probability === null || result.fake_probability === undefined ? 'N/A' : result.fake_probability}
             </span>
           </div>
           <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
-            <span className="text-[10px] font-black uppercase text-slate-400 block mb-1">Real Probability</span>
+            <span className="text-[10px] font-black uppercase text-slate-600 block mb-1">Real Probability</span>
             <span className="text-2xl font-black text-emerald-600 font-mono">{realPercentage === null ? 'N/A' : `${realPercentage}%`}</span>
-            <span className="text-[10px] text-slate-400 block mt-1 font-mono">
+            <span className="text-[10px] text-slate-600 block mt-1 font-mono">
               P(REAL) = {result.real_probability === null || result.real_probability === undefined ? 'N/A' : result.real_probability}
             </span>
           </div>
           <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
-            <span className="text-[10px] font-black uppercase text-slate-400 block mb-1">Threshold Zone</span>
+            <span className="text-[10px] font-black uppercase text-slate-600 block mb-1">Threshold Zone</span>
             <span className="text-sm font-bold text-slate-800 block mt-1">
               Real ≤ {tReal} | Fake ≥ {tFake}
             </span>
@@ -471,8 +471,8 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
       {/* SECTION 3: DETECTED CLAIM */}
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
         <div className="flex items-center gap-2 mb-3">
-          <FileText className="w-4 h-4 text-slate-400" />
-          <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+          <FileText className="w-4 h-4 text-slate-600" />
+          <span className="text-[10px] font-black uppercase text-slate-600 tracking-wider">
             3. Detected Claim
           </span>
         </div>
@@ -480,7 +480,7 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
           <p className="text-base font-semibold text-slate-900 leading-relaxed">
             "{result.detected_claim || 'Specific factual claim could not be confidently identified.'}"
           </p>
-          <span className="text-[10px] text-slate-400 block mt-2 font-mono">
+          <span className="text-[10px] text-slate-600 block mt-2 font-mono">
             Note: Extracted assertion represents the primary syntactic subject-predicate statement found in the text; it is not verified fact.
           </span>
         </div>
@@ -489,7 +489,7 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
       {/* SECTION 4: CONTRIBUTING SIGNALS */}
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+          <span className="text-[10px] font-black uppercase text-slate-600 tracking-wider">
             4. Contributing Signals (Model Vocabulary Attribution)
           </span>
           <span className="text-[10px] font-mono text-slate-500">
@@ -533,20 +533,20 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
 
         {/* Structural indicators */}
         <div className="border-t border-slate-100 pt-3">
-          <span className="text-[10px] font-bold uppercase text-slate-400 block mb-2 tracking-wider">
+          <span className="text-[10px] font-bold uppercase text-slate-600 block mb-2 tracking-wider">
             Heuristic & Stylistic Observations
           </span>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
             <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
-              <span className="text-[10px] text-slate-400 font-mono block mb-1">Sensational Terms</span>
+              <span className="text-[10px] text-slate-600 font-mono block mb-1">Sensational Terms</span>
               <span className="font-bold text-slate-800">{result.linguistic_signals?.sensational_count ?? 0} detected</span>
             </div>
             <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
-              <span className="text-[10px] text-slate-400 font-mono block mb-1">ALL-CAPS Words</span>
+              <span className="text-[10px] text-slate-600 font-mono block mb-1">ALL-CAPS Words</span>
               <span className="font-bold text-slate-800">{result.linguistic_signals?.all_caps_words_count ?? 0} words</span>
             </div>
             <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
-              <span className="text-[10px] text-slate-400 font-mono block mb-1">Punctuation Clustering</span>
+              <span className="text-[10px] text-slate-600 font-mono block mb-1">Punctuation Clustering</span>
               <span className="font-bold text-slate-800">
                 {result.linguistic_signals?.excessive_punctuation ? 'Exaggerated (!/?)' : 'Standard'}
               </span>
@@ -559,8 +559,8 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <ExternalLink className="w-4 h-4 text-slate-400" />
-            <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+            <ExternalLink className="w-4 h-4 text-slate-600" />
+            <span className="text-[10px] font-black uppercase text-slate-600 tracking-wider">
               5. Source Information & Provenance (Phase 3 Acquisition)
             </span>
           </div>
@@ -580,33 +580,33 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
           <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-4 space-y-2 text-xs">
             {result.article_title && (
               <div>
-                <span className="text-[10px] font-bold uppercase text-slate-400 block font-mono">Article Title:</span>
+                <span className="text-[10px] font-bold uppercase text-slate-600 block font-mono">Article Title:</span>
                 <span className="font-bold text-slate-900 text-sm leading-snug">{result.article_title}</span>
               </div>
             )}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
               {result.source_name && (
                 <div>
-                  <span className="text-[10px] font-bold uppercase text-slate-400 block font-mono">Publisher / Wire:</span>
+                  <span className="text-[10px] font-bold uppercase text-slate-600 block font-mono">Publisher / Wire:</span>
                   <span className="font-semibold text-slate-900 text-sm">{result.source_name}</span>
                 </div>
               )}
               {result.published_at && (
                 <div>
-                  <span className="text-[10px] font-bold uppercase text-slate-400 block font-mono">Published Date:</span>
+                  <span className="text-[10px] font-bold uppercase text-slate-600 block font-mono">Published Date:</span>
                   <span className="font-semibold text-slate-700">{new Date(result.published_at).toLocaleString()}</span>
                 </div>
               )}
               {result.word_count && (
                 <div>
-                  <span className="text-[10px] font-bold uppercase text-slate-400 block font-mono">Article Length:</span>
+                  <span className="text-[10px] font-bold uppercase text-slate-600 block font-mono">Article Length:</span>
                   <span className="font-semibold text-slate-700">{result.word_count} words extracted</span>
                 </div>
               )}
             </div>
             {safeHttpUrl(result.canonical_url) && (
               <div className="pt-1">
-                <span className="text-[10px] font-bold uppercase text-slate-400 block font-mono">Canonical Link:</span>
+                <span className="text-[10px] font-bold uppercase text-slate-600 block font-mono">Canonical Link:</span>
                 <a
                   href={safeHttpUrl(result.canonical_url)}
                   target="_blank"
@@ -648,7 +648,7 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-mono">
           <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-            <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1 font-sans">
+            <span className="text-[10px] font-bold uppercase text-slate-600 block mb-1 font-sans">
               Source Domain
             </span>
             <span className="text-sm font-bold text-slate-800 block truncate">
@@ -660,7 +660,7 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
           </div>
 
           <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-            <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1 font-sans">
+            <span className="text-[10px] font-bold uppercase text-slate-600 block mb-1 font-sans">
               Verification Decoupling Policy
             </span>
             <span className="text-sm font-bold text-amber-700 block">
@@ -690,7 +690,7 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ result, metrics, art
 
       {/* SECTION 7: LIMITATIONS & NOTE */}
       <div className="bg-slate-900 text-slate-300 p-6 rounded-2xl space-y-3">
-        <div className="flex items-center gap-2 text-slate-400">
+        <div className="flex items-center gap-2 text-slate-600">
           <ShieldAlert className="w-4 h-4 text-amber-400" />
           <span className="text-[10px] font-black uppercase tracking-wider text-white">
             7. System Limitations & Scientific Scope (ISOT Benchmark)
