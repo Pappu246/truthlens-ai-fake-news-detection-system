@@ -77,8 +77,8 @@ The saved traces permit a deterministic counterfactual re-tally without rerunnin
 | 0.35 | 40.33% | 38.63% | 16.13% | 51.79% | 150 |
 | 0.45 | 44.33% | 41.75% | 16.94% | 65.18% | 119 |
 | 0.50 | 45.67% | 42.02% | 15.32% | 74.11% | 98 |
-| 0.55 | 45.00% | 39.73% | 11.29% | 82.14% | 80 |
-| 0.60 | 42.67% | 35.66% | 9.68% | 87.50% | 56 |
+| 0.55 | 45.00% | 39.73% | 11.29% | 81.25% | 80 |
+| 0.60 | 42.67% | 35.66% | 8.87% | 85.71% | 56 |
 
 At 0.50, 94/149 (63.1%) of REFUTES passage votes on NOT_ENOUGH_INFO claims are filtered. However, only 112/127 (88.2%) of the retrieved gold SUPPORT evidence IDs and 50/55 (90.9%) of retrieved gold CONTRADICT evidence IDs remain. The metric peak at 0.50 is a same-dev-set counterfactual and is therefore vulnerable to selection bias. It is **not** a recommendation to change the 0.15 gate.
 
