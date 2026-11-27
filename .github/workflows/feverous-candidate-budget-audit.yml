@@ -55,21 +55,21 @@ jobs:
             --db="${{ steps.locate.outputs.db_path }}" \
             --claims=artifacts/v3/feverous-budget-audit/sample.jsonl \
             --output=artifacts/v3/feverous-budget-audit/baseline-25x50.jsonl \
-            --top-pages=25 --elements-per-page=50 --expected-claims=7890
+            --top-pages=25 --elements-per-page=50 --expected-claims=200
       - name: Build medium candidate set (10 pages x 20 elements)
         run: |
           python3 scripts/benchmarks/v3FeverousPrepareCandidates.py \
             --db="${{ steps.locate.outputs.db_path }}" \
             --claims=artifacts/v3/feverous-budget-audit/sample.jsonl \
             --output=artifacts/v3/feverous-budget-audit/medium-10x20.jsonl \
-            --top-pages=10 --elements-per-page=20
+            --top-pages=10 --elements-per-page=20 --expected-claims=200
       - name: Build small candidate set (5 pages x 10 elements)
         run: |
           python3 scripts/benchmarks/v3FeverousPrepareCandidates.py \
             --db="${{ steps.locate.outputs.db_path }}" \
             --claims=artifacts/v3/feverous-budget-audit/sample.jsonl \
             --output=artifacts/v3/feverous-budget-audit/small-5x10.jsonl \
-            --top-pages=5 --elements-per-page=10
+            --top-pages=5 --elements-per-page=10 --expected-claims=200
       - name: Score recall retention and candidate-count reduction
         run: |
           python3 research/feverous-candidate-budget-audit.py \
