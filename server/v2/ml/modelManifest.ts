@@ -298,27 +298,26 @@ export const DEBERTA_V3_BASE_MNLI_FEVER_ANLI_CANDIDATE: ExperimentalNliCandidate
   kind: 'nli',
   id: 'Xenova/DeBERTa-v3-base-mnli-fever-anli',
   baseModel: 'MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli',
-  revision: null,
+  revision: '72a1ce83a0144efaf828b3c3844320a61197a53d',
   quantization: 'int8-dynamic(q8)-onnx',
   versionSeal: null,
   sealState: 'unsealed',
   purpose:
-    'V2.2 evaluation candidate: MNLI+FEVER+ANLI training is the evidence-verification ' +
-    'task-fit hypothesis raised by the V2.1 review; evaluated on SciFact (not a FEVER-family ' +
-    'benchmark) through the unchanged V2.1 pipeline. Evaluation only — never a default.',
+    'V2.2 evaluation candidate: DeBERTa-v3-base trained on MNLI+FEVER+ANLI; a task-fit ' +
+    'hypothesis for evidence verification. Evaluation-only on SciFact through the unchanged ' +
+    'V2.1 pipeline — never a default and not assumed to outperform the current model.',
   files: [],
   sources: [
     {
       type: 'huggingface-resolve',
-      note: 'Canonical upstream ONNX port (Xenova). Unreachable from this environment (huggingface.co is not in the egress allowlist).',
-      urlTemplate: 'https://huggingface.co/Xenova/DeBERTa-v3-base-mnli-fever-anli/resolve/main/{file}'
+      note: 'Official Xenova Transformers.js ONNX export pinned to verified upstream revision 72a1ce83a0144efaf828b3c3844320a61197a53d. The published LFS pointer for model_quantized.onnx reports SHA-256 ab9da76bb06054ea6b921560c1ecf5683a9e4d96f0ea73d78d3b4a8990aea882 and 244291931 bytes; CI must download and independently verify it before sealing.',
+      urlTemplate: 'https://huggingface.co/Xenova/DeBERTa-v3-base-mnli-fever-anli/resolve/72a1ce83a0144efaf828b3c3844320a61197a53d/{file}'
     }
   ],
   unsealedReason:
-    'No content-sealed copy of Xenova/DeBERTa-v3-base-mnli-fever-anli was obtainable: huggingface.co and every ' +
-    'tested mirror host are outside this environment\'s egress allowlist, and an exhaustive GitHub code/repo ' +
-    'search found no repository vendoring these ONNX weights (the q8 export is ~185 MB, above GitHub\'s 100 MB ' +
-    'non-LFS blob limit, and no LFS mirror exists). Bytes therefore cannot be hashed, pinned, or run here.',
+    'Upstream identity and revision are pinned, and the official LFS pointer exposes the expected ONNX SHA-256/size, ' +
+    'but the exact files have not yet been downloaded and independently hashed in the project workflow. The candidate ' +
+    'remains fail-closed until CI verifies the ONNX bytes plus tokenizer/config files and their class mapping.',
   expectedLabels: ['entailment', 'neutral', 'contradiction']
 };
 
