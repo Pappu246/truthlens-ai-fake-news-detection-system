@@ -170,8 +170,19 @@ function bootstrapClaimClusterComparison(
     deltas.macro_f1.push(candidateMetrics.macro_f1 - baselineMetrics.macro_f1);
     deltas.ece.push(candidateMetrics.ece - baselineMetrics.ece);
   }
-  const summarize = (values: number[]) => ({
-    estimate: percentile(values, 0.5),
+  const originalGold = rows.map(row => row.gold as GoldLabel);
+  const originalBaseline = metrics(
+    rows.map(row => row.baseline_prediction as NliLabel),
+    originalGold,
+    rows.map(row => Number(row.baseline_confidence))
+  );
+  const originalCandidate = metrics(
+    rows.map(row => row.candidate_prediction as NliLabel),
+    originalGold,
+    rows.map(row => Number(row.candidate_confidence))
+  );
+  const summarize = (values: number[], estimate: number) => ({
+    estimate,
     ci_95_percentile: [percentile(values, 0.025), percentile(values, 0.975)]
   });
   const goldCounts = Object.fromEntries(TARGET_LABELS.map(label => [
@@ -186,9 +197,9 @@ function bootstrapClaimClusterComparison(
     seed,
     interval: 'two-sided 95% percentile interval; exploratory component diagnostic',
     delta_candidate_minus_baseline: {
-      accuracy: summarize(deltas.accuracy),
-      macro_f1: summarize(deltas.macro_f1),
-      ece: summarize(deltas.ece)
+      accuracy: summarize(deltas.accuracy, originalCandidate.accuracy - originalBaseline.accuracy),
+      macro_f1: summarize(deltas.macro_f1, originalCandidate.macro_f1 - originalBaseline.macro_f1),
+      ece: summarize(deltas.ece, originalCandidate.ece - originalBaseline.ece)
     },
     gold_label_counts: goldCounts
   };
