@@ -116,6 +116,84 @@ function metrics(predictions: NliLabel[], gold: GoldLabel[], confidences: number
   };
 }
 
+function percentile(values: number[], probability: number): number {
+  if (!values.length) throw new Error('Bootstrap percentile requires non-empty samples.');
+  const ordered = [...values].sort((a, b) => a - b);
+  const position = (ordered.length - 1) * probability;
+  const lower = Math.floor(position);
+  const upper = Math.min(lower + 1, ordered.length - 1);
+  const fraction = position - lower;
+  return ordered[lower] * (1 - fraction) + ordered[upper] * fraction;
+}
+
+function bootstrapClaimClusterComparison(
+  rows: Array<Record<string, unknown>>,
+  resamples = 10_000,
+  seed = 20_261_128
+) {
+  const clusters = new Map<string, Array<Record<string, unknown>>>();
+  for (const row of rows) {
+    const key = String(row.claim_id);
+    const group = clusters.get(key) ?? [];
+    group.push(row);
+    clusters.set(key, group);
+  }
+  const claimIds = [...clusters.keys()].sort();
+  if (claimIds.length < 2) throw new Error('Claim-cluster bootstrap requires at least two distinct claims.');
+
+  let state = seed >>> 0;
+  const random = () => {
+    state ^= state << 13;
+    state ^= state >>> 17;
+    state ^= state << 5;
+    return (state >>> 0) / 0x1_0000_0000;
+  };
+  const deltas = {
+    accuracy: [] as number[],
+    macro_f1: [] as number[],
+    ece: [] as number[]
+  };
+  for (let iteration = 0; iteration < resamples; iteration++) {
+    const sample: Array<Record<string, unknown>> = [];
+    for (let draw = 0; draw < claimIds.length; draw++) {
+      const selected = claimIds[Math.floor(random() * claimIds.length)];
+      sample.push(...(clusters.get(selected) ?? []));
+    }
+    const gold = sample.map(row => row.gold as GoldLabel);
+    const baselinePredictions = sample.map(row => row.baseline_prediction as NliLabel);
+    const candidatePredictions = sample.map(row => row.candidate_prediction as NliLabel);
+    const baselineConfidences = sample.map(row => Number(row.baseline_confidence));
+    const candidateConfidences = sample.map(row => Number(row.candidate_confidence));
+    const baselineMetrics = metrics(baselinePredictions, gold, baselineConfidences);
+    const candidateMetrics = metrics(candidatePredictions, gold, candidateConfidences);
+    deltas.accuracy.push(candidateMetrics.accuracy - baselineMetrics.accuracy);
+    deltas.macro_f1.push(candidateMetrics.macro_f1 - baselineMetrics.macro_f1);
+    deltas.ece.push(candidateMetrics.ece - baselineMetrics.ece);
+  }
+  const summarize = (values: number[]) => ({
+    estimate: percentile(values, 0.5),
+    ci_95_percentile: [percentile(values, 0.025), percentile(values, 0.975)]
+  });
+  const goldCounts = Object.fromEntries(TARGET_LABELS.map(label => [
+    label,
+    rows.filter(row => row.gold === label).length
+  ]));
+  return {
+    bootstrap_unit: 'claim_id; all evidence pairs for each sampled claim remain grouped',
+    distinct_claim_clusters: claimIds.length,
+    paired_rows: rows.length,
+    resamples,
+    seed,
+    interval: 'two-sided 95% percentile interval; exploratory component diagnostic',
+    delta_candidate_minus_baseline: {
+      accuracy: summarize(deltas.accuracy),
+      macro_f1: summarize(deltas.macro_f1),
+      ece: summarize(deltas.ece)
+    },
+    gold_label_counts: goldCounts
+  };
+}
+
 function nliSeal() {
   return ALL_MODEL_MANIFESTS.map(manifest => ({
     kind: manifest.kind,
@@ -318,7 +396,9 @@ async function main(): Promise<void> {
       max_pair_tokens: 384,
       candidate_model_id: activeCandidate.modelName,
       candidate_model_revision: candidateModel.revision,
-      scoring_labels: TARGET_LABELS
+      scoring_labels: TARGET_LABELS,
+      claim_cluster_bootstrap_resamples: 10000,
+      claim_cluster_bootstrap_seed: 20261128
     };
     const sealedModels = { baseline: nliSeal(), candidate: candidateSeal(candidateModel) };
     const configSha256 = sha256(JSON.stringify(config));
@@ -358,6 +438,8 @@ async function main(): Promise<void> {
         same_prediction_rate: baselinePredictions.length
           ? baselinePredictions.reduce((n, value, index) => n + Number(value === candidatePredictions[index]), 0) / baselinePredictions.length
           : 0
+,
+        claim_cluster_bootstrap: bootstrapClaimClusterComparison(rows, 10000, 20261128)
       },
       interpretation: [
         'Every baseline/candidate prediction uses the same frozen SciFact claim/evidence pair and the same embedding-based relatedness gate.',
