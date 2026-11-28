@@ -28,6 +28,8 @@ on:
       - 'scripts/analysisSignalsSurfaceTests.ts'
       - 'scripts/v2ScifactMatchedContext.ts'
       - 'scripts/v2ScifactMatchedContextTests.ts'
+      - 'scripts/analyze_scifact_matched_context.py'
+      - 'scripts/test_analyze_scifact_matched_context.py'
       - 'data/test.tsv'
       - 'data/saved_model_artifacts.json'
       - 'data/external_validation.json'
@@ -179,6 +181,9 @@ jobs:
 
       - name: SciFact matched-context diagnostic helper tests
         run: npm run test:v2-scifact-matched-context
+
+      - name: SciFact claim-cluster bootstrap analysis tests
+        run: python3 scripts/test_analyze_scifact_matched_context.py
 
       - name: V2 route tests
         run: npm run test:v2-route
