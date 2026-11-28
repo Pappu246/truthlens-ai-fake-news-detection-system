@@ -185,18 +185,26 @@ jobs:
               result["mapped_label_counts"] = {col: dict(counts) for col, counts in result["mapped_label_counts"].items()}
               return result
 
+          def is_appledouble_member(name):
+              parts = Path(name).parts
+              return "__MACOSX" in parts or Path(name).name.startswith("._")
+
           report = []
           archive_member_count = 0
+          excluded_appledouble_member_count = 0
           with zipfile.ZipFile(archive) as outer:
               archive_member_count = len([i for i in outer.infolist() if not i.is_dir()])
               for info in outer.infolist():
                   if info.is_dir():
                       continue
+                  if is_appledouble_member(info.filename):
+                      excluded_appledouble_member_count += 1
+                      continue
                   suffix = Path(info.filename).suffix.lower()
                   if suffix not in {".csv", ".tsv"}:
                       # Do not assume other formats. Record only aggregate extension counts below.
                       continue
-                  delimiter = "," if suffix == ".csv" else "\t"
+                  delimiter = "," if suffix == ".csv" else "\\t"
                   with outer.open(info, "r") as stream:
                       item = scan_delimited(stream, delimiter, "top-level")
                       item["archive_member_extension"] = suffix
@@ -217,7 +225,7 @@ jobs:
                           dst.write(chunk)
                   with zipfile.ZipFile(nested_path) as inner:
                       for item_info in inner.infolist():
-                          if item_info.is_dir():
+                          if item_info.is_dir() or is_appledouble_member(item_info.filename):
                               continue
                           suffix = Path(item_info.filename).suffix.lower()
                           if suffix not in {".csv", ".tsv"}:
@@ -247,6 +255,7 @@ jobs:
               "archive_sha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
               "archive_bytes": archive.stat().st_size,
               "archive_member_count": archive_member_count,
+              "excluded_appledouble_member_count": excluded_appledouble_member_count,
               "top_level_delimited_files": report,
               "nested_delimited_files": nested_reports,
               "aggregate": aggregate,
@@ -261,7 +270,7 @@ jobs:
           out = Path("artifacts/external-corpus-audit/disinformation-v1.1-audit.json")
           out.parent.mkdir(parents=True, exist_ok=True)
           out.write_text(json.dumps(output, indent=2) + "\n", encoding="utf-8")
-          print(json.dumps({"archive_bytes": output["archive_bytes"], "archive_member_count": archive_member_count, "aggregate": aggregate, "file_summaries": [{"container_type":x["container_type"],"columns":x["header_columns"],"row_count":x["row_count"],"candidate_body_columns":x["candidate_body_columns"],"candidate_label_columns":x["candidate_label_columns"],"candidate_source_columns":x["candidate_source_columns"],"rows_with_full_text_explicit_string_binary_label_and_source":x["full_text_with_explicit_string_binary_label_and_source"],"label_value_counts":x["label_value_counts"]} for x in selected], "release_gate_passed": False}, indent=2))
+          print(json.dumps({"archive_bytes": output["archive_bytes"], "archive_member_count": archive_member_count, "excluded_appledouble_member_count": excluded_appledouble_member_count, "aggregate": aggregate, "file_summaries": [{"container_type":x["container_type"],"columns":x["header_columns"],"row_count":x["row_count"],"candidate_body_columns":x["candidate_body_columns"],"candidate_label_columns":x["candidate_label_columns"],"candidate_source_columns":x["candidate_source_columns"],"rows_with_full_text_explicit_string_binary_label_and_source":x["full_text_with_explicit_string_binary_label_and_source"],"label_value_counts":x["label_value_counts"]} for x in selected], "release_gate_passed": False}, indent=2))
           PY
 
       - name: Upload aggregate audit only
