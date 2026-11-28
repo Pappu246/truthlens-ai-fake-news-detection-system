@@ -30,6 +30,8 @@ on:
       - 'scripts/v2ScifactMatchedContextTests.ts'
       - 'scripts/analyze_scifact_matched_context.py'
       - 'scripts/test_analyze_scifact_matched_context.py'
+      - 'scripts/analyze_scifact_nli_errors.py'
+      - 'scripts/test_analyze_scifact_nli_errors.py'
       - 'data/test.tsv'
       - 'data/saved_model_artifacts.json'
       - 'data/external_validation.json'
@@ -184,6 +186,9 @@ jobs:
 
       - name: SciFact claim-cluster bootstrap analysis tests
         run: python3 scripts/test_analyze_scifact_matched_context.py
+
+      - name: SciFact NLI error audit tests
+        run: python3 scripts/test_analyze_scifact_nli_errors.py
 
       - name: V2 route tests
         run: npm run test:v2-route
