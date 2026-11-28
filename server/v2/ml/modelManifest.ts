@@ -279,20 +279,17 @@ export interface ExperimentalNliCandidate {
  * cross-encoder recommended as the next evidence-only experiment by
  * docs/V2_1_RESEARCH_REVIEW.md §7.
  *
- * Identity is pinned; the BYTES ARE NOT SEALED HERE because no verified copy
- * of the ONNX export was obtainable from any host reachable by this
- * environment (see docs/V2_2_MODEL_COMPARISON.md §2 for the full attempt
- * log). Recording a plausible-looking sha256/revision without having the
- * bytes would be a fabricated attestation, so the entry stays 'unsealed' and
- * every code path that would load it fails closed.
+ * The official Xenova Transformers.js ONNX export and its upstream revision
+ * are now identified and pinned. The ONNX LFS pointer publishes a SHA-256 and
+ * byte size, but this repository has not yet independently downloaded and
+ * hashed the complete model/tokenizer/config file set. The candidate therefore
+ * remains 'unsealed' and all provisioning/loading paths fail closed.
  *
- * To complete provisioning from a network-enabled environment:
- *   1. obtain the files listed in `EXPECTED_CANDIDATE_FILES` for this id;
- *   2. run `npm run seal:v2-candidate -- --model=<id> --dir=<path>` to print
- *      the seal block (sizes + SHA-256 + revision);
- *   3. paste it here, flip `sealState` to 'sealed', then
- *      `npm run download:v2-candidate -- --model=<id>` and
- *      `npm run test:v2-candidate`.
+ * To complete provisioning, run the dedicated
+ * v2-nli-taskfit-candidate-provision workflow. Review the resulting artifact,
+ * copy the independently verified file sizes/SHA-256 values into this entry,
+ * set sealState to 'sealed', then run the existing candidate download and
+ * matched-pair evaluation workflows. Never infer or hand-enter missing seals.
  */
 export const DEBERTA_V3_BASE_MNLI_FEVER_ANLI_CANDIDATE: ExperimentalNliCandidate = {
   kind: 'nli',
