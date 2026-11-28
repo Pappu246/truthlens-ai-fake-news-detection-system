@@ -279,17 +279,15 @@ export interface ExperimentalNliCandidate {
  * cross-encoder recommended as the next evidence-only experiment by
  * docs/V2_1_RESEARCH_REVIEW.md §7.
  *
- * The official Xenova Transformers.js ONNX export and its upstream revision
- * are now identified and pinned. The ONNX LFS pointer publishes a SHA-256 and
- * byte size, but this repository has not yet independently downloaded and
- * hashed the complete model/tokenizer/config file set. The candidate therefore
- * remains 'unsealed' and all provisioning/loading paths fail closed.
+ * This candidate is now content-sealed from the exact Xenova revision below.
+ * The dedicated provisioning workflow downloaded all seven model/tokenizer/
+ * config files and independently verified their sizes and SHA-256 hashes,
+ * including the ONNX LFS-pointer cross-check. It remains comparison-only:
+ * the default resolver never selects it and production identity is unchanged.
  *
- * To complete provisioning, run the dedicated
- * v2-nli-taskfit-candidate-provision workflow. Review the resulting artifact,
- * copy the independently verified file sizes/SHA-256 values into this entry,
- * set sealState to 'sealed', then run the existing candidate download and
- * matched-pair evaluation workflows. Never infer or hand-enter missing seals.
+ * Runtime parity, matched-pair SciFact metrics, calibration, latency, and
+ * memory must pass before any further recommendation. A valid seal is not
+ * evidence of better model quality.
  */
 export const DEBERTA_V3_BASE_MNLI_FEVER_ANLI_CANDIDATE: ExperimentalNliCandidate = {
   kind: 'nli',
@@ -297,24 +295,28 @@ export const DEBERTA_V3_BASE_MNLI_FEVER_ANLI_CANDIDATE: ExperimentalNliCandidate
   baseModel: 'MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli',
   revision: '72a1ce83a0144efaf828b3c3844320a61197a53d',
   quantization: 'int8-dynamic(q8)-onnx',
-  versionSeal: null,
-  sealState: 'unsealed',
+  versionSeal: 'q8@ab9da76b',
+  sealState: 'sealed',
   purpose:
     'V2.2 evaluation candidate: DeBERTa-v3-base trained on MNLI+FEVER+ANLI; a task-fit ' +
     'hypothesis for evidence verification. Evaluation-only on SciFact through the unchanged ' +
     'V2.1 pipeline — never a default and not assumed to outperform the current model.',
-  files: [],
+  files: [
+    { path: 'config.json', bytes: 1048, sha256: '4a5f8b1df58dba69e3588255c297e6ad1a70dc8b6312990959f3a3032c892738' },
+    { path: 'tokenizer.json', bytes: 8656551, sha256: 'a86f883318afa11c8c10466f1bf4efaeb6ded28a52cbe57217a8fa0d0a2a87df' },
+    { path: 'tokenizer_config.json', bytes: 384, sha256: 'd8d3bb123b99317634d5ee3d1d2d8b2ddb01510a0654687fc2639a5347a7291f' },
+    { path: 'added_tokens.json', bytes: 23, sha256: 'dc046d04c9b0ada7ae6f1dc89c465801799acdf0c9a6aab8c15a1b2d5ca4e91f' },
+    { path: 'special_tokens_map.json', bytes: 173, sha256: '311de3f4eed9d76a43bf0d71f10e62e086ca65ccce9f15d5da0d2098bf519ecc' },
+    { path: 'spm.model', bytes: 2464616, sha256: 'c679fbf93643d19aab7ee10c0b99e460bdbc02fedf34b92b05af343b4af586fd' },
+    { path: 'onnx/model_quantized.onnx', bytes: 244291931, sha256: 'ab9da76bb06054ea6b921560c1ecf5683a9e4d96f0ea73d78d3b4a8990aea882' }
+  ],
   sources: [
     {
       type: 'huggingface-resolve',
-      note: 'Official Xenova Transformers.js ONNX export pinned to verified upstream revision 72a1ce83a0144efaf828b3c3844320a61197a53d. The published LFS pointer for model_quantized.onnx reports SHA-256 ab9da76bb06054ea6b921560c1ecf5683a9e4d96f0ea73d78d3b4a8990aea882 and 244291931 bytes; CI must download and independently verify it before sealing.',
+      note: 'Official Xenova Transformers.js ONNX export pinned to verified upstream revision 72a1ce83a0144efaf828b3c3844320a61197a53d. All seven file sizes/SHA-256 values were independently recomputed by the task-fit candidate provisioning workflow; the ONNX hash also matches its published LFS pointer.',
       urlTemplate: 'https://huggingface.co/Xenova/DeBERTa-v3-base-mnli-fever-anli/resolve/72a1ce83a0144efaf828b3c3844320a61197a53d/{file}'
     }
   ],
-  unsealedReason:
-    'Upstream identity and revision are pinned, and the official LFS pointer exposes the expected ONNX SHA-256/size, ' +
-    'but the exact files have not yet been downloaded and independently hashed in the project workflow. The candidate ' +
-    'remains fail-closed until CI verifies the ONNX bytes plus tokenizer/config files and their class mapping.',
   expectedLabels: ['entailment', 'neutral', 'contradiction']
 };
 
