@@ -60,8 +60,10 @@ function sha256File(file: string): string {
 function readJsonl<T>(file: string): T[] {
   return fs.readFileSync(file, 'utf8').split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line) as T);
 }
-function metrics(predictions: NliLabel[], gold: GoldLabel[]) {
-  if (predictions.length !== gold.length || gold.length === 0) throw new Error('NLI comparison requires equal non-empty prediction and gold arrays.');
+function metrics(predictions: NliLabel[], gold: GoldLabel[], confidences: number[]) {
+  if (predictions.length !== gold.length || gold.length === 0 || confidences.length !== gold.length) {
+    throw new Error('NLI comparison requires equal non-empty prediction, gold, and confidence arrays.');
+  }
   const perClass = TARGET_LABELS.map(label => {
     let tp = 0, fp = 0, fn = 0, support = 0;
     for (let i = 0; i < gold.length; i++) {
@@ -85,10 +87,25 @@ function metrics(predictions: NliLabel[], gold: GoldLabel[]) {
       gold.reduce((n, actual, i) => n + Number(actual === goldLabel && predictions[i] === predictedLabel), 0)
     ]))
   }));
+  const bins = Array.from({ length: 10 }, () => ({ count: 0, confidence: 0, accuracy: 0 }));
+  for (let i = 0; i < predictions.length; i++) {
+    const confidence = Math.max(0, Math.min(1, confidences[i]));
+    const index = Math.min(9, Math.floor(Math.min(0.999999, confidence) * 10));
+    bins[index].count++;
+    bins[index].confidence += confidence;
+    bins[index].accuracy += Number(predictions[i] === gold[i]);
+  }
+  const ece = bins.reduce((sum, bin) => {
+    if (!bin.count) return sum;
+    return sum + (bin.count / predictions.length) * Math.abs(
+      bin.accuracy / bin.count - bin.confidence / bin.count
+    );
+  }, 0);
   return {
     passages: gold.length,
     accuracy: correct / gold.length,
     macro_f1: perClass.reduce((n, item) => n + item.f1, 0) / TARGET_LABELS.length,
+    ece,
     coverage: covered / gold.length,
     unclear_rate: (gold.length - covered) / gold.length,
     selective_accuracy: covered ? coveredCorrect / covered : 0,
@@ -199,7 +216,9 @@ async function main(): Promise<void> {
 
   const goldLabels: GoldLabel[] = groups.flatMap(group => group.passages.map(item => item.gold));
   const baselinePredictions: NliLabel[] = [];
+  const baselineConfidences: number[] = [];
   const candidatePredictions: NliLabel[] = [];
+  const candidateConfidences: number[] = [];
   const rows: Array<Record<string, unknown>> = groups.flatMap(group => group.passages.map(item => ({
     claim_id: group.claimId,
     document_id: item.docId,
@@ -230,6 +249,7 @@ async function main(): Promise<void> {
       for (let i = 0; i < baseResults.length; i++) {
         const result = baseResults[i];
         baselinePredictions.push(result.label);
+        baselineConfidences.push(result.confidence);
         Object.assign(rows[cursor + i], {
           baseline_prediction: result.label,
           baseline_confidence: result.confidence,
@@ -263,6 +283,7 @@ async function main(): Promise<void> {
       for (let i = 0; i < candidateResults.length; i++) {
         const result = candidateResults[i];
         candidatePredictions.push(result.label);
+        candidateConfidences.push(result.confidence);
         Object.assign(rows[cursor + i], {
           candidate_prediction: result.label,
           candidate_confidence: result.confidence,
@@ -329,10 +350,11 @@ async function main(): Promise<void> {
       models,
       model_seals: sealedModels,
       paired_comparison: {
-        baseline: metrics(baselinePredictions, goldLabels),
-        candidate: metrics(candidatePredictions, goldLabels),
-        delta_accuracy: metrics(candidatePredictions, goldLabels).accuracy - metrics(baselinePredictions, goldLabels).accuracy,
-        delta_macro_f1: metrics(candidatePredictions, goldLabels).macro_f1 - metrics(baselinePredictions, goldLabels).macro_f1,
+        baseline: metrics(baselinePredictions, goldLabels, baselineConfidences),
+        candidate: metrics(candidatePredictions, goldLabels, candidateConfidences),
+        delta_accuracy: metrics(candidatePredictions, goldLabels, candidateConfidences).accuracy - metrics(baselinePredictions, goldLabels, baselineConfidences).accuracy,
+        delta_macro_f1: metrics(candidatePredictions, goldLabels, candidateConfidences).macro_f1 - metrics(baselinePredictions, goldLabels, baselineConfidences).macro_f1,
+        delta_ece: metrics(candidatePredictions, goldLabels, candidateConfidences).ece - metrics(baselinePredictions, goldLabels, baselineConfidences).ece,
         same_prediction_rate: baselinePredictions.length
           ? baselinePredictions.reduce((n, value, index) => n + Number(value === candidatePredictions[index]), 0) / baselinePredictions.length
           : 0
@@ -353,8 +375,8 @@ async function main(): Promise<void> {
       benchmark: report.benchmark,
       dataset: report.dataset,
       candidate: models.candidate,
-      baseline: { accuracy: report.paired_comparison.baseline.accuracy, macro_f1: report.paired_comparison.baseline.macro_f1 },
-      comparison: { accuracy: report.paired_comparison.candidate.accuracy, macro_f1: report.paired_comparison.candidate.macro_f1, delta_accuracy: report.paired_comparison.delta_accuracy, delta_macro_f1: report.paired_comparison.delta_macro_f1 },
+      baseline: { accuracy: report.paired_comparison.baseline.accuracy, macro_f1: report.paired_comparison.baseline.macro_f1, ece: report.paired_comparison.baseline.ece },
+      comparison: { accuracy: report.paired_comparison.candidate.accuracy, macro_f1: report.paired_comparison.candidate.macro_f1, ece: report.paired_comparison.candidate.ece, delta_accuracy: report.paired_comparison.delta_accuracy, delta_macro_f1: report.paired_comparison.delta_macro_f1, delta_ece: report.paired_comparison.delta_ece },
       artifact: output
     }, null, 2));
   } finally {
