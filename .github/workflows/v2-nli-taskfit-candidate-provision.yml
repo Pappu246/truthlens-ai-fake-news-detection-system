@@ -20,7 +20,7 @@ jobs:
       - name: Checkout exact research head
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: \${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Setup Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -32,7 +32,7 @@ jobs:
         run: |
           set -euo pipefail
           REV="72a1ce83a0144efaf828b3c3844320a61197a53d"
-          BASE="https://huggingface.co/Xenova/DeBERTa-v3-base-mnli-fever-anli/resolve/\${REV}"
+          BASE="https://huggingface.co/Xenova/DeBERTa-v3-base-mnli-fever-anli/resolve/${REV}"
           ROOT="/tmp/truthlens-taskfit-nli"
           mkdir -p "$ROOT/onnx"
           FILES=(
@@ -44,11 +44,11 @@ jobs:
             "spm.model"
             "onnx/model_quantized.onnx"
           )
-          for file in "\${FILES[@]}"; do
-            echo "Downloading \${file}"
+          for file in "${FILES[@]}"; do
+            echo "Downloading ${file}"
             curl --fail --location --retry 3 --retry-all-errors \
               --connect-timeout 20 --max-time 1200 \
-              "\${BASE}/\${file}" --output "\${ROOT}/\${file}"
+              "${BASE}/${file}" --output "${ROOT}/${file}"
           done
           echo "Downloaded all pinned candidate files."
 
