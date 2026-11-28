@@ -15,7 +15,9 @@ import { MlWorkerClient } from '../server/v2/ml/mlWorkerClient.js';
 import {
   ALL_MODEL_MANIFESTS,
   DISTILBERT_MNLI_CANDIDATE,
+  findExperimentalCandidate,
   getV2ModelDir,
+  type ExperimentalNliCandidate,
   verifyCandidateHashes,
   verifyModelHashes
 } from '../server/v2/ml/modelManifest.js';
@@ -107,14 +109,14 @@ function nliSeal() {
     files: manifest.files.map(file => ({ path: file.path, bytes: file.bytes, sha256: file.sha256, git_blob_sha1: file.gitBlobSha1 ?? null }))
   }));
 }
-function candidateSeal() {
+function candidateSeal(candidate: ExperimentalNliCandidate) {
   return {
-    id: DISTILBERT_MNLI_CANDIDATE.id,
-    base_model: DISTILBERT_MNLI_CANDIDATE.baseModel,
-    revision: DISTILBERT_MNLI_CANDIDATE.revision,
-    quantization: DISTILBERT_MNLI_CANDIDATE.quantization,
-    version_seal: DISTILBERT_MNLI_CANDIDATE.versionSeal,
-    files: DISTILBERT_MNLI_CANDIDATE.files.map(file => ({ path: file.path, bytes: file.bytes, sha256: file.sha256, git_blob_sha1: file.gitBlobSha1 ?? null }))
+    id: candidate.id,
+    base_model: candidate.baseModel,
+    revision: candidate.revision,
+    quantization: candidate.quantization,
+    version_seal: candidate.versionSeal,
+    files: candidate.files.map(file => ({ path: file.path, bytes: file.bytes, sha256: file.sha256, git_blob_sha1: file.gitBlobSha1 ?? null }))
   };
 }
 
@@ -143,12 +145,16 @@ async function main(): Promise<void> {
     throw new Error(`SciFact hash mismatch: claims=${claimsSha}, corpus=${corpusSha}`);
   }
 
+  const candidateId = arg('candidate') || DISTILBERT_MNLI_CANDIDATE.id;
+  const candidateModel = findExperimentalCandidate(candidateId);
+  if (!candidateModel) throw new Error(`Unknown comparison candidate '${candidateId}'.`);
+
   const modelDir = getV2ModelDir();
   for (const manifest of ALL_MODEL_MANIFESTS) {
     const verified = await verifyModelHashes(modelDir, manifest);
     if (!verified.ok) throw new Error(`Baseline model seal failed for ${manifest.id}: ${verified.mismatches.join('; ')}`);
   }
-  const candidateVerification = verifyCandidateHashes(DISTILBERT_MNLI_CANDIDATE.id, modelDir);
+  const candidateVerification = verifyCandidateHashes(candidateModel.id, modelDir);
   if (!candidateVerification.ok) {
     throw new Error(`Comparison candidate seal failed: ${candidateVerification.mismatches.join('; ')}. Provision it only via npm run download:v2-candidate.`);
   }
@@ -239,13 +245,13 @@ async function main(): Promise<void> {
     // Reuse the initialized native worker and embedding session. The worker
     // explicitly disposes the previous NLI ONNX sessions before loading the
     // already provisioned and hash-verified comparison-only candidate.
-    comparisonClient.setNliModel(DISTILBERT_MNLI_CANDIDATE.id);
+    comparisonClient.setNliModel(candidateModel.id);
     candidate = new PretrainedNliAdapter({
       client: comparisonClient,
       embeddingModel: sharedEmbeddingModel,
       relatednessFloor: RELATEDNESS_FLOOR,
-      modelName: DISTILBERT_MNLI_CANDIDATE.id,
-      modelVersion: DISTILBERT_MNLI_CANDIDATE.versionSeal ?? 'unsealed'
+      modelName: candidateModel.id,
+      modelVersion: candidateModel.versionSeal ?? 'unsealed'
     });
 
     cursor = 0;
@@ -281,7 +287,7 @@ async function main(): Promise<void> {
       candidate: {
         name: activeCandidate.modelName,
         version: activeCandidate.modelVersion,
-        nli_weight_sha256: candidateSeal().files.find(file => file.path === 'onnx/model_quantized.onnx')?.sha256 ?? null
+        nli_weight_sha256: candidateSeal(candidateModel).files.find(file => file.path === 'onnx/model_quantized.onnx')?.sha256 ?? null
       }
     };
     const config = {
@@ -290,9 +296,10 @@ async function main(): Promise<void> {
       relatedness_floor: RELATEDNESS_FLOOR,
       max_pair_tokens: 384,
       candidate_model_id: activeCandidate.modelName,
+      candidate_model_revision: candidateModel.revision,
       scoring_labels: TARGET_LABELS
     };
-    const sealedModels = { baseline: nliSeal(), candidate: candidateSeal() };
+    const sealedModels = { baseline: nliSeal(), candidate: candidateSeal(candidateModel) };
     const configSha256 = sha256(JSON.stringify(config));
     const modelManifestSha256 = sha256(JSON.stringify(sealedModels));
     const report = {
@@ -333,7 +340,7 @@ async function main(): Promise<void> {
       interpretation: [
         'Every baseline/candidate prediction uses the same frozen SciFact claim/evidence pair and the same embedding-based relatedness gate.',
         'Unclear predictions count as incorrect for full coverage accuracy and are also reported separately in coverage/selective metrics.',
-        'The comparison is restricted to a general MNLI model candidate already sealed in the repository. No model weights or production settings are changed.',
+        'The comparison is restricted to the explicitly selected, content-sealed experimental NLI candidate. No production model weights or settings are changed.',
         'This component comparison does not replace the full retrieval/reranking/evidence/decision benchmark and does not establish world-level accuracy.'
       ],
       rows
