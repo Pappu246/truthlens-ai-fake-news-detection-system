@@ -315,7 +315,7 @@ async function main(): Promise<void> {
       analysis_only: true,
       task: 'Paired component diagnostic; not end-to-end accuracy, not open-retrieval performance, and not a production release gate.',
       run_provenance: {
-        source_commit_sha: process.env.GITHUB_SHA || null,
+        source_commit_sha: process.env.TRUTHLENS_EVALUATED_COMMIT_SHA || process.env.GITHUB_SHA || null,
         source_ref: process.env.GITHUB_REF || null,
         event_name: process.env.GITHUB_EVENT_NAME || 'local',
         workflow_run_id: process.env.GITHUB_RUN_ID || null,
@@ -353,6 +353,7 @@ async function main(): Promise<void> {
         'The context-only control is drawn from non-rationale sentences in the same abstract and exactly matches the rationale-centered window character count; pairs without enough control text are excluded from that control metric.',
         'The context-only control has no gold label; report only its prediction distribution and confidence, never accuracy or F1.',
         'Character lengths are recorded, but tokenizer truncation and token-count behavior remain governed by the fixed 384-token model input limit.',
+        'Macro-F1 is averaged over SUPPORTS and REFUTES only because this gold-rationale pair set contains no NEUTRAL gold examples.',
         'No retrieval, production pipeline, model, threshold, decision policy, or source rule is changed.'
       ],
       rows
