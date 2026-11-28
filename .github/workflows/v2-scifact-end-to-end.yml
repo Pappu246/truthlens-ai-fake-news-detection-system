@@ -11,6 +11,12 @@ on:
       - 'scripts/v2ScifactPassageGranularity.ts'
       - 'scripts/v2ScifactMatchedContext.ts'
       - 'scripts/v2ScifactMatchedContextTests.ts'
+      - 'scripts/analyze_scifact_matched_context.py'
+      - 'scripts/test_analyze_scifact_matched_context.py'
+      - 'scripts/v2ScifactMatchedContext.ts'
+      - 'scripts/v2ScifactMatchedContextTests.ts'
+      - 'scripts/analyze_scifact_matched_context.py'
+      - 'scripts/test_analyze_scifact_matched_context.py'
       - 'scripts/v2ScifactMatchedContext.ts'
       - 'scripts/v2ScifactMatchedContextTests.ts'
       - 'scripts/v2DownloadModels.ts'
@@ -147,6 +153,14 @@ jobs:
             --output=artifacts/v2-scifact-e2e/scifact-matched-context.json \
             2>&1 | tee artifacts/v2-scifact-e2e/scifact-matched-context.log
 
+      - name: Analyze paired context uncertainty by claim cluster
+        run: |
+          python3 scripts/analyze_scifact_matched_context.py \\
+            --input artifacts/v2-scifact-e2e/scifact-matched-context.json \\
+            --output artifacts/v2-scifact-e2e/scifact-matched-context-bootstrap.json \\
+            --resamples 10000 \\
+            --seed 20261128
+
       - name: Validate benchmark provenance and metric denominators
         env:
           EXPECTED_COMMIT_SHA: ${{ env.TRUTHLENS_EVALUATED_COMMIT_SHA }}
@@ -171,6 +185,14 @@ jobs:
               model_record = next(item for item in model_manifest if item["kind"] == model_kind)
               expected_weight = next(item["sha256"] for item in model_record["files"] if item["path"] == "onnx/model_quantized.onnx")
               assert report["models"][model_key]["artifact_sha256"] == expected_weight
+
+          matched = json.loads(Path("artifacts/v2-scifact-e2e/scifact-matched-context.json").read_text(encoding="utf-8"))
+          assert matched["run_provenance"]["source_commit_sha"] == os.environ["EXPECTED_COMMIT_SHA"], "Matched-context artifact must identify the exact checked-out PR head"
+          assert matched["dataset"]["claims_sha256"] == report["dataset"]["claims_sha256"]
+          assert matched["dataset"]["corpus_sha256"] == report["dataset"]["corpus_sha256"]
+          bootstrap = json.loads(Path("artifacts/v2-scifact-e2e/scifact-matched-context-bootstrap.json").read_text(encoding="utf-8"))
+          assert bootstrap["source"]["source_commit_sha"] == os.environ["EXPECTED_COMMIT_SHA"]
+          assert bootstrap["sampling"]["bootstrap_unit"].startswith("claim_id")
 
           rows = report["rows"]
           # A successful benchmark is not sufficient unless the opt-in NLI
