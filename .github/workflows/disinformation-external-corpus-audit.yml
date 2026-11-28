@@ -204,7 +204,7 @@ jobs:
                   if suffix not in {".csv", ".tsv"}:
                       # Do not assume other formats. Record only aggregate extension counts below.
                       continue
-                  delimiter = "," if suffix == ".csv" else "\\t"
+                  delimiter = "," if suffix == ".csv" else "\t"
                   with outer.open(info, "r") as stream:
                       item = scan_delimited(stream, delimiter, "top-level")
                       item["archive_member_extension"] = suffix
