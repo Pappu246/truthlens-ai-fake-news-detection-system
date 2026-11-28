@@ -13,12 +13,6 @@ on:
       - 'scripts/v2ScifactMatchedContextTests.ts'
       - 'scripts/analyze_scifact_matched_context.py'
       - 'scripts/test_analyze_scifact_matched_context.py'
-      - 'scripts/v2ScifactMatchedContext.ts'
-      - 'scripts/v2ScifactMatchedContextTests.ts'
-      - 'scripts/analyze_scifact_matched_context.py'
-      - 'scripts/test_analyze_scifact_matched_context.py'
-      - 'scripts/v2ScifactMatchedContext.ts'
-      - 'scripts/v2ScifactMatchedContextTests.ts'
       - 'scripts/v2DownloadModels.ts'
       - 'data/v2/**'
       - 'package.json'
@@ -34,6 +28,10 @@ on:
       - 'server/v2/**'
       - 'scripts/v2ScifactEndToEnd.ts'
       - 'scripts/v2ScifactPassageGranularity.ts'
+      - 'scripts/v2ScifactMatchedContext.ts'
+      - 'scripts/v2ScifactMatchedContextTests.ts'
+      - 'scripts/analyze_scifact_matched_context.py'
+      - 'scripts/test_analyze_scifact_matched_context.py'
       - 'scripts/v2DownloadModels.ts'
       - 'data/v2/**'
       - 'package-lock.json'
@@ -155,7 +153,7 @@ jobs:
 
       - name: Analyze paired context uncertainty by claim cluster
         run: |
-          python3 scripts/analyze_scifact_matched_context.py \\
+          python3 scripts/analyze_scifact_matched_context.py \
             --input artifacts/v2-scifact-e2e/scifact-matched-context.json \\
             --output artifacts/v2-scifact-e2e/scifact-matched-context-bootstrap.json \\
             --resamples 10000 \\
