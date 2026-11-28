@@ -203,6 +203,11 @@ jobs:
           bootstrap = json.loads(Path("artifacts/v2-scifact-e2e/scifact-matched-context-bootstrap.json").read_text(encoding="utf-8"))
           assert bootstrap["source"]["source_commit_sha"] == os.environ["EXPECTED_COMMIT_SHA"]
           assert bootstrap["sampling"]["bootstrap_unit"].startswith("claim_id")
+          nli_error_audit = json.loads(Path("artifacts/v2-scifact-e2e/scifact-nli-error-audit.json").read_text(encoding="utf-8"))
+          assert nli_error_audit["source"]["source_commit_sha"] == os.environ["EXPECTED_COMMIT_SHA"]
+          assert nli_error_audit["source"]["claims_sha256"] == report["dataset"]["claims_sha256"]
+          assert nli_error_audit["source"]["corpus_sha256"] == report["dataset"]["corpus_sha256"]
+          assert nli_error_audit["sampling"]["bootstrap_unit"].startswith("claim row")
 
           rows = report["rows"]
           # A successful benchmark is not sufficient unless the opt-in NLI
