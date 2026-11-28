@@ -182,6 +182,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npm run download:v2-candidate -- --model=Xenova/distilbert-base-uncased-mnli
 
+      - name: Download sealed task-fit DeBERTa MNLI-FEVER-ANLI candidate
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run download:v2-candidate -- --model=Xenova/DeBERTa-v3-base-mnli-fever-anli
+
       - name: Run real local pretrained model-quality comparison
         env:
           TRUTHLENS_V2_ML_CALL_TIMEOUT_MS: 180000
@@ -204,6 +209,18 @@ jobs:
             --max-claims=300 \
             --output=artifacts/v2-model-quality/nli-candidate-comparison.json \
             2>&1 | tee artifacts/v2-model-quality/nli-candidate-comparison.log
+
+      - name: Compare task-fit NLI candidate on the same frozen SciFact pairs
+        env:
+          TRUTHLENS_V2_ML_CALL_TIMEOUT_MS: 180000
+        run: |
+          set -euo pipefail
+          npm run eval:v2-nli-candidate-comparison -- \\
+            --data-dir=/tmp/truthlens-model-quality/scifact \\
+            --max-claims=300 \\
+            --candidate=Xenova/DeBERTa-v3-base-mnli-fever-anli \\
+            --output=artifacts/v2-model-quality/nli-taskfit-candidate-comparison.json \\
+            2>&1 | tee artifacts/v2-model-quality/nli-taskfit-candidate-comparison.log
 
       - name: Upload local pretrained evaluation results
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
