@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "type": "module",
   "engines": {
-    "node": ">=20.18.1"
+    "node": "^22.0.0 || ^24.0.0"
   },
   "scripts": {
     "dev": "tsx server.ts",
@@ -27,6 +27,9 @@
     "test:all": "npm run lint && npm run test:contracts && npm run test:vercel-sim && npm run test:verdicts && npm run test:claim && npm run test:claim-parity && npm run test:evidence && npm run test:artifacts && npm run test:ssrf && npm run test:analysis-signals",
     "test:production": "tsx scripts/productionSmokeTest.ts",
     "test:v2": "tsx scripts/v2PipelineTests.ts",
+    "test:v2-research-trace": "tsx scripts/v2ResearchTraceTests.ts",
+    "test:v2-scifact-passage-granularity": "tsx scripts/v2ScifactPassageGranularityTests.ts",
+    "eval:v2-scifact-passage-granularity": "tsx scripts/v2ScifactPassageGranularity.ts",
     "test:v2-route": "tsx scripts/v2RouteTests.ts",
     "eval:v2": "tsx scripts/v2Evaluate.ts",
     "generate:v2-fixtures": "tsx scripts/generate_v2_eval_fixtures.ts",
@@ -47,7 +50,9 @@
     "test:phase2-materialization": "tsx scripts/phase2MaterializationTests.ts",
     "test:analysis-signals": "tsx scripts/analysisSignalsSurfaceTests.ts",
     "download:v2-candidate": "tsx scripts/v2DownloadCandidateModel.ts",
-    "eval:v2-nli-candidate-comparison": "tsx scripts/v2NliCandidateComparison.ts"
+    "eval:v2-nli-candidate-comparison": "tsx scripts/v2NliCandidateComparison.ts",
+    "test:v2-scifact-matched-context": "tsx scripts/v2ScifactMatchedContextTests.ts",
+    "eval:v2-scifact-matched-context": "tsx scripts/v2ScifactMatchedContext.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

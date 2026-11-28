@@ -279,46 +279,44 @@ export interface ExperimentalNliCandidate {
  * cross-encoder recommended as the next evidence-only experiment by
  * docs/V2_1_RESEARCH_REVIEW.md §7.
  *
- * Identity is pinned; the BYTES ARE NOT SEALED HERE because no verified copy
- * of the ONNX export was obtainable from any host reachable by this
- * environment (see docs/V2_2_MODEL_COMPARISON.md §2 for the full attempt
- * log). Recording a plausible-looking sha256/revision without having the
- * bytes would be a fabricated attestation, so the entry stays 'unsealed' and
- * every code path that would load it fails closed.
+ * This candidate is now content-sealed from the exact Xenova revision below.
+ * The dedicated provisioning workflow downloaded all seven model/tokenizer/
+ * config files and independently verified their sizes and SHA-256 hashes,
+ * including the ONNX LFS-pointer cross-check. It remains comparison-only:
+ * the default resolver never selects it and production identity is unchanged.
  *
- * To complete provisioning from a network-enabled environment:
- *   1. obtain the files listed in `EXPECTED_CANDIDATE_FILES` for this id;
- *   2. run `npm run seal:v2-candidate -- --model=<id> --dir=<path>` to print
- *      the seal block (sizes + SHA-256 + revision);
- *   3. paste it here, flip `sealState` to 'sealed', then
- *      `npm run download:v2-candidate -- --model=<id>` and
- *      `npm run test:v2-candidate`.
+ * Runtime parity, matched-pair SciFact metrics, calibration, latency, and
+ * memory must pass before any further recommendation. A valid seal is not
+ * evidence of better model quality.
  */
 export const DEBERTA_V3_BASE_MNLI_FEVER_ANLI_CANDIDATE: ExperimentalNliCandidate = {
   kind: 'nli',
   id: 'Xenova/DeBERTa-v3-base-mnli-fever-anli',
   baseModel: 'MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli',
-  revision: null,
+  revision: '72a1ce83a0144efaf828b3c3844320a61197a53d',
   quantization: 'int8-dynamic(q8)-onnx',
-  versionSeal: null,
-  sealState: 'unsealed',
+  versionSeal: 'q8@ab9da76b',
+  sealState: 'sealed',
   purpose:
-    'V2.2 evaluation candidate: MNLI+FEVER+ANLI training is the evidence-verification ' +
-    'task-fit hypothesis raised by the V2.1 review; evaluated on SciFact (not a FEVER-family ' +
-    'benchmark) through the unchanged V2.1 pipeline. Evaluation only — never a default.',
-  files: [],
+    'V2.2 evaluation candidate: DeBERTa-v3-base trained on MNLI+FEVER+ANLI; a task-fit ' +
+    'hypothesis for evidence verification. Evaluation-only on SciFact through the unchanged ' +
+    'V2.1 pipeline — never a default and not assumed to outperform the current model.',
+  files: [
+    { path: 'config.json', bytes: 1048, sha256: '4a5f8b1df58dba69e3588255c297e6ad1a70dc8b6312990959f3a3032c892738' },
+    { path: 'tokenizer.json', bytes: 8656551, sha256: 'a86f883318afa11c8c10466f1bf4efaeb6ded28a52cbe57217a8fa0d0a2a87df' },
+    { path: 'tokenizer_config.json', bytes: 384, sha256: 'd8d3bb123b99317634d5ee3d1d2d8b2ddb01510a0654687fc2639a5347a7291f' },
+    { path: 'added_tokens.json', bytes: 23, sha256: 'dc046d04c9b0ada7ae6f1dc89c465801799acdf0c9a6aab8c15a1b2d5ca4e91f' },
+    { path: 'special_tokens_map.json', bytes: 173, sha256: '311de3f4eed9d76a43bf0d71f10e62e086ca65ccce9f15d5da0d2098bf519ecc' },
+    { path: 'spm.model', bytes: 2464616, sha256: 'c679fbf93643d19aab7ee10c0b99e460bdbc02fedf34b92b05af343b4af586fd' },
+    { path: 'onnx/model_quantized.onnx', bytes: 244291931, sha256: 'ab9da76bb06054ea6b921560c1ecf5683a9e4d96f0ea73d78d3b4a8990aea882' }
+  ],
   sources: [
     {
       type: 'huggingface-resolve',
-      note: 'Canonical upstream ONNX port (Xenova). Unreachable from this environment (huggingface.co is not in the egress allowlist).',
-      urlTemplate: 'https://huggingface.co/Xenova/DeBERTa-v3-base-mnli-fever-anli/resolve/main/{file}'
+      note: 'Official Xenova Transformers.js ONNX export pinned to verified upstream revision 72a1ce83a0144efaf828b3c3844320a61197a53d. All seven file sizes/SHA-256 values were independently recomputed by the task-fit candidate provisioning workflow; the ONNX hash also matches its published LFS pointer.',
+      urlTemplate: 'https://huggingface.co/Xenova/DeBERTa-v3-base-mnli-fever-anli/resolve/72a1ce83a0144efaf828b3c3844320a61197a53d/{file}'
     }
   ],
-  unsealedReason:
-    'No content-sealed copy of Xenova/DeBERTa-v3-base-mnli-fever-anli was obtainable: huggingface.co and every ' +
-    'tested mirror host are outside this environment\'s egress allowlist, and an exhaustive GitHub code/repo ' +
-    'search found no repository vendoring these ONNX weights (the q8 export is ~185 MB, above GitHub\'s 100 MB ' +
-    'non-LFS blob limit, and no LFS mirror exists). Bytes therefore cannot be hashed, pinned, or run here.',
   expectedLabels: ['entailment', 'neutral', 'contradiction']
 };
 

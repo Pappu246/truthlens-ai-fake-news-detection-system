@@ -1,0 +1,135 @@
+name: V2 Task-Fit NLI Candidate Provisioning Audit
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'server/v2/ml/modelManifest.ts'
+      - '.github/workflows/v2-nli-taskfit-candidate-provision.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  provision-and-seal-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact research head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Setup Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Download exact upstream candidate files
+        shell: bash
+        run: |
+          set -euo pipefail
+          REV="72a1ce83a0144efaf828b3c3844320a61197a53d"
+          BASE="https://huggingface.co/Xenova/DeBERTa-v3-base-mnli-fever-anli/resolve/${REV}"
+          ROOT="/tmp/truthlens-taskfit-nli"
+          mkdir -p "$ROOT/onnx"
+          FILES=(
+            "config.json"
+            "tokenizer.json"
+            "tokenizer_config.json"
+            "added_tokens.json"
+            "special_tokens_map.json"
+            "spm.model"
+            "onnx/model_quantized.onnx"
+          )
+          for file in "${FILES[@]}"; do
+            echo "Downloading ${file}"
+            curl --fail --location --retry 3 --retry-all-errors \
+              --connect-timeout 20 --max-time 1200 \
+              "${BASE}/${file}" --output "${ROOT}/${file}"
+          done
+          echo "Downloaded all pinned candidate files."
+
+      - name: Verify labels and generate independent content seals
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+
+          root = Path("/tmp/truthlens-taskfit-nli")
+          expected_onnx_sha = "ab9da76bb06054ea6b921560c1ecf5683a9e4d96f0ea73d78d3b4a8990aea882"
+          expected_onnx_bytes = 244291931
+          config = json.loads((root / "config.json").read_text(encoding="utf-8"))
+          id2label = config.get("id2label", {})
+          expected_labels = {"0": "entailment", "1": "neutral", "2": "contradiction"}
+          assert id2label == expected_labels, f"Unexpected id2label: {id2label}"
+
+          paths = [
+              "config.json",
+              "tokenizer.json",
+              "tokenizer_config.json",
+              "added_tokens.json",
+              "special_tokens_map.json",
+              "spm.model",
+              "onnx/model_quantized.onnx",
+          ]
+          files = []
+          for relative in paths:
+              path = root / relative
+              payload = path.read_bytes()
+              files.append({
+                  "path": relative,
+                  "bytes": len(payload),
+                  "sha256": hashlib.sha256(payload).hexdigest(),
+              })
+
+          onnx = next(item for item in files if item["path"] == "onnx/model_quantized.onnx")
+          assert onnx["bytes"] == expected_onnx_bytes, (onnx["bytes"], expected_onnx_bytes)
+          assert onnx["sha256"] == expected_onnx_sha, (onnx["sha256"], expected_onnx_sha)
+
+          report = {
+              "protocol_version": "truthlens-v2-taskfit-nli-provisioning-audit-v1",
+              "candidate_id": "Xenova/DeBERTa-v3-base-mnli-fever-anli",
+              "base_model": "MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli",
+              "upstream_revision": "72a1ce83a0144efaf828b3c3844320a61197a53d",
+              "quantization": "model_quantized.onnx",
+              "expected_labels": expected_labels,
+              "files": files,
+              "onnx_pointer_cross_check": {
+                  "sha256": expected_onnx_sha,
+                  "bytes": expected_onnx_bytes,
+                  "verified_against_downloaded_bytes": True,
+              },
+              "provisioning_status": "CONTENT_SEALS_VERIFIED",
+              "runtime_evaluation_status": "NOT_RUN",
+              "production_eligible": False,
+              "notes": [
+                  "This job downloads and hashes the pinned public ONNX export; it does not change the model registry seal or load the candidate into production.",
+                  "The candidate must be added to the registry only after this artifact is reviewed and its complete file seals are committed.",
+                  "Runtime parity, matched SciFact evaluation, calibration, latency, and memory remain separate gates.",
+              ],
+          }
+          out = Path("artifacts/v2-taskfit-nli/candidate-seal-report.json")
+          out.parent.mkdir(parents=True, exist_ok=True)
+          out.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+          print(json.dumps({
+              "status": report["provisioning_status"],
+              "candidate": report["candidate_id"],
+              "files": len(files),
+              "onnx_bytes": onnx["bytes"],
+              "onnx_sha256": onnx["sha256"],
+              "output": str(out),
+          }, indent=2))
+          PY
+
+      - name: Upload content-seal report (no model binaries)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: truthlens-v2-taskfit-nli-candidate-seal
+          path: artifacts/v2-taskfit-nli/candidate-seal-report.json
+          if-no-files-found: error
+          retention-days: 30

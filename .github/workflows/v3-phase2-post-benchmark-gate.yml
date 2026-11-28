@@ -33,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out proposed workflow
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
@@ -101,14 +101,14 @@ jobs:
 
       - name: Check out the evaluated research commit
         if: steps.resolve.outputs.gate_ready == 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
           persist-credentials: false
 
       - name: Download complete FEVER score artifact
         if: steps.resolve.outputs.gate_ready == 'true' && steps.resolve.outputs.recovery_id != ''
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           github-token: ${{ github.token }}
           run-id: ${{ steps.resolve.outputs.recovery_id }}
@@ -118,7 +118,7 @@ jobs:
 
       - name: Download complete FEVEROUS score artifact
         if: steps.resolve.outputs.gate_ready == 'true' && steps.resolve.outputs.recovery_id != ''
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           github-token: ${{ github.token }}
           run-id: ${{ steps.resolve.outputs.recovery_id }}
@@ -128,7 +128,7 @@ jobs:
 
       - name: Download complete SciFact benchmark artifact
         if: steps.resolve.outputs.gate_ready == 'true' && steps.resolve.outputs.scifact_id != ''
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           github-token: ${{ github.token }}
           run-id: ${{ steps.resolve.outputs.scifact_id }}
@@ -138,7 +138,7 @@ jobs:
 
       - name: Download complete AVeriTeC score artifact
         if: steps.resolve.outputs.gate_ready == 'true' && steps.resolve.outputs.averitec_id != ''
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           github-token: ${{ github.token }}
           run-id: ${{ steps.resolve.outputs.averitec_id }}
@@ -148,7 +148,7 @@ jobs:
 
       - name: Download human holdout validation artifact
         if: steps.resolve.outputs.gate_ready == 'true' && steps.resolve.outputs.holdout_id != ''
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           github-token: ${{ github.token }}
           run-id: ${{ steps.resolve.outputs.holdout_id }}
@@ -164,7 +164,7 @@ jobs:
 
       - name: Upload post-benchmark gate result
         if: always() && steps.resolve.outputs.gate_ready == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: truthlens-v3-phase2-post-benchmark-gate-${{ github.run_id }}
           path: artifacts/v3/phase2-exit-gate.json

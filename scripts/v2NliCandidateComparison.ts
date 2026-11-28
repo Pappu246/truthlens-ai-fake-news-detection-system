@@ -15,7 +15,9 @@ import { MlWorkerClient } from '../server/v2/ml/mlWorkerClient.js';
 import {
   ALL_MODEL_MANIFESTS,
   DISTILBERT_MNLI_CANDIDATE,
+  findExperimentalCandidate,
   getV2ModelDir,
+  type ExperimentalNliCandidate,
   verifyCandidateHashes,
   verifyModelHashes
 } from '../server/v2/ml/modelManifest.js';
@@ -58,8 +60,10 @@ function sha256File(file: string): string {
 function readJsonl<T>(file: string): T[] {
   return fs.readFileSync(file, 'utf8').split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line) as T);
 }
-function metrics(predictions: NliLabel[], gold: GoldLabel[]) {
-  if (predictions.length !== gold.length || gold.length === 0) throw new Error('NLI comparison requires equal non-empty prediction and gold arrays.');
+function metrics(predictions: NliLabel[], gold: GoldLabel[], confidences: number[]) {
+  if (predictions.length !== gold.length || gold.length === 0 || confidences.length !== gold.length) {
+    throw new Error('NLI comparison requires equal non-empty prediction, gold, and confidence arrays.');
+  }
   const perClass = TARGET_LABELS.map(label => {
     let tp = 0, fp = 0, fn = 0, support = 0;
     for (let i = 0; i < gold.length; i++) {
@@ -83,10 +87,25 @@ function metrics(predictions: NliLabel[], gold: GoldLabel[]) {
       gold.reduce((n, actual, i) => n + Number(actual === goldLabel && predictions[i] === predictedLabel), 0)
     ]))
   }));
+  const bins = Array.from({ length: 10 }, () => ({ count: 0, confidence: 0, accuracy: 0 }));
+  for (let i = 0; i < predictions.length; i++) {
+    const confidence = Math.max(0, Math.min(1, confidences[i]));
+    const index = Math.min(9, Math.floor(Math.min(0.999999, confidence) * 10));
+    bins[index].count++;
+    bins[index].confidence += confidence;
+    bins[index].accuracy += Number(predictions[i] === gold[i]);
+  }
+  const ece = bins.reduce((sum, bin) => {
+    if (!bin.count) return sum;
+    return sum + (bin.count / predictions.length) * Math.abs(
+      bin.accuracy / bin.count - bin.confidence / bin.count
+    );
+  }, 0);
   return {
     passages: gold.length,
     accuracy: correct / gold.length,
     macro_f1: perClass.reduce((n, item) => n + item.f1, 0) / TARGET_LABELS.length,
+    ece,
     coverage: covered / gold.length,
     unclear_rate: (gold.length - covered) / gold.length,
     selective_accuracy: covered ? coveredCorrect / covered : 0,
@@ -94,6 +113,95 @@ function metrics(predictions: NliLabel[], gold: GoldLabel[]) {
     predicted_label_counts: Object.fromEntries(OUTPUT_LABELS.map(label => [label, predictions.filter(value => value === label).length])),
     per_class: perClass,
     confusion_matrix: confusionMatrix
+  };
+}
+
+function percentile(values: number[], probability: number): number {
+  if (!values.length) throw new Error('Bootstrap percentile requires non-empty samples.');
+  const ordered = [...values].sort((a, b) => a - b);
+  const position = (ordered.length - 1) * probability;
+  const lower = Math.floor(position);
+  const upper = Math.min(lower + 1, ordered.length - 1);
+  const fraction = position - lower;
+  return ordered[lower] * (1 - fraction) + ordered[upper] * fraction;
+}
+
+function bootstrapClaimClusterComparison(
+  rows: Array<Record<string, unknown>>,
+  resamples = 10_000,
+  seed = 20_261_128
+) {
+  const clusters = new Map<string, Array<Record<string, unknown>>>();
+  for (const row of rows) {
+    const key = String(row.claim_id);
+    const group = clusters.get(key) ?? [];
+    group.push(row);
+    clusters.set(key, group);
+  }
+  const claimIds = [...clusters.keys()].sort();
+  if (claimIds.length < 2) throw new Error('Claim-cluster bootstrap requires at least two distinct claims.');
+
+  let state = seed >>> 0;
+  const random = () => {
+    state ^= state << 13;
+    state ^= state >>> 17;
+    state ^= state << 5;
+    return (state >>> 0) / 0x1_0000_0000;
+  };
+  const deltas = {
+    accuracy: [] as number[],
+    macro_f1: [] as number[],
+    ece: [] as number[]
+  };
+  for (let iteration = 0; iteration < resamples; iteration++) {
+    const sample: Array<Record<string, unknown>> = [];
+    for (let draw = 0; draw < claimIds.length; draw++) {
+      const selected = claimIds[Math.floor(random() * claimIds.length)];
+      sample.push(...(clusters.get(selected) ?? []));
+    }
+    const gold = sample.map(row => row.gold as GoldLabel);
+    const baselinePredictions = sample.map(row => row.baseline_prediction as NliLabel);
+    const candidatePredictions = sample.map(row => row.candidate_prediction as NliLabel);
+    const baselineConfidences = sample.map(row => Number(row.baseline_confidence));
+    const candidateConfidences = sample.map(row => Number(row.candidate_confidence));
+    const baselineMetrics = metrics(baselinePredictions, gold, baselineConfidences);
+    const candidateMetrics = metrics(candidatePredictions, gold, candidateConfidences);
+    deltas.accuracy.push(candidateMetrics.accuracy - baselineMetrics.accuracy);
+    deltas.macro_f1.push(candidateMetrics.macro_f1 - baselineMetrics.macro_f1);
+    deltas.ece.push(candidateMetrics.ece - baselineMetrics.ece);
+  }
+  const originalGold = rows.map(row => row.gold as GoldLabel);
+  const originalBaseline = metrics(
+    rows.map(row => row.baseline_prediction as NliLabel),
+    originalGold,
+    rows.map(row => Number(row.baseline_confidence))
+  );
+  const originalCandidate = metrics(
+    rows.map(row => row.candidate_prediction as NliLabel),
+    originalGold,
+    rows.map(row => Number(row.candidate_confidence))
+  );
+  const summarize = (values: number[], estimate: number) => ({
+    estimate,
+    ci_95_percentile: [percentile(values, 0.025), percentile(values, 0.975)]
+  });
+  const goldCounts = Object.fromEntries(TARGET_LABELS.map(label => [
+    label,
+    rows.filter(row => row.gold === label).length
+  ]));
+  return {
+    bootstrap_unit: 'claim_id; all evidence pairs for each sampled claim remain grouped',
+    distinct_claim_clusters: claimIds.length,
+    paired_rows: rows.length,
+    resamples,
+    seed,
+    interval: 'two-sided 95% percentile interval; exploratory component diagnostic',
+    delta_candidate_minus_baseline: {
+      accuracy: summarize(deltas.accuracy, originalCandidate.accuracy - originalBaseline.accuracy),
+      macro_f1: summarize(deltas.macro_f1, originalCandidate.macro_f1 - originalBaseline.macro_f1),
+      ece: summarize(deltas.ece, originalCandidate.ece - originalBaseline.ece)
+    },
+    gold_label_counts: goldCounts
   };
 }
 
@@ -107,14 +215,14 @@ function nliSeal() {
     files: manifest.files.map(file => ({ path: file.path, bytes: file.bytes, sha256: file.sha256, git_blob_sha1: file.gitBlobSha1 ?? null }))
   }));
 }
-function candidateSeal() {
+function candidateSeal(candidate: ExperimentalNliCandidate) {
   return {
-    id: DISTILBERT_MNLI_CANDIDATE.id,
-    base_model: DISTILBERT_MNLI_CANDIDATE.baseModel,
-    revision: DISTILBERT_MNLI_CANDIDATE.revision,
-    quantization: DISTILBERT_MNLI_CANDIDATE.quantization,
-    version_seal: DISTILBERT_MNLI_CANDIDATE.versionSeal,
-    files: DISTILBERT_MNLI_CANDIDATE.files.map(file => ({ path: file.path, bytes: file.bytes, sha256: file.sha256, git_blob_sha1: file.gitBlobSha1 ?? null }))
+    id: candidate.id,
+    base_model: candidate.baseModel,
+    revision: candidate.revision,
+    quantization: candidate.quantization,
+    version_seal: candidate.versionSeal,
+    files: candidate.files.map(file => ({ path: file.path, bytes: file.bytes, sha256: file.sha256, git_blob_sha1: file.gitBlobSha1 ?? null }))
   };
 }
 
@@ -143,12 +251,16 @@ async function main(): Promise<void> {
     throw new Error(`SciFact hash mismatch: claims=${claimsSha}, corpus=${corpusSha}`);
   }
 
+  const candidateId = arg('candidate') || DISTILBERT_MNLI_CANDIDATE.id;
+  const candidateModel = findExperimentalCandidate(candidateId);
+  if (!candidateModel) throw new Error(`Unknown comparison candidate '${candidateId}'.`);
+
   const modelDir = getV2ModelDir();
   for (const manifest of ALL_MODEL_MANIFESTS) {
     const verified = await verifyModelHashes(modelDir, manifest);
     if (!verified.ok) throw new Error(`Baseline model seal failed for ${manifest.id}: ${verified.mismatches.join('; ')}`);
   }
-  const candidateVerification = verifyCandidateHashes(DISTILBERT_MNLI_CANDIDATE.id, modelDir);
+  const candidateVerification = verifyCandidateHashes(candidateModel.id, modelDir);
   if (!candidateVerification.ok) {
     throw new Error(`Comparison candidate seal failed: ${candidateVerification.mismatches.join('; ')}. Provision it only via npm run download:v2-candidate.`);
   }
@@ -193,7 +305,9 @@ async function main(): Promise<void> {
 
   const goldLabels: GoldLabel[] = groups.flatMap(group => group.passages.map(item => item.gold));
   const baselinePredictions: NliLabel[] = [];
+  const baselineConfidences: number[] = [];
   const candidatePredictions: NliLabel[] = [];
+  const candidateConfidences: number[] = [];
   const rows: Array<Record<string, unknown>> = groups.flatMap(group => group.passages.map(item => ({
     claim_id: group.claimId,
     document_id: item.docId,
@@ -224,6 +338,7 @@ async function main(): Promise<void> {
       for (let i = 0; i < baseResults.length; i++) {
         const result = baseResults[i];
         baselinePredictions.push(result.label);
+        baselineConfidences.push(result.confidence);
         Object.assign(rows[cursor + i], {
           baseline_prediction: result.label,
           baseline_confidence: result.confidence,
@@ -239,13 +354,13 @@ async function main(): Promise<void> {
     // Reuse the initialized native worker and embedding session. The worker
     // explicitly disposes the previous NLI ONNX sessions before loading the
     // already provisioned and hash-verified comparison-only candidate.
-    comparisonClient.setNliModel(DISTILBERT_MNLI_CANDIDATE.id);
+    comparisonClient.setNliModel(candidateModel.id);
     candidate = new PretrainedNliAdapter({
       client: comparisonClient,
       embeddingModel: sharedEmbeddingModel,
       relatednessFloor: RELATEDNESS_FLOOR,
-      modelName: DISTILBERT_MNLI_CANDIDATE.id,
-      modelVersion: DISTILBERT_MNLI_CANDIDATE.versionSeal ?? 'unsealed'
+      modelName: candidateModel.id,
+      modelVersion: candidateModel.versionSeal ?? 'unsealed'
     });
 
     cursor = 0;
@@ -257,6 +372,7 @@ async function main(): Promise<void> {
       for (let i = 0; i < candidateResults.length; i++) {
         const result = candidateResults[i];
         candidatePredictions.push(result.label);
+        candidateConfidences.push(result.confidence);
         Object.assign(rows[cursor + i], {
           candidate_prediction: result.label,
           candidate_confidence: result.confidence,
@@ -281,7 +397,7 @@ async function main(): Promise<void> {
       candidate: {
         name: activeCandidate.modelName,
         version: activeCandidate.modelVersion,
-        nli_weight_sha256: candidateSeal().files.find(file => file.path === 'onnx/model_quantized.onnx')?.sha256 ?? null
+        nli_weight_sha256: candidateSeal(candidateModel).files.find(file => file.path === 'onnx/model_quantized.onnx')?.sha256 ?? null
       }
     };
     const config = {
@@ -290,9 +406,12 @@ async function main(): Promise<void> {
       relatedness_floor: RELATEDNESS_FLOOR,
       max_pair_tokens: 384,
       candidate_model_id: activeCandidate.modelName,
-      scoring_labels: TARGET_LABELS
+      candidate_model_revision: candidateModel.revision,
+      scoring_labels: TARGET_LABELS,
+      claim_cluster_bootstrap_resamples: 10000,
+      claim_cluster_bootstrap_seed: 20261128
     };
-    const sealedModels = { baseline: nliSeal(), candidate: candidateSeal() };
+    const sealedModels = { baseline: nliSeal(), candidate: candidateSeal(candidateModel) };
     const configSha256 = sha256(JSON.stringify(config));
     const modelManifestSha256 = sha256(JSON.stringify(sealedModels));
     const report = {
@@ -322,18 +441,21 @@ async function main(): Promise<void> {
       models,
       model_seals: sealedModels,
       paired_comparison: {
-        baseline: metrics(baselinePredictions, goldLabels),
-        candidate: metrics(candidatePredictions, goldLabels),
-        delta_accuracy: metrics(candidatePredictions, goldLabels).accuracy - metrics(baselinePredictions, goldLabels).accuracy,
-        delta_macro_f1: metrics(candidatePredictions, goldLabels).macro_f1 - metrics(baselinePredictions, goldLabels).macro_f1,
+        baseline: metrics(baselinePredictions, goldLabels, baselineConfidences),
+        candidate: metrics(candidatePredictions, goldLabels, candidateConfidences),
+        delta_accuracy: metrics(candidatePredictions, goldLabels, candidateConfidences).accuracy - metrics(baselinePredictions, goldLabels, baselineConfidences).accuracy,
+        delta_macro_f1: metrics(candidatePredictions, goldLabels, candidateConfidences).macro_f1 - metrics(baselinePredictions, goldLabels, baselineConfidences).macro_f1,
+        delta_ece: metrics(candidatePredictions, goldLabels, candidateConfidences).ece - metrics(baselinePredictions, goldLabels, baselineConfidences).ece,
         same_prediction_rate: baselinePredictions.length
           ? baselinePredictions.reduce((n, value, index) => n + Number(value === candidatePredictions[index]), 0) / baselinePredictions.length
           : 0
+,
+        claim_cluster_bootstrap: bootstrapClaimClusterComparison(rows, 10000, 20261128)
       },
       interpretation: [
         'Every baseline/candidate prediction uses the same frozen SciFact claim/evidence pair and the same embedding-based relatedness gate.',
         'Unclear predictions count as incorrect for full coverage accuracy and are also reported separately in coverage/selective metrics.',
-        'The comparison is restricted to a general MNLI model candidate already sealed in the repository. No model weights or production settings are changed.',
+        'The comparison is restricted to the explicitly selected, content-sealed experimental NLI candidate. No production model weights or settings are changed.',
         'This component comparison does not replace the full retrieval/reranking/evidence/decision benchmark and does not establish world-level accuracy.'
       ],
       rows
@@ -346,8 +468,8 @@ async function main(): Promise<void> {
       benchmark: report.benchmark,
       dataset: report.dataset,
       candidate: models.candidate,
-      baseline: { accuracy: report.paired_comparison.baseline.accuracy, macro_f1: report.paired_comparison.baseline.macro_f1 },
-      comparison: { accuracy: report.paired_comparison.candidate.accuracy, macro_f1: report.paired_comparison.candidate.macro_f1, delta_accuracy: report.paired_comparison.delta_accuracy, delta_macro_f1: report.paired_comparison.delta_macro_f1 },
+      baseline: { accuracy: report.paired_comparison.baseline.accuracy, macro_f1: report.paired_comparison.baseline.macro_f1, ece: report.paired_comparison.baseline.ece },
+      comparison: { accuracy: report.paired_comparison.candidate.accuracy, macro_f1: report.paired_comparison.candidate.macro_f1, ece: report.paired_comparison.candidate.ece, delta_accuracy: report.paired_comparison.delta_accuracy, delta_macro_f1: report.paired_comparison.delta_macro_f1, delta_ece: report.paired_comparison.delta_ece },
       artifact: output
     }, null, 2));
   } finally {

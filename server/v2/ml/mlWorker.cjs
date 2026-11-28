@@ -153,7 +153,17 @@ async function classify(body) {
   const { logits } = await model(inputs);
   const raw = Array.from(logits.data);
   const id2label = model.config.id2label;
-  return softmaxNliLogits(raw, id2label);
+  const output = softmaxNliLogits(raw, id2label);
+  if (body.includeDiagnostics) {
+    const mask = inputs.attention_mask && inputs.attention_mask.data ? Array.from(inputs.attention_mask.data) : null;
+    const tokenCountAfterTruncation = mask ? mask.reduce((sum, value) => sum + Number(value > 0), 0) : null;
+    const maxTokens = Number(body.maxTokens || 384);
+    output.diagnostics = {
+      tokenCountAfterTruncation,
+      atMaxLength: tokenCountAfterTruncation !== null ? tokenCountAfterTruncation >= maxTokens : null
+    };
+  }
+  return output;
 }
 
 function softmaxNliLogits(raw, id2label) {
@@ -193,8 +203,26 @@ async function classifyBatch(body) {
     throw new Error(`Unexpected NLI batch logits shape: dims=${JSON.stringify(logits.dims)}, values=${raw.length}, pairs=${pairs.length}`);
   }
   const outputs = [];
+  const attentionMask = body.includeDiagnostics && inputs.attention_mask && inputs.attention_mask.data
+    ? Array.from(inputs.attention_mask.data)
+    : null;
+  const inputDims = inputs.input_ids && Array.isArray(inputs.input_ids.dims) ? inputs.input_ids.dims : [];
+  const sequenceLength = inputDims.length ? Number(inputDims[inputDims.length - 1]) : null;
   for (let i = 0; i < pairs.length; i++) {
-    outputs.push(softmaxNliLogits(raw.slice(i * numLabels, (i + 1) * numLabels), id2label));
+    const output = softmaxNliLogits(raw.slice(i * numLabels, (i + 1) * numLabels), id2label);
+    if (body.includeDiagnostics) {
+      let tokenCountAfterTruncation = null;
+      if (attentionMask && sequenceLength) {
+        const row = attentionMask.slice(i * sequenceLength, (i + 1) * sequenceLength);
+        tokenCountAfterTruncation = row.reduce((sum, value) => sum + Number(value > 0), 0);
+      }
+      const maxTokensForPair = Number(pairs[i].maxTokens || 384);
+      output.diagnostics = {
+        tokenCountAfterTruncation,
+        atMaxLength: tokenCountAfterTruncation !== null ? tokenCountAfterTruncation >= maxTokensForPair : null
+      };
+    }
+    outputs.push(output);
   }
   return { outputs };
 }

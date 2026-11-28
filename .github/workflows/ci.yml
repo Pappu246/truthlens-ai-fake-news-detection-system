@@ -26,6 +26,12 @@ on:
       - 'scripts/evidenceBenchmark.ts'
       - 'scripts/evaluate_liar.py'
       - 'scripts/analysisSignalsSurfaceTests.ts'
+      - 'scripts/v2ScifactMatchedContext.ts'
+      - 'scripts/v2ScifactMatchedContextTests.ts'
+      - 'scripts/analyze_scifact_matched_context.py'
+      - 'scripts/test_analyze_scifact_matched_context.py'
+      - 'scripts/analyze_scifact_nli_errors.py'
+      - 'scripts/test_analyze_scifact_nli_errors.py'
       - 'data/test.tsv'
       - 'data/saved_model_artifacts.json'
       - 'data/external_validation.json'
@@ -53,12 +59,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - name: Install dependencies
@@ -169,6 +175,21 @@ jobs:
       - name: V2 pipeline tests
         run: npm run test:v2
 
+      - name: V2 research trace invariance tests
+        run: npm run test:v2-research-trace
+
+      - name: SciFact passage-granularity metric tests
+        run: npm run test:v2-scifact-passage-granularity
+
+      - name: SciFact matched-context diagnostic helper tests
+        run: npm run test:v2-scifact-matched-context
+
+      - name: SciFact claim-cluster bootstrap analysis tests
+        run: python3 scripts/test_analyze_scifact_matched_context.py
+
+      - name: SciFact NLI error audit tests
+        run: python3 scripts/test_analyze_scifact_nli_errors.py
+
       - name: V2 route tests
         run: npm run test:v2-route
 
@@ -197,7 +218,7 @@ jobs:
 
       - name: Upload evidence/research evaluation artifacts
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: truthlens-gate14-evaluation
           path: |
